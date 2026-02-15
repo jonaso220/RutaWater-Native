@@ -4,7 +4,7 @@ import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
 import { normalizePhone } from '../utils/helpers';
 
-const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+const URL_REGEX = /(https?:\/\/[^\s]+)/;
 
 const parseTextWithLinks = (text: string) => {
   const parts = text.split(URL_REGEX);

@@ -363,6 +363,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     day: string,
     products: Record<string, number>,
     notes: string,
+    mapsLink?: string,
   ) => {
     try {
       const currentWeek = getWeekNumber(new Date());
@@ -405,7 +406,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         phone,
         lat: '',
         lng: '',
-        mapsLink: '',
+        mapsLink: mapsLink || '',
         notes,
         freq: isDirectoryOnly ? 'on_demand' : 'weekly',
         visitDay: isDirectoryOnly ? 'Sin Asignar' : day,

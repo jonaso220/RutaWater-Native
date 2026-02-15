@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
 import { ALL_DAYS, PRODUCTS } from '../constants/products';
 import { getTodayDayName, normalizeText, getNextVisitDate } from '../utils/helpers';
@@ -64,6 +66,7 @@ const HomeScreen = () => {
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
+  const [alarmTime, setAlarmTime] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
@@ -230,6 +233,10 @@ const HomeScreen = () => {
           ],
         );
       } else {
+        // Set default time to current hour rounded to next 30 min
+        const now = new Date();
+        now.setMinutes(Math.ceil(now.getMinutes() / 30) * 30, 0, 0);
+        setAlarmTime(now);
         setAlarmPromptClient(client);
       }
     },
@@ -622,20 +629,45 @@ const HomeScreen = () => {
         onClose={() => setShowTransfersSheet(false)}
       />
 
-      {/* Alarm Prompt (cross-platform replacement for Alert.prompt) */}
-      <PromptModal
-        visible={!!alarmPromptClient}
-        title="Alarma"
-        message="Hora o nota para la alarma:"
-        placeholder="Ej: 10:30, Llamar antes..."
-        onSubmit={(text) => {
-          if (alarmPromptClient) {
-            saveAlarm(alarmPromptClient.id, text);
-          }
-          setAlarmPromptClient(null);
-        }}
-        onCancel={() => setAlarmPromptClient(null)}
-      />
+      {/* Alarm Time Picker Modal */}
+      <Modal visible={!!alarmPromptClient} animationType="fade" transparent>
+        <View style={styles.alarmOverlay}>
+          <View style={styles.alarmModal}>
+            <Text style={styles.alarmTitle}>Seleccionar hora</Text>
+            <DateTimePicker
+              value={alarmTime}
+              mode="time"
+              display="spinner"
+              onChange={(_event: DateTimePickerEvent, date?: Date) => {
+                if (date) setAlarmTime(date);
+              }}
+              locale="es-ES"
+              style={{ height: 150 }}
+            />
+            <View style={styles.alarmActions}>
+              <TouchableOpacity
+                style={styles.alarmCancelBtn}
+                onPress={() => setAlarmPromptClient(null)}
+              >
+                <Text style={styles.alarmCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alarmSaveBtn}
+                onPress={() => {
+                  if (alarmPromptClient) {
+                    const hours = alarmTime.getHours().toString().padStart(2, '0');
+                    const minutes = alarmTime.getMinutes().toString().padStart(2, '0');
+                    saveAlarm(alarmPromptClient.id, `${hours}:${minutes}`);
+                  }
+                  setAlarmPromptClient(null);
+                }}
+              >
+                <Text style={styles.alarmSaveText}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -961,6 +993,52 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#DC2626',
+  },
+  alarmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  alarmModal: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+  },
+  alarmTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  alarmActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 12,
+  },
+  alarmCancelBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+  },
+  alarmCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  alarmSaveBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#2563EB',
+  },
+  alarmSaveText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
 

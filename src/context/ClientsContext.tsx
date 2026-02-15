@@ -35,6 +35,7 @@ interface ClientsContextType {
     day: string,
     products: Record<string, number>,
     notes: string,
+    mapsLink?: string,
   ) => Promise<void>;
   changePosition: (clientId: string, newPos: number, day: string) => Promise<void>;
   /** Pre-computed client counts per day for the day selector */

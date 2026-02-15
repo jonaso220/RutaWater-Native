@@ -1,17 +1,18 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
-  FlatList,
+  SectionList,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
   ActivityIndicator,
   ScrollView,
   Alert,
 } from 'react-native';
 import { Client } from '../types';
-import { ALL_DAYS } from '../constants/products';
-import { getTodayDayName } from '../utils/helpers';
+import { ALL_DAYS, PRODUCTS } from '../constants/products';
+import { getTodayDayName, normalizeText, getNextVisitDate } from '../utils/helpers';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsContext } from '../context/ClientsContext';
 import { useDebtsContext } from '../context/DebtsContext';
@@ -24,11 +25,14 @@ import ProductCounter from '../components/ProductCounter';
 import NoteModal from '../components/NoteModal';
 import DailyLoadModal from '../components/DailyLoadModal';
 import TransfersSheet from '../components/TransfersSheet';
+import DebtsSheet from '../components/DebtsSheet';
+import AddClientModal from '../components/AddClientModal';
 import PromptModal from '../components/PromptModal';
 
 const HomeScreen = () => {
   const { isAdmin } = useAuthContext();
   const {
+    clients,
     loading,
     getVisibleClients,
     getCompletedClients,
@@ -39,11 +43,14 @@ const HomeScreen = () => {
     toggleStar,
     saveAlarm,
     addNote,
+    addClient,
+    changePosition,
     dayCounts,
   } = useClientsContext();
   const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
   const { transfers, hasPendingTransfer, addTransfer, markTransferReviewed } = useTransfersContext();
   const { dailyLoad, loadForDay, saveDailyLoad } = useDailyLoadsContext();
+
   const [selectedDay, setSelectedDay] = useState(getTodayDayName());
   const [showCompleted, setShowCompleted] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -51,10 +58,115 @@ const HomeScreen = () => {
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showDailyLoadModal, setShowDailyLoadModal] = useState(false);
   const [showTransfersSheet, setShowTransfersSheet] = useState(false);
+  const [showAddClientModal, setShowAddClientModal] = useState(false);
+  const [showDebtsSheet, setShowDebtsSheet] = useState(false);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
 
-  const visibleClients = getVisibleClients(selectedDay);
+  const toggleFilter = useCallback((filterId: string) => {
+    setActiveFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(filterId)) {
+        next.delete(filterId);
+      } else {
+        next.add(filterId);
+      }
+      return next;
+    });
+  }, []);
+
+  const allVisibleClients = getVisibleClients(selectedDay);
   const completedClients = getCompletedClients(selectedDay);
+
+  const visibleClients = useMemo(() => {
+    let filtered = allVisibleClients;
+
+    // Search filter
+    if (searchTerm.trim()) {
+      const term = normalizeText(searchTerm);
+      filtered = filtered.filter((c) => {
+        const name = normalizeText(c.name || '');
+        const address = normalizeText(c.address || '');
+        return name.includes(term) || address.includes(term);
+      });
+    }
+
+    // Active filters
+    if (activeFilters.size > 0) {
+      filtered = filtered.filter((c) => {
+        for (const f of activeFilters) {
+          if (f === 'once_fav') {
+            if (c.freq !== 'once' && !c.isStarred) return false;
+          } else if (f === 'con_deuda') {
+            if (getClientDebtTotal(c.id) <= 0) return false;
+          } else {
+            // Product filter
+            const qty = parseInt(String(c.products?.[f] || 0), 10);
+            if (qty <= 0) return false;
+          }
+        }
+        return true;
+      });
+    }
+
+    return filtered;
+  }, [allVisibleClients, searchTerm, activeFilters, getClientDebtTotal]);
+
+  // Group clients by next visit date for section headers
+  const clientSections = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const groups: Record<string, Client[]> = {};
+
+    visibleClients.forEach((c) => {
+      const nextDate = getNextVisitDate(c, selectedDay);
+      let dateKey: string;
+      if (nextDate) {
+        const d = new Date(nextDate);
+        d.setHours(0, 0, 0, 0);
+        dateKey = d.toISOString().split('T')[0];
+      } else {
+        dateKey = today.toISOString().split('T')[0];
+      }
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(c);
+    });
+
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+    return Object.keys(groups)
+      .sort()
+      .map((dateKey) => {
+        const d = new Date(dateKey + 'T12:00:00');
+        const diffDays = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+        let label: string;
+        if (diffDays <= 0) {
+          label = `Hoy — ${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
+        } else if (diffDays === 1) {
+          label = `Mañana — ${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
+        } else {
+          label = `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
+        }
+
+        return {
+          title: label,
+          dateKey,
+          isToday: diffDays <= 0,
+          data: groups[dateKey],
+        };
+      });
+  }, [visibleClients, selectedDay]);
+
+  // Clients for the nearest date only (for the product counter)
+  const nearestDateClients = useMemo(() => {
+    if (clientSections.length === 0) return [];
+    return clientSections[0].data;
+  }, [clientSections]);
 
   // Load daily load data when day changes
   useEffect(() => {
@@ -145,23 +257,32 @@ const HomeScreen = () => {
   const pendingTransferCount = transfers.length;
 
   const renderClient = useCallback(
-    ({ item, index }: { item: Client; index: number }) => (
-      <ClientCard
-        client={item}
-        index={index}
-        isAdmin={isAdmin}
-        hasDebt={getClientDebtTotal(item.id) > 0}
-        hasPendingTransfer={hasPendingTransfer(item.id)}
-        onMarkDone={() => handleMarkDone(item)}
-        onEdit={() => setEditingClient(item)}
-        onDelete={() => handleDelete(item)}
-        onDebt={() => setDebtClient(item)}
-        onToggleStar={() => handleToggleStar(item)}
-        onTransfer={() => handleTransfer(item)}
-        onAlarm={() => handleAlarm(item)}
-      />
-    ),
-    [isAdmin, handleMarkDone, handleDelete, getClientDebtTotal, hasPendingTransfer, handleToggleStar, handleTransfer, handleAlarm],
+    ({ item, index, section }: { item: Client; index: number; section: { dateKey: string } }) => {
+      // Compute global index across all sections
+      let globalIndex = index;
+      for (const s of clientSections) {
+        if (s.dateKey === section.dateKey) break;
+        globalIndex += s.data.length;
+      }
+      return (
+        <ClientCard
+          client={item}
+          index={globalIndex}
+          isAdmin={isAdmin}
+          hasDebt={getClientDebtTotal(item.id) > 0}
+          hasPendingTransfer={hasPendingTransfer(item.id)}
+          onMarkDone={() => handleMarkDone(item)}
+          onEdit={() => setEditingClient(item)}
+          onDelete={() => handleDelete(item)}
+          onDebt={() => setDebtClient(item)}
+          onToggleStar={() => handleToggleStar(item)}
+          onTransfer={() => handleTransfer(item)}
+          onAlarm={() => handleAlarm(item)}
+          onChangePosition={(newPos) => changePosition(item.id, newPos, selectedDay)}
+        />
+      );
+    },
+    [isAdmin, handleMarkDone, handleDelete, getClientDebtTotal, hasPendingTransfer, handleToggleStar, handleTransfer, handleAlarm, changePosition, selectedDay, clientSections],
   );
 
   if (loading) {
@@ -219,23 +340,38 @@ const HomeScreen = () => {
         })}
       </ScrollView>
 
-      {/* Product counter */}
-      <ProductCounter clients={visibleClients} />
+      {/* Product counter — only nearest date */}
+      <ProductCounter clients={nearestDateClients} />
 
       {/* Action bar */}
-      <View style={styles.actionBar}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.actionBar}
+        contentContainerStyle={styles.actionBarContent}
+      >
         <TouchableOpacity
-          style={styles.actionBtn}
+          style={[styles.actionBtn, styles.actionBtnAdd]}
+          onPress={() => setShowAddClientModal(true)}
+        >
+          <Text style={[styles.actionBtnText, styles.actionBtnAddText]}>+ Cliente</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnNote]}
           onPress={() => setShowNoteModal(true)}
         >
-          <Text style={styles.actionBtnText}>+ Nota</Text>
+          <Text style={[styles.actionBtnText, styles.actionBtnNoteText]}>+ Nota</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => setShowDailyLoadModal(true)}
-        >
-          <Text style={styles.actionBtnText}>Carga</Text>
-        </TouchableOpacity>
+        {debts.length > 0 && (
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.actionBtnDebt]}
+            onPress={() => setShowDebtsSheet(true)}
+          >
+            <Text style={[styles.actionBtnText, styles.actionBtnDebtText]}>
+              Deudas ({debts.length})
+            </Text>
+          </TouchableOpacity>
+        )}
         {pendingTransferCount > 0 && (
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnTransfer]}
@@ -246,14 +382,92 @@ const HomeScreen = () => {
             </Text>
           </TouchableOpacity>
         )}
+      </ScrollView>
+
+      {/* Search bar + Filters */}
+      <View style={styles.searchSection}>
+        <View style={styles.searchRow}>
+          <View style={styles.searchInputWrapper}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              placeholder="Buscar por nombre o direccion..."
+              placeholderTextColor="#9CA3AF"
+              autoCorrect={false}
+            />
+            {searchTerm.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchTerm('')} style={styles.clearBtn}>
+                <Text style={styles.clearBtnText}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity
+            style={[styles.filterToggleBtn, showFilters && styles.filterToggleBtnActive]}
+            onPress={() => setShowFilters(!showFilters)}
+          >
+            <Text style={[styles.filterToggleText, showFilters && styles.filterToggleTextActive]}>
+              Filtros{activeFilters.size > 0 ? ` (${activeFilters.size})` : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {showFilters && (
+          <View style={styles.filtersPanel}>
+            <Text style={styles.filterSectionTitle}>TIPO</Text>
+            <View style={styles.filterChipsRow}>
+              <TouchableOpacity
+                style={[styles.filterChip, activeFilters.has('once_fav') && styles.filterChipActive]}
+                onPress={() => toggleFilter('once_fav')}
+              >
+                <Text style={[styles.filterChipText, activeFilters.has('once_fav') && styles.filterChipTextActive]}>
+                  ☆ Una vez / Favoritos
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.filterChip, activeFilters.has('con_deuda') && styles.filterChipActive]}
+                onPress={() => toggleFilter('con_deuda')}
+              >
+                <Text style={[styles.filterChipText, activeFilters.has('con_deuda') && styles.filterChipTextActive]}>
+                  $ Con deuda
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.filterSectionTitle, { marginTop: 10 }]}>PRODUCTOS</Text>
+            <View style={styles.filterChipsRow}>
+              {PRODUCTS.map((p) => (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[styles.filterChip, activeFilters.has(p.id) && styles.filterChipActive]}
+                  onPress={() => toggleFilter(p.id)}
+                >
+                  <Text style={[styles.filterChipText, activeFilters.has(p.id) && styles.filterChipTextActive]}>
+                    {p.icon} {p.short}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
       </View>
 
       {/* Client list */}
-      <FlatList
-        data={visibleClients}
+      <SectionList
+        sections={clientSections}
         renderItem={renderClient}
+        renderSectionHeader={({ section }) => (
+          <View style={[styles.sectionHeader, section.isToday && styles.sectionHeaderToday]}>
+            <Text style={[styles.sectionHeaderText, section.isToday && styles.sectionHeaderTextToday]}>
+              {section.title}
+            </Text>
+            <Text style={[styles.sectionHeaderCount, section.isToday && styles.sectionHeaderCountToday]}>
+              {section.data.length}
+            </Text>
+          </View>
+        )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        stickySectionHeadersEnabled={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyEmoji}>📋</Text>
@@ -328,6 +542,34 @@ const HomeScreen = () => {
         onClose={() => setShowDailyLoadModal(false)}
       />
 
+      {/* Add Client Modal */}
+      <AddClientModal
+        visible={showAddClientModal}
+        day={selectedDay}
+        onSave={addClient}
+        onClose={() => setShowAddClientModal(false)}
+      />
+
+      {/* Debts Sheet */}
+      <DebtsSheet
+        visible={showDebtsSheet}
+        debts={debts}
+        clients={clients}
+        isAdmin={isAdmin}
+        onMarkPaid={markDebtPaid}
+        onEditDebt={editDebt}
+        onClose={() => setShowDebtsSheet(false)}
+        onTransferPayment={(clientId) => {
+          const client = clients.find((c) => c.id === clientId);
+          if (!client) return;
+          if (!hasPendingTransfer(clientId)) {
+            addTransfer(client);
+          }
+          setShowDebtsSheet(false);
+          setShowTransfersSheet(true);
+        }}
+      />
+
       {/* Transfers Sheet */}
       <TransfersSheet
         visible={showTransfersSheet}
@@ -372,18 +614,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   daySelector: {
-    maxHeight: 56,
+    flexGrow: 0,
+    flexShrink: 0,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
   daySelectorContent: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
   },
   dayChip: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: '#F3F4F6',
@@ -400,7 +643,7 @@ const styles = StyleSheet.create({
     borderColor: '#2563EB',
   },
   dayChipText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: '#374151',
   },
@@ -422,13 +665,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#DBEAFE',
   },
   actionBar: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 8,
+    flexGrow: 0,
+    flexShrink: 0,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+  },
+  actionBarContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 8,
+    alignItems: 'center',
   },
   actionBtn: {
     backgroundColor: '#F3F4F6',
@@ -441,6 +688,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#374151',
   },
+  actionBtnAdd: {
+    backgroundColor: '#DBEAFE',
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+  },
+  actionBtnAddText: {
+    color: '#2563EB',
+  },
+  actionBtnNote: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  actionBtnNoteText: {
+    color: '#B45309',
+  },
+  actionBtnDebt: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  actionBtnDebtText: {
+    color: '#DC2626',
+  },
   actionBtnTransfer: {
     backgroundColor: '#ECFDF5',
     borderWidth: 1,
@@ -449,9 +720,140 @@ const styles = StyleSheet.create({
   actionBtnTransferText: {
     color: '#059669',
   },
+  searchSection: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 38,
+  },
+  searchIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#111827',
+    padding: 0,
+  },
+  clearBtn: {
+    padding: 4,
+  },
+  clearBtnText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  filterToggleBtn: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  filterToggleBtnActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+  },
+  filterToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  filterToggleTextActive: {
+    color: '#2563EB',
+  },
+  filtersPanel: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  filterSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    marginBottom: 6,
+  },
+  filterChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  filterChip: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  filterChipActive: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#2563EB',
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  filterChipTextActive: {
+    color: '#1D4ED8',
+  },
   listContent: {
     padding: 12,
     paddingBottom: 100,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginTop: 6,
+    marginBottom: 6,
+    borderBottomWidth: 2,
+    borderBottomColor: '#E5E7EB',
+  },
+  sectionHeaderToday: {
+    borderBottomColor: '#2563EB',
+  },
+  sectionHeaderText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  sectionHeaderTextToday: {
+    color: '#2563EB',
+  },
+  sectionHeaderCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  sectionHeaderCountToday: {
+    color: '#2563EB',
+    backgroundColor: '#DBEAFE',
   },
   emptyContainer: {
     alignItems: 'center',

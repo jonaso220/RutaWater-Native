@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-native';
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
 import { normalizePhone } from '../utils/helpers';
@@ -17,6 +17,7 @@ interface ClientCardProps {
   onToggleStar?: () => void;
   onTransfer?: () => void;
   onAlarm?: () => void;
+  onChangePosition?: (newPosition: number) => void;
 }
 
 const ClientCard: React.FC<ClientCardProps> = ({
@@ -32,6 +33,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   onToggleStar,
   onTransfer,
   onAlarm,
+  onChangePosition,
 }) => {
   const productSummary = React.useMemo(() => {
     if (!client.products) return '';
@@ -44,13 +46,47 @@ const ClientCard: React.FC<ClientCardProps> = ({
       .join(', ');
   }, [client.products]);
 
-  const sendWhatsApp = () => {
+  const handleOrderTap = () => {
+    if (!onChangePosition) return;
+    Alert.prompt?.(
+      'Cambiar posicion',
+      `Posicion actual: ${index + 1}\nIngresa la nueva posicion:`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Mover',
+          onPress: (text?: string) => {
+            const num = parseInt(text || '', 10);
+            if (num > 0) {
+              onChangePosition(num);
+            }
+          },
+        },
+      ],
+      'plain-text',
+      String(index + 1),
+      'number-pad',
+    );
+  };
+
+  const sendEnCamino = () => {
     if (!client.phone) return;
     const cleanPhone = normalizePhone(client.phone);
     const msg = encodeURIComponent(
-      'Buenas. Ya estamos en camino, sos el/la siguiente en la lista de entrega. Nos vemos en unos minutos!\n\nAquapura',
+      'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura',
     );
     Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
+  };
+
+  const openWhatsAppCamera = () => {
+    if (!client.phone) return;
+    const cleanPhone = normalizePhone(client.phone);
+    Linking.openURL(`whatsapp://send?phone=${cleanPhone}`);
+  };
+
+  const callClient = () => {
+    if (!client.phone) return;
+    Linking.openURL(`tel:${client.phone}`);
   };
 
   const openMaps = () => {
@@ -63,13 +99,15 @@ const ClientCard: React.FC<ClientCardProps> = ({
     }
   };
 
+  const hasLocation = !!(client.lat && client.lng) || !!client.mapsLink;
+
   // --- NOTE CARD ---
   if (client.isNote) {
     return (
       <View style={[styles.card, styles.noteCard]}>
-        <View style={styles.orderBadge}>
+        <TouchableOpacity style={styles.orderBadge} onPress={handleOrderTap} activeOpacity={0.6}>
           <Text style={styles.orderText}>{index + 1}</Text>
-        </View>
+        </TouchableOpacity>
         <View style={styles.cardBody}>
           <View style={styles.headerRow}>
             <Text style={styles.noteLabel}>📝 NOTA</Text>
@@ -83,8 +121,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
             </View>
           </View>
           <Text style={styles.noteText}>{client.notes}</Text>
-          <View style={styles.footerRow}>
+          <View style={styles.actionBar}>
             <Text style={styles.badge}>{client.specificDate || 'Una vez'}</Text>
+            <View style={{ flex: 1 }} />
             <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
               <Text style={styles.doneButtonText}>✓ Listo</Text>
             </TouchableOpacity>
@@ -103,9 +142,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
         (client.freq === 'once') && styles.cardOnce,
       ]}
     >
-      <View style={styles.orderBadge}>
+      <TouchableOpacity style={styles.orderBadge} onPress={handleOrderTap} activeOpacity={0.6}>
         <Text style={styles.orderText}>{index + 1}</Text>
-      </View>
+      </TouchableOpacity>
       <View style={styles.cardBody}>
         {/* Toolbar */}
         <View style={styles.toolbar}>
@@ -157,7 +196,15 @@ const ClientCard: React.FC<ClientCardProps> = ({
           ) : null}
         </View>
 
-        <Text style={styles.clientAddress}>{client.address}</Text>
+        {/* Address with location button */}
+        {hasLocation ? (
+          <TouchableOpacity onPress={openMaps} style={styles.addressRow} activeOpacity={0.6}>
+            <Text style={styles.mapsPinIcon}>📍</Text>
+            <Text style={styles.clientAddressLink}>{client.address}</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.clientAddress}>{client.address}</Text>
+        )}
 
         {/* Products */}
         {productSummary ? (
@@ -171,8 +218,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
           <Text style={styles.notesText}>💬 {client.notes}</Text>
         ) : null}
 
-        {/* Footer */}
-        <View style={styles.footerRow}>
+        {/* Freq badge */}
+        <View style={styles.freqRow}>
           <Text style={styles.badge}>
             {client.freq === 'once'
               ? client.specificDate || 'Una vez'
@@ -184,17 +231,28 @@ const ClientCard: React.FC<ClientCardProps> = ({
                     ? 'Cada 3 sem'
                     : 'Mensual'}
           </Text>
-          <View style={styles.footerActions}>
-            <TouchableOpacity onPress={sendWhatsApp} style={styles.footerBtn}>
-              <Text>💬</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={openMaps} style={styles.footerBtn}>
-              <Text>📍</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
-              <Text style={styles.doneButtonText}>✓ Listo</Text>
-            </TouchableOpacity>
-          </View>
+        </View>
+
+        {/* Action bar: Call | Camera | En camino | Listo */}
+        <View style={styles.actionBar}>
+          {client.phone ? (
+            <>
+              <TouchableOpacity onPress={callClient} style={styles.actionBtnDark}>
+                <Text style={styles.actionBtnIcon}>📞</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={openWhatsAppCamera} style={styles.actionBtnDark}>
+                <Text style={styles.actionBtnIcon}>📷</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={sendEnCamino} style={styles.enCaminoBtn} activeOpacity={0.7}>
+                <Text style={styles.enCaminoText}>💬 En camino</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={{ flex: 1 }} />
+          )}
+          <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
+            <Text style={styles.doneButtonText}>✓ Listo</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -321,6 +379,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  mapsPinIcon: {
+    fontSize: 14,
+  },
+  clientAddressLink: {
+    fontSize: 12,
+    color: '#2563EB',
+    flex: 1,
+  },
   productsRow: {
     backgroundColor: '#F3F4F6',
     borderRadius: 8,
@@ -337,14 +408,8 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontStyle: 'italic',
   },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+  freqRow: {
+    marginTop: 2,
   },
   badge: {
     fontSize: 10,
@@ -355,21 +420,50 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     overflow: 'hidden',
+    alignSelf: 'flex-start',
   },
-  footerActions: {
+  actionBar: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  actionBtnDark: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionBtnIcon: {
+    fontSize: 16,
+  },
+  enCaminoBtn: {
+    flex: 1,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#22C55E',
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
     gap: 4,
   },
-  footerBtn: {
-    padding: 6,
-    borderRadius: 6,
+  enCaminoText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   doneButton: {
+    height: 36,
     backgroundColor: '#2563EB',
     paddingHorizontal: 14,
-    paddingVertical: 7,
     borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   doneButtonText: {
     color: '#FFFFFF',

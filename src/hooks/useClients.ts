@@ -53,25 +53,17 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           (c.visitDays && c.visitDays.includes(day)) || c.visitDay === day;
         if (!matchesDay) return false;
 
-        // Frequency-based filtering
-        if (c.freq !== 'once' && c.freq !== 'weekly') {
-          const nextVisit = getNextVisitDate(c, day);
-          if (!nextVisit) return false;
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const visitDate = new Date(nextVisit);
-          visitDate.setHours(0, 0, 0, 0);
-
-          const dayIndex = ALL_DAYS.indexOf(day);
-          const todayDayIndex = today.getDay() - 1; // 0=Mon in ALL_DAYS
-          const isFutureDay = dayIndex > todayDayIndex;
-
-          if (!isFutureDay && visitDate.getTime() > today.getTime()) return false;
-        }
-
         return true;
       })
       .sort((a, b) => {
+        // Primary sort: by next visit date
+        const dateA = getNextVisitDate(a, day);
+        const dateB = getNextVisitDate(b, day);
+        const timeA = dateA ? dateA.getTime() : 0;
+        const timeB = dateB ? dateB.getTime() : 0;
+        if (timeA !== timeB) return timeA - timeB;
+
+        // Secondary sort: by list order within the same date
         const orderA = a.listOrders?.[day] ?? a.listOrder ?? 0;
         const orderB = b.listOrders?.[day] ?? b.listOrder ?? 0;
         const cleanA = orderA > 100000 ? 0 : orderA;
@@ -356,6 +348,79 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, [clients, groupId, userId]);
 
+  // Add a new client to a day's route or directory only
+  const addClient = useCallback(async (
+    name: string,
+    address: string,
+    phone: string,
+    day: string,
+    products: Record<string, number>,
+    notes: string,
+  ) => {
+    try {
+      const currentWeek = getWeekNumber(new Date());
+      const scope = groupId ? { groupId, userId } : { userId };
+
+      const cleanProducts: Record<string, number> = {};
+      Object.entries(products).forEach(([key, val]) => {
+        if (val > 0) cleanProducts[key] = val;
+      });
+
+      const isDirectoryOnly = !day;
+
+      let listOrder = 0;
+      let listOrders: Record<string, number> = {};
+
+      if (!isDirectoryOnly) {
+        const existingInDay = clients.filter(
+          (c) =>
+            c.freq !== 'on_demand' &&
+            !c.isCompleted &&
+            ((c.visitDays && c.visitDays.includes(day)) || c.visitDay === day),
+        );
+        const maxOrder =
+          existingInDay.length > 0
+            ? Math.max(
+                ...existingInDay.map(
+                  (c) => c.listOrders?.[day] ?? c.listOrder ?? 0,
+                ),
+              )
+            : -1;
+        listOrder = maxOrder + 1;
+        listOrders = { [day]: maxOrder + 1 };
+      }
+
+      await db.collection('clients').add({
+        ...scope,
+        userId,
+        name,
+        address,
+        phone,
+        lat: '',
+        lng: '',
+        mapsLink: '',
+        notes,
+        freq: isDirectoryOnly ? 'on_demand' : 'weekly',
+        visitDay: isDirectoryOnly ? 'Sin Asignar' : day,
+        visitDays: isDirectoryOnly ? [] : [day],
+        specificDate: '',
+        products: cleanProducts,
+        listOrder,
+        listOrders,
+        isCompleted: false,
+        isStarred: false,
+        isPinned: false,
+        isNote: false,
+        alarm: '',
+        startWeek: currentWeek,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    } catch (e) {
+      console.error('Error adding client:', e);
+    }
+  }, [clients, groupId, userId]);
+
   // Change client position in the day's list
   const changePosition = useCallback(async (clientId: string, newPos: number, day: string) => {
     const pos = Math.max(1, newPos);
@@ -397,6 +462,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     toggleStar,
     saveAlarm,
     addNote,
+    addClient,
     changePosition,
   };
 };

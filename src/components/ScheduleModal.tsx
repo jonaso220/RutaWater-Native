@@ -11,6 +11,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
 import { PRODUCTS, ALL_DAYS, FREQUENCY_LABELS, Frequency } from '../constants/products';
 
@@ -37,6 +38,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const [localDays, setLocalDays] = useState<string[]>(['Lunes']);
   const [localFreq, setLocalFreq] = useState<Frequency>('once');
   const [localDate, setLocalDate] = useState('');
+  const [pickerDate, setPickerDate] = useState(new Date());
+  const [showPicker, setShowPicker] = useState(false);
   const [localNotes, setLocalNotes] = useState('');
   const [localProducts, setLocalProducts] = useState<Record<string, number>>({});
 
@@ -47,6 +50,17 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         client.freq === 'on_demand' ? 'once' : (client.freq || 'once'),
       );
       setLocalDate(client.specificDate || '');
+      setShowPicker(false);
+      if (client.specificDate) {
+        const parsed = new Date(client.specificDate + 'T12:00:00');
+        if (!isNaN(parsed.getTime())) {
+          setPickerDate(parsed);
+        } else {
+          setPickerDate(new Date());
+        }
+      } else {
+        setPickerDate(new Date());
+      }
       const prods: Record<string, number> = {};
       PRODUCTS.forEach((p) => {
         prods[p.id] = parseInt(String(client.products?.[p.id] || 0), 10);
@@ -79,6 +93,28 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       ...prev,
       [productId]: Math.max(0, (prev[productId] || 0) + delta),
     }));
+  };
+
+  const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowPicker(false);
+    }
+    if (selectedDate) {
+      setPickerDate(selectedDate);
+      const yyyy = selectedDate.getFullYear();
+      const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(selectedDate.getDate()).padStart(2, '0');
+      setLocalDate(`${yyyy}-${mm}-${dd}`);
+    }
+  };
+
+  const formatDisplayDate = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T12:00:00');
+    if (isNaN(d.getTime())) return dateStr;
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    return `${dayNames[d.getDay()]} ${d.getDate()} de ${monthNames[d.getMonth()]}`;
   };
 
   const handleSubmit = () => {
@@ -158,17 +194,23 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             {localFreq === 'once' ? (
               <View style={{ marginTop: 16 }}>
                 <Text style={styles.sectionTitle}>Fecha de Entrega</Text>
-                <TextInput
-                  style={styles.dateInput}
-                  value={localDate}
-                  onChangeText={setLocalDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="numbers-and-punctuation"
+                {localDate ? (
+                  <View style={styles.selectedDateRow}>
+                    <Text style={styles.selectedDateText}>
+                      {formatDisplayDate(localDate)}
+                    </Text>
+                  </View>
+                ) : null}
+                <DateTimePicker
+                  value={pickerDate}
+                  mode="date"
+                  display="inline"
+                  onChange={onDateChange}
+                  minimumDate={new Date()}
+                  locale="es-ES"
+                  style={styles.datePicker}
+                  themeVariant="light"
                 />
-                <Text style={styles.hintText}>
-                  Formato: 2025-01-15. Se agenda para el dia correspondiente.
-                </Text>
               </View>
             ) : (
               <View style={{ marginTop: 16 }}>
@@ -348,14 +390,22 @@ const styles = StyleSheet.create({
   freqChipTextSelected: {
     color: '#1D4ED8',
   },
-  dateInput: {
-    backgroundColor: '#F9FAFB',
+  selectedDateRow: {
+    backgroundColor: '#EFF6FF',
     borderRadius: 10,
     padding: 12,
-    fontSize: 16,
-    color: '#111827',
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#BFDBFE',
+  },
+  selectedDateText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1D4ED8',
+    textAlign: 'center',
+  },
+  datePicker: {
+    height: 340,
   },
   hintText: {
     fontSize: 11,

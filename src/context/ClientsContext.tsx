@@ -26,6 +26,14 @@ interface ClientsContextType {
   toggleStar: (clientId: string, currentValue: boolean) => Promise<void>;
   saveAlarm: (clientId: string, time: string) => Promise<void>;
   addNote: (notesText: string, date: string) => Promise<void>;
+  addClient: (
+    name: string,
+    address: string,
+    phone: string,
+    day: string,
+    products: Record<string, number>,
+    notes: string,
+  ) => Promise<void>;
   changePosition: (clientId: string, newPos: number, day: string) => Promise<void>;
   /** Pre-computed client counts per day for the day selector */
   dayCounts: Record<string, number>;

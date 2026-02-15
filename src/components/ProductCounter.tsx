@@ -1,28 +1,21 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Client } from '../types';
+import { PRODUCTS } from '../constants/products';
 
 interface ProductCounterProps {
   clients: Client[];
 }
 
-const COUNTER_PRODUCTS = [
-  { id: 'b20', label: '20L', icon: '💧' },
-  { id: 'b12', label: '12L', icon: '💧' },
-  { id: 'b6', label: '6L', icon: '💧' },
-  { id: 'soda', label: 'Soda', icon: '🍾' },
-  { id: 'bombita', label: 'Bomb', icon: '🖐️' },
-];
-
 const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
   const totals = React.useMemo(() => {
     const result: Record<string, number> = {};
-    COUNTER_PRODUCTS.forEach((p) => {
+    PRODUCTS.forEach((p) => {
       result[p.id] = 0;
     });
     clients.forEach((c) => {
       if (!c.products) return;
-      COUNTER_PRODUCTS.forEach((p) => {
+      PRODUCTS.forEach((p) => {
         const qty = parseInt(String(c.products[p.id] || 0), 10);
         if (qty > 0) result[p.id] += qty;
       });
@@ -34,29 +27,37 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
   if (!hasAny) return null;
 
   return (
-    <View style={styles.container}>
-      {COUNTER_PRODUCTS.map((p) =>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.container}
+      contentContainerStyle={styles.content}
+    >
+      {PRODUCTS.map((p) =>
         totals[p.id] > 0 ? (
           <View key={p.id} style={styles.item}>
             <Text style={styles.qty}>{totals[p.id]}</Text>
-            <Text style={styles.label}>{p.label}</Text>
+            <Text style={styles.label}>{p.short}</Text>
           </View>
         ) : null,
       )}
-    </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
+    flexGrow: 0,
+    flexShrink: 0,
     backgroundColor: '#EFF6FF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 12,
-    justifyContent: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#DBEAFE',
+  },
+  content: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+    alignItems: 'center',
   },
   item: {
     flexDirection: 'row',

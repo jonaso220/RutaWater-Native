@@ -8,11 +8,13 @@ import { ALL_DAYS } from '../constants/products';
 interface ClientsContextType {
   clients: Client[];
   loading: boolean;
+  getAllDayClients: (day: string) => Client[];
   getVisibleClients: (day: string) => Client[];
   getCompletedClients: (day: string) => Client[];
   getFilteredDirectory: (term: string) => Client[];
   markAsDone: (clientId: string, client: Client) => Promise<void>;
   undoComplete: (clientId: string) => Promise<void>;
+  deleteAllCompleted: (day: string) => Promise<void>;
   deleteFromDay: (clientId: string) => Promise<void>;
   updateClient: (clientId: string, data: Partial<Client>) => Promise<void>;
   scheduleFromDirectory: (

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -34,10 +34,12 @@ const HomeScreen = () => {
   const {
     clients,
     loading,
+    getAllDayClients,
     getVisibleClients,
     getCompletedClients,
     markAsDone,
     undoComplete,
+    deleteAllCompleted,
     deleteFromDay,
     updateClient,
     toggleStar,
@@ -51,6 +53,7 @@ const HomeScreen = () => {
   const { transfers, hasPendingTransfer, addTransfer, markTransferReviewed } = useTransfersContext();
   const { dailyLoad, loadForDay, saveDailyLoad } = useDailyLoadsContext();
 
+  const sectionListRef = useRef<SectionList>(null);
   const [selectedDay, setSelectedDay] = useState(getTodayDayName());
   const [showCompleted, setShowCompleted] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -256,14 +259,19 @@ const HomeScreen = () => {
 
   const pendingTransferCount = transfers.length;
 
+  // Map client ID to its global position among ALL clients for the day
+  const globalPositionMap = useMemo(() => {
+    const allClients = getAllDayClients(selectedDay);
+    const map: Record<string, number> = {};
+    allClients.forEach((c, idx) => {
+      map[c.id] = idx;
+    });
+    return map;
+  }, [getAllDayClients, selectedDay]);
+
   const renderClient = useCallback(
-    ({ item, index, section }: { item: Client; index: number; section: { dateKey: string } }) => {
-      // Compute global index across all sections
-      let globalIndex = index;
-      for (const s of clientSections) {
-        if (s.dateKey === section.dateKey) break;
-        globalIndex += s.data.length;
-      }
+    ({ item }: { item: Client }) => {
+      const globalIndex = globalPositionMap[item.id] ?? 0;
       return (
         <ClientCard
           client={item}
@@ -282,7 +290,7 @@ const HomeScreen = () => {
         />
       );
     },
-    [isAdmin, handleMarkDone, handleDelete, getClientDebtTotal, hasPendingTransfer, handleToggleStar, handleTransfer, handleAlarm, changePosition, selectedDay, clientSections],
+    [isAdmin, handleMarkDone, handleDelete, getClientDebtTotal, hasPendingTransfer, handleToggleStar, handleTransfer, handleAlarm, changePosition, selectedDay, globalPositionMap],
   );
 
   if (loading) {
@@ -311,7 +319,18 @@ const HomeScreen = () => {
           return (
             <TouchableOpacity
               key={day}
-              onPress={() => setSelectedDay(day)}
+              onPress={() => {
+                if (day === selectedDay) {
+                  sectionListRef.current?.scrollToLocation({
+                    sectionIndex: 0,
+                    itemIndex: 0,
+                    viewOffset: 0,
+                    animated: true,
+                  });
+                } else {
+                  setSelectedDay(day);
+                }
+              }}
               style={[
                 styles.dayChip,
                 isSelected && styles.dayChipSelected,
@@ -453,6 +472,7 @@ const HomeScreen = () => {
 
       {/* Client list */}
       <SectionList
+        ref={sectionListRef}
         sections={clientSections}
         renderItem={renderClient}
         renderSectionHeader={({ section }) => (
@@ -488,20 +508,43 @@ const HomeScreen = () => {
                   {showCompleted ? '▼' : '▶'} Completados ({completedClients.length})
                 </Text>
               </TouchableOpacity>
-              {showCompleted &&
-                completedClients.map((client) => (
+              {showCompleted && (
+                <>
+                  {completedClients.map((client) => (
+                    <TouchableOpacity
+                      key={client.id}
+                      style={styles.completedCard}
+                      onPress={() => handleUndoComplete(client)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.completedName}>
+                        {(client.name || '').toUpperCase()}
+                      </Text>
+                      <Text style={styles.completedHint}>Tocar para deshacer</Text>
+                    </TouchableOpacity>
+                  ))}
                   <TouchableOpacity
-                    key={client.id}
-                    style={styles.completedCard}
-                    onPress={() => handleUndoComplete(client)}
+                    style={styles.deleteAllBtn}
+                    onPress={() => {
+                      Alert.alert(
+                        'Eliminar completados',
+                        `Eliminar ${completedClients.length} cliente${completedClients.length !== 1 ? 's' : ''} completado${completedClients.length !== 1 ? 's' : ''}?`,
+                        [
+                          { text: 'Cancelar', style: 'cancel' },
+                          {
+                            text: 'Eliminar todo',
+                            style: 'destructive',
+                            onPress: () => deleteAllCompleted(selectedDay),
+                          },
+                        ],
+                      );
+                    }}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.completedName}>
-                      {(client.name || '').toUpperCase()}
-                    </Text>
-                    <Text style={styles.completedHint}>Tocar para deshacer</Text>
+                    <Text style={styles.deleteAllBtnText}>🗑️ Eliminar todo</Text>
                   </TouchableOpacity>
-                ))}
+                </>
+              )}
             </View>
           ) : null
         }
@@ -904,6 +947,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6EE7B7',
     fontStyle: 'italic',
+  },
+  deleteAllBtn: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    padding: 12,
+    marginTop: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  deleteAllBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#DC2626',
   },
 });
 

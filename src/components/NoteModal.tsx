@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 interface NoteModalProps {
   visible: boolean;
@@ -19,7 +20,27 @@ interface NoteModalProps {
 
 const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
   const [notes, setNotes] = useState('');
+  const [pickerDate, setPickerDate] = useState(new Date());
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (selectedDate) {
+      setPickerDate(selectedDate);
+      const yyyy = selectedDate.getFullYear();
+      const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(selectedDate.getDate()).padStart(2, '0');
+      setDate(`${yyyy}-${mm}-${dd}`);
+    }
+  };
+
+  const formatDisplayDate = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T12:00:00');
+    if (isNaN(d.getTime())) return dateStr;
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    return `${dayNames[d.getDay()]} ${d.getDate()} de ${monthNames[d.getMonth()]}`;
+  };
 
   const handleSave = () => {
     if (!notes.trim()) {
@@ -32,6 +53,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
     }
     onSave(notes.trim(), date);
     setNotes('');
+    setPickerDate(new Date());
     setDate(new Date().toISOString().split('T')[0]);
     onClose();
   };
@@ -59,24 +81,30 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
               placeholder="Escribe tu nota aqui..."
               placeholderTextColor="#9CA3AF"
               multiline
-              numberOfLines={4}
+              numberOfLines={3}
               autoFocus
             />
 
             <Text style={[styles.label, { marginTop: 16 }]}>
               Fecha de entrega
             </Text>
-            <TextInput
-              style={styles.dateInput}
-              value={date}
-              onChangeText={setDate}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#9CA3AF"
-              keyboardType="numbers-and-punctuation"
+            {date ? (
+              <View style={styles.selectedDateRow}>
+                <Text style={styles.selectedDateText}>
+                  {formatDisplayDate(date)}
+                </Text>
+              </View>
+            ) : null}
+            <DateTimePicker
+              value={pickerDate}
+              mode="date"
+              display="inline"
+              onChange={onDateChange}
+              minimumDate={new Date()}
+              locale="es-ES"
+              style={styles.datePicker}
+              themeVariant="light"
             />
-            <Text style={styles.hint}>
-              Se agregara al dia correspondiente.
-            </Text>
           </View>
 
           <View style={styles.footer}>
@@ -94,12 +122,13 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
   },
   modal: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
+    maxHeight: '90%',
   },
   header: {
     flexDirection: 'row',
@@ -140,21 +169,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FDE68A',
     textAlignVertical: 'top',
-    minHeight: 100,
+    minHeight: 80,
   },
-  dateInput: {
-    backgroundColor: '#F9FAFB',
+  selectedDateRow: {
+    backgroundColor: '#EFF6FF',
     borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
-    color: '#111827',
+    padding: 10,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#BFDBFE',
   },
-  hint: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginTop: 6,
+  selectedDateText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1D4ED8',
+    textAlign: 'center',
+  },
+  datePicker: {
+    height: 340,
   },
   footer: {
     padding: 16,

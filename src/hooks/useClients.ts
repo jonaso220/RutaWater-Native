@@ -41,29 +41,16 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     return () => unsubscribe();
   }, [userId, groupId]);
 
-  // Get visible (non-completed) clients for a specific day
-  const getVisibleClients = useCallback((day: string): Client[] => {
+  // Get ALL clients assigned to a day (including not-due), sorted by position
+  const getAllDayClients = useCallback((day: string): Client[] => {
     if (!day) return [];
     return clients
       .filter((c) => {
         if (c.freq === 'on_demand') return false;
         if (c.isCompleted) return false;
-
-        const matchesDay =
-          (c.visitDays && c.visitDays.includes(day)) || c.visitDay === day;
-        if (!matchesDay) return false;
-
-        return true;
+        return (c.visitDays && c.visitDays.includes(day)) || c.visitDay === day;
       })
       .sort((a, b) => {
-        // Primary sort: by next visit date
-        const dateA = getNextVisitDate(a, day);
-        const dateB = getNextVisitDate(b, day);
-        const timeA = dateA ? dateA.getTime() : 0;
-        const timeB = dateB ? dateB.getTime() : 0;
-        if (timeA !== timeB) return timeA - timeB;
-
-        // Secondary sort: by list order within the same date
         const orderA = a.listOrders?.[day] ?? a.listOrder ?? 0;
         const orderB = b.listOrders?.[day] ?? b.listOrder ?? 0;
         const cleanA = orderA > 100000 ? 0 : orderA;
@@ -71,6 +58,11 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         return cleanA - cleanB;
       });
   }, [clients]);
+
+  // Get visible (non-completed) clients for a specific day — sorted by assigned position
+  const getVisibleClients = useCallback((day: string): Client[] => {
+    return getAllDayClients(day);
+  }, [getAllDayClients]);
 
   // Get completed clients for a specific day (only 'once' freq)
   const getCompletedClients = useCallback((day: string): Client[] => {
@@ -155,6 +147,21 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       console.error('Error undoing complete:', e);
     }
   }, []);
+
+  // Delete all completed clients for a day
+  const deleteAllCompleted = useCallback(async (day: string) => {
+    try {
+      const completed = getCompletedClients(day);
+      if (completed.length === 0) return;
+      const batch = db.batch();
+      completed.forEach((c) => {
+        batch.delete(db.collection('clients').doc(c.id));
+      });
+      await batch.commit();
+    } catch (e) {
+      console.error('Error deleting completed:', e);
+    }
+  }, [getCompletedClients]);
 
   // Remove a client from the day's route (move to directory)
   const deleteFromDay = useCallback(async (clientId: string) => {
@@ -421,10 +428,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, [clients, groupId, userId]);
 
-  // Change client position in the day's list
+  // Change client position in the day's list (operates on ALL clients for the day)
   const changePosition = useCallback(async (clientId: string, newPos: number, day: string) => {
     const pos = Math.max(1, newPos);
-    const dayClients = [...getVisibleClients(day)];
+    const dayClients = [...getAllDayClients(day)];
     const currentIndex = dayClients.findIndex((c) => c.id === clientId);
     if (currentIndex === -1) return;
 
@@ -446,16 +453,18 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error changing position:', e);
     }
-  }, [getVisibleClients]);
+  }, [getAllDayClients]);
 
   return {
     clients,
     loading,
+    getAllDayClients,
     getVisibleClients,
     getCompletedClients,
     getFilteredDirectory,
     markAsDone,
     undoComplete,
+    deleteAllCompleted,
     deleteFromDay,
     updateClient,
     scheduleFromDirectory,

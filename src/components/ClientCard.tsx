@@ -4,6 +4,26 @@ import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
 import { normalizePhone } from '../utils/helpers';
 
+const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+
+const parseTextWithLinks = (text: string) => {
+  const parts = text.split(URL_REGEX);
+  return parts.map((part, i) => {
+    if (URL_REGEX.test(part)) {
+      return (
+        <Text
+          key={i}
+          style={{ color: '#2563EB', textDecorationLine: 'underline' }}
+          onPress={() => Linking.openURL(part)}
+        >
+          {part}
+        </Text>
+      );
+    }
+    return part;
+  });
+};
+
 interface ClientCardProps {
   client: Client;
   index: number;
@@ -120,7 +140,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
               </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.noteText}>{client.notes}</Text>
+          <Text style={styles.noteText}>
+            {parseTextWithLinks(client.notes || '')}
+          </Text>
           <View style={styles.actionBar}>
             <Text style={styles.badge}>{client.specificDate || 'Una vez'}</Text>
             <View style={{ flex: 1 }} />

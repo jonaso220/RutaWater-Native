@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { db } from '../config/firebase';
 import { Client } from '../types';
 import { normalizeText, getNextVisitDate, getWeekNumber } from '../utils/helpers';
@@ -42,7 +42,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   }, [userId, groupId]);
 
   // Get visible (non-completed) clients for a specific day
-  const getVisibleClients = (day: string): Client[] => {
+  const getVisibleClients = useCallback((day: string): Client[] => {
     if (!day) return [];
     return clients
       .filter((c) => {
@@ -78,18 +78,18 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         const cleanB = orderB > 100000 ? 0 : orderB;
         return cleanA - cleanB;
       });
-  };
+  }, [clients]);
 
   // Get completed clients for a specific day (only 'once' freq)
-  const getCompletedClients = (day: string): Client[] => {
+  const getCompletedClients = useCallback((day: string): Client[] => {
     return clients.filter((c) => {
       if (!c.isCompleted) return false;
       return (c.visitDays && c.visitDays.includes(day)) || c.visitDay === day;
     });
-  };
+  }, [clients]);
 
   // Get directory (all clients, searchable)
-  const getFilteredDirectory = (searchTerm: string): Client[] => {
+  const getFilteredDirectory = useCallback((searchTerm: string): Client[] => {
     return clients
       .filter((c) => {
         if (!searchTerm.trim()) return true;
@@ -100,12 +100,12 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         return name.includes(term) || address.includes(term) || phone.includes(term);
       })
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  };
+  }, [clients]);
 
   // --- MUTATION FUNCTIONS ---
 
   // Mark a client as done for the day
-  const markAsDone = async (clientId: string, client: Client) => {
+  const markAsDone = useCallback(async (clientId: string, client: Client) => {
     try {
       if (client.freq === 'once') {
         // Once: mark as completed permanently
@@ -149,10 +149,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error marking as done:', e);
     }
-  };
+  }, []);
 
   // Undo a completed client (only for 'once' freq)
-  const undoComplete = async (clientId: string) => {
+  const undoComplete = useCallback(async (clientId: string) => {
     try {
       await db.collection('clients').doc(clientId).update({
         isCompleted: false,
@@ -162,10 +162,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error undoing complete:', e);
     }
-  };
+  }, []);
 
   // Remove a client from the day's route (move to directory)
-  const deleteFromDay = async (clientId: string) => {
+  const deleteFromDay = useCallback(async (clientId: string) => {
     try {
       await db.collection('clients').doc(clientId).update({
         freq: 'on_demand',
@@ -175,19 +175,19 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error deleting from day:', e);
     }
-  };
+  }, []);
 
   // Generic update for client fields
-  const updateClient = async (clientId: string, data: Partial<Client>) => {
+  const updateClient = useCallback(async (clientId: string, data: Partial<Client>) => {
     try {
       await db.collection('clients').doc(clientId).update(data);
     } catch (e) {
       console.error('Error updating client:', e);
     }
-  };
+  }, []);
 
   // Schedule a client from the directory to a specific day/frequency
-  const scheduleFromDirectory = async (
+  const scheduleFromDirectory = useCallback(async (
     clientData: Client,
     newDays: string[],
     newFreq: Frequency,
@@ -283,29 +283,29 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error scheduling client:', e);
     }
-  };
+  }, [clients, groupId, userId]);
 
   // Toggle star on a client (optimistic update)
-  const toggleStar = async (clientId: string, currentValue: boolean) => {
+  const toggleStar = useCallback(async (clientId: string, currentValue: boolean) => {
     const newVal = !currentValue;
     try {
       await db.collection('clients').doc(clientId).update({ isStarred: newVal });
     } catch (e) {
       console.error('Error toggling star:', e);
     }
-  };
+  }, []);
 
   // Save alarm time for a client
-  const saveAlarm = async (clientId: string, time: string) => {
+  const saveAlarm = useCallback(async (clientId: string, time: string) => {
     try {
       await db.collection('clients').doc(clientId).update({ alarm: time });
     } catch (e) {
       console.error('Error saving alarm:', e);
     }
-  };
+  }, []);
 
   // Add a note (special client with isNote: true)
-  const addNote = async (notesText: string, date: string) => {
+  const addNote = useCallback(async (notesText: string, date: string) => {
     try {
       const d = new Date(date + 'T12:00:00');
       const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -354,10 +354,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error adding note:', e);
     }
-  };
+  }, [clients, groupId, userId]);
 
   // Change client position in the day's list
-  const changePosition = async (clientId: string, newPos: number, day: string) => {
+  const changePosition = useCallback(async (clientId: string, newPos: number, day: string) => {
     const pos = Math.max(1, newPos);
     const dayClients = [...getVisibleClients(day)];
     const currentIndex = dayClients.findIndex((c) => c.id === clientId);
@@ -381,7 +381,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error changing position:', e);
     }
-  };
+  }, [getVisibleClients]);
 
   return {
     clients,

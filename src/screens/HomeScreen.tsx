@@ -9,10 +9,14 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { Client, Debt, Transfer } from '../types';
+import { Client } from '../types';
 import { ALL_DAYS } from '../constants/products';
 import { getTodayDayName } from '../utils/helpers';
-import { DailyLoad } from '../hooks/useDailyLoads';
+import { useAuthContext } from '../context/AuthContext';
+import { useClientsContext } from '../context/ClientsContext';
+import { useDebtsContext } from '../context/DebtsContext';
+import { useTransfersContext } from '../context/TransfersContext';
+import { useDailyLoadsContext } from '../context/DailyLoadsContext';
 import ClientCard from '../components/ClientCard';
 import EditClientModal from '../components/EditClientModal';
 import DebtModal from '../components/DebtModal';
@@ -20,60 +24,26 @@ import ProductCounter from '../components/ProductCounter';
 import NoteModal from '../components/NoteModal';
 import DailyLoadModal from '../components/DailyLoadModal';
 import TransfersSheet from '../components/TransfersSheet';
+import PromptModal from '../components/PromptModal';
 
-interface HomeScreenProps {
-  clients: Client[];
-  loading: boolean;
-  getVisibleClients: (day: string) => Client[];
-  getCompletedClients: (day: string) => Client[];
-  isAdmin: boolean;
-  markAsDone: (clientId: string, client: Client) => Promise<void>;
-  undoComplete: (clientId: string) => Promise<void>;
-  deleteFromDay: (clientId: string) => Promise<void>;
-  updateClient: (clientId: string, data: Partial<Client>) => Promise<void>;
-  debts: Debt[];
-  addDebt: (client: Client, amount: number) => Promise<void>;
-  markDebtPaid: (debt: Debt) => Promise<void>;
-  editDebt: (debtId: string, newAmount: number) => Promise<void>;
-  getClientDebtTotal: (clientId: string) => number;
-  toggleStar: (clientId: string, currentValue: boolean) => Promise<void>;
-  saveAlarm: (clientId: string, time: string) => Promise<void>;
-  addNote: (notesText: string, date: string) => Promise<void>;
-  transfers: Transfer[];
-  hasPendingTransfer: (clientId: string) => boolean;
-  addTransfer: (client: Client) => Promise<boolean | undefined>;
-  markTransferReviewed: (transfer: Transfer) => Promise<void>;
-  dailyLoad: DailyLoad;
-  loadForDay: (day: string) => Promise<void>;
-  saveDailyLoad: (day: string, data: DailyLoad) => Promise<void>;
-}
-
-const HomeScreen: React.FC<HomeScreenProps> = ({
-  clients,
-  loading,
-  getVisibleClients,
-  getCompletedClients,
-  isAdmin,
-  markAsDone,
-  undoComplete,
-  deleteFromDay,
-  updateClient,
-  debts,
-  addDebt,
-  markDebtPaid,
-  editDebt,
-  getClientDebtTotal,
-  toggleStar,
-  saveAlarm,
-  addNote,
-  transfers,
-  hasPendingTransfer,
-  addTransfer,
-  markTransferReviewed,
-  dailyLoad,
-  loadForDay,
-  saveDailyLoad,
-}) => {
+const HomeScreen = () => {
+  const { isAdmin } = useAuthContext();
+  const {
+    loading,
+    getVisibleClients,
+    getCompletedClients,
+    markAsDone,
+    undoComplete,
+    deleteFromDay,
+    updateClient,
+    toggleStar,
+    saveAlarm,
+    addNote,
+    dayCounts,
+  } = useClientsContext();
+  const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
+  const { transfers, hasPendingTransfer, addTransfer, markTransferReviewed } = useTransfersContext();
+  const { dailyLoad, loadForDay, saveDailyLoad } = useDailyLoadsContext();
   const [selectedDay, setSelectedDay] = useState(getTodayDayName());
   const [showCompleted, setShowCompleted] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -81,6 +51,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showDailyLoadModal, setShowDailyLoadModal] = useState(false);
   const [showTransfersSheet, setShowTransfersSheet] = useState(false);
+  const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
 
   const visibleClients = getVisibleClients(selectedDay);
   const completedClients = getCompletedClients(selectedDay);
@@ -144,23 +115,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
           ],
         );
       } else {
-        Alert.prompt?.(
-          'Alarma',
-          'Hora o nota para la alarma:',
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-              text: 'Guardar',
-              onPress: (text?: string) => {
-                if (text?.trim()) saveAlarm(client.id, text.trim());
-              },
-            },
-          ],
-          'plain-text',
-          '',
-        ) ||
-          // Fallback for Android (no Alert.prompt)
-          saveAlarm(client.id, new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
+        setAlarmPromptClient(client);
       }
     },
     [saveAlarm],
@@ -230,7 +185,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
         {ALL_DAYS.map((day) => {
           const isToday = day === getTodayDayName();
           const isSelected = day === selectedDay;
-          const count = getVisibleClients(day).length;
+          const count = dayCounts[day] || 0;
 
           return (
             <TouchableOpacity
@@ -380,6 +335,21 @@ const HomeScreen: React.FC<HomeScreenProps> = ({
         isAdmin={isAdmin}
         onReview={markTransferReviewed}
         onClose={() => setShowTransfersSheet(false)}
+      />
+
+      {/* Alarm Prompt (cross-platform replacement for Alert.prompt) */}
+      <PromptModal
+        visible={!!alarmPromptClient}
+        title="Alarma"
+        message="Hora o nota para la alarma:"
+        placeholder="Ej: 10:30, Llamar antes..."
+        onSubmit={(text) => {
+          if (alarmPromptClient) {
+            saveAlarm(alarmPromptClient.id, text);
+          }
+          setAlarmPromptClient(null);
+        }}
+        onCancel={() => setAlarmPromptClient(null)}
       />
     </View>
   );

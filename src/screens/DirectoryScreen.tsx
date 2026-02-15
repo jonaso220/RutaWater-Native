@@ -8,41 +8,19 @@ import {
   StyleSheet,
   Linking,
 } from 'react-native';
-import { Client, Debt } from '../types';
-import { Frequency } from '../constants/products';
+import { Client } from '../types';
 import { normalizePhone } from '../utils/helpers';
 import { PRODUCTS } from '../constants/products';
+import { useAuthContext } from '../context/AuthContext';
+import { useClientsContext } from '../context/ClientsContext';
+import { useDebtsContext } from '../context/DebtsContext';
 import ScheduleModal from '../components/ScheduleModal';
 import DebtModal from '../components/DebtModal';
 
-interface DirectoryScreenProps {
-  getFilteredDirectory: (term: string) => Client[];
-  isAdmin: boolean;
-  scheduleFromDirectory: (
-    client: Client,
-    days: string[],
-    freq: Frequency,
-    date: string,
-    notes: string,
-    products: Record<string, number>,
-  ) => Promise<void>;
-  debts: Debt[];
-  addDebt: (client: Client, amount: number) => Promise<void>;
-  markDebtPaid: (debt: Debt) => Promise<void>;
-  editDebt: (debtId: string, newAmount: number) => Promise<void>;
-  getClientDebtTotal: (clientId: string) => number;
-}
-
-const DirectoryScreen: React.FC<DirectoryScreenProps> = ({
-  getFilteredDirectory,
-  isAdmin,
-  scheduleFromDirectory,
-  debts,
-  addDebt,
-  markDebtPaid,
-  editDebt,
-  getClientDebtTotal,
-}) => {
+const DirectoryScreen = () => {
+  const { isAdmin } = useAuthContext();
+  const { getFilteredDirectory, scheduleFromDirectory } = useClientsContext();
+  const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
   const [search, setSearch] = useState('');
   const [scheduleClient, setScheduleClient] = useState<Client | null>(null);
   const [debtClient, setDebtClient] = useState<Client | null>(null);

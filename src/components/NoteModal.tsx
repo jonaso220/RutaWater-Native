@@ -11,6 +11,8 @@ import {
   Alert,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface NoteModalProps {
   visible: boolean;
@@ -19,6 +21,9 @@ interface NoteModalProps {
 }
 
 const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
+
   const [notes, setNotes] = useState('');
   const [pickerDate, setPickerDate] = useState(new Date());
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -79,7 +84,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
               value={notes}
               onChangeText={setNotes}
               placeholder="Escribe tu nota aqui..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
               multiline
               numberOfLines={3}
               autoFocus
@@ -103,7 +108,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
               minimumDate={new Date()}
               locale="es-ES"
               style={styles.datePicker}
-              themeVariant="light"
+              themeVariant={isDark ? 'dark' : 'light'}
             />
           </View>
 
@@ -118,15 +123,15 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
   modal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 20,
     maxHeight: '90%',
   },
@@ -136,53 +141,53 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 16, color: '#6B7280' },
+  closeBtnText: { fontSize: 16, color: colors.textMuted },
   body: { padding: 16 },
   label: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#6B7280',
+    color: colors.textMuted,
     textTransform: 'uppercase',
     marginBottom: 8,
   },
   notesInput: {
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.warningAmberBg,
     borderRadius: 10,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#FDE68A',
+    borderColor: colors.warningAmberBorder,
     textAlignVertical: 'top',
     minHeight: 80,
   },
   selectedDateRow: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: colors.primaryLighter,
     borderRadius: 10,
     padding: 10,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: colors.primaryInactiveBorder,
   },
   selectedDateText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1D4ED8',
+    color: colors.primaryDark,
     textAlign: 'center',
   },
   datePicker: {
@@ -191,16 +196,16 @@ const styles = StyleSheet.create({
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.cardBorder,
   },
   saveBtn: {
-    backgroundColor: '#F59E0B',
+    backgroundColor: colors.warningAmber,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
   },
   saveBtnText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontSize: 16,
     fontWeight: '700',
   },

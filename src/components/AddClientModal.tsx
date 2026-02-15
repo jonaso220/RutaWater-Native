@@ -12,6 +12,8 @@ import {
   Alert,
 } from 'react-native';
 import { PRODUCTS } from '../constants/products';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface AddClientModalProps {
   visible: boolean;
@@ -36,6 +38,9 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
+
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
@@ -279,7 +284,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               value={name}
               onChangeText={setName}
               placeholder="Nombre del cliente"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
               autoCapitalize="words"
             />
 
@@ -290,7 +295,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               value={address}
               onChangeText={setAddress}
               placeholder="Direccion"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
             />
 
             {/* Phone */}
@@ -300,7 +305,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               value={phone}
               onChangeText={setPhone}
               placeholder="Telefono"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
               keyboardType="phone-pad"
             />
 
@@ -311,7 +316,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               value={mapsLink}
               onChangeText={setMapsLink}
               placeholder="https://maps.app.goo.gl/..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
               keyboardType="url"
               autoCapitalize="none"
               autoCorrect={false}
@@ -349,7 +354,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               value={notes}
               onChangeText={setNotes}
               placeholder="Notas del cliente..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
               multiline
               numberOfLines={3}
             />
@@ -387,7 +392,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               value={pasteText}
               onChangeText={setPasteText}
               placeholder="Pegar texto del pedido aqui..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
               multiline
               autoFocus
             />
@@ -409,14 +414,14 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '90%',
@@ -427,24 +432,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   body: {
     padding: 16,
@@ -452,7 +457,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#6B7280',
+    color: colors.textMuted,
     textTransform: 'uppercase',
     marginBottom: 8,
   },
@@ -464,37 +469,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   destChipSelected: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#2563EB',
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
   },
   destChipDirectory: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#F97316',
+    backgroundColor: colors.warningLightBg,
+    borderColor: colors.warning,
   },
   destChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   destChipTextSelected: {
-    color: '#1D4ED8',
+    color: colors.primaryDark,
   },
   destChipTextDirectory: {
-    color: '#EA580C',
+    color: colors.warningOrangeText,
   },
   textInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
     fontSize: 15,
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.inputBorder,
   },
   productRow: {
     flexDirection: 'row',
@@ -502,11 +507,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.sectionBackground,
   },
   productLabel: {
     fontSize: 14,
-    color: '#374151',
+    color: colors.textSecondary,
   },
   qtyControls: {
     flexDirection: 'row',
@@ -517,46 +522,46 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   qtyBtnPlus: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
   },
   qtyBtnText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   qtyBtnPlusText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
   },
   qtyValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     minWidth: 24,
     textAlign: 'center',
   },
   notesInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.inputBorder,
     textAlignVertical: 'top',
     minHeight: 80,
   },
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.cardBorder,
   },
   saveBtn: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
@@ -565,54 +570,54 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   saveBtnText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontSize: 16,
     fontWeight: '700',
   },
   pasteBtn: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: colors.successBg,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: colors.successBorder,
   },
   pasteBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#16A34A',
+    color: colors.successMedium,
   },
   pasteOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     paddingHorizontal: 20,
   },
   pasteModal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
   },
   pasteModalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   pasteModalHint: {
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.textMuted,
     marginBottom: 12,
   },
   pasteInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.inputBorder,
     textAlignVertical: 'top',
     minHeight: 200,
     maxHeight: 300,
@@ -627,23 +632,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
   },
   pasteCancelText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   pasteConfirmBtn: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
   },
   pasteConfirmText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.textWhite,
   },
 });
 

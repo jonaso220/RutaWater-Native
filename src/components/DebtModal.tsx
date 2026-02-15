@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { Client, Debt } from '../types';
 import { normalizePhone } from '../utils/helpers';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface DebtModalProps {
   visible: boolean;
@@ -34,6 +36,8 @@ const DebtModal: React.FC<DebtModalProps> = ({
   onMarkPaid,
   onEditDebt,
 }) => {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const [newAmount, setNewAmount] = useState('');
   const [editingDebt, setEditingDebt] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
@@ -139,7 +143,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                         onChangeText={setEditAmount}
                         keyboardType="numeric"
                         placeholder="Monto"
-                        placeholderTextColor="#9CA3AF"
+                        placeholderTextColor={colors.textHint}
                         autoFocus
                       />
                       <TouchableOpacity
@@ -229,7 +233,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                 onChangeText={setNewAmount}
                 keyboardType="numeric"
                 placeholder="Monto"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={colors.textHint}
               />
               <TouchableOpacity
                 onPress={handleAdd}
@@ -249,15 +253,15 @@ const DebtModal: React.FC<DebtModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
   modal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.modalBackground,
     borderRadius: 20,
     maxHeight: '80%',
   },
@@ -267,41 +271,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   totalText: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#DC2626',
+    color: colors.danger,
     marginTop: 4,
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   body: {
     padding: 16,
   },
   debtCard: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerLight,
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: colors.dangerBorder,
   },
   debtRow: {
     flexDirection: 'row',
@@ -311,11 +315,11 @@ const styles = StyleSheet.create({
   debtAmount: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#DC2626',
+    color: colors.danger,
   },
   debtDate: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: colors.textHint,
     marginTop: 2,
   },
   debtActions: {
@@ -327,11 +331,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   paidBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     paddingHorizontal: 12,
   },
   paidBtnText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontWeight: '700',
     fontSize: 13,
   },
@@ -342,23 +346,23 @@ const styles = StyleSheet.create({
   },
   editInput: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 8,
     padding: 10,
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: colors.textDisabled,
   },
   saveEditBtn: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 8,
   },
   saveEditText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontWeight: '700',
   },
   cancelEditBtn: {
@@ -366,7 +370,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   cancelEditText: {
-    color: '#6B7280',
+    color: colors.textMuted,
     fontWeight: '700',
   },
   emptyState: {
@@ -379,7 +383,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textHint,
   },
   whatsappSection: {
     marginTop: 16,
@@ -392,22 +396,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   whatsappBtnText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontWeight: '700',
     fontSize: 14,
   },
   whatsappBtnSecondary: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
   },
   whatsappBtnSecondaryText: {
-    color: '#374151',
+    color: colors.textSecondary,
     fontWeight: '700',
     fontSize: 14,
   },
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.cardBorder,
   },
   addRow: {
     flexDirection: 'row',
@@ -417,21 +421,21 @@ const styles = StyleSheet.create({
   currencySign: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   amountInput: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.inputBorder,
   },
   addBtn: {
-    backgroundColor: '#DC2626',
+    backgroundColor: colors.danger,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
@@ -440,7 +444,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   addBtnText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontWeight: '700',
     fontSize: 14,
   },

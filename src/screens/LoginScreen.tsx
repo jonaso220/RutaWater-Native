@@ -1,11 +1,15 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface LoginScreenProps {
   onSignIn: () => Promise<void>;
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
 
@@ -15,7 +19,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
     try {
       await onSignIn();
     } catch (e: any) {
-      setError(e.message || 'Error al iniciar sesión');
+      setError(e.message || 'Error al iniciar sesion');
     } finally {
       setLoading(false);
     }
@@ -26,7 +30,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
       <View style={styles.card}>
         <Text style={styles.emoji}>🚚</Text>
         <Text style={styles.title}>RutaWater</Text>
-        <Text style={styles.subtitle}>Gestión de rutas de agua</Text>
+        <Text style={styles.subtitle}>Gestion de rutas de agua</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -45,7 +49,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#111827',

@@ -20,6 +20,8 @@ import { useClientsContext } from '../context/ClientsContext';
 import { useDebtsContext } from '../context/DebtsContext';
 import { useTransfersContext } from '../context/TransfersContext';
 import { useDailyLoadsContext } from '../context/DailyLoadsContext';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 import ClientCard from '../components/ClientCard';
 import EditClientModal from '../components/EditClientModal';
 import DebtModal from '../components/DebtModal';
@@ -32,6 +34,9 @@ import AddClientModal from '../components/AddClientModal';
 import PromptModal from '../components/PromptModal';
 
 const HomeScreen = () => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
+
   const { isAdmin } = useAuthContext();
   const {
     clients,
@@ -303,7 +308,7 @@ const HomeScreen = () => {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563EB" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Cargando clientes...</Text>
       </View>
     );
@@ -420,7 +425,7 @@ const HomeScreen = () => {
               value={searchTerm}
               onChangeText={setSearchTerm}
               placeholder="Buscar por nombre o direccion..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
               autoCorrect={false}
             />
             {searchTerm.length > 0 && (
@@ -642,6 +647,7 @@ const HomeScreen = () => {
                 if (date) setAlarmTime(date);
               }}
               locale="es-ES"
+              themeVariant={isDark ? 'dark' : 'light'}
               style={{ height: 150 }}
             />
             <View style={styles.alarmActions}>
@@ -672,28 +678,28 @@ const HomeScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   loadingText: {
     marginTop: 12,
-    color: '#6B7280',
+    color: colors.textMuted,
     fontSize: 14,
   },
   daySelector: {
     flexGrow: 0,
     flexShrink: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   daySelectorContent: {
     paddingHorizontal: 12,
@@ -704,47 +710,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginRight: 8,
   },
   dayChipSelected: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
   },
   dayChipToday: {
     borderWidth: 1.5,
-    borderColor: '#2563EB',
+    borderColor: colors.primary,
   },
   dayChipText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   dayChipTextSelected: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
   },
   dayCount: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#6B7280',
-    backgroundColor: '#E5E7EB',
+    color: colors.textMuted,
+    backgroundColor: colors.cardBorder,
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 8,
     overflow: 'hidden',
   },
   dayCountSelected: {
-    color: '#2563EB',
-    backgroundColor: '#DBEAFE',
+    color: colors.primary,
+    backgroundColor: colors.primaryLight,
   },
   actionBar: {
     flexGrow: 0,
     flexShrink: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   actionBarContent: {
     paddingHorizontal: 12,
@@ -753,7 +759,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionBtn: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -761,44 +767,44 @@ const styles = StyleSheet.create({
   actionBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   actionBtnAdd: {
-    backgroundColor: '#DBEAFE',
+    backgroundColor: colors.primaryLight,
     borderWidth: 1,
-    borderColor: '#93C5FD',
+    borderColor: colors.primaryBorder,
   },
   actionBtnAddText: {
-    color: '#2563EB',
+    color: colors.primary,
   },
   actionBtnNote: {
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.warningAmberBg,
     borderWidth: 1,
-    borderColor: '#FDE68A',
+    borderColor: colors.warningAmberBorder,
   },
   actionBtnNoteText: {
-    color: '#B45309',
+    color: colors.warningDarker,
   },
   actionBtnDebt: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerLight,
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: colors.dangerBorder,
   },
   actionBtnDebtText: {
-    color: '#DC2626',
+    color: colors.danger,
   },
   actionBtnTransfer: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: colors.successLighter,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: colors.successLight,
   },
   actionBtnTransferText: {
-    color: '#059669',
+    color: colors.successDark,
   },
   searchSection: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -811,7 +817,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     borderRadius: 10,
     paddingHorizontal: 10,
     height: 38,
@@ -823,7 +829,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#111827',
+    color: colors.textPrimary,
     padding: 0,
   },
   clearBtn: {
@@ -831,10 +837,10 @@ const styles = StyleSheet.create({
   },
   clearBtnText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textHint,
   },
   filterToggleBtn: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
@@ -842,27 +848,27 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   filterToggleBtnActive: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#2563EB',
+    backgroundColor: colors.primaryLighter,
+    borderColor: colors.primary,
   },
   filterToggleText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   filterToggleTextActive: {
-    color: '#2563EB',
+    color: colors.primary,
   },
   filtersPanel: {
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: colors.sectionBackground,
   },
   filterSectionTitle: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#9CA3AF',
+    color: colors.textHint,
     marginBottom: 6,
   },
   filterChipsRow: {
@@ -871,7 +877,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   filterChip: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
@@ -879,16 +885,16 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   filterChipActive: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#2563EB',
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
   },
   filterChipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   filterChipTextActive: {
-    color: '#1D4ED8',
+    color: colors.primaryDark,
   },
   listContent: {
     padding: 12,
@@ -903,32 +909,32 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 6,
     borderBottomWidth: 2,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   sectionHeaderToday: {
-    borderBottomColor: '#2563EB',
+    borderBottomColor: colors.primary,
   },
   sectionHeaderText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   sectionHeaderTextToday: {
-    color: '#2563EB',
+    color: colors.primary,
   },
   sectionHeaderCount: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#9CA3AF',
-    backgroundColor: '#F3F4F6',
+    color: colors.textHint,
+    backgroundColor: colors.sectionBackground,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
     overflow: 'hidden',
   },
   sectionHeaderCountToday: {
-    color: '#2563EB',
-    backgroundColor: '#DBEAFE',
+    color: colors.primary,
+    backgroundColor: colors.primaryLight,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -940,11 +946,11 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: '#9CA3AF',
+    color: colors.textHint,
   },
   completedSection: {
     borderTopWidth: 2,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.cardBorder,
     borderStyle: 'dashed',
     marginTop: 12,
     paddingTop: 4,
@@ -955,12 +961,12 @@ const styles = StyleSheet.create({
   completedTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#9CA3AF',
+    color: colors.textHint,
     textTransform: 'uppercase',
     textAlign: 'center',
   },
   completedCard: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: colors.successLighter,
     borderRadius: 10,
     padding: 12,
     marginBottom: 6,
@@ -968,47 +974,47 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderLeftWidth: 4,
-    borderLeftColor: '#10B981',
+    borderLeftColor: colors.success,
   },
   completedName: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#065F46',
+    color: colors.successText,
   },
   completedHint: {
     fontSize: 11,
-    color: '#6EE7B7',
+    color: colors.successAccent,
     fontStyle: 'italic',
   },
   deleteAllBtn: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerLight,
     borderRadius: 10,
     padding: 12,
     marginTop: 8,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: colors.dangerBorder,
   },
   deleteAllBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#DC2626',
+    color: colors.danger,
   },
   alarmOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     paddingHorizontal: 20,
   },
   alarmModal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
   },
   alarmTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -1022,23 +1028,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
   },
   alarmCancelText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   alarmSaveBtn: {
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
   },
   alarmSaveText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.textWhite,
   },
 });
 

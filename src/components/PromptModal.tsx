@@ -9,6 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface PromptModalProps {
   visible: boolean;
@@ -29,6 +31,8 @@ const PromptModal: React.FC<PromptModalProps> = ({
   onSubmit,
   onCancel,
 }) => {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const [value, setValue] = useState(defaultValue);
 
   useEffect(() => {
@@ -57,7 +61,7 @@ const PromptModal: React.FC<PromptModalProps> = ({
             value={value}
             onChangeText={setValue}
             placeholder={placeholder}
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textHint}
             autoFocus
             onSubmitEditing={handleSubmit}
           />
@@ -79,16 +83,16 @@ const PromptModal: React.FC<PromptModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
   },
   dialog: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
     width: '100%',
@@ -102,24 +106,24 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 17,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     textAlign: 'center',
   },
   message: {
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.textMuted,
     textAlign: 'center',
     marginTop: 6,
   },
   input: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.inputBackground,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.inputBorder,
     marginTop: 16,
   },
   buttons: {
@@ -132,19 +136,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
   },
   cancelText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   submitBtn: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
   },
   submitBtnDisabled: {
     opacity: 0.5,
@@ -152,7 +156,7 @@ const styles = StyleSheet.create({
   submitText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: colors.textWhite,
   },
 });
 

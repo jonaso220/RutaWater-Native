@@ -3,17 +3,19 @@ import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
 import { normalizePhone } from '../utils/helpers';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
 
-const parseTextWithLinks = (text: string) => {
+const parseTextWithLinks = (text: string, linkColor: string) => {
   const parts = text.split(URL_REGEX);
   return parts.map((part, i) => {
     if (URL_REGEX.test(part)) {
       return (
         <Text
           key={i}
-          style={{ color: '#2563EB', textDecorationLine: 'underline' }}
+          style={{ color: linkColor, textDecorationLine: 'underline' }}
           onPress={() => Linking.openURL(part)}
         >
           {part}
@@ -55,6 +57,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
   onAlarm,
   onChangePosition,
 }) => {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
+
   const productSummary = React.useMemo(() => {
     if (!client.products) return '';
     return Object.keys(client.products)
@@ -141,7 +146,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
             </View>
           </View>
           <Text style={styles.noteText}>
-            {parseTextWithLinks(client.notes || '')}
+            {parseTextWithLinks(client.notes || '', colors.primary)}
           </Text>
           <View style={styles.actionBar}>
             <Text style={styles.badge}>{client.specificDate || 'Una vez'}</Text>
@@ -281,217 +286,218 @@ const ClientCard: React.FC<ClientCardProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginBottom: 8,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  noteCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#FBBF24',
-    backgroundColor: '#FFFBEB',
-  },
-  cardOnce: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#F97316',
-    backgroundColor: '#FFF7ED',
-  },
-  cardStarred: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#F59E0B',
-    backgroundColor: '#FFFBEB',
-  },
-  orderBadge: {
-    width: 36,
-    backgroundColor: '#F9FAFB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderRightColor: '#F3F4F6',
-  },
-  orderText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#6B7280',
-  },
-  cardBody: {
-    flex: 1,
-    padding: 10,
-    gap: 4,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  noteLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#B45309',
-    textTransform: 'uppercase',
-  },
-  noteText: {
-    fontSize: 14,
-    color: '#1F2937',
-    lineHeight: 20,
-  },
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    flexWrap: 'wrap',
-    gap: 2,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  iconBtn: {
-    padding: 4,
-    borderRadius: 6,
-  },
-  clientName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  badgesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  debtBadge: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#DC2626',
-    backgroundColor: '#FEF2F2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  transferBadge: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#059669',
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  alarmBadge: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#D97706',
-    backgroundColor: '#FFFBEB',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  clientAddress: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  mapsPinIcon: {
-    fontSize: 14,
-  },
-  clientAddressLink: {
-    fontSize: 12,
-    color: '#2563EB',
-    flex: 1,
-  },
-  productsRow: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    padding: 6,
-    marginTop: 2,
-  },
-  productsText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  notesText: {
-    fontSize: 11,
-    color: '#6B7280',
-    fontStyle: 'italic',
-  },
-  freqRow: {
-    marginTop: 2,
-  },
-  badge: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#6B7280',
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    overflow: 'hidden',
-    alignSelf: 'flex-start',
-  },
-  actionBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  actionBtnDark: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionBtnIcon: {
-    fontSize: 16,
-  },
-  enCaminoBtn: {
-    flex: 1,
-    height: 36,
-    borderRadius: 8,
-    backgroundColor: '#22C55E',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 4,
-  },
-  enCaminoText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  doneButton: {
-    height: 36,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  doneButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-});
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      marginBottom: 8,
+      flexDirection: 'row',
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 3,
+      elevation: 1,
+    },
+    noteCard: {
+      borderLeftWidth: 4,
+      borderLeftColor: colors.warningYellow,
+      backgroundColor: colors.warningAmberBg,
+    },
+    cardOnce: {
+      borderLeftWidth: 4,
+      borderLeftColor: colors.warning,
+      backgroundColor: colors.warningLightBg,
+    },
+    cardStarred: {
+      borderLeftWidth: 4,
+      borderLeftColor: colors.warningAmber,
+      backgroundColor: colors.warningAmberBg,
+    },
+    orderBadge: {
+      width: 36,
+      backgroundColor: colors.background,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderRightWidth: 1,
+      borderRightColor: colors.sectionBackground,
+    },
+    orderText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textMuted,
+    },
+    cardBody: {
+      flex: 1,
+      padding: 10,
+      gap: 4,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    noteLabel: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.warningDarker,
+      textTransform: 'uppercase',
+    },
+    noteText: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      lineHeight: 20,
+    },
+    toolbar: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      flexWrap: 'wrap',
+      gap: 2,
+    },
+    actions: {
+      flexDirection: 'row',
+      gap: 4,
+    },
+    iconBtn: {
+      padding: 4,
+      borderRadius: 6,
+    },
+    clientName: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    badgesRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 4,
+    },
+    debtBadge: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.danger,
+      backgroundColor: colors.dangerLight,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+      overflow: 'hidden',
+    },
+    transferBadge: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.successDark,
+      backgroundColor: colors.successLighter,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+      overflow: 'hidden',
+    },
+    alarmBadge: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.warningDark,
+      backgroundColor: colors.warningAmberBg,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+      overflow: 'hidden',
+    },
+    clientAddress: {
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    addressRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    mapsPinIcon: {
+      fontSize: 14,
+    },
+    clientAddressLink: {
+      fontSize: 12,
+      color: colors.primary,
+      flex: 1,
+    },
+    productsRow: {
+      backgroundColor: colors.sectionBackground,
+      borderRadius: 8,
+      padding: 6,
+      marginTop: 2,
+    },
+    productsText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    notesText: {
+      fontSize: 11,
+      color: colors.textMuted,
+      fontStyle: 'italic',
+    },
+    freqRow: {
+      marginTop: 2,
+    },
+    badge: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.textMuted,
+      backgroundColor: colors.sectionBackground,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+      overflow: 'hidden',
+      alignSelf: 'flex-start',
+    },
+    actionBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 6,
+      paddingTop: 8,
+      borderTopWidth: 1,
+      borderTopColor: colors.sectionBackground,
+    },
+    actionBtnDark: {
+      width: 36,
+      height: 36,
+      borderRadius: 8,
+      backgroundColor: colors.sectionBackground,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    actionBtnIcon: {
+      fontSize: 16,
+    },
+    enCaminoBtn: {
+      flex: 1,
+      height: 36,
+      borderRadius: 8,
+      backgroundColor: colors.successBright,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 4,
+    },
+    enCaminoText: {
+      color: colors.textWhite,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    doneButton: {
+      height: 36,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 14,
+      borderRadius: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    doneButtonText: {
+      color: colors.textWhite,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+  });
 
 export default React.memo(ClientCard);

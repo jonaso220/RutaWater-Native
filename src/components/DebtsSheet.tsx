@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { Client, Debt } from '../types';
 import { normalizePhone } from '../utils/helpers';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface DebtsSheetProps {
   visible: boolean;
@@ -41,6 +43,9 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   onClose,
   onTransferPayment,
 }) => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
+
   // Group debts by client
   const clientGroups: ClientDebtGroup[] = React.useMemo(() => {
     const grouped: Record<string, ClientDebtGroup> = {};
@@ -181,14 +186,14 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
@@ -199,35 +204,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   headerCount: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textMuted,
     marginTop: 2,
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 16, color: '#6B7280' },
+  closeBtnText: { fontSize: 16, color: colors.textMuted },
   list: { padding: 12 },
   card: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerLight,
     borderRadius: 12,
     padding: 14,
     marginBottom: 8,
     borderLeftWidth: 4,
-    borderLeftColor: '#DC2626',
+    borderLeftColor: colors.danger,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -238,12 +243,12 @@ const styles = StyleSheet.create({
   clientName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   totalAmount: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#DC2626',
+    color: colors.danger,
     marginTop: 2,
   },
   cardActions: {
@@ -253,17 +258,17 @@ const styles = StyleSheet.create({
   },
   actionBtn: { padding: 6 },
   transferBtn: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: colors.successLighter,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#A7F3D0',
+    borderColor: colors.successLight,
   },
   transferBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#059669',
+    color: colors.successDark,
   },
   debtRow: {
     flexDirection: 'row',
@@ -271,26 +276,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#FECACA',
+    borderTopColor: colors.dangerBorder,
   },
   debtAmount: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#991B1B',
+    color: colors.danger,
   },
   debtDate: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: colors.textHint,
     marginTop: 2,
   },
   paidBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
   },
   paidBtnText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontWeight: '700',
     fontSize: 13,
   },
@@ -301,7 +306,7 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 40, marginBottom: 8 },
   emptyText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textHint,
   },
 });
 

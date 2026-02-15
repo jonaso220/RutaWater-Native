@@ -2,12 +2,17 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface ProductCounterProps {
   clients: Client[];
 }
 
 const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
+
   const totals = React.useMemo(() => {
     const result: Record<string, number> = {};
     PRODUCTS.forEach((p) => {
@@ -45,13 +50,13 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flexGrow: 0,
     flexShrink: 0,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: colors.primaryLighter,
     borderBottomWidth: 1,
-    borderBottomColor: '#DBEAFE',
+    borderBottomColor: colors.primaryLight,
   },
   content: {
     paddingHorizontal: 12,
@@ -63,22 +68,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: colors.primaryLight,
   },
   qty: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#2563EB',
+    color: colors.primary,
   },
   label: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#6B7280',
+    color: colors.textMuted,
   },
 });
 

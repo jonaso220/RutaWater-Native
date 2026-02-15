@@ -16,8 +16,12 @@ import { useClientsContext } from '../context/ClientsContext';
 import { useDebtsContext } from '../context/DebtsContext';
 import ScheduleModal from '../components/ScheduleModal';
 import DebtModal from '../components/DebtModal';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 const DirectoryScreen = () => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
   const { isAdmin } = useAuthContext();
   const { getFilteredDirectory, scheduleFromDirectory } = useClientsContext();
   const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
@@ -160,7 +164,7 @@ const DirectoryScreen = () => {
         <TextInput
           style={styles.searchInput}
           placeholder="Buscar por nombre, direccion o telefono..."
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textHint}
           value={search}
           onChangeText={setSearch}
           autoCorrect={false}
@@ -207,28 +211,28 @@ const DirectoryScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   searchContainer: {
     padding: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   searchInput: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 14,
-    color: '#111827',
+    color: colors.textPrimary,
   },
   countText: {
     textAlign: 'center',
-    color: '#9CA3AF',
+    color: colors.textHint,
     fontSize: 12,
     fontWeight: '500',
     marginTop: 8,
@@ -238,7 +242,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 14,
     marginBottom: 8,
@@ -251,7 +255,7 @@ const styles = StyleSheet.create({
     borderLeftColor: 'transparent',
   },
   cardDebt: {
-    borderLeftColor: '#DC2626',
+    borderLeftColor: colors.danger,
   },
   cardContent: {
     gap: 4,
@@ -264,14 +268,14 @@ const styles = StyleSheet.create({
   clientName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     flex: 1,
   },
   debtBadge: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#DC2626',
-    backgroundColor: '#FEF2F2',
+    color: colors.danger,
+    backgroundColor: colors.dangerLight,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -279,17 +283,17 @@ const styles = StyleSheet.create({
   },
   clientAddress: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textMuted,
     marginTop: 2,
   },
   clientPhone: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: colors.textHint,
     marginTop: 1,
   },
   productText: {
     fontSize: 11,
-    color: '#374151',
+    color: colors.textSecondary,
     fontWeight: '600',
     marginTop: 4,
   },
@@ -302,8 +306,8 @@ const styles = StyleSheet.create({
   freqBadge: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#6B7280',
-    backgroundColor: '#F3F4F6',
+    color: colors.textMuted,
+    backgroundColor: colors.sectionBackground,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -311,7 +315,7 @@ const styles = StyleSheet.create({
   },
   daysText: {
     fontSize: 10,
-    color: '#9CA3AF',
+    color: colors.textHint,
   },
   actionsRow: {
     flexDirection: 'row',
@@ -320,7 +324,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: colors.sectionBackground,
   },
   actionBtn: {
     padding: 6,
@@ -330,7 +334,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   scheduleButton: {
-    backgroundColor: '#DBEAFE',
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
@@ -338,7 +342,7 @@ const styles = StyleSheet.create({
   scheduleButtonText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#1D4ED8',
+    color: colors.primaryDark,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -346,7 +350,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
-    color: '#9CA3AF',
+    color: colors.textHint,
   },
 });
 

@@ -1,7 +1,8 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { Text as RNText } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 import HomeScreen from '../screens/HomeScreen';
 import DirectoryScreen from '../screens/DirectoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -9,21 +10,35 @@ import SettingsScreen from '../screens/SettingsScreen';
 const Tab = createBottomTabNavigator();
 
 const AppNavigator = () => {
+  const { colors, isDark } = useTheme();
+
+  const navTheme = {
+    ...(isDark ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
+      background: colors.background,
+      card: colors.card,
+      text: colors.textPrimary,
+      border: colors.cardBorder,
+      primary: colors.primary,
+    },
+  };
+
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navTheme}>
       <Tab.Navigator
         screenOptions={{
-          headerStyle: { backgroundColor: '#111827' },
-          headerTintColor: '#FFFFFF',
+          headerStyle: { backgroundColor: colors.headerBackground },
+          headerTintColor: colors.headerText,
           headerTitleStyle: { fontWeight: '700' },
           tabBarStyle: {
-            backgroundColor: '#FFFFFF',
-            borderTopColor: '#E5E7EB',
+            backgroundColor: colors.tabBarBackground,
+            borderTopColor: colors.tabBarBorder,
             paddingBottom: 4,
             height: 56,
           },
-          tabBarActiveTintColor: '#2563EB',
-          tabBarInactiveTintColor: '#9CA3AF',
+          tabBarActiveTintColor: colors.tabActive,
+          tabBarInactiveTintColor: colors.tabInactive,
           tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         }}
       >

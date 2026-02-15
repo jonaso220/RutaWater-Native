@@ -11,8 +11,12 @@ import {
 } from 'react-native';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 const SettingsScreen = () => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
   const { user: firebaseUser, groupData, isAdmin, signOut, setGroupData } = useAuthContext();
   const user = {
     uid: firebaseUser!.uid,
@@ -369,7 +373,7 @@ const SettingsScreen = () => {
                 value={joinCode}
                 onChangeText={setJoinCode}
                 placeholder="Codigo"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={colors.textHint}
                 autoCapitalize="characters"
                 maxLength={6}
               />
@@ -397,10 +401,10 @@ const SettingsScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.background,
   },
   section: {
     padding: 16,
@@ -408,13 +412,13 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     marginBottom: 12,
   },
   subsectionTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#6B7280',
+    color: colors.textMuted,
     textTransform: 'uppercase',
     marginTop: 16,
     marginBottom: 8,
@@ -422,7 +426,7 @@ const styles = StyleSheet.create({
   userCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     gap: 12,
@@ -436,7 +440,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -448,18 +452,18 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   userEmail: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textMuted,
     marginTop: 2,
   },
   roleBadge: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#2563EB',
-    backgroundColor: '#DBEAFE',
+    color: colors.primary,
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -468,58 +472,58 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   codeCard: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: colors.primaryLighter,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: colors.primaryLight,
   },
   codeLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textMuted,
     fontWeight: '600',
   },
   codeValue: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#2563EB',
+    color: colors.primary,
     letterSpacing: 4,
     marginVertical: 8,
   },
   codeHint: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: colors.textHint,
     textAlign: 'center',
   },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 10,
     padding: 12,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: '#F3F4F6',
+    borderColor: colors.sectionBackground,
   },
   memberName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   memberRole: {
     fontSize: 11,
-    color: '#6B7280',
+    color: colors.textMuted,
     marginTop: 2,
   },
   removeBtn: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerLight,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
   },
   removeBtnText: {
-    color: '#DC2626',
+    color: colors.danger,
     fontWeight: '700',
     fontSize: 12,
   },
@@ -527,26 +531,26 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   dangerBtn: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: colors.dangerLight,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: colors.dangerBorder,
   },
   dangerBtnText: {
-    color: '#DC2626',
+    color: colors.danger,
     fontWeight: '700',
     fontSize: 14,
   },
   noGroupText: {
     fontSize: 14,
-    color: '#6B7280',
+    color: colors.textMuted,
     textAlign: 'center',
     marginBottom: 16,
   },
   primaryBtn: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
@@ -564,10 +568,10 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.cardBorder,
   },
   dividerText: {
-    color: '#9CA3AF',
+    color: colors.textHint,
     paddingHorizontal: 12,
     fontSize: 13,
   },
@@ -577,20 +581,20 @@ const styles = StyleSheet.create({
   },
   joinInput: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.cardBorder,
     letterSpacing: 3,
     textAlign: 'center',
   },
   joinBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     paddingHorizontal: 20,
     borderRadius: 10,
     justifyContent: 'center',
@@ -602,15 +606,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   signOutBtn: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.cardBorder,
   },
   signOutText: {
-    color: '#DC2626',
+    color: colors.danger,
     fontWeight: '700',
     fontSize: 14,
   },

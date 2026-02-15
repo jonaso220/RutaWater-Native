@@ -13,6 +13,8 @@ import {
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface EditClientModalProps {
   visible: boolean;
@@ -27,6 +29,9 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
+
   const [products, setProducts] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const [freq, setFreq] = useState<Frequency>('weekly');
@@ -116,7 +121,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
               value={notes}
               onChangeText={setNotes}
               placeholder="Notas del cliente..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
               multiline
               numberOfLines={3}
             />
@@ -162,14 +167,14 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '85%',
@@ -180,25 +185,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     flex: 1,
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   body: {
     padding: 16,
@@ -206,7 +211,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#6B7280',
+    color: colors.textMuted,
     textTransform: 'uppercase',
     marginBottom: 12,
   },
@@ -216,11 +221,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.sectionBackground,
   },
   productLabel: {
     fontSize: 14,
-    color: '#374151',
+    color: colors.textSecondary,
   },
   qtyControls: {
     flexDirection: 'row',
@@ -231,36 +236,36 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   qtyBtnPlus: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
   },
   qtyBtnText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   qtyBtnPlusText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
   },
   qtyValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     minWidth: 24,
     textAlign: 'center',
   },
   notesInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.inputBorder,
     textAlignVertical: 'top',
     minHeight: 80,
   },
@@ -273,32 +278,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
   },
   freqChipSelected: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
   },
   freqChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   freqChipTextSelected: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
   },
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.cardBorder,
   },
   saveBtn: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
   },
   saveBtnText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontSize: 16,
     fontWeight: '700',
   },

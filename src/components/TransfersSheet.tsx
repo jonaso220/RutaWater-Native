@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { Transfer } from '../types';
 import { normalizePhone } from '../utils/helpers';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface TransfersSheetProps {
   visible: boolean;
@@ -27,6 +29,9 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   onReview,
   onClose,
 }) => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
+
   const formatDate = (timestamp: any): string => {
     if (!timestamp) return '';
     const date = timestamp.seconds
@@ -133,14 +138,14 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
@@ -151,30 +156,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   headerCount: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textMuted,
     marginTop: 2,
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 16, color: '#6B7280' },
+  closeBtnText: { fontSize: 16, color: colors.textMuted },
   list: { padding: 12 },
   card: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: colors.successBg,
     borderRadius: 12,
     padding: 14,
     marginBottom: 8,
@@ -182,22 +187,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderLeftWidth: 4,
-    borderLeftColor: '#10B981',
+    borderLeftColor: colors.success,
   },
   cardContent: { flex: 1, marginRight: 12 },
   clientName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   clientAddress: {
     fontSize: 12,
-    color: '#6B7280',
+    color: colors.textMuted,
     marginTop: 2,
   },
   date: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: colors.textHint,
     marginTop: 4,
   },
   cardActions: {
@@ -207,13 +212,13 @@ const styles = StyleSheet.create({
   },
   actionBtn: { padding: 6 },
   reviewBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: colors.success,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
   },
   reviewBtnText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontWeight: '700',
     fontSize: 13,
   },
@@ -224,7 +229,7 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 40, marginBottom: 8 },
   emptyText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: colors.textHint,
   },
 });
 

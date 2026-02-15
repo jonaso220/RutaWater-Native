@@ -11,6 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { DailyLoad } from '../hooks/useDailyLoads';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface DailyLoadModalProps {
   visible: boolean;
@@ -34,6 +36,8 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
   const [data, setData] = useState<DailyLoad>(initialData);
 
   useEffect(() => {
@@ -78,7 +82,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
                     onChangeText={(v) => updateField(f.key, v)}
                     keyboardType="numeric"
                     placeholder="0"
-                    placeholderTextColor="#D1D5DB"
+                    placeholderTextColor={colors.textDisabled}
                   />
                 </View>
               ))}
@@ -100,7 +104,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
                     onChangeText={(v) => updateField(`${f.key}_extra`, v)}
                     keyboardType="numeric"
                     placeholder="0"
-                    placeholderTextColor="#D1D5DB"
+                    placeholderTextColor={colors.textDisabled}
                   />
                 </View>
               ))}
@@ -115,7 +119,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
               value={data.pedidos_note}
               onChangeText={(v) => updateField('pedidos_note', v)}
               placeholder="Notas sobre pedidos..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
               multiline
               numberOfLines={3}
             />
@@ -132,14 +136,14 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.modalBackground,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '85%',
@@ -150,27 +154,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 16, color: '#6B7280' },
+  closeBtnText: { fontSize: 16, color: colors.textMuted },
   body: { padding: 16 },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#6B7280',
+    color: colors.textMuted,
     textTransform: 'uppercase',
     marginBottom: 10,
   },
@@ -181,50 +185,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.sectionBackground,
   },
   fieldLabel: {
     fontSize: 14,
-    color: '#374151',
+    color: colors.textSecondary,
     fontWeight: '500',
   },
   fieldInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.inputBackground,
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.inputBorder,
     width: 80,
     textAlign: 'center',
   },
   notesInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.inputBorder,
     textAlignVertical: 'top',
     minHeight: 80,
   },
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.cardBorder,
   },
   saveBtn: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
   },
   saveBtnText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontSize: 16,
     fontWeight: '700',
   },

@@ -14,6 +14,8 @@ import {
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
 import { PRODUCTS, ALL_DAYS, FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeColors } from '../theme/colors';
 
 interface ScheduleModalProps {
   visible: boolean;
@@ -35,6 +37,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const { colors, isDark } = useTheme();
+  const styles = getStyles(colors);
+
   const [localDays, setLocalDays] = useState<string[]>(['Lunes']);
   const [localFreq, setLocalFreq] = useState<Frequency>('once');
   const [localDate, setLocalDate] = useState('');
@@ -209,7 +214,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                   minimumDate={new Date()}
                   locale="es-ES"
                   style={styles.datePicker}
-                  themeVariant="light"
+                  themeVariant={isDark ? 'dark' : 'light'}
                 />
               </View>
             ) : (
@@ -285,7 +290,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
               value={localNotes}
               onChangeText={setLocalNotes}
               placeholder="Notas del cliente..."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={colors.textHint}
               multiline
               numberOfLines={3}
             />
@@ -303,14 +308,14 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   modal: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '90%',
@@ -321,29 +326,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
   },
   headerSubtitle: {
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.textMuted,
     marginTop: 2,
   },
   closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
     fontSize: 16,
-    color: '#6B7280',
+    color: colors.textMuted,
   },
   body: {
     padding: 16,
@@ -351,14 +356,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#6B7280',
+    color: colors.textMuted,
     textTransform: 'uppercase',
     marginBottom: 10,
   },
   hintInline: {
     fontSize: 10,
     fontWeight: '400',
-    color: '#9CA3AF',
+    color: colors.textHint,
     textTransform: 'none',
   },
   freqGrid: {
@@ -370,38 +375,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   freqChipSelected: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#2563EB',
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
   },
   freqChipOnce: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#F97316',
+    backgroundColor: colors.warningLightBg,
+    borderColor: colors.warning,
   },
   freqChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   freqChipTextSelected: {
-    color: '#1D4ED8',
+    color: colors.primaryDark,
   },
   selectedDateRow: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: colors.primaryLighter,
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: colors.primaryInactiveBorder,
   },
   selectedDateText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1D4ED8',
+    color: colors.primaryDark,
     textAlign: 'center',
   },
   datePicker: {
@@ -409,7 +414,7 @@ const styles = StyleSheet.create({
   },
   hintText: {
     fontSize: 11,
-    color: '#9CA3AF',
+    color: colors.textHint,
     marginTop: 6,
   },
   daysGrid: {
@@ -421,22 +426,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
   },
   dayChipSelected: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
   },
   dayChipText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   dayChipTextSelected: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
   },
   dayCountText: {
     fontSize: 12,
-    color: '#2563EB',
+    color: colors.primary,
     fontWeight: '600',
     marginTop: 8,
   },
@@ -446,11 +451,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    borderBottomColor: colors.sectionBackground,
   },
   productLabel: {
     fontSize: 14,
-    color: '#374151',
+    color: colors.textSecondary,
   },
   qtyControls: {
     flexDirection: 'row',
@@ -461,52 +466,52 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   qtyBtnPlus: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
   },
   qtyBtnText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#374151',
+    color: colors.textSecondary,
   },
   qtyBtnPlusText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
   },
   qtyValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#111827',
+    color: colors.textPrimary,
     minWidth: 24,
     textAlign: 'center',
   },
   notesInput: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
     fontSize: 14,
-    color: '#111827',
+    color: colors.textPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.inputBorder,
     textAlignVertical: 'top',
     minHeight: 80,
   },
   footer: {
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: colors.cardBorder,
   },
   saveBtn: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
   },
   saveBtnText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontSize: 16,
     fontWeight: '700',
   },

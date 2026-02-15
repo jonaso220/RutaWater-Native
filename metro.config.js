@@ -1,5 +1,6 @@
 const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
-const config = {};
+const defaultConfig = getDefaultConfig(__dirname);
+defaultConfig.server.enhanceMiddleware = (middleware) => middleware;
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+module.exports = mergeConfig(defaultConfig, {});

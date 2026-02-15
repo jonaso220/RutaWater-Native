@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>882759838026-rlg7ijapthqcjaomr8vgpkupsb95bc6f.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.882759838026-rlg7ijapthqcjaomr8vgpkupsb95bc6f</string>
+	<key>API_KEY</key>
+	<string>AIzaSyA5qEL86SezLttu5XWIU6h_t1LxC8asjvE</string>
+	<key>GCM_SENDER_ID</key>
+	<string>882759838026</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.rutawater.native</string>
+	<key>PROJECT_ID</key>
+	<string>rutawater</string>
+	<key>STORAGE_BUCKET</key>
+	<string>rutawater.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:882759838026:ios:902cee0ffe27947b80f9b3</string>
+</dict>
+</plist>

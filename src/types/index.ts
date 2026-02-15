@@ -49,8 +49,11 @@ export interface Transfer {
   id: string;
   clientId: string;
   clientName: string;
-  amount: number;
-  status: 'pending' | 'reviewed';
+  clientAddress?: string;
+  clientLat?: string | null;
+  clientLng?: string | null;
+  clientMapsLink?: string | null;
+  reviewed: boolean;
   createdAt: FirebaseFirestoreTypes.Timestamp | null;
   userId: string;
   groupId?: string;

@@ -6,7 +6,7 @@ import { Group } from '../types';
 
 // Configure Google Sign-In (webClientId from Firebase Console)
 GoogleSignin.configure({
-  webClientId: '882759838026-XXXXXXX.apps.googleusercontent.com', // TODO: Replace with actual web client ID from Firebase Console
+  webClientId: '882759838026-bqngl8jrk5kjmbue3p3gtp6ojse9c2m8.apps.googleusercontent.com', // TODO: Replace with actual web client ID from Firebase Console
 });
 
 export const useAuth = () => {

@@ -21,6 +21,7 @@ interface EditClientModalProps {
   client: Client | null;
   onSave: (clientId: string, data: Partial<Client>) => void;
   onClose: () => void;
+  showClientInfo?: boolean;
 }
 
 const EditClientModal: React.FC<EditClientModalProps> = ({
@@ -28,16 +29,25 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   client,
   onSave,
   onClose,
+  showClientInfo = false,
 }) => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
 
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [phone, setPhone] = useState('');
+  const [mapsLink, setMapsLink] = useState('');
   const [products, setProducts] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const [freq, setFreq] = useState<Frequency>('weekly');
 
   useEffect(() => {
     if (client) {
+      setName(client.name || '');
+      setAddress(client.address || '');
+      setPhone(client.phone || '');
+      setMapsLink(client.mapsLink || '');
       // Initialize products from client data
       const prods: Record<string, number> = {};
       PRODUCTS.forEach((p) => {
@@ -56,11 +66,18 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     Object.entries(products).forEach(([key, val]) => {
       if (val > 0) cleanProducts[key] = val;
     });
-    onSave(client.id, {
+    const data: Partial<Client> = {
       products: cleanProducts,
       notes,
       freq,
-    });
+    };
+    if (showClientInfo) {
+      data.name = name.trim();
+      data.address = address.trim();
+      data.phone = phone.trim();
+      data.mapsLink = mapsLink.trim();
+    }
+    onSave(client.id, data);
     onClose();
   };
 
@@ -81,16 +98,54 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>
-              {(client.name || '').toUpperCase()}
+              {showClientInfo ? 'Editar Cliente' : (client.name || '').toUpperCase()}
             </Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {showClientInfo && (
+              <>
+                <Text style={styles.sectionTitle}>Datos del cliente</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Nombre"
+                  placeholderTextColor={colors.textHint}
+                />
+                <TextInput
+                  style={styles.fieldInput}
+                  value={address}
+                  onChangeText={setAddress}
+                  placeholder="Direccion"
+                  placeholderTextColor={colors.textHint}
+                />
+                <TextInput
+                  style={styles.fieldInput}
+                  value={phone}
+                  onChangeText={setPhone}
+                  placeholder="Telefono"
+                  placeholderTextColor={colors.textHint}
+                  keyboardType="phone-pad"
+                />
+                <TextInput
+                  style={styles.fieldInput}
+                  value={mapsLink}
+                  onChangeText={setMapsLink}
+                  placeholder="URL Google Maps"
+                  placeholderTextColor={colors.textHint}
+                  keyboardType="url"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </>
+            )}
+
             {/* Products */}
-            <Text style={styles.sectionTitle}>Productos</Text>
+            <Text style={[styles.sectionTitle, showClientInfo && { marginTop: 20 }]}>Productos</Text>
             {PRODUCTS.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
@@ -214,6 +269,16 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textMuted,
     textTransform: 'uppercase',
     marginBottom: 12,
+  },
+  fieldInput: {
+    backgroundColor: colors.inputBackground,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+    color: colors.textPrimary,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    marginBottom: 10,
   },
   productRow: {
     flexDirection: 'row',

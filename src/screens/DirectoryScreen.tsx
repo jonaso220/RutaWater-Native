@@ -16,6 +16,7 @@ import { useClientsContext } from '../context/ClientsContext';
 import { useDebtsContext } from '../context/DebtsContext';
 import ScheduleModal from '../components/ScheduleModal';
 import DebtModal from '../components/DebtModal';
+import EditClientModal from '../components/EditClientModal';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -23,11 +24,12 @@ const DirectoryScreen = () => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
   const { isAdmin } = useAuthContext();
-  const { getFilteredDirectory, scheduleFromDirectory } = useClientsContext();
+  const { getFilteredDirectory, scheduleFromDirectory, updateClient } = useClientsContext();
   const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
   const [search, setSearch] = useState('');
   const [scheduleClient, setScheduleClient] = useState<Client | null>(null);
   const [debtClient, setDebtClient] = useState<Client | null>(null);
+  const [editClient, setEditClient] = useState<Client | null>(null);
 
   const filteredClients = getFilteredDirectory(search);
 
@@ -141,6 +143,14 @@ const DirectoryScreen = () => {
                 {debtTotal > 0 ? '🔴' : '💰'}
               </Text>
             </TouchableOpacity>
+            {isAdmin && (
+              <TouchableOpacity
+                onPress={() => setEditClient(item)}
+                style={styles.actionBtn}
+              >
+                <Text style={styles.actionBtnText}>✏️</Text>
+              </TouchableOpacity>
+            )}
             <View style={{ flex: 1 }} />
             <TouchableOpacity
               style={styles.scheduleButton}
@@ -207,6 +217,17 @@ const DirectoryScreen = () => {
         onMarkPaid={markDebtPaid}
         onEditDebt={editDebt}
       />
+
+      {/* Edit Client Modal (admin only) */}
+      {isAdmin && (
+        <EditClientModal
+          visible={!!editClient}
+          client={editClient}
+          onSave={updateClient}
+          onClose={() => setEditClient(null)}
+          showClientInfo
+        />
+      )}
     </View>
   );
 };

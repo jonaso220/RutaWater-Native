@@ -9,6 +9,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ScrollView,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useTheme } from '../theme/ThemeContext';
@@ -69,55 +72,64 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
       >
-        <View style={styles.modal}>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Nueva Nota</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>✕</Text>
-            </TouchableOpacity>
-          </View>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modal}>
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>Nueva Nota</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                <Text style={styles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.body}>
-            <Text style={styles.label}>Nota</Text>
-            <TextInput
-              style={styles.notesInput}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Escribe tu nota aqui..."
-              placeholderTextColor={colors.textHint}
-              multiline
-              numberOfLines={3}
-              autoFocus
-            />
+            <ScrollView
+              style={styles.scrollBody}
+              contentContainerStyle={styles.bodyContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.label}>Nota</Text>
+              <TextInput
+                style={styles.notesInput}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Escribe tu nota aqui..."
+                placeholderTextColor={colors.textHint}
+                multiline
+                numberOfLines={3}
+                blurOnSubmit
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
+              />
 
-            <Text style={[styles.label, { marginTop: 16 }]}>
-              Fecha de entrega
-            </Text>
-            {date ? (
-              <View style={styles.selectedDateRow}>
-                <Text style={styles.selectedDateText}>
-                  {formatDisplayDate(date)}
-                </Text>
-              </View>
-            ) : null}
-            <DateTimePicker
-              value={pickerDate}
-              mode="date"
-              display="inline"
-              onChange={onDateChange}
-              minimumDate={new Date()}
-              locale="es-ES"
-              style={styles.datePicker}
-              themeVariant={isDark ? 'dark' : 'light'}
-            />
-          </View>
+              <Text style={[styles.label, { marginTop: 16 }]}>
+                Fecha de entrega
+              </Text>
+              {date ? (
+                <View style={styles.selectedDateRow}>
+                  <Text style={styles.selectedDateText}>
+                    {formatDisplayDate(date)}
+                  </Text>
+                </View>
+              ) : null}
+              <DateTimePicker
+                value={pickerDate}
+                mode="date"
+                display="inline"
+                onChange={onDateChange}
+                minimumDate={new Date()}
+                locale="es-ES"
+                style={styles.datePicker}
+                themeVariant={isDark ? 'dark' : 'light'}
+              />
+            </ScrollView>
 
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-              <Text style={styles.saveBtnText}>Agregar Nota</Text>
-            </TouchableOpacity>
+            <View style={styles.footer}>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
+                <Text style={styles.saveBtnText}>Agregar Nota</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -127,13 +139,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
+    justifyContent: 'flex-end',
   },
   modal: {
     backgroundColor: colors.card,
-    borderRadius: 20,
-    maxHeight: '90%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '92%',
   },
   header: {
     flexDirection: 'row',
@@ -157,7 +169,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   closeBtnText: { fontSize: 16, color: colors.textMuted },
-  body: { padding: 16 },
+  scrollBody: {
+    flexGrow: 0,
+  },
+  bodyContent: {
+    padding: 16,
+    paddingBottom: 8,
+  },
   label: {
     fontSize: 13,
     fontWeight: '700',

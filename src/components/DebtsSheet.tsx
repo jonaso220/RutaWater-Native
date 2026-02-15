@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,12 @@ import {
   StyleSheet,
   Alert,
   Linking,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Client, Debt } from '../types';
-import { normalizePhone } from '../utils/helpers';
+import { normalizePhone, normalizeText } from '../utils/helpers';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -45,6 +48,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 }) => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Group debts by client
   const clientGroups: ClientDebtGroup[] = React.useMemo(() => {
@@ -67,6 +71,14 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 
     return Object.values(grouped).sort((a, b) => b.total - a.total);
   }, [debts, clients]);
+
+  const filteredGroups = useMemo(() => {
+    if (!searchTerm.trim()) return clientGroups;
+    const term = normalizeText(searchTerm);
+    return clientGroups.filter((g) =>
+      normalizeText(g.clientName).includes(term),
+    );
+  }, [clientGroups, searchTerm]);
 
   const grandTotal = clientGroups.reduce((sum, g) => sum + g.total, 0);
 
@@ -151,8 +163,11 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} onDismiss={() => setSearchTerm('')}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}
+      >
         <View style={styles.modal}>
           <View style={styles.header}>
             <View>
@@ -166,9 +181,34 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             </TouchableOpacity>
           </View>
 
+          <View style={styles.searchSection}>
+            <View style={styles.searchInputWrapper}>
+              <Text style={styles.searchIcon}>🔍</Text>
+              <TextInput
+                style={styles.searchInput}
+                value={searchTerm}
+                onChangeText={setSearchTerm}
+                placeholder="Buscar cliente..."
+                placeholderTextColor={colors.textHint}
+                autoCorrect={false}
+              />
+              {searchTerm.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchTerm('')} style={styles.clearBtn}>
+                  <Text style={styles.clearBtnText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {searchTerm.trim().length > 0 && (
+              <Text style={styles.searchResultCount}>
+                {filteredGroups.length} resultado{filteredGroups.length !== 1 ? 's' : ''}
+              </Text>
+            )}
+          </View>
+
           <FlatList
-            data={clientGroups}
+            data={filteredGroups}
             renderItem={renderGroup}
+            keyboardShouldPersistTaps="handled"
             keyExtractor={(item) => item.clientId}
             contentContainerStyle={styles.list}
             ListEmptyComponent={
@@ -181,7 +221,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             }
           />
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -225,6 +265,42 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   closeBtnText: { fontSize: 16, color: colors.textMuted },
+  searchSection: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.sectionBackground,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 38,
+  },
+  searchIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.textPrimary,
+    padding: 0,
+  },
+  clearBtn: {
+    padding: 4,
+  },
+  clearBtnText: {
+    fontSize: 14,
+    color: colors.textHint,
+  },
+  searchResultCount: {
+    fontSize: 11,
+    color: colors.textHint,
+    marginTop: 4,
+  },
   list: { padding: 12 },
   card: {
     backgroundColor: colors.dangerLight,

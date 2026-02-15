@@ -10,23 +10,17 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { db } from '../config/firebase';
-import { Group, UserData } from '../types';
+import { useAuthContext } from '../context/AuthContext';
 
-interface SettingsScreenProps {
-  user: UserData;
-  groupData: Group | null;
-  isAdmin: boolean;
-  onSignOut: () => void;
-  onGroupUpdate: (data: Group | null) => void;
-}
-
-const SettingsScreen: React.FC<SettingsScreenProps> = ({
-  user,
-  groupData,
-  isAdmin,
-  onSignOut,
-  onGroupUpdate,
-}) => {
+const SettingsScreen = () => {
+  const { user: firebaseUser, groupData, isAdmin, signOut, setGroupData } = useAuthContext();
+  const user = {
+    uid: firebaseUser!.uid,
+    email: firebaseUser!.email,
+    displayName: firebaseUser!.displayName,
+  };
+  const onSignOut = signOut;
+  const onGroupUpdate = setGroupData;
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<any[]>([]);

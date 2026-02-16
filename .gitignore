@@ -20,9 +20,12 @@ DerivedData/
 
 # Android
 android/app/build/
+android/app/.cxx/
 android/build/
 android/.gradle/
 android/local.properties
+android/app/google-services.json
+android/app/rutawater-release.keystore
 *.apk
 *.aab
 

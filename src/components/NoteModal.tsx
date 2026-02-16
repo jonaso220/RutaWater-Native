@@ -30,8 +30,14 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
   const [notes, setNotes] = useState('');
   const [pickerDate, setPickerDate] = useState(new Date());
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [showAndroidPicker, setShowAndroidPicker] = useState(false);
 
   const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    // On Android, dismiss the picker on any event (set or dismissed)
+    if (Platform.OS === 'android') {
+      setShowAndroidPicker(false);
+    }
+    if (event.type === 'dismissed') return;
     if (selectedDate) {
       setPickerDate(selectedDate);
       const yyyy = selectedDate.getFullYear();
@@ -105,22 +111,51 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
                 Fecha de entrega
               </Text>
               {date ? (
-                <View style={styles.selectedDateRow}>
+                <TouchableOpacity
+                  style={styles.selectedDateRow}
+                  onPress={() => Platform.OS === 'android' && setShowAndroidPicker(true)}
+                  activeOpacity={Platform.OS === 'android' ? 0.6 : 1}
+                >
                   <Text style={styles.selectedDateText}>
-                    {formatDisplayDate(date)}
+                    📅 {formatDisplayDate(date)}
                   </Text>
-                </View>
+                  {Platform.OS === 'android' && (
+                    <Text style={[styles.selectedDateHint, { color: colors.textMuted }]}>
+                      Toca para cambiar fecha
+                    </Text>
+                  )}
+                </TouchableOpacity>
               ) : null}
-              <DateTimePicker
-                value={pickerDate}
-                mode="date"
-                display="inline"
-                onChange={onDateChange}
-                minimumDate={new Date()}
-                locale="es-ES"
-                style={styles.datePicker}
-                themeVariant={isDark ? 'dark' : 'light'}
-              />
+              {Platform.OS === 'ios' ? (
+                <DateTimePicker
+                  value={pickerDate}
+                  mode="date"
+                  display="inline"
+                  onChange={onDateChange}
+                  minimumDate={new Date()}
+                  locale="es-ES"
+                  style={styles.datePicker}
+                  themeVariant={isDark ? 'dark' : 'light'}
+                />
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.datePickerBtn}
+                    onPress={() => setShowAndroidPicker(true)}
+                  >
+                    <Text style={styles.datePickerBtnText}>📅 Seleccionar fecha</Text>
+                  </TouchableOpacity>
+                  {showAndroidPicker && (
+                    <DateTimePicker
+                      value={pickerDate}
+                      mode="date"
+                      display="default"
+                      onChange={onDateChange}
+                      minimumDate={new Date()}
+                    />
+                  )}
+                </>
+              )}
             </ScrollView>
 
             <View style={styles.footer}>
@@ -210,6 +245,24 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   datePicker: {
     height: 340,
+  },
+  selectedDateHint: {
+    fontSize: 11,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  datePickerBtn: {
+    backgroundColor: colors.primaryLighter,
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primaryInactiveBorder,
+  },
+  datePickerBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primaryDark,
   },
   footer: {
     padding: 16,

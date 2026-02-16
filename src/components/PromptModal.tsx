@@ -8,6 +8,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  KeyboardTypeOptions,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -18,6 +19,7 @@ interface PromptModalProps {
   message?: string;
   placeholder?: string;
   defaultValue?: string;
+  keyboardType?: KeyboardTypeOptions;
   onSubmit: (value: string) => void;
   onCancel: () => void;
 }
@@ -28,6 +30,7 @@ const PromptModal: React.FC<PromptModalProps> = ({
   message,
   placeholder,
   defaultValue = '',
+  keyboardType,
   onSubmit,
   onCancel,
 }) => {
@@ -62,6 +65,7 @@ const PromptModal: React.FC<PromptModalProps> = ({
             onChangeText={setValue}
             placeholder={placeholder}
             placeholderTextColor={colors.textHint}
+            keyboardType={keyboardType}
             autoFocus
             onSubmitEditing={handleSubmit}
           />

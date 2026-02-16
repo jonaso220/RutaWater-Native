@@ -1,4 +1,4 @@
-package com.rutawatertemp
+package com.rutawater.app
 
 import android.app.Application
 import com.facebook.react.PackageList

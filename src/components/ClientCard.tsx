@@ -1,10 +1,11 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
 import { normalizePhone } from '../utils/helpers';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import PromptModal from './PromptModal';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
 
@@ -59,6 +60,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
 }) => {
   const { colors } = useTheme();
   const styles = getStyles(colors);
+  const [showPositionPrompt, setShowPositionPrompt] = useState(false);
 
   const productSummary = React.useMemo(() => {
     if (!client.products) return '';
@@ -73,25 +75,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
 
   const handleOrderTap = () => {
     if (!onChangePosition) return;
-    Alert.prompt?.(
-      'Cambiar posicion',
-      `Posicion actual: ${index + 1}\nIngresa la nueva posicion:`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Mover',
-          onPress: (text?: string) => {
-            const num = parseInt(text || '', 10);
-            if (num > 0) {
-              onChangePosition(num);
-            }
-          },
-        },
-      ],
-      'plain-text',
-      String(index + 1),
-      'number-pad',
-    );
+    setShowPositionPrompt(true);
   };
 
   const sendEnCamino = () => {
@@ -130,6 +114,21 @@ const ClientCard: React.FC<ClientCardProps> = ({
   if (client.isNote) {
     return (
       <View style={[styles.card, styles.noteCard]}>
+        <PromptModal
+          visible={showPositionPrompt}
+          title="Cambiar posicion"
+          message={`Posicion actual: ${index + 1}\nIngresa la nueva posicion:`}
+          defaultValue={String(index + 1)}
+          keyboardType="number-pad"
+          onSubmit={(text) => {
+            setShowPositionPrompt(false);
+            const num = parseInt(text, 10);
+            if (num > 0 && onChangePosition) {
+              onChangePosition(num);
+            }
+          }}
+          onCancel={() => setShowPositionPrompt(false)}
+        />
         <TouchableOpacity style={styles.orderBadge} onPress={handleOrderTap} activeOpacity={0.6}>
           <Text style={styles.orderText}>{index + 1}</Text>
         </TouchableOpacity>
@@ -169,6 +168,21 @@ const ClientCard: React.FC<ClientCardProps> = ({
         (client.freq === 'once') && styles.cardOnce,
       ]}
     >
+      <PromptModal
+        visible={showPositionPrompt}
+        title="Cambiar posicion"
+        message={`Posicion actual: ${index + 1}\nIngresa la nueva posicion:`}
+        defaultValue={String(index + 1)}
+        keyboardType="number-pad"
+        onSubmit={(text) => {
+          setShowPositionPrompt(false);
+          const num = parseInt(text, 10);
+          if (num > 0 && onChangePosition) {
+            onChangePosition(num);
+          }
+        }}
+        onCancel={() => setShowPositionPrompt(false)}
+      />
       <TouchableOpacity style={styles.orderBadge} onPress={handleOrderTap} activeOpacity={0.6}>
         <Text style={styles.orderText}>{index + 1}</Text>
       </TouchableOpacity>

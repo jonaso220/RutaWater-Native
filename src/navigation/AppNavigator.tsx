@@ -39,7 +39,7 @@ const AppNavigator = () => {
           },
           tabBarActiveTintColor: colors.tabActive,
           tabBarInactiveTintColor: colors.tabInactive,
-          tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+          tabBarLabelStyle: { fontSize: 13, fontWeight: '600' },
         }}
       >
         <Tab.Screen
@@ -72,7 +72,7 @@ const AppNavigator = () => {
 };
 
 const TabIcon = ({ label }: { label: string }) => (
-  <RNText style={{ fontSize: 20 }}>{label}</RNText>
+  <RNText style={{ fontSize: 22 }}>{label}</RNText>
 );
 
 export default AppNavigator;

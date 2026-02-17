@@ -76,12 +76,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primaryLight,
   },
   qty: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '800',
     color: colors.primary,
   },
   label: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.textMuted,
   },

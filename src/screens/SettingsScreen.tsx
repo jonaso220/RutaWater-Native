@@ -410,13 +410,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 16,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
     marginBottom: 12,
   },
   subsectionTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
@@ -446,21 +446,21 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   avatarText: {
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
   },
   userName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
   },
   userEmail: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.textMuted,
     marginTop: 2,
   },
   roleBadge: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.primary,
     backgroundColor: colors.primaryLight,
@@ -480,7 +480,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primaryLight,
   },
   codeLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.textMuted,
     fontWeight: '600',
   },
@@ -492,7 +492,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginVertical: 8,
   },
   codeHint: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textHint,
     textAlign: 'center',
   },
@@ -507,12 +507,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.sectionBackground,
   },
   memberName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
   },
   memberRole: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textMuted,
     marginTop: 2,
   },
@@ -525,7 +525,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   removeBtnText: {
     color: colors.danger,
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 14,
   },
   groupActions: {
     marginTop: 16,
@@ -541,10 +541,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   dangerBtnText: {
     color: colors.danger,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 16,
   },
   noGroupText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textMuted,
     textAlign: 'center',
     marginBottom: 16,
@@ -557,7 +557,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   primaryBtnText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
   divider: {
@@ -573,7 +573,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   dividerText: {
     color: colors.textHint,
     paddingHorizontal: 12,
-    fontSize: 13,
+    fontSize: 15,
   },
   joinRow: {
     flexDirection: 'row',
@@ -585,7 +585,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
     borderWidth: 1,
@@ -603,7 +603,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   joinBtnText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 16,
   },
   signOutBtn: {
     backgroundColor: colors.card,
@@ -616,7 +616,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   signOutText: {
     color: colors.danger,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 16,
   },
 });
 

@@ -692,7 +692,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   loadingText: {
     marginTop: 12,
     color: colors.textMuted,
-    fontSize: 14,
+    fontSize: 16,
   },
   daySelector: {
     flexGrow: 0,
@@ -724,7 +724,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primary,
   },
   dayChipText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -732,7 +732,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textWhite,
   },
   dayCount: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.textMuted,
     backgroundColor: colors.cardBorder,
@@ -765,7 +765,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 8,
   },
   actionBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -823,12 +823,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     height: 38,
   },
   searchIcon: {
-    fontSize: 14,
+    fontSize: 16,
     marginRight: 6,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textPrimary,
     padding: 0,
   },
@@ -836,7 +836,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 4,
   },
   clearBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textHint,
   },
   filterToggleBtn: {
@@ -852,7 +852,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primary,
   },
   filterToggleText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -866,7 +866,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopColor: colors.sectionBackground,
   },
   filterSectionTitle: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.textHint,
     marginBottom: 6,
@@ -889,7 +889,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primary,
   },
   filterChipText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -915,7 +915,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.primary,
   },
   sectionHeaderText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.textMuted,
   },
@@ -923,7 +923,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.primary,
   },
   sectionHeaderCount: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.textHint,
     backgroundColor: colors.sectionBackground,
@@ -945,7 +945,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 12,
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: 17,
     color: colors.textHint,
   },
   completedSection: {
@@ -959,7 +959,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 12,
   },
   completedTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textHint,
     textTransform: 'uppercase',
@@ -977,12 +977,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderLeftColor: colors.success,
   },
   completedName: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.successText,
   },
   completedHint: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.successAccent,
     fontStyle: 'italic',
   },
@@ -996,7 +996,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.dangerBorder,
   },
   deleteAllBtnText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.danger,
   },
@@ -1012,7 +1012,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 20,
   },
   alarmTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
@@ -1031,7 +1031,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.sectionBackground,
   },
   alarmCancelText: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '600',
     color: colors.textMuted,
   },
@@ -1042,7 +1042,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.primary,
   },
   alarmSaveText: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.textWhite,
   },

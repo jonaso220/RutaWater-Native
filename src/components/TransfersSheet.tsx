@@ -159,12 +159,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
   },
   headerCount: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.textMuted,
     marginTop: 2,
   },
@@ -176,7 +176,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 16, color: colors.textMuted },
+  closeBtnText: { fontSize: 18, color: colors.textMuted },
   list: { padding: 12 },
   card: {
     backgroundColor: colors.successBg,
@@ -191,17 +191,17 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cardContent: { flex: 1, marginRight: 12 },
   clientName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.textPrimary,
   },
   clientAddress: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.textMuted,
     marginTop: 2,
   },
   date: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textHint,
     marginTop: 4,
   },
@@ -220,7 +220,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   reviewBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 15,
   },
   empty: {
     alignItems: 'center',
@@ -228,7 +228,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   emptyEmoji: { fontSize: 40, marginBottom: 8 },
   emptyText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textHint,
   },
 });

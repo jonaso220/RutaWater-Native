@@ -435,7 +435,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
   },
@@ -448,14 +448,14 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 16,
+    fontSize: 18,
     color: colors.textMuted,
   },
   body: {
     padding: 16,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
@@ -482,7 +482,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.warning,
   },
   destChipText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -496,7 +496,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
-    fontSize: 15,
+    fontSize: 17,
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -510,7 +510,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.sectionBackground,
   },
   productLabel: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textSecondary,
   },
   qtyControls: {
@@ -530,7 +530,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.primary,
   },
   qtyBtnText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -538,7 +538,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textWhite,
   },
   qtyValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
     minWidth: 24,
@@ -548,7 +548,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -571,7 +571,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   saveBtnText: {
     color: colors.textWhite,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
   pasteBtn: {
@@ -584,7 +584,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.successBorder,
   },
   pasteBtnText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.successMedium,
   },
@@ -600,13 +600,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 20,
   },
   pasteModalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
     marginBottom: 4,
   },
   pasteModalHint: {
-    fontSize: 13,
+    fontSize: 15,
     color: colors.textMuted,
     marginBottom: 12,
   },
@@ -614,7 +614,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -635,7 +635,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.sectionBackground,
   },
   pasteCancelText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.textMuted,
   },
@@ -646,7 +646,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.primary,
   },
   pasteConfirmText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.textWhite,
   },

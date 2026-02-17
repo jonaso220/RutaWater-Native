@@ -248,13 +248,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textPrimary,
   },
   countText: {
     textAlign: 'center',
     color: colors.textHint,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '500',
     marginTop: 8,
   },
@@ -287,13 +287,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   clientName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.textPrimary,
     flex: 1,
   },
   debtBadge: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '800',
     color: colors.danger,
     backgroundColor: colors.dangerLight,
@@ -303,17 +303,17 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     overflow: 'hidden',
   },
   clientAddress: {
-    fontSize: 12,
+    fontSize: 14,
     color: colors.textMuted,
     marginTop: 2,
   },
   clientPhone: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textHint,
     marginTop: 1,
   },
   productText: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textSecondary,
     fontWeight: '600',
     marginTop: 4,
@@ -325,7 +325,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 4,
   },
   freqBadge: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.textMuted,
     backgroundColor: colors.sectionBackground,
@@ -335,7 +335,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     overflow: 'hidden',
   },
   daysText: {
-    fontSize: 10,
+    fontSize: 12,
     color: colors.textHint,
   },
   actionsRow: {
@@ -352,7 +352,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 6,
   },
   actionBtnText: {
-    fontSize: 16,
+    fontSize: 18,
   },
   scheduleButton: {
     backgroundColor: colors.primaryLight,
@@ -361,7 +361,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 8,
   },
   scheduleButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.primaryDark,
   },
@@ -370,7 +370,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 80,
   },
   emptyText: {
-    fontSize: 15,
+    fontSize: 17,
     color: colors.textHint,
   },
 });

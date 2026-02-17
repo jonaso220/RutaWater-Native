@@ -337,7 +337,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
     flex: 1,
@@ -351,14 +351,14 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 16,
+    fontSize: 18,
     color: colors.textMuted,
   },
   body: {
     padding: 16,
   },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
@@ -368,7 +368,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -383,7 +383,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.sectionBackground,
   },
   productLabel: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textSecondary,
   },
   qtyControls: {
@@ -403,7 +403,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.primary,
   },
   qtyBtnText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -411,7 +411,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textWhite,
   },
   qtyValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
     minWidth: 24,
@@ -421,7 +421,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -443,7 +443,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.primary,
   },
   freqChipText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -460,17 +460,17 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 8,
   },
   selectedDateText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
   },
   clearDateText: {
-    fontSize: 13,
+    fontSize: 15,
     color: colors.danger,
     fontWeight: '600',
   },
   dateHint: {
-    fontSize: 13,
+    fontSize: 15,
     color: colors.textMuted,
     marginBottom: 8,
   },
@@ -484,7 +484,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   dateBtnText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.primary,
   },
@@ -501,7 +501,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   saveBtnText: {
     color: colors.textWhite,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
 });

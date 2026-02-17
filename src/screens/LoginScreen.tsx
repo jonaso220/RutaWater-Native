@@ -75,19 +75,19 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 12,
   },
   title: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
     color: '#FFFFFF',
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#9CA3AF',
     marginBottom: 32,
   },
   error: {
     color: '#EF4444',
-    fontSize: 13,
+    fontSize: 15,
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -104,7 +104,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
 });

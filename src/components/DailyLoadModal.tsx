@@ -157,7 +157,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
   },
@@ -169,10 +169,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 16, color: colors.textMuted },
+  closeBtnText: { fontSize: 18, color: colors.textMuted },
   body: { padding: 16 },
   sectionTitle: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
@@ -188,7 +188,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.sectionBackground,
   },
   fieldLabel: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textSecondary,
     fontWeight: '500',
   },
@@ -197,7 +197,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
     borderWidth: 1,
@@ -209,7 +209,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -229,7 +229,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   saveBtnText: {
     color: colors.textWhite,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
 });

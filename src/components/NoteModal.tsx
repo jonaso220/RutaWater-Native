@@ -191,7 +191,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
   },
@@ -203,7 +203,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 16, color: colors.textMuted },
+  closeBtnText: { fontSize: 18, color: colors.textMuted },
   scrollBody: {
     flexGrow: 0,
   },
@@ -212,7 +212,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingBottom: 8,
   },
   label: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
@@ -222,7 +222,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.warningAmberBg,
     borderRadius: 10,
     padding: 12,
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.warningAmberBorder,
@@ -238,7 +238,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primaryInactiveBorder,
   },
   selectedDateText: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.primaryDark,
     textAlign: 'center',
@@ -247,7 +247,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     height: 340,
   },
   selectedDateHint: {
-    fontSize: 11,
+    fontSize: 13,
     marginTop: 2,
     textAlign: 'center',
   },
@@ -260,7 +260,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primaryInactiveBorder,
   },
   datePickerBtnText: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '600',
     color: colors.primaryDark,
   },
@@ -277,7 +277,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   saveBtnText: {
     color: colors.textWhite,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
   },
 });

@@ -274,12 +274,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
   },
   totalText: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '800',
     color: colors.danger,
     marginTop: 4,
@@ -293,7 +293,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 16,
+    fontSize: 18,
     color: colors.textMuted,
   },
   body: {
@@ -313,12 +313,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   debtAmount: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: colors.danger,
   },
   debtDate: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.textHint,
     marginTop: 2,
   },
@@ -337,7 +337,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   paidBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 15,
   },
   editRow: {
     flexDirection: 'row',
@@ -349,7 +349,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: 8,
     padding: 10,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
     borderWidth: 1,
@@ -382,7 +382,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 8,
   },
   emptyText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textHint,
   },
   whatsappSection: {
@@ -398,7 +398,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   whatsappBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 16,
   },
   whatsappBtnSecondary: {
     backgroundColor: colors.sectionBackground,
@@ -406,7 +406,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   whatsappBtnSecondaryText: {
     color: colors.textSecondary,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 16,
   },
   footer: {
     padding: 16,
@@ -419,7 +419,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: 8,
   },
   currencySign: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: colors.textMuted,
   },
@@ -428,7 +428,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
     borderWidth: 1,
@@ -446,7 +446,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   addBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 16,
   },
 });
 

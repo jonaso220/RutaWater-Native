@@ -338,7 +338,7 @@ const getStyles = (colors: ThemeColors) =>
       borderRightColor: colors.sectionBackground,
     },
     orderText: {
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: '700',
       color: colors.textMuted,
     },
@@ -353,13 +353,13 @@ const getStyles = (colors: ThemeColors) =>
       alignItems: 'center',
     },
     noteLabel: {
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '800',
       color: colors.warningDarker,
       textTransform: 'uppercase',
     },
     noteText: {
-      fontSize: 14,
+      fontSize: 16,
       color: colors.textSecondary,
       lineHeight: 20,
     },
@@ -378,7 +378,7 @@ const getStyles = (colors: ThemeColors) =>
       borderRadius: 6,
     },
     clientName: {
-      fontSize: 14,
+      fontSize: 16,
       fontWeight: '700',
       color: colors.textPrimary,
     },
@@ -388,7 +388,7 @@ const getStyles = (colors: ThemeColors) =>
       gap: 4,
     },
     debtBadge: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '700',
       color: colors.danger,
       backgroundColor: colors.dangerLight,
@@ -398,7 +398,7 @@ const getStyles = (colors: ThemeColors) =>
       overflow: 'hidden',
     },
     transferBadge: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '700',
       color: colors.successDark,
       backgroundColor: colors.successLighter,
@@ -408,7 +408,7 @@ const getStyles = (colors: ThemeColors) =>
       overflow: 'hidden',
     },
     alarmBadge: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '700',
       color: colors.warningDark,
       backgroundColor: colors.warningAmberBg,
@@ -418,7 +418,7 @@ const getStyles = (colors: ThemeColors) =>
       overflow: 'hidden',
     },
     clientAddress: {
-      fontSize: 12,
+      fontSize: 14,
       color: colors.textMuted,
     },
     addressRow: {
@@ -427,10 +427,10 @@ const getStyles = (colors: ThemeColors) =>
       gap: 4,
     },
     mapsPinIcon: {
-      fontSize: 14,
+      fontSize: 16,
     },
     clientAddressLink: {
-      fontSize: 12,
+      fontSize: 14,
       color: colors.primary,
       flex: 1,
     },
@@ -441,12 +441,12 @@ const getStyles = (colors: ThemeColors) =>
       marginTop: 2,
     },
     productsText: {
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: '600',
       color: colors.textSecondary,
     },
     notesText: {
-      fontSize: 11,
+      fontSize: 13,
       color: colors.textMuted,
       fontStyle: 'italic',
     },
@@ -454,7 +454,7 @@ const getStyles = (colors: ThemeColors) =>
       marginTop: 2,
     },
     badge: {
-      fontSize: 10,
+      fontSize: 12,
       fontWeight: '700',
       color: colors.textMuted,
       backgroundColor: colors.sectionBackground,
@@ -482,7 +482,7 @@ const getStyles = (colors: ThemeColors) =>
       alignItems: 'center',
     },
     actionBtnIcon: {
-      fontSize: 16,
+      fontSize: 18,
     },
     enCaminoBtn: {
       flex: 1,
@@ -496,7 +496,7 @@ const getStyles = (colors: ThemeColors) =>
     },
     enCaminoText: {
       color: colors.textWhite,
-      fontSize: 14,
+      fontSize: 16,
       fontWeight: '700',
     },
     doneButton: {
@@ -509,7 +509,7 @@ const getStyles = (colors: ThemeColors) =>
     },
     doneButtonText: {
       color: colors.textWhite,
-      fontSize: 13,
+      fontSize: 15,
       fontWeight: '700',
     },
   });

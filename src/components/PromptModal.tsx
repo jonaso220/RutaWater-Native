@@ -108,13 +108,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     elevation: 8,
   },
   title: {
-    fontSize: 17,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
   },
   message: {
-    fontSize: 13,
+    fontSize: 15,
     color: colors.textMuted,
     textAlign: 'center',
     marginTop: 6,
@@ -124,7 +124,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 17,
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -143,7 +143,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.sectionBackground,
   },
   cancelText: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '600',
     color: colors.textMuted,
   },
@@ -158,7 +158,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     opacity: 0.5,
   },
   submitText: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.textWhite,
   },

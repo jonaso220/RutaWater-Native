@@ -99,6 +99,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
     const date = timestamp.seconds
       ? new Date(timestamp.seconds * 1000)
       : new Date(timestamp);
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleDateString('es-ES', {
       day: 'numeric',
       month: 'short',

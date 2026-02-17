@@ -113,15 +113,19 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           if (client.freq === 'triweekly') interval = 3;
           if (client.freq === 'monthly') interval = 4;
           const currentSpecificDate = new Date(client.specificDate + 'T12:00:00');
-          const nextSpecificDate = new Date(currentSpecificDate);
-          nextSpecificDate.setDate(nextSpecificDate.getDate() + interval * 7);
-          const tomorrow = new Date();
-          tomorrow.setHours(0, 0, 0, 0);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          while (nextSpecificDate < tomorrow) {
+          if (isNaN(currentSpecificDate.getTime())) {
+            updates.specificDate = '';
+          } else {
+            const nextSpecificDate = new Date(currentSpecificDate);
             nextSpecificDate.setDate(nextSpecificDate.getDate() + interval * 7);
+            const tomorrow = new Date();
+            tomorrow.setHours(0, 0, 0, 0);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            while (nextSpecificDate < tomorrow) {
+              nextSpecificDate.setDate(nextSpecificDate.getDate() + interval * 7);
+            }
+            updates.specificDate = nextSpecificDate.toISOString().split('T')[0];
           }
-          updates.specificDate = nextSpecificDate.toISOString().split('T')[0];
         }
 
         if (client.isStarred) {
@@ -445,7 +449,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       const ref = db.collection('clients').doc(client.id);
       batch.update(ref, {
         [`listOrders.${day}`]: index,
-        listOrder: index,
       });
     });
 

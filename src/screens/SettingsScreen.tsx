@@ -18,10 +18,11 @@ const SettingsScreen = () => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
   const { user: firebaseUser, groupData, isAdmin, signOut, setGroupData } = useAuthContext();
+  if (!firebaseUser) return null;
   const user = {
-    uid: firebaseUser!.uid,
-    email: firebaseUser!.email,
-    displayName: firebaseUser!.displayName,
+    uid: firebaseUser.uid,
+    email: firebaseUser.email,
+    displayName: firebaseUser.displayName,
   };
   const onSignOut = signOut;
   const onGroupUpdate = setGroupData;

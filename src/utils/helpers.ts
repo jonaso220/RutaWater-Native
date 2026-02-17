@@ -90,8 +90,10 @@ export const getErrorMessage = (error: any): string => {
 
 export const parseDate = (val: any): Date | null => {
   if (!val) return null;
-  if (val.seconds !== undefined) return new Date(val.seconds * 1000);
-  return new Date(val);
+  const date = val.seconds !== undefined
+    ? new Date(val.seconds * 1000)
+    : new Date(val);
+  return isNaN(date.getTime()) ? null : date;
 };
 
 export const normalizeText = (text: string): string => {

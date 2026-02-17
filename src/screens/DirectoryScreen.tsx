@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Linking,
+  Alert,
 } from 'react-native';
 import { Client } from '../types';
 import { normalizePhone } from '../utils/helpers';
@@ -36,16 +37,22 @@ const DirectoryScreen = () => {
   const sendWhatsApp = (client: Client) => {
     if (!client.phone) return;
     const cleanPhone = normalizePhone(client.phone);
-    Linking.openURL(`whatsapp://send?phone=${cleanPhone}`);
+    Linking.openURL(`whatsapp://send?phone=${cleanPhone}`).catch(() => {
+      Alert.alert('Error', 'No se pudo abrir WhatsApp.');
+    });
   };
 
   const openMaps = (client: Client) => {
     if (client.lat && client.lng) {
       Linking.openURL(
         `https://www.google.com/maps/dir/?api=1&destination=${client.lat},${client.lng}`,
-      );
+      ).catch(() => {
+        Alert.alert('Error', 'No se pudo abrir Google Maps.');
+      });
     } else if (client.mapsLink) {
-      Linking.openURL(client.mapsLink);
+      Linking.openURL(client.mapsLink).catch(() => {
+        Alert.alert('Error', 'No se pudo abrir el enlace de mapa.');
+      });
     }
   };
 

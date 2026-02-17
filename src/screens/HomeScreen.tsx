@@ -152,7 +152,7 @@ const HomeScreen = () => {
     return Object.keys(groups)
       .sort()
       .map((dateKey) => {
-        const d = new Date(dateKey + 'T12:00:00');
+        const d = new Date(dateKey + 'T00:00:00');
         const diffDays = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
         let label: string;

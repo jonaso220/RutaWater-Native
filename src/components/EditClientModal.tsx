@@ -9,6 +9,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
@@ -96,7 +97,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     return `${dayNames[d.getDay()]} ${d.getDate()} de ${monthNames[d.getMonth()]}`;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const cleanProducts: Record<string, number> = {};
     Object.entries(products).forEach(([key, val]) => {
       if (val > 0) cleanProducts[key] = val;
@@ -117,8 +118,12 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       data.phone = phone.trim();
       data.mapsLink = mapsLink.trim();
     }
-    onSave(client.id, data);
-    onClose();
+    try {
+      await onSave(client.id, data);
+      onClose();
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo guardar los cambios.');
+    }
   };
 
   const adjustQty = (productId: string, delta: number) => {

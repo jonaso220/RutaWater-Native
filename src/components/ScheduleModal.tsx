@@ -122,7 +122,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     return `${dayNames[d.getDay()]} ${d.getDate()} de ${monthNames[d.getMonth()]}`;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (localFreq === 'once' && !localDate) {
       Alert.alert('Error', 'Por favor, selecciona una fecha de entrega.');
       return;
@@ -135,8 +135,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     Object.entries(localProducts).forEach(([key, val]) => {
       if (val > 0) cleanProducts[key] = val;
     });
-    onSave(client, localDays, localFreq, localDate, localNotes, cleanProducts);
-    onClose();
+    try {
+      await onSave(client, localDays, localFreq, localDate, localNotes, cleanProducts);
+      onClose();
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo agendar la visita.');
+    }
   };
 
   const freqOptions: { key: Frequency; label: string }[] = [
@@ -206,16 +210,39 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     </Text>
                   </View>
                 ) : null}
-                <DateTimePicker
-                  value={pickerDate}
-                  mode="date"
-                  display="inline"
-                  onChange={onDateChange}
-                  minimumDate={new Date()}
-                  locale="es-ES"
-                  style={styles.datePicker}
-                  themeVariant={isDark ? 'dark' : 'light'}
-                />
+                {Platform.OS === 'ios' ? (
+                  <DateTimePicker
+                    value={pickerDate}
+                    mode="date"
+                    display="inline"
+                    onChange={onDateChange}
+                    minimumDate={new Date()}
+                    locale="es-ES"
+                    style={styles.datePicker}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                  />
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={styles.selectedDateRow}
+                      onPress={() => setShowPicker(true)}
+                    >
+                      <Text style={styles.selectedDateText}>
+                        {localDate ? formatDisplayDate(localDate) : 'Elegir fecha'}
+                      </Text>
+                    </TouchableOpacity>
+                    {showPicker && (
+                      <DateTimePicker
+                        value={pickerDate}
+                        mode="date"
+                        display="default"
+                        onChange={onDateChange}
+                        minimumDate={new Date()}
+                        locale="es-ES"
+                      />
+                    )}
+                  </>
+                )}
               </View>
             ) : (
               <View style={{ marginTop: 16 }}>

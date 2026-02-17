@@ -63,7 +63,7 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const value = useMemo(
     () => ({ ...hook, dayCounts }),
-    [hook, dayCounts],
+    [hook.clients, hook.loading, dayCounts], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   return (

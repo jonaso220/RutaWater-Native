@@ -37,6 +37,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
     const date = timestamp.seconds
       ? new Date(timestamp.seconds * 1000)
       : new Date(timestamp);
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleDateString('es-ES', {
       day: 'numeric',
       month: 'short',
@@ -81,7 +82,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
         <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
       </View>
       <View style={styles.cardActions}>
-        {(item.clientLat || item.clientMapsLink) && (
+        {((item.clientLat && item.clientLng) || item.clientMapsLink) && (
           <TouchableOpacity
             onPress={() => openMaps(item)}
             style={styles.actionBtn}

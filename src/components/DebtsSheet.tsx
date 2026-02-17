@@ -87,6 +87,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     const date = timestamp.seconds
       ? new Date(timestamp.seconds * 1000)
       : new Date(timestamp);
+    if (isNaN(date.getTime())) return '';
     return date.toLocaleDateString('es-ES', {
       day: 'numeric',
       month: 'short',
@@ -163,7 +164,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} onDismiss={() => setSearchTerm('')}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => { setSearchTerm(''); onClose(); }} onDismiss={() => setSearchTerm('')}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}

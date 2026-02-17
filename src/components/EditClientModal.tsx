@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
@@ -41,6 +42,9 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const [products, setProducts] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const [freq, setFreq] = useState<Frequency>('weekly');
+  const [startDate, setStartDate] = useState<string>('');
+  const [pickerDate, setPickerDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
     if (client) {
@@ -56,10 +60,41 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       setProducts(prods);
       setNotes(client.notes || '');
       setFreq(client.freq || 'weekly');
+      setStartDate(client.specificDate || '');
+      if (client.specificDate) {
+        setPickerDate(new Date(client.specificDate + 'T12:00:00'));
+      } else {
+        setPickerDate(new Date());
+      }
+      setShowDatePicker(false);
     }
   }, [client]);
 
   if (!client) return null;
+
+  const needsStartDate = freq === 'biweekly' || freq === 'triweekly' || freq === 'monthly';
+
+  const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    if (selectedDate) {
+      setPickerDate(selectedDate);
+      const yyyy = selectedDate.getFullYear();
+      const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(selectedDate.getDate()).padStart(2, '0');
+      setStartDate(`${yyyy}-${mm}-${dd}`);
+    }
+  };
+
+  const formatDisplayDate = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T12:00:00');
+    if (isNaN(d.getTime())) return dateStr;
+    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    return `${dayNames[d.getDay()]} ${d.getDate()} de ${monthNames[d.getMonth()]}`;
+  };
 
   const handleSave = () => {
     const cleanProducts: Record<string, number> = {};
@@ -71,6 +106,11 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       notes,
       freq,
     };
+    if (needsStartDate && startDate) {
+      data.specificDate = startDate;
+    } else if (!needsStartDate) {
+      data.specificDate = '';
+    }
     if (showClientInfo) {
       data.name = name.trim();
       data.address = address.trim();
@@ -208,6 +248,60 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                 ),
               )}
             </View>
+
+            {/* Start date for non-weekly frequencies */}
+            {needsStartDate && (
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.sectionTitle}>Fecha de inicio</Text>
+                {startDate ? (
+                  <View style={styles.selectedDateRow}>
+                    <Text style={styles.selectedDateText}>
+                      {formatDisplayDate(startDate)}
+                    </Text>
+                    <TouchableOpacity onPress={() => { setStartDate(''); setShowDatePicker(false); }}>
+                      <Text style={styles.clearDateText}>Quitar</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <Text style={styles.dateHint}>
+                    Selecciona desde cuando inicia la frecuencia
+                  </Text>
+                )}
+                {Platform.OS === 'ios' ? (
+                  <DateTimePicker
+                    value={pickerDate}
+                    mode="date"
+                    display="inline"
+                    onChange={onDateChange}
+                    minimumDate={new Date()}
+                    locale="es-ES"
+                    style={styles.datePicker}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                  />
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={styles.dateBtn}
+                      onPress={() => setShowDatePicker(true)}
+                    >
+                      <Text style={styles.dateBtnText}>
+                        {startDate ? formatDisplayDate(startDate) : 'Elegir fecha'}
+                      </Text>
+                    </TouchableOpacity>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={pickerDate}
+                        mode="date"
+                        display="default"
+                        onChange={onDateChange}
+                        minimumDate={new Date()}
+                        locale="es-ES"
+                      />
+                    )}
+                  </>
+                )}
+              </View>
+            )}
           </ScrollView>
 
           {/* Save button */}
@@ -355,6 +449,44 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   freqChipTextSelected: {
     color: colors.textWhite,
+  },
+  selectedDateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.sectionBackground,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  selectedDateText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  clearDateText: {
+    fontSize: 13,
+    color: colors.danger,
+    fontWeight: '600',
+  },
+  dateHint: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginBottom: 8,
+  },
+  datePicker: {
+    marginTop: 4,
+  },
+  dateBtn: {
+    backgroundColor: colors.sectionBackground,
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+  },
+  dateBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   footer: {
     padding: 16,

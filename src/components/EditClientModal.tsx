@@ -72,7 +72,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
   if (!client) return null;
 
-  const needsStartDate = freq === 'biweekly' || freq === 'triweekly' || freq === 'monthly';
+  const needsStartDate = freq === 'weekly' || freq === 'biweekly' || freq === 'triweekly' || freq === 'monthly';
 
   const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') {

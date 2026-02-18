@@ -79,7 +79,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         setLocalDays(['Lunes']);
       }
     }
-  }, [client]);
+  }, [client?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!client) return null;
 

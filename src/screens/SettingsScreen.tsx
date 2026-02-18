@@ -17,7 +17,7 @@ import { ThemeColors } from '../theme/colors';
 const SettingsScreen = () => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
-  const { user: firebaseUser, groupData, isAdmin, signOut, setGroupData } = useAuthContext();
+  const { user: firebaseUser, groupData, isAdmin, signOut, deleteAccount, setGroupData } = useAuthContext();
   if (!firebaseUser) return null;
   const user = {
     uid: firebaseUser.uid,
@@ -257,6 +257,49 @@ const SettingsScreen = () => {
     );
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Eliminar cuenta',
+      'Se eliminaran permanentemente tu cuenta y todos tus datos (clientes, deudas, transferencias). Esta accion no se puede deshacer.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar cuenta',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Confirmar eliminacion',
+              'Estas seguro? Todos tus datos seran eliminados permanentemente.',
+              [
+                { text: 'No, cancelar', style: 'cancel' },
+                {
+                  text: 'Si, eliminar',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setLoading(true);
+                    try {
+                      await deleteAccount();
+                    } catch (e: any) {
+                      if (e.message === 'REQUIRES_RECENT_LOGIN') {
+                        Alert.alert(
+                          'Sesion expirada',
+                          'Por seguridad, necesitas iniciar sesion de nuevo antes de eliminar tu cuenta. Cierra sesion y vuelve a entrar.',
+                        );
+                      } else {
+                        Alert.alert('Error', 'No se pudo eliminar la cuenta. Intenta de nuevo.');
+                      }
+                    }
+                    setLoading(false);
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <ScrollView style={styles.container}>
       {/* User info */}
@@ -395,6 +438,20 @@ const SettingsScreen = () => {
         <TouchableOpacity onPress={onSignOut} style={styles.signOutBtn}>
           <Text style={styles.signOutText}>Cerrar Sesion</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Delete account */}
+      <View style={styles.section}>
+        <TouchableOpacity
+          onPress={handleDeleteAccount}
+          style={styles.deleteAccountBtn}
+          disabled={loading}
+        >
+          <Text style={styles.deleteAccountText}>Eliminar cuenta</Text>
+        </TouchableOpacity>
+        <Text style={styles.deleteAccountHint}>
+          Se eliminaran todos tus datos permanentemente.
+        </Text>
       </View>
 
       <View style={{ height: 60 }} />
@@ -618,6 +675,22 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.danger,
     fontWeight: '700',
     fontSize: 16,
+  },
+  deleteAccountBtn: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  deleteAccountText: {
+    color: colors.danger,
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  deleteAccountHint: {
+    color: colors.textHint,
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 4,
   },
 });
 

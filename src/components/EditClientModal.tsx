@@ -69,7 +69,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       }
       setShowDatePicker(false);
     }
-  }, [client]);
+  }, [client?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!client) return null;
 

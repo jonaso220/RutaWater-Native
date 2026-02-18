@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { appleAuth } from '@invertase/react-native-apple-authentication';
 import { db } from '../config/firebase';
 import { Group } from '../types';
 
@@ -63,12 +64,107 @@ export const useAuth = () => {
     }
   };
 
+  const signInWithApple = async () => {
+    try {
+      const appleAuthRequestResponse = await appleAuth.performRequest({
+        requestedOperation: appleAuth.Operation.LOGIN,
+        requestedScopes: [appleAuth.Scope.FULL_NAME, appleAuth.Scope.EMAIL],
+      });
+
+      const { identityToken, nonce } = appleAuthRequestResponse;
+      if (!identityToken) throw new Error('No identityToken received from Apple');
+
+      const appleCredential = auth.AppleAuthProvider.credential(identityToken, nonce);
+      const userCredential = await auth().signInWithCredential(appleCredential);
+
+      // Apple only sends the name on the first sign-in, so update profile if available
+      const fullName = appleAuthRequestResponse.fullName;
+      if (fullName && (fullName.givenName || fullName.familyName)) {
+        const displayName = [fullName.givenName, fullName.familyName].filter(Boolean).join(' ');
+        if (displayName && !userCredential.user.displayName) {
+          await userCredential.user.updateProfile({ displayName });
+        }
+      }
+    } catch (error: any) {
+      if (error.code === appleAuth.Error.CANCELED) {
+        // User cancelled, don't throw
+        return;
+      }
+      console.error('Apple Sign-In Error:', error);
+      throw error;
+    }
+  };
+
   const signOut = async () => {
     try {
-      await GoogleSignin.signOut();
+      await GoogleSignin.signOut().catch(() => {});
       await auth().signOut();
     } catch (error) {
       console.error('Sign-Out Error:', error);
+    }
+  };
+
+  const deleteAccount = async () => {
+    const currentUser = auth().currentUser;
+    if (!currentUser) throw new Error('No user logged in');
+
+    const uid = currentUser.uid;
+    const scope = groupData?.groupId
+      ? { field: 'groupId', value: groupData.groupId }
+      : { field: 'userId', value: uid };
+
+    try {
+      // If user is in a group, leave/dissolve it first
+      if (groupData?.groupId) {
+        if (groupData.role === 'admin') {
+          // Admin: remove all members from group, delete group doc
+          const membersSnap = await db
+            .collection('users')
+            .where('groupId', '==', groupData.groupId)
+            .get();
+          for (const doc of membersSnap.docs) {
+            if (doc.id !== uid) {
+              await db.collection('users').doc(doc.id).update({ groupId: null, role: null });
+            }
+          }
+          await db.collection('groups').doc(groupData.groupId).delete();
+        } else {
+          // Member: just leave
+          await db.collection('users').doc(uid).update({ groupId: null, role: null });
+        }
+      }
+
+      // Delete user's data in batches
+      const collections = ['clients', 'debts', 'transfers'];
+      for (const col of collections) {
+        let snap = await db
+          .collection(col)
+          .where(scope.field, '==', scope.value)
+          .limit(450)
+          .get();
+        while (!snap.empty) {
+          const batch = db.batch();
+          snap.docs.forEach((doc) => batch.delete(doc.ref));
+          await batch.commit();
+          snap = await db
+            .collection(col)
+            .where(scope.field, '==', scope.value)
+            .limit(450)
+            .get();
+        }
+      }
+
+      // Delete user doc from Firestore
+      await db.collection('users').doc(uid).delete();
+
+      // Delete Firebase Auth account
+      await currentUser.delete();
+    } catch (error: any) {
+      // If requires recent login, re-throw with specific message
+      if (error.code === 'auth/requires-recent-login') {
+        throw new Error('REQUIRES_RECENT_LOGIN');
+      }
+      throw error;
     }
   };
 
@@ -87,7 +183,9 @@ export const useAuth = () => {
     groupData,
     isAdmin,
     signInWithGoogle,
+    signInWithApple,
     signOut,
+    deleteAccount,
     getDataScope,
     setGroupData,
   };

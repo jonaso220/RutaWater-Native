@@ -379,8 +379,8 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
         </View>
       </KeyboardAvoidingView>
 
-      {/* Paste Order Modal */}
-      <Modal visible={showPasteModal} animationType="fade" transparent>
+      {/* Paste Order Overlay (absolute view instead of nested Modal for Android compatibility) */}
+      {showPasteModal && (
         <View style={styles.pasteOverlay}>
           <View style={styles.pasteModal}>
             <Text style={styles.pasteModalTitle}>Pegar Pedido</Text>
@@ -409,7 +409,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             </View>
           </View>
         </View>
-      </Modal>
+      )}
     </Modal>
   );
 };
@@ -589,10 +589,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.successMedium,
   },
   pasteOverlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.overlay,
     justifyContent: 'center',
     paddingHorizontal: 20,
+    zIndex: 999,
   },
   pasteModal: {
     backgroundColor: colors.card,

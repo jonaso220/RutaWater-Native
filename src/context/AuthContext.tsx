@@ -9,7 +9,9 @@ interface AuthContextType {
   groupData: Group | null;
   isAdmin: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   getDataScope: () => { groupId: string } | { userId: string };
   setGroupData: (data: Group | null) => void;
 }

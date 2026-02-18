@@ -9,6 +9,7 @@
     "clean": "cd ios && pod deintegrate && pod install && cd .."
   },
   "dependencies": {
+    "@invertase/react-native-apple-authentication": "^2.5.1",
     "@react-native-community/datetimepicker": "^8.6.0",
     "@react-native-firebase/app": "^21.6.1",
     "@react-native-firebase/auth": "^21.6.1",

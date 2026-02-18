@@ -1,27 +1,32 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
 interface LoginScreenProps {
-  onSignIn: () => Promise<void>;
+  onSignInWithGoogle: () => Promise<void>;
+  onSignInWithApple: () => Promise<void>;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onSignInWithGoogle, onSignInWithApple }) => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState<'google' | 'apple' | null>(null);
   const [error, setError] = React.useState('');
 
-  const handleSignIn = async () => {
-    setLoading(true);
+  const handleSignIn = async (provider: 'google' | 'apple') => {
+    setLoading(provider);
     setError('');
     try {
-      await onSignIn();
+      if (provider === 'google') {
+        await onSignInWithGoogle();
+      } else {
+        await onSignInWithApple();
+      }
     } catch (e: any) {
       setError(e.message || 'Error al iniciar sesion');
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
@@ -34,14 +39,27 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
+        {Platform.OS === 'ios' && (
+          <TouchableOpacity
+            style={[styles.appleButton, !!loading && styles.buttonDisabled]}
+            onPress={() => handleSignIn('apple')}
+            disabled={!!loading}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.appleButtonText}>
+              {loading === 'apple' ? 'Conectando...' : '\uF8FF  Iniciar con Apple'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSignIn}
-          disabled={loading}
+          style={[styles.button, !!loading && styles.buttonDisabled]}
+          onPress={() => handleSignIn('google')}
+          disabled={!!loading}
           activeOpacity={0.7}
         >
           <Text style={styles.buttonText}>
-            {loading ? 'Conectando...' : 'Iniciar con Google'}
+            {loading === 'google' ? 'Conectando...' : 'Iniciar con Google'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -52,13 +70,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSignIn }) => {
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   card: {
-    backgroundColor: '#1F2937',
+    backgroundColor: colors.card,
     borderRadius: 20,
     padding: 40,
     width: '100%',
@@ -77,22 +95,36 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   title: {
     fontSize: 30,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
-    color: '#9CA3AF',
+    color: colors.textHint,
     marginBottom: 32,
   },
   error: {
-    color: '#EF4444',
+    color: colors.dangerBright,
     fontSize: 15,
     marginBottom: 16,
     textAlign: 'center',
   },
+  appleButton: {
+    backgroundColor: '#000000',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  appleButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+  },
   button: {
-    backgroundColor: '#2563EB',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 12,
@@ -103,7 +135,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontSize: 18,
     fontWeight: '700',
   },

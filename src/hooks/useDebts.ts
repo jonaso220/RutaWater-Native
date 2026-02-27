@@ -104,6 +104,18 @@ export const useDebts = ({ userId, groupId }: UseDebtsProps) => {
     }
   };
 
+  // Mark ALL debts for a client as paid (batch atómico)
+  const markAllDebtsPaid = async (clientId: string, debtIds: string[]) => {
+    try {
+      const batch = db.batch();
+      debtIds.forEach((id) => batch.delete(db.collection('debts').doc(id)));
+      batch.update(db.collection('clients').doc(clientId), { hasDebt: false });
+      await batch.commit();
+    } catch (e) {
+      console.error('Error marking all debts paid:', e);
+    }
+  };
+
   return {
     debts,
     getClientDebts,
@@ -111,5 +123,6 @@ export const useDebts = ({ userId, groupId }: UseDebtsProps) => {
     addDebt,
     markDebtPaid,
     editDebt,
+    markAllDebtsPaid,
   };
 };

@@ -21,6 +21,7 @@ interface DebtModalProps {
   visible: boolean;
   client: Client | null;
   debts: Debt[];
+  debtTemplate?: string;
   onClose: () => void;
   onAddDebt: (client: Client, amount: number) => void;
   onMarkPaid: (debt: Debt) => void;
@@ -31,6 +32,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   visible,
   client,
   debts,
+  debtTemplate,
   onClose,
   onAddDebt,
   onMarkPaid,
@@ -79,9 +81,10 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const sendDebtTotal = () => {
     if (!client.phone || total <= 0) return;
     const cleanPhone = normalizePhone(client.phone);
-    const msg = encodeURIComponent(
-      `La deuda es de $${total.toLocaleString()}. Saludos`,
-    );
+    const defaultTemplate = 'La deuda es de ${total}. Saludos';
+    const template = debtTemplate || defaultTemplate;
+    const text = template.replace('${total}', `$${total.toLocaleString()}`);
+    const msg = encodeURIComponent(text);
     Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
   };
 

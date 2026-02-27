@@ -15,6 +15,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { Client } from '../types';
 import { ALL_DAYS, PRODUCTS } from '../constants/products';
 import { getTodayDayName, normalizeText, getNextVisitDate } from '../utils/helpers';
+import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsContext } from '../context/ClientsContext';
 import { useDebtsContext } from '../context/DebtsContext';
@@ -37,7 +38,7 @@ const HomeScreen = () => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
 
-  const { isAdmin } = useAuthContext();
+  const { isAdmin, user, groupData } = useAuthContext();
   const {
     clients,
     loading,
@@ -56,7 +57,7 @@ const HomeScreen = () => {
     changePosition,
     dayCounts,
   } = useClientsContext();
-  const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
+  const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal, markAllDebtsPaid } = useDebtsContext();
   const { transfers, hasPendingTransfer, addTransfer, markTransferReviewed } = useTransfersContext();
   const { dailyLoad, loadForDay, saveDailyLoad } = useDailyLoadsContext();
 
@@ -75,6 +76,16 @@ const HomeScreen = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
+  const [appSettings, setAppSettings] = useState<Record<string, string> | null>(null);
+
+  // Load WhatsApp templates
+  useEffect(() => {
+    if (!user?.uid) return;
+    const settingsDocId = groupData?.groupId || user.uid;
+    db.collection('settings').doc(settingsDocId).get().then((doc) => {
+      if (doc.exists) setAppSettings(doc.data() as Record<string, string>);
+    }).catch(() => {});
+  }, [user?.uid, groupData?.groupId]);
 
   const toggleFilter = useCallback((filterId: string) => {
     setActiveFilters((prev) => {
@@ -299,10 +310,11 @@ const HomeScreen = () => {
           onTransfer={() => handleTransfer(item)}
           onAlarm={() => handleAlarm(item)}
           onChangePosition={(newPos) => changePosition(item.id, newPos, selectedDay)}
+          enCaminoMessage={appSettings?.whatsappEnCamino}
         />
       );
     },
-    [isAdmin, handleMarkDone, handleDelete, getClientDebtTotal, hasPendingTransfer, handleToggleStar, handleTransfer, handleAlarm, changePosition, selectedDay, globalPositionMap],
+    [isAdmin, handleMarkDone, handleDelete, getClientDebtTotal, hasPendingTransfer, handleToggleStar, handleTransfer, handleAlarm, changePosition, selectedDay, globalPositionMap, appSettings],
   );
 
   if (loading) {
@@ -575,6 +587,7 @@ const HomeScreen = () => {
         visible={!!debtClient}
         client={debtClient}
         debts={debts}
+        debtTemplate={appSettings?.whatsappDeuda}
         onClose={() => setDebtClient(null)}
         onAddDebt={addDebt}
         onMarkPaid={markDebtPaid}
@@ -612,6 +625,7 @@ const HomeScreen = () => {
         clients={clients}
         isAdmin={isAdmin}
         onMarkPaid={markDebtPaid}
+        onMarkAllPaid={markAllDebtsPaid}
         onEditDebt={editDebt}
         onClose={() => setShowDebtsSheet(false)}
         onTransferPayment={(clientId) => {

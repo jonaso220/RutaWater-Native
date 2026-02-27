@@ -8,9 +8,13 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
+import { useClientsContext } from '../context/ClientsContext';
+import { useDebtsContext } from '../context/DebtsContext';
+import { useTransfersContext } from '../context/TransfersContext';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -18,6 +22,9 @@ const SettingsScreen = () => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
   const { user: firebaseUser, groupData, isAdmin, signOut, deleteAccount, setGroupData } = useAuthContext();
+  const { clients } = useClientsContext();
+  const { debts } = useDebtsContext();
+  const { transfers } = useTransfersContext();
   if (!firebaseUser) return null;
   const user = {
     uid: firebaseUser.uid,
@@ -29,6 +36,51 @@ const SettingsScreen = () => {
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
+  // WhatsApp templates
+  const DEFAULT_EN_CAMINO = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
+  const DEFAULT_DEUDA = 'La deuda es de ${total}. Saludos';
+  const [waEnCamino, setWaEnCamino] = useState('');
+  const [waDeuda, setWaDeuda] = useState('');
+  const [waLoaded, setWaLoaded] = useState(false);
+
+  // Load WhatsApp templates from settings
+  useEffect(() => {
+    if (!user.uid) return;
+    const settingsDocId = groupData?.groupId || user.uid;
+    db.collection('settings').doc(settingsDocId).get().then((doc) => {
+      if (doc.exists) {
+        const data = doc.data();
+        if (data?.whatsappEnCamino) setWaEnCamino(data.whatsappEnCamino);
+        if (data?.whatsappDeuda) setWaDeuda(data.whatsappDeuda);
+      }
+      setWaLoaded(true);
+    }).catch(() => setWaLoaded(true));
+  }, [user.uid, groupData?.groupId]);
+
+  const handleSaveTemplates = async () => {
+    try {
+      const settingsDocId = groupData?.groupId || user.uid;
+      const settings: Record<string, string> = {};
+      if (waEnCamino.trim()) settings.whatsappEnCamino = waEnCamino.trim();
+      if (waDeuda.trim()) settings.whatsappDeuda = waDeuda.trim();
+      await db.collection('settings').doc(settingsDocId).set(settings, { merge: true });
+      Alert.alert('Guardado', 'Templates actualizados');
+    } catch (e) {
+      console.error('Error saving templates:', e);
+      Alert.alert('Error', 'No se pudieron guardar los templates');
+    }
+  };
+
+  const handleResetTemplates = () => {
+    setWaEnCamino('');
+    setWaDeuda('');
+    const settingsDocId = groupData?.groupId || user.uid;
+    db.collection('settings').doc(settingsDocId).set(
+      { whatsappEnCamino: null, whatsappDeuda: null },
+      { merge: true },
+    ).catch((e) => console.error('Error resetting templates:', e));
+    Alert.alert('Templates reseteados', 'Se usarán los mensajes por defecto');
+  };
 
   // Load group members
   useEffect(() => {
@@ -257,6 +309,72 @@ const SettingsScreen = () => {
     );
   };
 
+  // --- EXPORT ---
+  const handleExportCSV = async () => {
+    try {
+      const header = 'Nombre,Telefono,Direccion,Dia,Frecuencia,Productos,Notas,Tiene Deuda,Estrella,Maps Link';
+      const rows = clients.map((c) => {
+        const products = c.products
+          ? Object.entries(c.products)
+              .filter(([_, v]) => v > 0)
+              .map(([k, v]) => `${k}:${v}`)
+              .join(' ')
+          : '';
+        const escape = (s: string) => `"${(s || '').replace(/"/g, '""')}"`;
+        return [
+          escape(c.name),
+          escape(c.phone),
+          escape(c.address),
+          escape((c.visitDays || []).join(', ')),
+          escape(c.freq),
+          escape(products),
+          escape(c.notes || ''),
+          c.hasDebt ? 'Si' : 'No',
+          c.isStarred ? 'Si' : 'No',
+          escape(c.mapsLink || ''),
+        ].join(',');
+      });
+      const csv = '\uFEFF' + header + '\n' + rows.join('\n');
+      await Share.share({ message: csv, title: 'RutaWater_Clientes.csv' });
+    } catch (e) {
+      console.error('Error exporting CSV:', e);
+    }
+  };
+
+  const handleExportJSON = async () => {
+    try {
+      const backup = {
+        exportDate: new Date().toISOString(),
+        userEmail: user.email,
+        clients: clients.map((c) => ({
+          id: c.id, name: c.name, phone: c.phone, address: c.address,
+          freq: c.freq, visitDay: c.visitDay, visitDays: c.visitDays,
+          specificDate: c.specificDate, products: c.products, notes: c.notes,
+          hasDebt: c.hasDebt, isStarred: c.isStarred, isNote: c.isNote,
+          mapsLink: c.mapsLink, lat: c.lat, lng: c.lng,
+        })),
+        debts: debts.map((d) => ({
+          id: d.id, clientId: d.clientId, clientName: d.clientName,
+          amount: d.amount,
+          createdAt: (d.createdAt as any)?.seconds
+            ? new Date((d.createdAt as any).seconds * 1000).toISOString()
+            : '',
+        })),
+        transfers: transfers.map((t) => ({
+          id: t.id, clientId: t.clientId, clientName: t.clientName,
+          createdAt: (t.createdAt as any)?.seconds
+            ? new Date((t.createdAt as any).seconds * 1000).toISOString()
+            : '',
+        })),
+      };
+      const json = JSON.stringify(backup, null, 2);
+      await Share.share({ message: json, title: 'RutaWater_Backup.json' });
+      Alert.alert('Backup listo', `${clients.length} clientes, ${debts.length} deudas, ${transfers.length} transferencias`);
+    } catch (e) {
+      console.error('Error exporting JSON:', e);
+    }
+  };
+
   const handleDeleteAccount = () => {
     Alert.alert(
       'Eliminar cuenta',
@@ -431,6 +549,53 @@ const SettingsScreen = () => {
             </View>
           </View>
         )}
+      </View>
+
+      {/* WhatsApp Templates */}
+      {waLoaded && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Mensajes WhatsApp</Text>
+          <Text style={styles.templateLabel}>Mensaje "En camino"</Text>
+          <TextInput
+            style={styles.templateInput}
+            value={waEnCamino}
+            onChangeText={setWaEnCamino}
+            placeholder={DEFAULT_EN_CAMINO}
+            placeholderTextColor={colors.textDisabled}
+            multiline
+            numberOfLines={3}
+          />
+          <Text style={[styles.templateLabel, { marginTop: 12 }]}>Mensaje de deuda</Text>
+          <TextInput
+            style={styles.templateInput}
+            value={waDeuda}
+            onChangeText={setWaDeuda}
+            placeholder={DEFAULT_DEUDA}
+            placeholderTextColor={colors.textDisabled}
+            multiline
+            numberOfLines={2}
+          />
+          <Text style={styles.templateHint}>Usa {'${total}'} para insertar el monto</Text>
+          <View style={styles.templateActions}>
+            <TouchableOpacity onPress={handleSaveTemplates} style={styles.templateSaveBtn}>
+              <Text style={styles.templateSaveBtnText}>Guardar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleResetTemplates} style={styles.templateResetBtn}>
+              <Text style={styles.templateResetBtnText}>Restaurar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Export */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Exportar Datos</Text>
+        <TouchableOpacity onPress={handleExportCSV} style={styles.exportBtn}>
+          <Text style={styles.exportBtnText}>Exportar Clientes (CSV)</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleExportJSON} style={[styles.exportBtn, { marginTop: 8 }]}>
+          <Text style={styles.exportBtnText}>Backup Completo (JSON)</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Sign out */}
@@ -660,6 +825,72 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   joinBtnDisabled: { opacity: 0.5 },
   joinBtnText: {
     color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  templateLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textMuted,
+    marginBottom: 6,
+  },
+  templateInput: {
+    backgroundColor: colors.inputBackground,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    color: colors.textPrimary,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    textAlignVertical: 'top',
+    minHeight: 60,
+  },
+  templateHint: {
+    fontSize: 12,
+    color: colors.textHint,
+    marginTop: 4,
+  },
+  templateActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  templateSaveBtn: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  templateSaveBtnText: {
+    color: colors.textWhite,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  templateResetBtn: {
+    flex: 1,
+    backgroundColor: colors.sectionBackground,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  templateResetBtnText: {
+    color: colors.textMuted,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  exportBtn: {
+    backgroundColor: colors.primaryLighter,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+  },
+  exportBtnText: {
+    color: colors.primary,
     fontWeight: '700',
     fontSize: 16,
   },

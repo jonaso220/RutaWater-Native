@@ -10,6 +10,7 @@ interface DebtsContextType {
   addDebt: (client: Client, amount: number) => Promise<void>;
   markDebtPaid: (debt: Debt) => Promise<void>;
   editDebt: (debtId: string, newAmount: number) => Promise<void>;
+  markAllDebtsPaid: (clientId: string, debtIds: string[]) => Promise<void>;
 }
 
 const DebtsContext = createContext<DebtsContextType | null>(null);

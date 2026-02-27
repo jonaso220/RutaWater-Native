@@ -33,6 +33,7 @@ interface ClientCardProps {
   isAdmin: boolean;
   hasDebt?: boolean;
   hasPendingTransfer?: boolean;
+  enCaminoMessage?: string;
   onMarkDone: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -57,6 +58,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   onTransfer,
   onAlarm,
   onChangePosition,
+  enCaminoMessage,
 }) => {
   const { colors } = useTheme();
   const styles = getStyles(colors);
@@ -81,9 +83,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
   const sendEnCamino = () => {
     if (!client.phone) return;
     const cleanPhone = normalizePhone(client.phone);
-    const msg = encodeURIComponent(
-      'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura',
-    );
+    const defaultMsg = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
+    const msg = encodeURIComponent(enCaminoMessage || defaultMsg);
     Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
   };
 

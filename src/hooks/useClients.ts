@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { db } from '../config/firebase';
 import { Client } from '../types';
 import { normalizeText, getNextVisitDate, getWeekNumber } from '../utils/helpers';
@@ -12,6 +12,10 @@ interface UseClientsProps {
 export const useClients = ({ userId, groupId }: UseClientsProps) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  // Ref sincrónico: siempre tiene los datos más recientes de clients
+  // Evita race condition cuando se asignan posiciones rápidamente
+  const clientsRef = useRef<Client[]>(clients);
+  clientsRef.current = clients;
 
   // Real-time listener on clients collection
   useEffect(() => {
@@ -433,10 +437,29 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, [clients, groupId, userId]);
 
-  // Change client position in the day's list (operates on ALL clients for the day)
+  // Get day clients from a specific source (para leer del ref sincrónico)
+  const getDayClientsFromSource = useCallback((day: string, source: Client[]): Client[] => {
+    if (!day) return [];
+    return source
+      .filter((c) => {
+        if (c.freq === 'on_demand') return false;
+        if (c.isCompleted) return false;
+        return (c.visitDays && c.visitDays.includes(day)) || c.visitDay === day;
+      })
+      .sort((a, b) => {
+        const orderA = a.listOrders?.[day] ?? a.listOrder ?? 0;
+        const orderB = b.listOrders?.[day] ?? b.listOrder ?? 0;
+        const cleanA = orderA > 100000 ? 0 : orderA;
+        const cleanB = orderB > 100000 ? 0 : orderB;
+        return cleanA - cleanB;
+      });
+  }, []);
+
+  // Change client position - usa ref sincrónico para evitar race conditions
   const changePosition = useCallback(async (clientId: string, newPos: number, day: string) => {
     const pos = Math.max(1, newPos);
-    const dayClients = [...getAllDayClients(day)];
+    // Leer del ref sincrónico, no del state (que puede estar batched)
+    const dayClients = [...getDayClientsFromSource(day, clientsRef.current)];
     const currentIndex = dayClients.findIndex((c) => c.id === clientId);
     if (currentIndex === -1) return;
 
@@ -444,6 +467,25 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     const targetIndex = Math.min(Math.max(0, pos - 1), dayClients.length);
     dayClients.splice(targetIndex, 0, movedClient);
 
+    // Construir mapa de actualizaciones
+    const updateMap: Record<string, number> = {};
+    dayClients.forEach((client, index) => {
+      updateMap[client.id] = index;
+    });
+
+    // Actualizar ref sincrónico ANTES del batch (evita stale reads)
+    const applyUpdate = (list: Client[]): Client[] =>
+      list.map((c) => {
+        if (updateMap[c.id] !== undefined) {
+          return { ...c, listOrders: { ...(c.listOrders || {}), [day]: updateMap[c.id] } } as Client;
+        }
+        return c;
+      });
+
+    clientsRef.current = applyUpdate(clientsRef.current);
+    setClients((prev) => applyUpdate(prev));
+
+    // Escribir a Firestore
     const batch = db.batch();
     dayClients.forEach((client, index) => {
       const ref = db.collection('clients').doc(client.id);
@@ -457,7 +499,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error changing position:', e);
     }
-  }, [getAllDayClients]);
+  }, [getDayClientsFromSource]);
 
   return {
     clients,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { db } from '../config/firebase';
 import { Client } from '../types';
 import { normalizeText, getNextVisitDate, getWeekNumber } from '../utils/helpers';
@@ -77,8 +77,14 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   }, [clients]);
 
   // Get directory (all clients, searchable)
-  const getFilteredDirectory = useCallback((searchTerm: string): Client[] => {
+  const getFilteredDirectory = useCallback((searchTerm: string, filter: string = 'all'): Client[] => {
     return clients
+      .filter((c) => !c.isNote)
+      .filter((c) => {
+        if (filter === 'all') return true;
+        if (filter === 'no_location') return !((c.lat && c.lng) || c.mapsLink);
+        return c.freq === filter;
+      })
       .filter((c) => {
         if (!searchTerm.trim()) return true;
         const term = normalizeText(searchTerm);
@@ -88,6 +94,20 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         return name.includes(term) || address.includes(term) || phone.includes(term);
       })
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [clients]);
+
+  // Directory category counts (excluding notes)
+  const directoryCounts = useMemo(() => {
+    const all = clients.filter((c) => !c.isNote);
+    const counts: Record<string, number> = {
+      total: all.length, weekly: 0, biweekly: 0, triweekly: 0,
+      monthly: 0, once: 0, on_demand: 0, no_location: 0,
+    };
+    all.forEach((c) => {
+      if (c.freq && counts[c.freq] !== undefined) counts[c.freq]++;
+      if (!((c.lat && c.lng) || c.mapsLink)) counts.no_location++;
+    });
+    return counts;
   }, [clients]);
 
   // --- MUTATION FUNCTIONS ---
@@ -508,6 +528,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     getVisibleClients,
     getCompletedClients,
     getFilteredDirectory,
+    directoryCounts,
     markAsDone,
     undoComplete,
     deleteAllCompleted,

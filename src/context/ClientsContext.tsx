@@ -1,9 +1,10 @@
-import React, { createContext, useContext, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useClients } from '../hooks/useClients';
 import { useAuthContext } from './AuthContext';
 import { Client } from '../types';
 import { Frequency } from '../constants/products';
 import { ALL_DAYS } from '../constants/products';
+import { db } from '../config/firebase';
 
 interface ClientsContextType {
   clients: Client[];
@@ -11,7 +12,8 @@ interface ClientsContextType {
   getAllDayClients: (day: string) => Client[];
   getVisibleClients: (day: string) => Client[];
   getCompletedClients: (day: string) => Client[];
-  getFilteredDirectory: (term: string) => Client[];
+  getFilteredDirectory: (term: string, filter?: string) => Client[];
+  directoryCounts: Record<string, number>;
   markAsDone: (clientId: string, client: Client) => Promise<void>;
   undoComplete: (clientId: string) => Promise<void>;
   deleteAllCompleted: (day: string) => Promise<void>;
@@ -60,6 +62,48 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
     return counts;
   }, [hook.clients]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-cleanup: expired completed 'once' clients
+  const cleanupDoneRef = useRef(false);
+  useEffect(() => {
+    if (cleanupDoneRef.current) return;
+    if (hook.clients.length === 0) return;
+    cleanupDoneRef.current = true;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const expiredCompleted = hook.clients.filter((c) =>
+      c.isCompleted &&
+      c.freq === 'once' &&
+      c.specificDate &&
+      new Date(c.specificDate + 'T12:00:00') < today,
+    );
+
+    if (expiredCompleted.length === 0) return;
+
+    const batchSize = 450;
+    for (let i = 0; i < expiredCompleted.length; i += batchSize) {
+      const chunk = expiredCompleted.slice(i, i + batchSize);
+      const batch = db.batch();
+      chunk.forEach((c) => {
+        const ref = db.collection('clients').doc(c.id);
+        if (c.isNote) {
+          batch.delete(ref);
+        } else {
+          batch.update(ref, {
+            freq: 'on_demand',
+            visitDay: 'Sin Asignar',
+            visitDays: [],
+            isCompleted: false,
+            completedAt: null,
+            updatedAt: new Date(),
+          });
+        }
+      });
+      batch.commit().catch((err) => console.error('Auto-cleanup error:', err));
+    }
+  }, [hook.clients]);
 
   const value = useMemo(
     () => ({ ...hook, dayCounts }),

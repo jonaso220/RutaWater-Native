@@ -43,6 +43,9 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
           <View key={p.id} style={styles.item}>
             <Text style={styles.qty}>{totals[p.id]}</Text>
             <Text style={styles.label}>{p.short}</Text>
+            {p.id === 'soda' && (
+              <Text style={styles.crateLabel}>({Math.ceil(totals[p.id] / 6)} caj.)</Text>
+            )}
           </View>
         ) : null,
       )}
@@ -84,6 +87,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.textMuted,
+  },
+  crateLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: colors.textHint,
   },
 });
 

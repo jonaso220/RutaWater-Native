@@ -46,7 +46,11 @@
       "Bash(npm install:*)",
       "Bash(npm uninstall:*)",
       "Bash(node -e:*)",
-      "Bash(identify:*)"
+      "Bash(identify:*)",
+      "Bash(git fetch:*)",
+      "Bash(python3:*)",
+      "Bash(npm ci:*)",
+      "Bash(curl:*)"
     ]
   }
 }

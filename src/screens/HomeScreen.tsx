@@ -12,6 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { useScrollToTop } from '@react-navigation/native';
 import { Client } from '../types';
 import { ALL_DAYS, PRODUCTS } from '../constants/products';
 import { getTodayDayName, normalizeText, getNextVisitDate } from '../utils/helpers';
@@ -62,6 +63,7 @@ const HomeScreen = () => {
   const { dailyLoad, loadForDay, saveDailyLoad } = useDailyLoadsContext();
 
   const sectionListRef = useRef<SectionList>(null);
+  useScrollToTop(sectionListRef);
   const [selectedDay, setSelectedDay] = useState(getTodayDayName());
   const [showCompleted, setShowCompleted] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);

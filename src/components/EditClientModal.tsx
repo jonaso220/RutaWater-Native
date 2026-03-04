@@ -73,7 +73,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
   if (!client) return null;
 
-  const needsStartDate = freq === 'weekly' || freq === 'biweekly' || freq === 'triweekly' || freq === 'monthly';
+  const needsDate = freq === 'once' || freq === 'weekly' || freq === 'biweekly' || freq === 'triweekly' || freq === 'monthly';
 
   const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
@@ -107,9 +107,17 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       notes,
       freq,
     };
-    if (needsStartDate && startDate) {
+    if (needsDate && startDate) {
       data.specificDate = startDate;
-    } else if (!needsStartDate) {
+      // For 'once' freq (notes), update visitDay/visitDays to match new date
+      if (freq === 'once') {
+        const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        const d = new Date(startDate + 'T12:00:00');
+        const newDay = dayNames[d.getDay()];
+        data.visitDay = newDay;
+        data.visitDays = [newDay];
+      }
+    } else if (!needsDate) {
       data.specificDate = '';
     }
     if (showClientInfo) {
@@ -254,10 +262,12 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
               )}
             </View>
 
-            {/* Start date for non-weekly frequencies */}
-            {needsStartDate && (
+            {/* Date picker */}
+            {needsDate && (
               <View style={{ marginTop: 16 }}>
-                <Text style={styles.sectionTitle}>Fecha de inicio</Text>
+                <Text style={styles.sectionTitle}>
+                  {freq === 'once' ? 'Fecha' : 'Fecha de inicio'}
+                </Text>
                 {startDate ? (
                   <View style={styles.selectedDateRow}>
                     <Text style={styles.selectedDateText}>

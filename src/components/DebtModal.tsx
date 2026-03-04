@@ -22,6 +22,7 @@ interface DebtModalProps {
   client: Client | null;
   debts: Debt[];
   debtTemplate?: string;
+  reminderTemplate?: string;
   onClose: () => void;
   onAddDebt: (client: Client, amount: number) => void;
   onMarkPaid: (debt: Debt) => void;
@@ -33,6 +34,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   client,
   debts,
   debtTemplate,
+  reminderTemplate,
   onClose,
   onAddDebt,
   onMarkPaid,
@@ -91,9 +93,8 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const sendDebtReminder = () => {
     if (!client.phone) return;
     const cleanPhone = normalizePhone(client.phone);
-    const msg = encodeURIComponent(
-      'Hola, buenas \nEste es un mensaje automatico para informarle que, segun nuestros registros, quedo pendiente un saldo por regularizar.\nCuando pueda, le agradecemos que nos indique en que fecha podriamos saldarlo. Si necesita nuevamente los datos de la cuenta, con gusto se los enviamos.\nMuchas gracias.',
-    );
+    const defaultMsg = 'Hola, buenas \nEste es un mensaje automatico para informarle que, segun nuestros registros, quedo pendiente un saldo por regularizar.\nCuando pueda, le agradecemos que nos indique en que fecha podriamos saldarlo. Si necesita nuevamente los datos de la cuenta, con gusto se los enviamos.\nMuchas gracias.';
+    const msg = encodeURIComponent(reminderTemplate || defaultMsg);
     Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
   };
 

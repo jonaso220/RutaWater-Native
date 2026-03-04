@@ -589,6 +589,7 @@ const HomeScreen = () => {
         client={debtClient}
         debts={debts}
         debtTemplate={appSettings?.whatsappDeuda}
+        reminderTemplate={appSettings?.whatsappRecordatorio}
         onClose={() => setDebtClient(null)}
         onAddDebt={addDebt}
         onMarkPaid={markDebtPaid}

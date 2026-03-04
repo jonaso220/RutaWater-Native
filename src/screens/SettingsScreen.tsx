@@ -42,8 +42,10 @@ const SettingsScreen = () => {
   // WhatsApp templates
   const DEFAULT_EN_CAMINO = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
   const DEFAULT_DEUDA = 'La deuda es de ${total}. Saludos';
+  const DEFAULT_RECORDATORIO = 'Hola, buenas \nEste es un mensaje automatico para informarle que, segun nuestros registros, quedo pendiente un saldo por regularizar.\nCuando pueda, le agradecemos que nos indique en que fecha podriamos saldarlo. Si necesita nuevamente los datos de la cuenta, con gusto se los enviamos.\nMuchas gracias.';
   const [waEnCamino, setWaEnCamino] = useState('');
   const [waDeuda, setWaDeuda] = useState('');
+  const [waRecordatorio, setWaRecordatorio] = useState('');
   const [waLoaded, setWaLoaded] = useState(false);
 
   // Load WhatsApp templates from settings
@@ -55,6 +57,7 @@ const SettingsScreen = () => {
         const data = doc.data();
         if (data?.whatsappEnCamino) setWaEnCamino(data.whatsappEnCamino);
         if (data?.whatsappDeuda) setWaDeuda(data.whatsappDeuda);
+        if (data?.whatsappRecordatorio) setWaRecordatorio(data.whatsappRecordatorio);
       }
       setWaLoaded(true);
     }).catch(() => setWaLoaded(true));
@@ -66,6 +69,7 @@ const SettingsScreen = () => {
       const settings: Record<string, string> = {};
       if (waEnCamino.trim()) settings.whatsappEnCamino = waEnCamino.trim();
       if (waDeuda.trim()) settings.whatsappDeuda = waDeuda.trim();
+      if (waRecordatorio.trim()) settings.whatsappRecordatorio = waRecordatorio.trim();
       await db.collection('settings').doc(settingsDocId).set(settings, { merge: true });
       Alert.alert('Guardado', 'Templates actualizados');
     } catch (e) {
@@ -77,9 +81,10 @@ const SettingsScreen = () => {
   const handleResetTemplates = () => {
     setWaEnCamino('');
     setWaDeuda('');
+    setWaRecordatorio('');
     const settingsDocId = groupData?.groupId || user.uid;
     db.collection('settings').doc(settingsDocId).set(
-      { whatsappEnCamino: null, whatsappDeuda: null },
+      { whatsappEnCamino: null, whatsappDeuda: null, whatsappRecordatorio: null },
       { merge: true },
     ).catch((e) => console.error('Error resetting templates:', e));
     Alert.alert('Templates reseteados', 'Se usarán los mensajes por defecto');
@@ -631,6 +636,16 @@ const SettingsScreen = () => {
             numberOfLines={2}
           />
           <Text style={styles.templateHint}>Usa {'${total}'} para insertar el monto</Text>
+          <Text style={[styles.templateLabel, { marginTop: 12 }]}>Mensaje de recordatorio</Text>
+          <TextInput
+            style={styles.templateInput}
+            value={waRecordatorio}
+            onChangeText={setWaRecordatorio}
+            placeholder={DEFAULT_RECORDATORIO}
+            placeholderTextColor={colors.textDisabled}
+            multiline
+            numberOfLines={4}
+          />
           <View style={styles.templateActions}>
             <TouchableOpacity onPress={handleSaveTemplates} style={styles.templateSaveBtn}>
               <Text style={styles.templateSaveBtnText}>Guardar</Text>

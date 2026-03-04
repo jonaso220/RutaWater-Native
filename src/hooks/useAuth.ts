@@ -35,10 +35,16 @@ export const useAuth = () => {
       if (userDoc.exists) {
         const data = userDoc.data();
         if (data?.groupId) {
+          // Fetch group code from groups collection
+          let code = '';
+          const groupDoc = await db.collection('groups').doc(data.groupId).get();
+          if (groupDoc.exists) {
+            code = groupDoc.data()?.code || '';
+          }
           setGroupData({
             groupId: data.groupId,
             role: data.role || 'member',
-            code: data.code || '',
+            code,
           });
           return;
         }

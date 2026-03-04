@@ -9,9 +9,14 @@ import {
   Linking,
   Alert,
   ScrollView,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Client } from '../types';
-import { normalizePhone } from '../utils/helpers';
+import { normalizePhone, parseContactString, isSafeUrl } from '../utils/helpers';
+import { getWeekNumber } from '../utils/helpers';
+import { db } from '../config/firebase';
 import { PRODUCTS } from '../constants/products';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsContext } from '../context/ClientsContext';
@@ -25,14 +30,16 @@ import { ThemeColors } from '../theme/colors';
 const DirectoryScreen = () => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
-  const { isAdmin } = useAuthContext();
-  const { getFilteredDirectory, directoryCounts, scheduleFromDirectory, updateClient, clients } = useClientsContext();
+  const { isAdmin, user, groupData } = useAuthContext();
+  const { getFilteredDirectory, directoryCounts, scheduleFromDirectory, updateClient, clients, cloneClient } = useClientsContext();
   const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [scheduleClient, setScheduleClient] = useState<Client | null>(null);
   const [debtClient, setDebtClient] = useState<Client | null>(null);
   const [editClient, setEditClient] = useState<Client | null>(null);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pasteText, setPasteText] = useState('');
 
   // Compute with_debt count (needs both clients and debts)
   const withDebtCount = useMemo(() => {
@@ -109,6 +116,73 @@ const DirectoryScreen = () => {
       case 'on_demand': return 'Solo Directorio';
       default: return freq || '';
     }
+  };
+
+  // Magic Paste: parse text and import to directory
+  const handleMagicPaste = async () => {
+    if (!pasteText.trim()) return;
+    const parsed = parseContactString(pasteText);
+    if (!parsed.name && !parsed.link) {
+      Alert.alert('Error', 'No se pudo detectar el formato.');
+      return;
+    }
+    try {
+      const currentWeek = getWeekNumber(new Date());
+      const scope = groupData?.groupId ? { groupId: groupData.groupId, userId: user?.uid } : { userId: user?.uid };
+      const cleanProducts: Record<string, number> = {};
+      Object.entries(parsed.products).filter(([, v]) => v !== '').forEach(([k, v]) => {
+        cleanProducts[k] = parseInt(v) || 0;
+      });
+      const safeMapsLink = (parsed.link && isSafeUrl(parsed.link)) ? parsed.link : '';
+      await db.collection('clients').add({
+        ...scope,
+        userId: user?.uid,
+        name: parsed.name || '',
+        phone: parsed.phone || '',
+        address: parsed.address || '',
+        lat: parsed.lat || '',
+        lng: parsed.lng || '',
+        mapsLink: safeMapsLink,
+        notes: parsed.notes || '',
+        freq: 'on_demand',
+        visitDay: 'Sin Asignar',
+        visitDays: [],
+        specificDate: '',
+        products: cleanProducts,
+        listOrder: 0,
+        listOrders: {},
+        isCompleted: false,
+        isStarred: false,
+        isPinned: false,
+        isNote: false,
+        alarm: '',
+        startWeek: currentWeek,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      setShowPasteModal(false);
+      setPasteText('');
+      Alert.alert('✅', `"${parsed.name}" importado al Directorio.`);
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo importar el cliente.');
+    }
+  };
+
+  const handleClone = (client: Client) => {
+    Alert.alert(
+      'Clonar Cliente',
+      `¿Duplicar "${client.name}" al directorio?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Clonar',
+          onPress: async () => {
+            await cloneClient(client);
+            Alert.alert('✅', `"${client.name}" clonado al directorio.`);
+          },
+        },
+      ],
+    );
   };
 
   const callClient = (client: Client) => {
@@ -223,6 +297,9 @@ const DirectoryScreen = () => {
             <TouchableOpacity onPress={() => setDebtClient(item)} style={styles.actionBtn}>
               <Text style={styles.actionBtnText}>{debtTotal > 0 ? '🔴' : '💰'}</Text>
             </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleClone(item)} style={styles.actionBtn}>
+              <Text style={styles.actionBtnText}>📋</Text>
+            </TouchableOpacity>
             {isAdmin && (
               <TouchableOpacity onPress={() => setEditClient(item)} style={styles.actionBtn}>
                 <Text style={styles.actionBtnText}>✏️</Text>
@@ -246,16 +323,24 @@ const DirectoryScreen = () => {
 
   return (
     <View style={styles.container}>
-      {/* Search bar */}
+      {/* Search bar + Import */}
       <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Buscar por nombre, direccion o telefono..."
-          placeholderTextColor={colors.textHint}
-          value={search}
-          onChangeText={setSearch}
-          autoCorrect={false}
-        />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TextInput
+            style={[styles.searchInput, { flex: 1 }]}
+            placeholder="Buscar por nombre, direccion o telefono..."
+            placeholderTextColor={colors.textHint}
+            value={search}
+            onChangeText={setSearch}
+            autoCorrect={false}
+          />
+          <TouchableOpacity
+            style={styles.importBtn}
+            onPress={() => setShowPasteModal(true)}
+          >
+            <Text style={styles.importBtnText}>📋+</Text>
+          </TouchableOpacity>
+        </View>
         {/* Filter chips */}
         <ScrollView
           horizontal
@@ -349,6 +434,47 @@ const DirectoryScreen = () => {
           showClientInfo
         />
       )}
+
+      {/* Magic Paste Import Modal */}
+      <Modal visible={showPasteModal} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.pasteOverlay}
+        >
+          <View style={styles.pasteDialog}>
+            <Text style={styles.pasteTitle}>📋 Importar Cliente</Text>
+            <Text style={styles.pasteSubtitle}>
+              Pegá el texto del cliente (nombre, dirección, teléfono, productos, link de Maps...)
+            </Text>
+            <TextInput
+              style={styles.pasteInput}
+              placeholder="Pegar texto aquí..."
+              placeholderTextColor={colors.textHint}
+              value={pasteText}
+              onChangeText={setPasteText}
+              multiline
+              numberOfLines={8}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <View style={styles.pasteButtons}>
+              <TouchableOpacity
+                style={styles.pasteCancelBtn}
+                onPress={() => { setShowPasteModal(false); setPasteText(''); }}
+              >
+                <Text style={styles.pasteCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.pasteImportBtn, !pasteText.trim() && { opacity: 0.4 }]}
+                onPress={handleMagicPaste}
+                disabled={!pasteText.trim()}
+              >
+                <Text style={styles.pasteImportText}>Importar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 };
@@ -565,6 +691,81 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: colors.primaryDark,
+  },
+  importBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    justifyContent: 'center',
+  },
+  importBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  pasteOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  pasteDialog: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 20,
+  },
+  pasteTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  pasteSubtitle: {
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  pasteInput: {
+    backgroundColor: colors.sectionBackground,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+    color: colors.textPrimary,
+    minHeight: 150,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  pasteButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  pasteCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.sectionBackground,
+    alignItems: 'center',
+  },
+  pasteCancelText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  pasteImportBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+  },
+  pasteImportText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
   },
   emptyContainer: {
     alignItems: 'center',

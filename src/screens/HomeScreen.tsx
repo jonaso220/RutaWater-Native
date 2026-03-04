@@ -15,7 +15,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { useScrollToTop } from '@react-navigation/native';
 import { Client } from '../types';
 import { ALL_DAYS, PRODUCTS } from '../constants/products';
-import { getTodayDayName, normalizeText, getNextVisitDate } from '../utils/helpers';
+import { getTodayDayName, fuzzyMatch, getNextVisitDate } from '../utils/helpers';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsContext } from '../context/ClientsContext';
@@ -107,31 +107,30 @@ const HomeScreen = () => {
   const visibleClients = useMemo(() => {
     let filtered = allVisibleClients;
 
-    // Search filter
+    // Fuzzy search filter
     if (searchTerm.trim()) {
-      const term = normalizeText(searchTerm);
-      filtered = filtered.filter((c) => {
-        const name = normalizeText(c.name || '');
-        const address = normalizeText(c.address || '');
-        return name.includes(term) || address.includes(term);
-      });
+      const matcher = fuzzyMatch(searchTerm);
+      filtered = filtered.filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
     }
 
-    // Active filters
+    // Active filters (type filters: AND, product filters: OR — matches webapp)
     if (activeFilters.size > 0) {
+      const typeFilters = [...activeFilters].filter((f) => f === 'once_starred' || f === 'con_deuda');
+      const productFilters = [...activeFilters].filter((f) => f !== 'once_starred' && f !== 'con_deuda');
+
       filtered = filtered.filter((c) => {
-        for (const f of activeFilters) {
-          if (f === 'once_fav') {
-            if (c.freq !== 'once' && !c.isStarred) return false;
-          } else if (f === 'con_deuda') {
-            if (getClientDebtTotal(c.id) <= 0) return false;
-          } else {
-            // Product filter
-            const qty = parseInt(String(c.products?.[f] || 0), 10);
-            if (qty <= 0) return false;
-          }
-        }
-        return true;
+        // Type filters: AND (must pass all)
+        const passesType = typeFilters.every((f) => {
+          if (f === 'once_starred') return c.freq === 'once' || c.isStarred;
+          if (f === 'con_deuda') return getClientDebtTotal(c.id) > 0;
+          return true;
+        });
+        // Product filters: OR (must have at least one)
+        const passesProduct = productFilters.length === 0 || productFilters.some((f) => {
+          const qty = parseInt(String(c.products?.[f] || 0), 10);
+          return qty > 0;
+        });
+        return passesType && passesProduct;
       });
     }
 
@@ -462,10 +461,10 @@ const HomeScreen = () => {
             <Text style={styles.filterSectionTitle}>TIPO</Text>
             <View style={styles.filterChipsRow}>
               <TouchableOpacity
-                style={[styles.filterChip, activeFilters.has('once_fav') && styles.filterChipActive]}
-                onPress={() => toggleFilter('once_fav')}
+                style={[styles.filterChip, activeFilters.has('once_starred') && styles.filterChipActive]}
+                onPress={() => toggleFilter('once_starred')}
               >
-                <Text style={[styles.filterChipText, activeFilters.has('once_fav') && styles.filterChipTextActive]}>
+                <Text style={[styles.filterChipText, activeFilters.has('once_starred') && styles.filterChipTextActive]}>
                   ☆ Una vez / Favoritos
                 </Text>
               </TouchableOpacity>

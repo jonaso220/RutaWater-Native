@@ -101,6 +101,171 @@ export const normalizeText = (text: string): string => {
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 };
 
+// --- FUZZY SEARCH (Levenshtein) ---
+
+export const levenshtein = (a: string, b: string): number => {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix: number[][] = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1,
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+};
+
+export const fuzzyMatch = (searchTerm: string): ((...fields: string[]) => boolean) => {
+  if (!searchTerm) return () => true;
+  const cleaned = normalizeText(searchTerm).trim().replace(/\s+/g, ' ');
+  if (!cleaned) return () => true;
+  const words = cleaned.split(' ');
+
+  return (...fields: string[]) => {
+    const combined = fields.map((f) => normalizeText(f)).join(' ');
+
+    // Fast path: direct full-term substring
+    if (combined.includes(cleaned)) return true;
+
+    // Each search word must match at least one field
+    return words.every((w) => {
+      if (combined.includes(w)) return true;
+
+      const textWords = combined.split(/\s+/);
+      const maxDist = w.length <= 2 ? 0 : w.length <= 4 ? 1 : 2;
+      if (maxDist === 0) return false;
+
+      return textWords.some((tw) => {
+        if (tw.startsWith(w) || w.startsWith(tw)) return true;
+        return levenshtein(tw, w) <= maxDist;
+      });
+    });
+  };
+};
+
+// --- MAGIC PASTE: Parse contact string ---
+
+export const parseContactString = (str: string): {
+  name: string; address: string; phone: string; link: string;
+  lat: string; lng: string; products: Record<string, string>; notes: string;
+} => {
+  // Clean WhatsApp formatting
+  str = str.replace(/\*/g, '').replace(/(?:^|\s)_([^_]+)_(?:\s|$)/g, ' $1 ');
+
+  const lines = str.split('\n').map((l) => l.trim()).filter((l) => l);
+
+  let name = '', address = '', phone = '', link = '', lat = '', lng = '', notes = '';
+  const products: Record<string, string> = {
+    b20: '', b12: '', b6: '', soda: '', bombita: '',
+    disp_elec_new: '', disp_elec_chg: '', disp_nat: '',
+  };
+
+  // 1. Extract Google Maps URL
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const urls = str.match(urlRegex);
+  if (urls) {
+    link = urls[0];
+    const m = link.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (m) { lat = m[1]; lng = m[2]; }
+  }
+
+  // 2. Extract phone
+  let i: number;
+  for (i = 0; i < lines.length; i++) {
+    const telMatch = lines[i].match(/tel[eé]fono\s*:\s*(\d[\d\s-]*)/i);
+    if (telMatch) { phone = telMatch[1].replace(/[\s-]/g, ''); break; }
+  }
+  if (!phone) {
+    for (i = 0; i < lines.length; i++) {
+      if (lines[i].match(urlRegex)) continue;
+      const numMatch = lines[i].match(/\b(0\d{8,})\b/);
+      if (numMatch) { phone = numMatch[1]; break; }
+    }
+  }
+
+  // 3. Extract name
+  for (i = 0; i < lines.length; i++) {
+    const nameMatch = lines[i].match(/nombre\s*:\s*(.+)/i);
+    if (nameMatch) { name = nameMatch[1].trim(); break; }
+  }
+
+  // 4. Extract address + corner
+  let direccion = '', esquina = '';
+  for (i = 0; i < lines.length; i++) {
+    const dirMatch = lines[i].match(/direcci[oó]n\s*:\s*(.+)/i);
+    if (dirMatch) { direccion = dirMatch[1].trim(); }
+    const esqMatch = lines[i].match(/esquina\s*:\s*(.+)/i);
+    if (esqMatch) { esquina = esqMatch[1].trim(); }
+  }
+  if (direccion && esquina) { address = direccion + ' (esq. ' + esquina + ')'; }
+  else if (direccion) { address = direccion; }
+
+  // 5. Extract products
+  const fullText = str.toLowerCase();
+
+  const b20Match = fullText.match(/bid[oó]n[:\s]*20\s*(?:lts?|litros?)?\s*(\d+)/i) || fullText.match(/20\s*(?:lts?|litros?)\s*(\d+)/i);
+  if (b20Match) products.b20 = b20Match[1];
+
+  const b12Match = fullText.match(/bid[oó]n[:\s]*12\s*(?:lts?|litros?)?\s*(\d+)/i) || fullText.match(/12\s*(?:lts?|litros?)\s*(\d+)/i);
+  if (b12Match) products.b12 = b12Match[1];
+
+  const b6Match = fullText.match(/bid[oó]n[:\s]*6\s*(?:lts?|litros?)?\s*(\d+)/i) || fullText.match(/6\s*(?:lts?|litros?)\s*(\d+)/i);
+  if (b6Match) products.b6 = b6Match[1];
+
+  const sodaMatch = fullText.match(/soda\s*:\s*(\d+)/i);
+  if (sodaMatch && parseInt(sodaMatch[1]) > 0) products.soda = sodaMatch[1];
+
+  const bombitaMatch = fullText.match(/bombita\s*:?\s*(\d+)/i);
+  if (bombitaMatch && parseInt(bombitaMatch[1]) > 0) products.bombita = bombitaMatch[1];
+
+  const dispElecNewMatch = fullText.match(/dispensador\s*:?\s*(?:elec(?:trico)?|elé(?:ctrico)?)\s*(?:nuevo)?\s*(\d+)/i) || fullText.match(/disp(?:ensador)?\s*:?\s*elec\s*(\d+)/i);
+  if (dispElecNewMatch && parseInt(dispElecNewMatch[1]) > 0) products.disp_elec_new = dispElecNewMatch[1];
+
+  const dispElecChgMatch = fullText.match(/dispensador\s*:?\s*(?:elec(?:trico)?|elé(?:ctrico)?)\s*cambio\s*(\d+)/i);
+  if (dispElecChgMatch && parseInt(dispElecChgMatch[1]) > 0) products.disp_elec_chg = dispElecChgMatch[1];
+
+  const dispNatMatch = fullText.match(/dispensador\s*:?\s*nat(?:ural)?\s*(\d+)/i) || fullText.match(/disp(?:ensador)?\s*:?\s*nat\s*(\d+)/i);
+  if (dispNatMatch && parseInt(dispNatMatch[1]) > 0) products.disp_nat = dispNatMatch[1];
+
+  // 6. Extract notes/details
+  const detalles: string[] = [];
+  let isAfterProducts = false;
+  for (i = 0; i < lines.length; i++) {
+    if (/producto|bidon|soda|dispensador/i.test(lines[i])) { isAfterProducts = true; }
+    const detMatch = lines[i].match(/detalle\s*:\s*(.+)/i);
+    if (detMatch) {
+      const detText = detMatch[1].trim();
+      if (detText.length <= 20 && !isAfterProducts && !/nuevo|coordinar|espera|llam/i.test(detText)) {
+        if (address) address += ' - ' + detText;
+        else address = detText;
+      } else if (isAfterProducts || detText.length > 20 || /nuevo|coordinar|espera|llam/i.test(detText)) {
+        detalles.push(detText);
+      }
+    }
+  }
+  notes = detalles.join(' | ');
+
+  // 7. Fallback
+  if (!name && !address && !phone) {
+    const cleanStr = str.replace(link, '').trim().replace(/-+$/, '').trim();
+    const parts = cleanStr.split(/\s+-\s+/).map((s) => s.trim()).filter((s) => s);
+    if (parts.length >= 2) { name = parts[0]; address = parts.slice(1).join(' - '); }
+    else if (parts.length === 1) { name = parts[0]; address = parts[0]; }
+  }
+
+  return { name, address, phone, link, lat, lng, products, notes };
+};
+
 export const getDayIndex = (dayName: string): number => {
   if (!dayName) return -1;
   const normalized = normalizeText(dayName);

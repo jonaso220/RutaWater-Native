@@ -6,11 +6,16 @@ import { useTheme } from '../theme/ThemeContext';
 import HomeScreen from '../screens/HomeScreen';
 import DirectoryScreen from '../screens/DirectoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import AlarmBanner from '../components/AlarmBanner';
+import { useAutoMergeDuplicates } from '../hooks/useAutoMergeDuplicates';
+import { useAlarmChecker } from '../hooks/useAlarmChecker';
 
 const Tab = createBottomTabNavigator();
 
 const AppNavigator = () => {
   const { colors, isDark } = useTheme();
+  useAutoMergeDuplicates();
+  const { activeAlarm, dismissAlarm } = useAlarmChecker();
 
   const navTheme = {
     ...(isDark ? DarkTheme : DefaultTheme),
@@ -26,6 +31,7 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer theme={navTheme}>
+      <AlarmBanner alarm={activeAlarm} onDismiss={dismissAlarm} />
       <Tab.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.headerBackground },

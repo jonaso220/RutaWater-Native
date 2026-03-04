@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { db } from '../config/firebase';
 import { Client } from '../types';
-import { normalizeText, getNextVisitDate, getWeekNumber } from '../utils/helpers';
+import { normalizeText, fuzzyMatch, getNextVisitDate, getWeekNumber } from '../utils/helpers';
 import { ALL_DAYS, Frequency } from '../constants/products';
 
 interface UseClientsProps {
@@ -46,6 +46,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   }, [userId, groupId]);
 
   // Get ALL clients assigned to a day (including not-due), sorted by position
+  // Normalization matches webapp: listOrders[day] is preferred, timestamps pushed to end
   const getAllDayClients = useCallback((day: string): Client[] => {
     if (!day) return [];
     return clients
@@ -55,11 +56,20 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         return (c.visitDays && c.visitDays.includes(day)) || c.visitDay === day;
       })
       .sort((a, b) => {
-        const orderA = a.listOrders?.[day] ?? a.listOrder ?? 0;
-        const orderB = b.listOrders?.[day] ?? b.listOrder ?? 0;
-        const cleanA = orderA > 100000 ? 0 : orderA;
-        const cleanB = orderB > 100000 ? 0 : orderB;
-        return cleanA - cleanB;
+        const hasOrderA = a.listOrders && typeof a.listOrders[day] === 'number';
+        const hasOrderB = b.listOrders && typeof b.listOrders[day] === 'number';
+        let orderA: number, orderB: number;
+        if (hasOrderA) {
+          orderA = a.listOrders![day];
+        } else {
+          orderA = (a.listOrder ?? 0) > 1000000 ? 999999 + ((a.listOrder ?? 0) / 1e15) : (a.listOrder || 999999);
+        }
+        if (hasOrderB) {
+          orderB = b.listOrders![day];
+        } else {
+          orderB = (b.listOrder ?? 0) > 1000000 ? 999999 + ((b.listOrder ?? 0) / 1e15) : (b.listOrder || 999999);
+        }
+        return orderA - orderB;
       });
   }, [clients]);
 
@@ -76,8 +86,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     });
   }, [clients]);
 
-  // Get directory (all clients, searchable)
+  // Get directory (all clients, searchable with fuzzy match)
   const getFilteredDirectory = useCallback((searchTerm: string, filter: string = 'all'): Client[] => {
+    const matcher = fuzzyMatch(searchTerm);
     return clients
       .filter((c) => !c.isNote)
       .filter((c) => {
@@ -85,14 +96,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         if (filter === 'no_location') return !((c.lat && c.lng) || c.mapsLink);
         return c.freq === filter;
       })
-      .filter((c) => {
-        if (!searchTerm.trim()) return true;
-        const term = normalizeText(searchTerm);
-        const name = normalizeText(c.name || '');
-        const address = normalizeText(c.address || '');
-        const phone = (c.phone || '').toLowerCase();
-        return name.includes(term) || address.includes(term) || phone.includes(term);
-      })
+      .filter((c) => matcher(c.name || '', c.address || '', c.phone || ''))
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [clients]);
 
@@ -467,33 +471,59 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         return (c.visitDays && c.visitDays.includes(day)) || c.visitDay === day;
       })
       .sort((a, b) => {
-        const orderA = a.listOrders?.[day] ?? a.listOrder ?? 0;
-        const orderB = b.listOrders?.[day] ?? b.listOrder ?? 0;
-        const cleanA = orderA > 100000 ? 0 : orderA;
-        const cleanB = orderB > 100000 ? 0 : orderB;
-        return cleanA - cleanB;
+        const hasOrderA = a.listOrders && typeof a.listOrders[day] === 'number';
+        const hasOrderB = b.listOrders && typeof b.listOrders[day] === 'number';
+        let orderA: number, orderB: number;
+        if (hasOrderA) {
+          orderA = a.listOrders![day];
+        } else {
+          orderA = (a.listOrder ?? 0) > 1000000 ? 999999 + ((a.listOrder ?? 0) / 1e15) : (a.listOrder || 999999);
+        }
+        if (hasOrderB) {
+          orderB = b.listOrders![day];
+        } else {
+          orderB = (b.listOrder ?? 0) > 1000000 ? 999999 + ((b.listOrder ?? 0) / 1e15) : (b.listOrder || 999999);
+        }
+        return orderA - orderB;
       });
   }, []);
 
-  // Change client position - usa ref sincrónico para evitar race conditions
+  // Reorder client: sequential integer positions with displacement (matches webapp)
+  // Supports manual position (targetPosition) for UI input
   const changePosition = useCallback(async (clientId: string, newPos: number, day: string) => {
-    const pos = Math.max(1, newPos);
-    // Leer del ref sincrónico, no del state (que puede estar batched)
-    const dayClients = [...getDayClientsFromSource(day, clientsRef.current)];
-    const currentIndex = dayClients.findIndex((c) => c.id === clientId);
+    // Leer del ref sincrónico para tener siempre las posiciones más recientes
+    const allClients = [...getDayClientsFromSource(day, clientsRef.current)];
+    const currentIndex = allClients.findIndex((c) => c.id === clientId);
     if (currentIndex === -1) return;
 
-    const [movedClient] = dayClients.splice(currentIndex, 1);
-    const targetIndex = Math.min(Math.max(0, pos - 1), dayClients.length);
-    dayClients.splice(targetIndex, 0, movedClient);
+    // Remover la tarjeta de su posición actual
+    const [movedClient] = allClients.splice(currentIndex, 1);
 
-    // Construir mapa de actualizaciones
-    const updateMap: Record<string, number> = {};
-    dayClients.forEach((client, index) => {
-      updateMap[client.id] = index;
+    // Asignación manual de posición (1-indexed desde el usuario)
+    const insertIndex = Math.max(0, Math.min(newPos - 1, allClients.length));
+    allClients.splice(insertIndex, 0, movedClient);
+
+    // Si la tarjeta quedó en la misma posición, no hacer nada
+    const newIndex = allClients.indexOf(movedClient);
+    if (newIndex === currentIndex) return;
+
+    // Asignar posiciones enteras secuenciales a TODOS los clientes.
+    // Solo escribir actualizaciones para los que cambiaron.
+    const updates: { id: string; position: number }[] = [];
+    allClients.forEach((client, newPosIdx) => {
+      const storedPos = client.listOrders && typeof client.listOrders[day] === 'number'
+        ? client.listOrders[day]
+        : undefined;
+      if (storedPos !== newPosIdx) {
+        updates.push({ id: client.id, position: newPosIdx });
+      }
     });
 
-    // Actualizar ref sincrónico ANTES del batch (evita stale reads)
+    if (updates.length === 0) return;
+
+    // Optimista: actualizar ref SINCRÓNICAMENTE + estado React
+    const updateMap: Record<string, number> = {};
+    updates.forEach((u) => { updateMap[u.id] = u.position; });
     const applyUpdate = (list: Client[]): Client[] =>
       list.map((c) => {
         if (updateMap[c.id] !== undefined) {
@@ -505,21 +535,54 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     clientsRef.current = applyUpdate(clientsRef.current);
     setClients((prev) => applyUpdate(prev));
 
-    // Escribir a Firestore
-    const batch = db.batch();
-    dayClients.forEach((client, index) => {
-      const ref = db.collection('clients').doc(client.id);
-      batch.update(ref, {
-        [`listOrders.${day}`]: index,
-      });
-    });
-
     try {
+      const batch = db.batch();
+      updates.forEach(({ id, position }) => {
+        batch.update(db.collection('clients').doc(id), {
+          [`listOrders.${day}`]: position,
+        });
+      });
       await batch.commit();
     } catch (e) {
       console.error('Error changing position:', e);
     }
   }, [getDayClientsFromSource]);
+
+  // Clone a client (duplicate with same data, for additional visits)
+  const cloneClient = useCallback(async (client: Client) => {
+    try {
+      const scope = groupId ? { groupId, userId } : { userId };
+      const newData: Record<string, any> = {
+        ...scope,
+        userId,
+        name: client.name,
+        phone: client.phone || '',
+        address: client.address || '',
+        lat: client.lat || '',
+        lng: client.lng || '',
+        mapsLink: client.mapsLink || '',
+        notes: client.notes || '',
+        freq: 'on_demand',
+        visitDay: 'Sin Asignar',
+        visitDays: [],
+        specificDate: '',
+        products: client.products || {},
+        listOrder: 0,
+        listOrders: {},
+        isCompleted: false,
+        isStarred: false,
+        isPinned: false,
+        isNote: false,
+        alarm: '',
+        startWeek: getWeekNumber(new Date()),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await db.collection('clients').add(newData);
+    } catch (e) {
+      console.error('Error cloning client:', e);
+    }
+  }, [groupId, userId]);
 
   return {
     clients,
@@ -540,5 +603,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     addNote,
     addClient,
     changePosition,
+    cloneClient,
   };
 };

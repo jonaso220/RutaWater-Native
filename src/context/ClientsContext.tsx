@@ -40,6 +40,7 @@ interface ClientsContextType {
     mapsLink?: string,
   ) => Promise<void>;
   changePosition: (clientId: string, newPos: number, day: string) => Promise<void>;
+  cloneClient: (client: Client) => Promise<void>;
   /** Pre-computed client counts per day for the day selector */
   dayCounts: Record<string, number>;
 }

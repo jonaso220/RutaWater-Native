@@ -269,34 +269,32 @@ const SettingsScreen = () => {
             if (!groupData?.groupId) return;
             setLoading(true);
             try {
-              // Remove all members
-              for (const member of members) {
-                await db
-                  .collection('users')
-                  .doc(member.id)
-                  .update({ groupId: null, role: null });
-              }
+              const gid = groupData.groupId;
 
-              // Clear groupId from data
-              const batch = db.batch();
-              let count = 0;
-              const clientsSnap = await db
-                .collection('clients')
-                .where('groupId', '==', groupData.groupId)
-                .get();
-              for (const doc of clientsSnap.docs) {
-                batch.update(doc.ref, { groupId: null });
-                count++;
-                if (count >= 450) break;
-              }
+              // Collect all docs to update
+              const updates: { ref: any; data: any }[] = [];
 
-              await batch.commit();
+              const membersSnap = await db.collection('users').where('groupId', '==', gid).get();
+              membersSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null, role: null } }));
+
+              const clientsSnap = await db.collection('clients').where('groupId', '==', gid).get();
+              clientsSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null } }));
+
+              const debtsSnap = await db.collection('debts').where('groupId', '==', gid).get();
+              debtsSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null } }));
+
+              const transfersSnap = await db.collection('transfers').where('groupId', '==', gid).get();
+              transfersSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null } }));
+
+              // Execute in batches of 450
+              for (let i = 0; i < updates.length; i += 450) {
+                const batch = db.batch();
+                updates.slice(i, i + 450).forEach(({ ref, data }) => batch.update(ref, data));
+                await batch.commit();
+              }
 
               // Delete group doc
-              await db
-                .collection('groups')
-                .doc(groupData.groupId)
-                .delete();
+              await db.collection('groups').doc(gid).delete();
 
               onGroupUpdate(null);
             } catch (e) {
@@ -316,7 +314,7 @@ const SettingsScreen = () => {
       const rows = clients.map((c) => {
         const products = c.products
           ? Object.entries(c.products)
-              .filter(([_, v]) => v > 0)
+              .filter(([_, v]) => Number(v) > 0)
               .map(([k, v]) => `${k}:${v}`)
               .join(' ')
           : '';

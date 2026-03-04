@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   View,
   Text,
-  SectionList,
   TouchableOpacity,
   TextInput,
   StyleSheet,
@@ -11,6 +10,12 @@ import {
   Alert,
   Modal,
 } from 'react-native';
+import DraggableFlatList, {
+  NestableScrollContainer,
+  NestableDraggableFlatList,
+  ScaleDecorator,
+  RenderItemParams,
+} from 'react-native-draggable-flatlist';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useScrollToTop } from '@react-navigation/native';
 import { Client } from '../types';
@@ -34,6 +39,10 @@ import TransfersSheet from '../components/TransfersSheet';
 import DebtsSheet from '../components/DebtsSheet';
 import AddClientModal from '../components/AddClientModal';
 import PromptModal from '../components/PromptModal';
+
+type ListItem =
+  | { type: 'header'; key: string; title: string; count: number; isToday: boolean }
+  | { type: 'client'; key: string; client: Client; sectionDateKey: string };
 
 const HomeScreen = () => {
   const { colors, isDark } = useTheme();
@@ -62,8 +71,8 @@ const HomeScreen = () => {
   const { transfers, hasPendingTransfer, addTransfer, markTransferReviewed } = useTransfersContext();
   const { dailyLoad, loadForDay, saveDailyLoad } = useDailyLoadsContext();
 
-  const sectionListRef = useRef<SectionList>(null);
-  useScrollToTop(sectionListRef);
+  const scrollRef = useRef<any>(null);
+  useScrollToTop(scrollRef);
   const [selectedDay, setSelectedDay] = useState(getTodayDayName());
   const [showCompleted, setShowCompleted] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -191,6 +200,31 @@ const HomeScreen = () => {
     return clientSections[0].data;
   }, [clientSections]);
 
+  // Flatten sections into a single array for DraggableFlatList
+  const flatListData = useMemo(() => {
+    const items: ListItem[] = [];
+    clientSections.forEach((section) => {
+      items.push({
+        type: 'header',
+        key: `header-${section.dateKey}`,
+        title: section.title,
+        count: section.data.length,
+        isToday: section.isToday,
+      });
+      section.data.forEach((client) => {
+        items.push({
+          type: 'client',
+          key: client.id,
+          client,
+          sectionDateKey: section.dateKey,
+        });
+      });
+    });
+    return items;
+  }, [clientSections]);
+
+  const isDragEnabled = searchTerm.trim().length === 0 && activeFilters.size === 0;
+
   // Load daily load data when day changes
   useEffect(() => {
     loadForDay(selectedDay);
@@ -293,29 +327,104 @@ const HomeScreen = () => {
     return map;
   }, [getAllDayClients, selectedDay]);
 
-  const renderClient = useCallback(
-    ({ item }: { item: Client }) => {
-      const globalIndex = globalPositionMap[item.id] ?? 0;
+  const renderDraggableItem = useCallback(
+    ({ item, drag, isActive }: RenderItemParams<ListItem>) => {
+      if (item.type === 'header') {
+        return (
+          <View style={[styles.sectionHeader, item.isToday && styles.sectionHeaderToday]}>
+            <Text style={[styles.sectionHeaderText, item.isToday && styles.sectionHeaderTextToday]}>
+              {item.title}
+            </Text>
+            <Text style={[styles.sectionHeaderCount, item.isToday && styles.sectionHeaderCountToday]}>
+              {item.count}
+            </Text>
+          </View>
+        );
+      }
+
+      const client = item.client;
+      const globalIndex = globalPositionMap[client.id] ?? 0;
+
       return (
-        <ClientCard
-          client={item}
-          index={globalIndex}
-          isAdmin={isAdmin}
-          hasDebt={getClientDebtTotal(item.id) > 0}
-          hasPendingTransfer={hasPendingTransfer(item.id)}
-          onMarkDone={() => handleMarkDone(item)}
-          onEdit={() => setEditingClient(item)}
-          onDelete={() => handleDelete(item)}
-          onDebt={() => setDebtClient(item)}
-          onToggleStar={() => handleToggleStar(item)}
-          onTransfer={() => handleTransfer(item)}
-          onAlarm={() => handleAlarm(item)}
-          onChangePosition={(newPos) => changePosition(item.id, newPos, selectedDay)}
-          enCaminoMessage={appSettings?.whatsappEnCamino}
-        />
+        <ScaleDecorator activeScale={1.03}>
+          <ClientCard
+            client={client}
+            index={globalIndex}
+            isAdmin={isAdmin}
+            hasDebt={getClientDebtTotal(client.id) > 0}
+            hasPendingTransfer={hasPendingTransfer(client.id)}
+            onMarkDone={() => handleMarkDone(client)}
+            onEdit={() => setEditingClient(client)}
+            onDelete={() => handleDelete(client)}
+            onDebt={() => setDebtClient(client)}
+            onToggleStar={() => handleToggleStar(client)}
+            onTransfer={() => handleTransfer(client)}
+            onAlarm={() => handleAlarm(client)}
+            onChangePosition={(newPos) => changePosition(client.id, newPos, selectedDay)}
+            onDrag={isDragEnabled ? drag : undefined}
+            enCaminoMessage={appSettings?.whatsappEnCamino}
+          />
+        </ScaleDecorator>
       );
     },
-    [isAdmin, handleMarkDone, handleDelete, getClientDebtTotal, hasPendingTransfer, handleToggleStar, handleTransfer, handleAlarm, changePosition, selectedDay, globalPositionMap, appSettings],
+    [isDragEnabled, isAdmin, handleMarkDone, handleDelete, getClientDebtTotal, hasPendingTransfer, handleToggleStar, handleTransfer, handleAlarm, changePosition, selectedDay, globalPositionMap, appSettings, styles],
+  );
+
+  const handleDragEnd = useCallback(
+    ({ data, from, to }: { data: ListItem[]; from: number; to: number }) => {
+      if (from === to) return;
+
+      const movedItem = flatListData[from];
+      if (movedItem.type !== 'client') return;
+
+      // Find which section the item landed in (walk backward in reordered data)
+      let landedSectionKey: string | null = null;
+      for (let i = to; i >= 0; i--) {
+        if (data[i].type === 'header') {
+          landedSectionKey = data[i].key.replace('header-', '');
+          break;
+        }
+      }
+
+      // Reject cross-section drag
+      if (landedSectionKey !== movedItem.sectionDateKey) return;
+
+      // Find neighbor clients at the drop position in the reordered array
+      let prevClientId: string | null = null;
+      let nextClientId: string | null = null;
+
+      for (let i = to - 1; i >= 0; i--) {
+        if (data[i].type === 'header') break;
+        if (data[i].type === 'client' && data[i].key !== movedItem.key) {
+          prevClientId = data[i].key;
+          break;
+        }
+      }
+      for (let i = to + 1; i < data.length; i++) {
+        if (data[i].type === 'header') break;
+        if (data[i].type === 'client' && data[i].key !== movedItem.key) {
+          nextClientId = data[i].key;
+          break;
+        }
+      }
+
+      // Map neighbor to position in the full day client list
+      const allDayClients = getAllDayClients(selectedDay);
+      let targetPos: number;
+
+      if (prevClientId) {
+        const prevIdx = allDayClients.findIndex((c) => c.id === prevClientId);
+        targetPos = prevIdx >= 0 ? prevIdx + 2 : 1; // 1-indexed, after prev
+      } else if (nextClientId) {
+        const nextIdx = allDayClients.findIndex((c) => c.id === nextClientId);
+        targetPos = nextIdx >= 0 ? nextIdx + 1 : 1; // 1-indexed, at next's position
+      } else {
+        targetPos = 1;
+      }
+
+      changePosition(movedItem.client.id, targetPos, selectedDay);
+    },
+    [flatListData, changePosition, selectedDay, getAllDayClients],
   );
 
   if (loading) {
@@ -346,12 +455,7 @@ const HomeScreen = () => {
               key={day}
               onPress={() => {
                 if (day === selectedDay) {
-                  sectionListRef.current?.scrollToLocation({
-                    sectionIndex: 0,
-                    itemIndex: 0,
-                    viewOffset: 0,
-                    animated: true,
-                  });
+                  scrollRef.current?.scrollTo({ y: 0, animated: true });
                 } else {
                   setSelectedDay(day);
                 }
@@ -496,84 +600,79 @@ const HomeScreen = () => {
       </View>
 
       {/* Client list */}
-      <SectionList
-        ref={sectionListRef}
-        sections={clientSections}
-        renderItem={renderClient}
-        renderSectionHeader={({ section }) => (
-          <View style={[styles.sectionHeader, section.isToday && styles.sectionHeaderToday]}>
-            <Text style={[styles.sectionHeaderText, section.isToday && styles.sectionHeaderTextToday]}>
-              {section.title}
-            </Text>
-            <Text style={[styles.sectionHeaderCount, section.isToday && styles.sectionHeaderCountToday]}>
-              {section.data.length}
-            </Text>
-          </View>
-        )}
-        keyExtractor={(item) => item.id}
+      <NestableScrollContainer
+        ref={scrollRef}
+        style={{ flex: 1 }}
         contentContainerStyle={styles.listContent}
-        stickySectionHeadersEnabled={false}
-        ListEmptyComponent={
+      >
+        {flatListData.length > 0 ? (
+          <NestableDraggableFlatList
+            data={flatListData}
+            keyExtractor={(item) => item.key}
+            renderItem={renderDraggableItem}
+            onDragEnd={handleDragEnd}
+          />
+        ) : (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyEmoji}>📋</Text>
             <Text style={styles.emptyText}>
               No hay clientes para {selectedDay}
             </Text>
           </View>
-        }
-        ListFooterComponent={
-          completedClients.length > 0 ? (
-            <View style={styles.completedSection}>
-              <TouchableOpacity
-                onPress={() => setShowCompleted(!showCompleted)}
-                style={styles.completedHeader}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.completedTitle}>
-                  {showCompleted ? '▼' : '▶'} Completados ({completedClients.length})
-                </Text>
-              </TouchableOpacity>
-              {showCompleted && (
-                <>
-                  {completedClients.map((client) => (
-                    <TouchableOpacity
-                      key={client.id}
-                      style={styles.completedCard}
-                      onPress={() => handleUndoComplete(client)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.completedName}>
-                        {(client.name || '').toUpperCase()}
-                      </Text>
-                      <Text style={styles.completedHint}>Tocar para deshacer</Text>
-                    </TouchableOpacity>
-                  ))}
+        )}
+
+        {/* Completed section */}
+        {completedClients.length > 0 && (
+          <View style={styles.completedSection}>
+            <TouchableOpacity
+              onPress={() => setShowCompleted(!showCompleted)}
+              style={styles.completedHeader}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.completedTitle}>
+                {showCompleted ? '▼' : '▶'} Completados ({completedClients.length})
+              </Text>
+            </TouchableOpacity>
+            {showCompleted && (
+              <>
+                {completedClients.map((client) => (
                   <TouchableOpacity
-                    style={styles.deleteAllBtn}
-                    onPress={() => {
-                      Alert.alert(
-                        'Eliminar completados',
-                        `Eliminar ${completedClients.length} cliente${completedClients.length !== 1 ? 's' : ''} completado${completedClients.length !== 1 ? 's' : ''}?`,
-                        [
-                          { text: 'Cancelar', style: 'cancel' },
-                          {
-                            text: 'Eliminar todo',
-                            style: 'destructive',
-                            onPress: () => deleteAllCompleted(selectedDay),
-                          },
-                        ],
-                      );
-                    }}
+                    key={client.id}
+                    style={styles.completedCard}
+                    onPress={() => handleUndoComplete(client)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.deleteAllBtnText}>🗑️ Eliminar todo</Text>
+                    <Text style={styles.completedName}>
+                      {(client.name || '').toUpperCase()}
+                    </Text>
+                    <Text style={styles.completedHint}>Tocar para deshacer</Text>
                   </TouchableOpacity>
-                </>
-              )}
-            </View>
-          ) : null
-        }
-      />
+                ))}
+                <TouchableOpacity
+                  style={styles.deleteAllBtn}
+                  onPress={() => {
+                    Alert.alert(
+                      'Eliminar completados',
+                      `Eliminar ${completedClients.length} cliente${completedClients.length !== 1 ? 's' : ''} completado${completedClients.length !== 1 ? 's' : ''}?`,
+                      [
+                        { text: 'Cancelar', style: 'cancel' },
+                        {
+                          text: 'Eliminar todo',
+                          style: 'destructive',
+                          onPress: () => deleteAllCompleted(selectedDay),
+                        },
+                      ],
+                    );
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.deleteAllBtnText}>🗑️ Eliminar todo</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
+      </NestableScrollContainer>
 
       {/* Edit Client Modal */}
       <EditClientModal

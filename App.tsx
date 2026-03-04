@@ -1,5 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuthContext } from './src/context/AuthContext';
 import { ClientsProvider } from './src/context/ClientsContext';
 import { DebtsProvider } from './src/context/DebtsContext';
@@ -39,11 +40,13 @@ const AppContent = () => {
 };
 
 const App = () => (
-  <ThemeProvider>
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
-  </ThemeProvider>
+  <GestureHandlerRootView style={{ flex: 1 }}>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
+  </GestureHandlerRootView>
 );
 
 export default App;

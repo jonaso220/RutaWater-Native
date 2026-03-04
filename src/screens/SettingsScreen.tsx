@@ -9,7 +9,9 @@ import {
   Alert,
   ActivityIndicator,
   Share,
+  Platform,
 } from 'react-native';
+import RNFS from 'react-native-fs';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsContext } from '../context/ClientsContext';
@@ -17,6 +19,7 @@ import { useDebtsContext } from '../context/DebtsContext';
 import { useTransfersContext } from '../context/TransfersContext';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { PRODUCTS, FREQUENCY_LABELS, Frequency } from '../constants/products';
 
 const SettingsScreen = () => {
   const { colors, isDark } = useTheme();
@@ -308,68 +311,122 @@ const SettingsScreen = () => {
   };
 
   // --- EXPORT ---
+  const escapeCsv = (val: string | number | boolean | undefined | null): string => {
+    const str = String(val ?? '');
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+  };
+
+  const shareFile = async (content: string, filename: string) => {
+    const dir = Platform.OS === 'ios' ? RNFS.TemporaryDirectoryPath : RNFS.CachesDirectoryPath;
+    const filePath = `${dir}/${filename}`;
+    await RNFS.writeFile(filePath, content, 'utf8');
+    const fileUrl = Platform.OS === 'ios' ? filePath : `file://${filePath}`;
+    await Share.share(
+      Platform.OS === 'ios'
+        ? { url: fileUrl }
+        : { title: filename, message: content },
+    );
+  };
+
   const handleExportCSV = async () => {
     try {
-      const header = 'Nombre,Telefono,Direccion,Dia,Frecuencia,Productos,Notas,Tiene Deuda,Estrella,Maps Link';
-      const rows = clients.map((c) => {
-        const products = c.products
-          ? Object.entries(c.products)
-              .filter(([_, v]) => Number(v) > 0)
-              .map(([k, v]) => `${k}:${v}`)
-              .join(' ')
-          : '';
-        const escape = (s: string) => `"${(s || '').replace(/"/g, '""')}"`;
+      const allClients = clients.filter((c) => c.name);
+      if (allClients.length === 0) {
+        Alert.alert('Sin datos', 'No hay clientes para exportar.');
+        return;
+      }
+
+      const headers = ['Nombre', 'Teléfono', 'Dirección', 'Día', 'Frecuencia', 'Productos', 'Notas', 'Tiene Deuda', 'Favorito', 'Link Maps'];
+
+      const rows = allClients.map((c) => {
+        // Build product summary with labels (matching webapp)
+        const prodParts: string[] = [];
+        if (c.products) {
+          PRODUCTS.forEach((p) => {
+            const qty = parseInt(String(c.products[p.id] || 0), 10);
+            if (qty > 0) prodParts.push(`${p.label}: ${qty}`);
+          });
+        }
+
         return [
-          escape(c.name),
-          escape(c.phone),
-          escape(c.address),
-          escape((c.visitDays || []).join(', ')),
-          escape(c.freq),
-          escape(products),
-          escape(c.notes || ''),
-          c.hasDebt ? 'Si' : 'No',
-          c.isStarred ? 'Si' : 'No',
-          escape(c.mapsLink || ''),
+          escapeCsv(c.name),
+          escapeCsv(c.phone),
+          escapeCsv(c.address),
+          escapeCsv(c.visitDay || (c.visitDays || []).join(', ')),
+          escapeCsv(FREQUENCY_LABELS[c.freq as Frequency] || c.freq || ''),
+          escapeCsv(prodParts.join(', ')),
+          escapeCsv(c.notes || ''),
+          c.hasDebt ? 'Sí' : 'No',
+          c.isStarred ? 'Sí' : 'No',
+          escapeCsv(c.mapsLink || ''),
         ].join(',');
       });
-      const csv = '\uFEFF' + header + '\n' + rows.join('\n');
-      await Share.share({ message: csv, title: 'RutaWater_Clientes.csv' });
+
+      // BOM for Excel/Sheets UTF-8 recognition
+      const bom = '\uFEFF';
+      const csvContent = bom + headers.map(escapeCsv).join(',') + '\n' + rows.join('\n');
+
+      const date = new Date().toISOString().split('T')[0];
+      await shareFile(csvContent, `RutaWater_Clientes_${date}.csv`);
+
+      Alert.alert('Exportado', `${allClients.length} clientes exportados a CSV`);
     } catch (e) {
       console.error('Error exporting CSV:', e);
+      Alert.alert('Error', 'No se pudo exportar. Intenta de nuevo.');
     }
   };
 
   const handleExportJSON = async () => {
     try {
+      const allClients = clients.filter((c) => c.name);
+      if (allClients.length === 0 && debts.length === 0 && transfers.length === 0) {
+        Alert.alert('Sin datos', 'No hay datos para exportar.');
+        return;
+      }
+
       const backup = {
-        exportDate: new Date().toISOString(),
-        userEmail: user.email,
-        clients: clients.map((c) => ({
-          id: c.id, name: c.name, phone: c.phone, address: c.address,
-          freq: c.freq, visitDay: c.visitDay, visitDays: c.visitDays,
-          specificDate: c.specificDate, products: c.products, notes: c.notes,
-          hasDebt: c.hasDebt, isStarred: c.isStarred, isNote: c.isNote,
-          mapsLink: c.mapsLink, lat: c.lat, lng: c.lng,
+        exportDate: new Date().toISOString().split('T')[0],
+        exportedBy: user.email || user.uid,
+        clients: allClients.map((c) => ({
+          id: c.id, name: c.name, phone: c.phone || '', address: c.address || '',
+          lat: c.lat || '', lng: c.lng || '', freq: c.freq || '',
+          visitDay: c.visitDay || '', visitDays: c.visitDays || [],
+          specificDate: c.specificDate || '', notes: c.notes || '',
+          products: c.products || {}, isStarred: c.isStarred || false,
+          alarm: c.alarm || '', mapsLink: c.mapsLink || '', isNote: c.isNote || false,
+          hasDebt: c.hasDebt || false,
         })),
         debts: debts.map((d) => ({
-          id: d.id, clientId: d.clientId, clientName: d.clientName,
-          amount: d.amount,
+          id: d.id, clientId: d.clientId, clientName: d.clientName || '',
+          clientAddress: (d as any).clientAddress || '', amount: d.amount || 0,
           createdAt: (d.createdAt as any)?.seconds
             ? new Date((d.createdAt as any).seconds * 1000).toISOString()
             : '',
         })),
         transfers: transfers.map((t) => ({
-          id: t.id, clientId: t.clientId, clientName: t.clientName,
+          id: t.id, clientId: t.clientId, clientName: t.clientName || '',
+          clientAddress: (t as any).clientAddress || '',
           createdAt: (t.createdAt as any)?.seconds
             ? new Date((t.createdAt as any).seconds * 1000).toISOString()
             : '',
         })),
       };
-      const json = JSON.stringify(backup, null, 2);
-      await Share.share({ message: json, title: 'RutaWater_Backup.json' });
-      Alert.alert('Backup listo', `${clients.length} clientes, ${debts.length} deudas, ${transfers.length} transferencias`);
+
+      const jsonContent = JSON.stringify(backup, null, 2);
+      const date = new Date().toISOString().split('T')[0];
+      await shareFile(jsonContent, `RutaWater_Backup_${date}.json`);
+
+      const counts: string[] = [];
+      if (backup.clients.length > 0) counts.push(`${backup.clients.length} clientes`);
+      if (backup.debts.length > 0) counts.push(`${backup.debts.length} deudas`);
+      if (backup.transfers.length > 0) counts.push(`${backup.transfers.length} transf.`);
+      Alert.alert('Backup listo', counts.join(', '));
     } catch (e) {
       console.error('Error exporting JSON:', e);
+      Alert.alert('Error', 'No se pudo exportar. Intenta de nuevo.');
     }
   };
 
@@ -589,10 +646,10 @@ const SettingsScreen = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Exportar Datos</Text>
         <TouchableOpacity onPress={handleExportCSV} style={styles.exportBtn}>
-          <Text style={styles.exportBtnText}>Exportar Clientes (CSV)</Text>
+          <Text style={styles.exportBtnText}>📤 Exportar Clientes (CSV)</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={handleExportJSON} style={[styles.exportBtn, { marginTop: 8 }]}>
-          <Text style={styles.exportBtnText}>Backup Completo (JSON)</Text>
+          <Text style={styles.exportBtnText}>💾 Backup Completo (JSON)</Text>
         </TouchableOpacity>
       </View>
 

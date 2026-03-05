@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00E356F31AD99517003FC87E /* RutaWaterNativeTests.m in Sources */ = {isa = PBXBuildFile; fileRef = 00E356F21AD99517003FC87E /* RutaWaterNativeTests.m */; };
+		E5A1B2C300000001ESLPROJ /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = E5A1B2C300000002ESLPROJ /* InfoPlist.strings */; };
 		0CD747072F3FE6F300614022 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 0CD747062F3FE6F300614022 /* GoogleService-Info.plist */; };
 		13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB01A68108700A75B9A /* AppDelegate.mm */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
@@ -49,7 +50,19 @@
 		DFFE95365FFFDF826EB1EFFB /* Pods_RutaWaterNative_RutaWaterNativeTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RutaWaterNative_RutaWaterNativeTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F1A1B2C3D4E5F60700APPLE0 /* RutaWaterNative.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = RutaWaterNative.entitlements; path = RutaWaterNative/RutaWaterNative.entitlements; sourceTree = "<group>"; };
+		E5A1B2C300000003ESLPROJ /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = RutaWaterNative/es.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXVariantGroup section */
+		E5A1B2C300000002ESLPROJ /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				E5A1B2C300000003ESLPROJ /* es */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		00E356EB1AD99517003FC87E /* Frameworks */ = {
@@ -100,6 +113,7 @@
 				13B07FB71A68108700A75B9A /* main.m */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				F1A1B2C3D4E5F60700APPLE0 /* RutaWaterNative.entitlements */,
+				E5A1B2C300000002ESLPROJ /* InfoPlist.strings */,
 			);
 			name = RutaWaterNative;
 			sourceTree = "<group>";
@@ -221,10 +235,11 @@
 			};
 			buildConfigurationList = 83CBB9FA1A601CBA00E9B192 /* Build configuration list for PBXProject "RutaWaterNative" */;
 			compatibilityVersion = "Xcode 12.0";
-			developmentRegion = en;
+			developmentRegion = es;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				es,
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
@@ -254,6 +269,7 @@
 				0CD747072F3FE6F300614022 /* GoogleService-Info.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				A5762753627D466D3A90DA9A /* PrivacyInfo.xcprivacy in Resources */,
+				E5A1B2C300000001ESLPROJ /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -510,8 +526,10 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.rutawater.native;
 				PRODUCT_NAME = RutaWaterNative;
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
@@ -542,7 +560,9 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.rutawater.native;
 				PRODUCT_NAME = RutaWaterNative;
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;

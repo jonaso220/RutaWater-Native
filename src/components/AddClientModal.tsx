@@ -425,6 +425,9 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '90%',
+    maxWidth: 600,
+    alignSelf: 'center' as const,
+    width: '100%' as const,
   },
   header: {
     flexDirection: 'row',

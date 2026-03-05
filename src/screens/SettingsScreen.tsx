@@ -19,11 +19,13 @@ import { useDebtsContext } from '../context/DebtsContext';
 import { useTransfersContext } from '../context/TransfersContext';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useLayout } from '../hooks/useLayout';
 import { PRODUCTS, FREQUENCY_LABELS, Frequency } from '../constants/products';
 
 const SettingsScreen = () => {
   const { colors, isDark } = useTheme();
-  const styles = getStyles(colors);
+  const { fontScale } = useLayout();
+  const styles = getStyles(colors, fontScale);
   const { user: firebaseUser, groupData, isAdmin, signOut, deleteAccount, setGroupData } = useAuthContext();
   const { clients } = useClientsContext();
   const { debts } = useDebtsContext();
@@ -694,7 +696,9 @@ const SettingsScreen = () => {
   );
 };
 
-const getStyles = (colors: ThemeColors) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -703,13 +707,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 16,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     marginBottom: 12,
   },
   subsectionTitle: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
@@ -739,21 +743,21 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   avatarText: {
     color: '#FFFFFF',
-    fontSize: 22,
+    fontSize: s(22),
     fontWeight: '700',
   },
   userName: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   userEmail: {
-    fontSize: 14,
+    fontSize: s(14),
     color: colors.textMuted,
     marginTop: 2,
   },
   roleBadge: {
-    fontSize: 13,
+    fontSize: s(13),
     fontWeight: '700',
     color: colors.primary,
     backgroundColor: colors.primaryLight,
@@ -773,19 +777,19 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primaryLight,
   },
   codeLabel: {
-    fontSize: 14,
+    fontSize: s(14),
     color: colors.textMuted,
     fontWeight: '600',
   },
   codeValue: {
-    fontSize: 32,
+    fontSize: s(32),
     fontWeight: '800',
     color: colors.primary,
     letterSpacing: 4,
     marginVertical: 8,
   },
   codeHint: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.textHint,
     textAlign: 'center',
   },
@@ -800,12 +804,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.sectionBackground,
   },
   memberName: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '600',
     color: colors.textPrimary,
   },
   memberRole: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.textMuted,
     marginTop: 2,
   },
@@ -818,7 +822,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   removeBtnText: {
     color: colors.danger,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: s(14),
   },
   groupActions: {
     marginTop: 16,
@@ -834,10 +838,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   dangerBtnText: {
     color: colors.danger,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
   noGroupText: {
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textMuted,
     textAlign: 'center',
     marginBottom: 16,
@@ -850,7 +854,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   primaryBtnText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
   },
   divider: {
@@ -866,7 +870,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   dividerText: {
     color: colors.textHint,
     paddingHorizontal: 12,
-    fontSize: 15,
+    fontSize: s(15),
   },
   joinRow: {
     flexDirection: 'row',
@@ -878,7 +882,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '700',
     color: colors.textPrimary,
     borderWidth: 1,
@@ -896,10 +900,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   joinBtnText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
   templateLabel: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '600',
     color: colors.textMuted,
     marginBottom: 6,
@@ -908,7 +912,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
-    fontSize: 15,
+    fontSize: s(15),
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -916,7 +920,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     minHeight: 60,
   },
   templateHint: {
-    fontSize: 12,
+    fontSize: s(12),
     color: colors.textHint,
     marginTop: 4,
   },
@@ -935,7 +939,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   templateSaveBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: s(15),
   },
   templateResetBtn: {
     flex: 1,
@@ -949,7 +953,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   templateResetBtnText: {
     color: colors.textMuted,
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: s(15),
   },
   exportBtn: {
     backgroundColor: colors.primaryLighter,
@@ -962,7 +966,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   exportBtnText: {
     color: colors.primary,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
   signOutBtn: {
     backgroundColor: colors.card,
@@ -975,7 +979,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   signOutText: {
     color: colors.danger,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
   deleteAccountBtn: {
     paddingVertical: 14,
@@ -985,14 +989,15 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   deleteAccountText: {
     color: colors.danger,
     fontWeight: '600',
-    fontSize: 15,
+    fontSize: s(15),
   },
   deleteAccountHint: {
     color: colors.textHint,
-    fontSize: 13,
+    fontSize: s(13),
     textAlign: 'center',
     marginTop: 4,
   },
 });
+};
 
 export default SettingsScreen;

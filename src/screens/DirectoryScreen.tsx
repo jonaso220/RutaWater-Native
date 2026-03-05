@@ -26,10 +26,12 @@ import DebtModal from '../components/DebtModal';
 import EditClientModal from '../components/EditClientModal';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useLayout } from '../hooks/useLayout';
 
 const DirectoryScreen = () => {
   const { colors, isDark } = useTheme();
-  const styles = getStyles(colors);
+  const { fontScale } = useLayout();
+  const styles = getStyles(colors, fontScale);
   const { isAdmin, user, groupData } = useAuthContext();
   const { getFilteredDirectory, directoryCounts, scheduleFromDirectory, updateClient, clients, cloneClient } = useClientsContext();
   const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
@@ -323,6 +325,7 @@ const DirectoryScreen = () => {
 
   return (
     <View style={styles.container}>
+      <View style={{ flex: 1 }}>
       {/* Search bar + Import */}
       <View style={styles.searchContainer}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -404,6 +407,7 @@ const DirectoryScreen = () => {
           </View>
         }
       />
+      </View>
 
       {/* Schedule Modal */}
       <ScheduleModal
@@ -479,7 +483,9 @@ const DirectoryScreen = () => {
   );
 };
 
-const getStyles = (colors: ThemeColors) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -495,7 +501,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textPrimary,
   },
   filterBar: {
@@ -525,7 +531,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.danger,
   },
   filterChipText: {
-    fontSize: 11,
+    fontSize: s(11),
     fontWeight: '700',
     color: colors.textMuted,
   },
@@ -533,7 +539,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: '#FFFFFF',
   },
   filterChipCount: {
-    fontSize: 11,
+    fontSize: s(11),
     fontWeight: '600',
     color: colors.textHint,
   },
@@ -543,7 +549,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   countText: {
     textAlign: 'center',
     color: colors.textHint,
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '500',
     marginTop: 8,
   },
@@ -585,7 +591,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   avatarText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
   headerInfo: {
     flex: 1,
@@ -598,18 +604,18 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: 8,
   },
   clientName: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '700',
     color: colors.textPrimary,
     flex: 1,
   },
   clientPhone: {
-    fontSize: 11,
+    fontSize: s(11),
     color: colors.textHint,
     flexShrink: 0,
   },
   clientAddress: {
-    fontSize: 12,
+    fontSize: s(12),
     color: colors.textMuted,
     marginTop: 2,
   },
@@ -621,7 +627,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 2,
   },
   freqBadge: {
-    fontSize: 10,
+    fontSize: s(10),
     fontWeight: '700',
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -629,7 +635,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     overflow: 'hidden',
   },
   daysBadge: {
-    fontSize: 10,
+    fontSize: s(10),
     color: colors.textHint,
     backgroundColor: colors.sectionBackground,
     paddingHorizontal: 8,
@@ -638,7 +644,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     overflow: 'hidden',
   },
   debtBadge: {
-    fontSize: 10,
+    fontSize: s(10),
     fontWeight: '700',
     color: colors.danger,
     backgroundColor: colors.dangerLight,
@@ -654,7 +660,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 2,
   },
   prodChip: {
-    fontSize: 11,
+    fontSize: s(11),
     fontWeight: '500',
     color: colors.textSecondary,
     backgroundColor: colors.sectionBackground,
@@ -679,7 +685,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 6,
   },
   actionBtnText: {
-    fontSize: 18,
+    fontSize: s(18),
   },
   scheduleButton: {
     backgroundColor: colors.primaryLight,
@@ -688,7 +694,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 8,
   },
   scheduleButtonText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '700',
     color: colors.primaryDark,
   },
@@ -700,7 +706,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   importBtnText: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '700',
     color: '#FFF',
   },
@@ -714,16 +720,19 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
+    maxWidth: 500,
+    alignSelf: 'center' as const,
+    width: '100%' as const,
   },
   pasteTitle: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
     marginBottom: 6,
   },
   pasteSubtitle: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.textMuted,
     textAlign: 'center',
     marginBottom: 14,
@@ -732,7 +741,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.sectionBackground,
     borderRadius: 10,
     padding: 12,
-    fontSize: 14,
+    fontSize: s(14),
     color: colors.textPrimary,
     minHeight: 150,
     borderWidth: 1,
@@ -751,7 +760,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   pasteCancelText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '600',
     color: colors.textMuted,
   },
@@ -763,7 +772,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
   },
   pasteImportText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '700',
     color: '#FFF',
   },
@@ -772,9 +781,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 80,
   },
   emptyText: {
-    fontSize: 17,
+    fontSize: s(17),
     color: colors.textHint,
   },
 });
+};
 
 export default DirectoryScreen;

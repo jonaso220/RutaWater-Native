@@ -269,6 +269,9 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.modalBackground,
     borderRadius: 20,
     maxHeight: '80%',
+    maxWidth: 500,
+    alignSelf: 'center' as const,
+    width: '100%' as const,
   },
   header: {
     flexDirection: 'row',

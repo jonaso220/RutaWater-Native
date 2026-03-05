@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { Text as RNText } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { useLayout } from '../hooks/useLayout';
 import HomeScreen from '../screens/HomeScreen';
 import DirectoryScreen from '../screens/DirectoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -14,8 +15,11 @@ const Tab = createBottomTabNavigator();
 
 const AppNavigator = () => {
   const { colors, isDark } = useTheme();
+  const { fontScale } = useLayout();
   useAutoMergeDuplicates();
   const { activeAlarm, dismissAlarm } = useAlarmChecker();
+
+  const s = (v: number) => Math.round(v * fontScale);
 
   const navTheme = {
     ...(isDark ? DarkTheme : DefaultTheme),
@@ -36,16 +40,16 @@ const AppNavigator = () => {
         screenOptions={{
           headerStyle: { backgroundColor: colors.headerBackground },
           headerTintColor: colors.headerText,
-          headerTitleStyle: { fontWeight: '700' },
+          headerTitleStyle: { fontWeight: '700', fontSize: s(17) },
           tabBarStyle: {
             backgroundColor: colors.tabBarBackground,
             borderTopColor: colors.tabBarBorder,
             paddingBottom: 4,
-            height: 56,
+            height: s(56),
           },
           tabBarActiveTintColor: colors.tabActive,
           tabBarInactiveTintColor: colors.tabInactive,
-          tabBarLabelStyle: { fontSize: 13, fontWeight: '600' },
+          tabBarLabelStyle: { fontSize: s(13), fontWeight: '600' },
         }}
       >
         <Tab.Screen
@@ -53,7 +57,7 @@ const AppNavigator = () => {
           component={HomeScreen}
           options={{
             headerTitle: 'RutaWater',
-            tabBarIcon: () => <TabIcon label="🏠" />,
+            tabBarIcon: () => <TabIcon label="🏠" scale={fontScale} />,
           }}
         />
         <Tab.Screen
@@ -61,7 +65,7 @@ const AppNavigator = () => {
           component={DirectoryScreen}
           options={{
             headerTitle: 'Directorio',
-            tabBarIcon: () => <TabIcon label="👥" />,
+            tabBarIcon: () => <TabIcon label="👥" scale={fontScale} />,
           }}
         />
         <Tab.Screen
@@ -69,7 +73,7 @@ const AppNavigator = () => {
           component={SettingsScreen}
           options={{
             headerTitle: 'Ajustes',
-            tabBarIcon: () => <TabIcon label="⚙️" />,
+            tabBarIcon: () => <TabIcon label="⚙️" scale={fontScale} />,
           }}
         />
       </Tab.Navigator>
@@ -77,8 +81,8 @@ const AppNavigator = () => {
   );
 };
 
-const TabIcon = ({ label }: { label: string }) => (
-  <RNText style={{ fontSize: 22 }}>{label}</RNText>
+const TabIcon = ({ label, scale = 1 }: { label: string; scale?: number }) => (
+  <RNText style={{ fontSize: Math.round(22 * scale) }}>{label}</RNText>
 );
 
 export default AppNavigator;

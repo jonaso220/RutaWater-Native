@@ -29,6 +29,7 @@ import { useTransfersContext } from '../context/TransfersContext';
 import { useDailyLoadsContext } from '../context/DailyLoadsContext';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useLayout } from '../hooks/useLayout';
 import ClientCard from '../components/ClientCard';
 import EditClientModal from '../components/EditClientModal';
 import DebtModal from '../components/DebtModal';
@@ -46,7 +47,8 @@ type ListItem =
 
 const HomeScreen = () => {
   const { colors, isDark } = useTheme();
-  const styles = getStyles(colors);
+  const { fontScale, isWide } = useLayout();
+  const styles = getStyles(colors, fontScale);
 
   const { isAdmin, user, groupData } = useAuthContext();
   const {
@@ -363,6 +365,7 @@ const HomeScreen = () => {
             onChangePosition={(newPos) => changePosition(client.id, newPos, selectedDay)}
             onDrag={isDragEnabled ? drag : undefined}
             enCaminoMessage={appSettings?.whatsappEnCamino}
+            fontScale={fontScale}
           />
         </ScaleDecorator>
       );
@@ -438,6 +441,7 @@ const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
+      <View style={{ flex: 1 }}>
       {/* Day selector */}
       <ScrollView
         horizontal
@@ -473,7 +477,7 @@ const HomeScreen = () => {
                   isSelected && styles.dayChipTextSelected,
                 ]}
               >
-                {day.slice(0, 3)}
+                {isWide ? day : day.slice(0, 3)}
               </Text>
               <Text
                 style={[
@@ -673,6 +677,7 @@ const HomeScreen = () => {
           </View>
         )}
       </NestableScrollContainer>
+      </View>
 
       {/* Edit Client Modal */}
       <EditClientModal
@@ -793,7 +798,9 @@ const HomeScreen = () => {
   );
 };
 
-const getStyles = (colors: ThemeColors) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -807,7 +814,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   loadingText: {
     marginTop: 12,
     color: colors.textMuted,
-    fontSize: 16,
+    fontSize: s(16),
   },
   daySelector: {
     flexGrow: 0,
@@ -839,7 +846,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primary,
   },
   dayChipText: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -847,7 +854,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textWhite,
   },
   dayCount: {
-    fontSize: 13,
+    fontSize: s(13),
     fontWeight: '700',
     color: colors.textMuted,
     backgroundColor: colors.cardBorder,
@@ -880,7 +887,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 8,
   },
   actionBtnText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -938,12 +945,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     height: 38,
   },
   searchIcon: {
-    fontSize: 16,
+    fontSize: s(16),
     marginRight: 6,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textPrimary,
     padding: 0,
   },
@@ -951,7 +958,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 4,
   },
   clearBtnText: {
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textHint,
   },
   filterToggleBtn: {
@@ -967,7 +974,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primary,
   },
   filterToggleText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -981,7 +988,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopColor: colors.sectionBackground,
   },
   filterSectionTitle: {
-    fontSize: 13,
+    fontSize: s(13),
     fontWeight: '700',
     color: colors.textHint,
     marginBottom: 6,
@@ -1004,7 +1011,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.primary,
   },
   filterChipText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -1030,7 +1037,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.primary,
   },
   sectionHeaderText: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '700',
     color: colors.textMuted,
   },
@@ -1038,7 +1045,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.primary,
   },
   sectionHeaderCount: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '700',
     color: colors.textHint,
     backgroundColor: colors.sectionBackground,
@@ -1056,11 +1063,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginTop: 80,
   },
   emptyEmoji: {
-    fontSize: 48,
+    fontSize: s(48),
     marginBottom: 12,
   },
   emptyText: {
-    fontSize: 17,
+    fontSize: s(17),
     color: colors.textHint,
   },
   completedSection: {
@@ -1074,7 +1081,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 12,
   },
   completedTitle: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.textHint,
     textTransform: 'uppercase',
@@ -1092,12 +1099,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderLeftColor: colors.success,
   },
   completedName: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.successText,
   },
   completedHint: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.successAccent,
     fontStyle: 'italic',
   },
@@ -1111,7 +1118,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderColor: colors.dangerBorder,
   },
   deleteAllBtnText: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.danger,
   },
@@ -1125,9 +1132,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
+    maxWidth: 400,
+    alignSelf: 'center' as const,
+    width: '100%' as const,
   },
   alarmTitle: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
@@ -1146,7 +1156,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.sectionBackground,
   },
   alarmCancelText: {
-    fontSize: 17,
+    fontSize: s(17),
     fontWeight: '600',
     color: colors.textMuted,
   },
@@ -1157,10 +1167,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.primary,
   },
   alarmSaveText: {
-    fontSize: 17,
+    fontSize: s(17),
     fontWeight: '700',
     color: colors.textWhite,
   },
 });
+};
 
 export default HomeScreen;

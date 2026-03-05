@@ -43,6 +43,7 @@ interface ClientCardProps {
   onAlarm?: () => void;
   onChangePosition?: (newPosition: number) => void;
   onDrag?: () => void;
+  fontScale?: number;
 }
 
 const ClientCard: React.FC<ClientCardProps> = ({
@@ -61,9 +62,10 @@ const ClientCard: React.FC<ClientCardProps> = ({
   onChangePosition,
   onDrag,
   enCaminoMessage,
+  fontScale = 1,
 }) => {
   const { colors } = useTheme();
-  const styles = getStyles(colors);
+  const styles = getStyles(colors, fontScale);
   const [showPositionPrompt, setShowPositionPrompt] = useState(false);
 
   const productSummary = React.useMemo(() => {
@@ -305,8 +307,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
+const getStyles = (colors: ThemeColors, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
     card: {
       backgroundColor: colors.card,
       borderRadius: 12,
@@ -343,12 +346,12 @@ const getStyles = (colors: ThemeColors) =>
       borderRightColor: colors.sectionBackground,
     },
     orderText: {
-      fontSize: 14,
+      fontSize: s(14),
       fontWeight: '700',
       color: colors.textMuted,
     },
     dragGrip: {
-      fontSize: 16,
+      fontSize: s(16),
       color: colors.textDisabled,
       marginTop: 2,
       lineHeight: 16,
@@ -364,13 +367,13 @@ const getStyles = (colors: ThemeColors) =>
       alignItems: 'center',
     },
     noteLabel: {
-      fontSize: 13,
+      fontSize: s(13),
       fontWeight: '800',
       color: colors.warningDarker,
       textTransform: 'uppercase',
     },
     noteText: {
-      fontSize: 16,
+      fontSize: s(16),
       color: colors.textSecondary,
       lineHeight: 20,
     },
@@ -389,7 +392,7 @@ const getStyles = (colors: ThemeColors) =>
       borderRadius: 6,
     },
     clientName: {
-      fontSize: 16,
+      fontSize: s(16),
       fontWeight: '700',
       color: colors.textPrimary,
     },
@@ -399,7 +402,7 @@ const getStyles = (colors: ThemeColors) =>
       gap: 4,
     },
     debtBadge: {
-      fontSize: 12,
+      fontSize: s(12),
       fontWeight: '700',
       color: colors.danger,
       backgroundColor: colors.dangerLight,
@@ -409,7 +412,7 @@ const getStyles = (colors: ThemeColors) =>
       overflow: 'hidden',
     },
     transferBadge: {
-      fontSize: 12,
+      fontSize: s(12),
       fontWeight: '700',
       color: colors.successDark,
       backgroundColor: colors.successLighter,
@@ -419,7 +422,7 @@ const getStyles = (colors: ThemeColors) =>
       overflow: 'hidden',
     },
     alarmBadge: {
-      fontSize: 12,
+      fontSize: s(12),
       fontWeight: '700',
       color: colors.warningDark,
       backgroundColor: colors.warningAmberBg,
@@ -429,7 +432,7 @@ const getStyles = (colors: ThemeColors) =>
       overflow: 'hidden',
     },
     clientAddress: {
-      fontSize: 14,
+      fontSize: s(14),
       color: colors.textMuted,
     },
     addressRow: {
@@ -438,10 +441,10 @@ const getStyles = (colors: ThemeColors) =>
       gap: 4,
     },
     mapsPinIcon: {
-      fontSize: 16,
+      fontSize: s(16),
     },
     clientAddressLink: {
-      fontSize: 14,
+      fontSize: s(14),
       color: colors.primary,
       flex: 1,
     },
@@ -452,12 +455,12 @@ const getStyles = (colors: ThemeColors) =>
       marginTop: 2,
     },
     productsText: {
-      fontSize: 13,
+      fontSize: s(13),
       fontWeight: '600',
       color: colors.textSecondary,
     },
     notesText: {
-      fontSize: 13,
+      fontSize: s(13),
       color: colors.textMuted,
       fontStyle: 'italic',
     },
@@ -465,7 +468,7 @@ const getStyles = (colors: ThemeColors) =>
       marginTop: 2,
     },
     badge: {
-      fontSize: 12,
+      fontSize: s(12),
       fontWeight: '700',
       color: colors.textMuted,
       backgroundColor: colors.sectionBackground,
@@ -493,7 +496,7 @@ const getStyles = (colors: ThemeColors) =>
       alignItems: 'center',
     },
     actionBtnIcon: {
-      fontSize: 18,
+      fontSize: s(18),
     },
     enCaminoBtn: {
       flex: 1,
@@ -507,7 +510,7 @@ const getStyles = (colors: ThemeColors) =>
     },
     enCaminoText: {
       color: colors.textWhite,
-      fontSize: 16,
+      fontSize: s(16),
       fontWeight: '700',
     },
     doneButton: {
@@ -520,9 +523,10 @@ const getStyles = (colors: ThemeColors) =>
     },
     doneButtonText: {
       color: colors.textWhite,
-      fontSize: 15,
+      fontSize: s(15),
       fontWeight: '700',
     },
   });
+};
 
 export default React.memo(ClientCard);

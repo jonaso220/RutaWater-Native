@@ -27,7 +27,7 @@ const SettingsScreen = () => {
   const { fontScale } = useLayout();
   const styles = getStyles(colors, fontScale);
   const { user: firebaseUser, groupData, isAdmin, signOut, deleteAccount, setGroupData } = useAuthContext();
-  const { clients } = useClientsContext();
+  const { clients, findDuplicateClients, cleanupDuplicates } = useClientsContext();
   const { debts } = useDebtsContext();
   const { transfers } = useTransfersContext();
   if (!firebaseUser) return null;
@@ -437,6 +437,34 @@ const SettingsScreen = () => {
     }
   };
 
+  const handleCleanupDuplicates = () => {
+    const { staleIds } = findDuplicateClients();
+    if (staleIds.length === 0) {
+      Alert.alert('Sin duplicados', 'No se encontraron duplicados.');
+      return;
+    }
+    Alert.alert(
+      'Limpiar duplicados',
+      `Se encontraron ${staleIds.length} clientes duplicados. ¿Eliminar?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const count = await cleanupDuplicates();
+              Alert.alert('Listo', `Se eliminaron ${count} duplicados.`);
+            } catch (e) {
+              console.error('Error cleaning duplicates:', e);
+              Alert.alert('Error', 'No se pudieron eliminar los duplicados.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleDeleteAccount = () => {
     Alert.alert(
       'Eliminar cuenta',
@@ -668,6 +696,17 @@ const SettingsScreen = () => {
         <TouchableOpacity onPress={handleExportJSON} style={[styles.exportBtn, { marginTop: 8 }]}>
           <Text style={styles.exportBtnText}>💾 Backup Completo (JSON)</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Cleanup duplicates */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Mantenimiento</Text>
+        <TouchableOpacity onPress={handleCleanupDuplicates} style={styles.exportBtn}>
+          <Text style={styles.exportBtnText}>Limpiar duplicados</Text>
+        </TouchableOpacity>
+        <Text style={styles.deleteAccountHint}>
+          Elimina clientes duplicados que quedaron en el directorio.
+        </Text>
       </View>
 
       {/* Sign out */}

@@ -363,9 +363,20 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         // Reactivate existing client
         await db.collection('clients').doc(clientData.id).update(newData);
       } else {
-        // Create additional visit
-        newData.createdAt = new Date();
-        await db.collection('clients').add(newData);
+        // Check if there's an existing on_demand duplicate to reuse
+        const existingOnDemand = clientsRef.current.find(
+          c => c.id !== clientData.id &&
+               c.freq === 'on_demand' &&
+               (c.name || '').toLowerCase().trim() === (clientData.name || '').toLowerCase().trim()
+        );
+
+        if (existingOnDemand) {
+          // Reuse the on_demand document instead of creating a new one
+          await db.collection('clients').doc(existingOnDemand.id).update(newData);
+        } else {
+          newData.createdAt = new Date();
+          await db.collection('clients').add(newData);
+        }
       }
     } catch (e) {
       console.error('Error scheduling client:', e);
@@ -407,7 +418,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       const scope = groupId ? { groupId, userId } : { userId };
 
       // Place at beginning of day
-      const existingInDay = clients.filter(
+      const existingInDay = clientsRef.current.filter(
         (c) =>
           c.freq !== 'on_demand' &&
           !c.isCompleted &&
@@ -447,7 +458,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error adding note:', e);
     }
-  }, [clients, groupId, userId]);
+  }, [groupId, userId]);
 
   // Add a new client to a day's route or directory only
   const addClient = useCallback(async (
@@ -474,7 +485,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       let listOrders: Record<string, number> = {};
 
       if (!isDirectoryOnly) {
-        const existingInDay = clients.filter(
+        const existingInDay = clientsRef.current.filter(
           (c) =>
             c.freq !== 'on_demand' &&
             !c.isCompleted &&
@@ -521,7 +532,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error adding client:', e);
     }
-  }, [clients, groupId, userId]);
+  }, [groupId, userId]);
 
   // Get day clients from a specific source (para leer del ref sincrónico)
   const getDayClientsFromSource = useCallback((day: string, source: Client[]): Client[] => {
@@ -613,6 +624,55 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, [getDayClientsFromSource]);
 
+  // Find duplicate clients: groups by normalized name, identifies stale on_demand copies
+  const findDuplicateClients = useCallback((): { staleIds: string[], details: Array<{ name: string, activeId: string, staleId: string }> } => {
+    const nameGroups: Record<string, Client[]> = {};
+    clients.filter(c => !c.isNote).forEach(c => {
+      const key = (c.name || '').toLowerCase().trim();
+      if (!key) return;
+      if (!nameGroups[key]) nameGroups[key] = [];
+      nameGroups[key].push(c);
+    });
+
+    const staleIds: string[] = [];
+    const details: Array<{ name: string, activeId: string, staleId: string }> = [];
+
+    Object.entries(nameGroups).forEach(([_name, group]) => {
+      if (group.length < 2) return;
+
+      // Separate active (scheduled) vs stale (on_demand/directory-only)
+      const active = group.filter(c => c.freq !== 'on_demand' && c.visitDays && c.visitDays.length > 0);
+      const stale = group.filter(c => c.freq === 'on_demand' || !c.visitDays || c.visitDays.length === 0);
+
+      // If there's at least one active version, the stale ones are duplicates
+      if (active.length > 0 && stale.length > 0) {
+        stale.forEach(s => {
+          staleIds.push(s.id);
+          details.push({ name: s.name, activeId: active[0].id, staleId: s.id });
+        });
+      }
+    });
+
+    return { staleIds, details };
+  }, [clients]);
+
+  // Delete stale duplicate clients in batches
+  const cleanupDuplicates = useCallback(async () => {
+    const { staleIds } = findDuplicateClients();
+    if (staleIds.length === 0) return 0;
+
+    const BATCH_SIZE = 450;
+    for (let i = 0; i < staleIds.length; i += BATCH_SIZE) {
+      const chunk = staleIds.slice(i, i + BATCH_SIZE);
+      const batch = db.batch();
+      chunk.forEach(id => {
+        batch.delete(db.collection('clients').doc(id));
+      });
+      await batch.commit();
+    }
+    return staleIds.length;
+  }, [findDuplicateClients]);
+
   // Clone a client (duplicate with same data, for additional visits)
   const cloneClient = useCallback(async (client: Client) => {
     try {
@@ -669,5 +729,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     addClient,
     changePosition,
     cloneClient,
+    findDuplicateClients,
+    cleanupDuplicates,
   };
 };

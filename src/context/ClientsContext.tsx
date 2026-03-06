@@ -41,6 +41,8 @@ interface ClientsContextType {
   ) => Promise<void>;
   changePosition: (clientId: string, newPos: number, day: string) => Promise<void>;
   cloneClient: (client: Client) => Promise<void>;
+  findDuplicateClients: () => { staleIds: string[], details: Array<{ name: string, activeId: string, staleId: string }> };
+  cleanupDuplicates: () => Promise<number>;
   /** Pre-computed client counts per day for the day selector */
   dayCounts: Record<string, number>;
 }

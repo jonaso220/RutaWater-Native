@@ -4,6 +4,7 @@ import {
   Text,
   Modal,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   TextInput,
   ScrollView,
   StyleSheet,
@@ -421,34 +422,39 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
 
       {/* Paste Order Overlay (absolute view instead of nested Modal for Android compatibility) */}
       {showPasteModal && (
-        <View style={styles.pasteOverlay}>
-          <View style={styles.pasteModal}>
-            <Text style={styles.pasteModalTitle}>Pegar Pedido</Text>
-            <Text style={styles.pasteModalHint}>
-              Pega el texto del pedido y se completaran los campos automaticamente
-            </Text>
-            <TextInput
-              style={styles.pasteInput}
-              value={pasteText}
-              onChangeText={setPasteText}
-              placeholder="Pegar texto del pedido aqui..."
-              placeholderTextColor={colors.textHint}
-              multiline
-              autoFocus
-            />
-            <View style={styles.pasteActions}>
-              <TouchableOpacity
-                style={styles.pasteCancelBtn}
-                onPress={() => { Keyboard.dismiss(); setPasteText(''); setShowPasteModal(false); }}
-              >
-                <Text style={styles.pasteCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.pasteConfirmBtn} onPress={handlePasteOrder}>
-                <Text style={styles.pasteConfirmText}>Procesar</Text>
-              </TouchableOpacity>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.pasteOverlay}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.pasteModal}>
+              <Text style={styles.pasteModalTitle}>Pegar Pedido</Text>
+              <Text style={styles.pasteModalHint}>
+                Pega el texto del pedido y se completaran los campos automaticamente
+              </Text>
+              <TextInput
+                style={styles.pasteInput}
+                value={pasteText}
+                onChangeText={setPasteText}
+                placeholder="Pegar texto del pedido aqui..."
+                placeholderTextColor={colors.textHint}
+                multiline
+                autoFocus
+              />
+              <View style={styles.pasteActions}>
+                <TouchableOpacity
+                  style={styles.pasteCancelBtn}
+                  onPress={() => { Keyboard.dismiss(); setPasteText(''); setShowPasteModal(false); }}
+                >
+                  <Text style={styles.pasteCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.pasteConfirmBtn} onPress={handlePasteOrder}>
+                  <Text style={styles.pasteConfirmText}>Procesar</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       )}
     </Modal>
   );
@@ -663,8 +669,8 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.inputBorder,
     textAlignVertical: 'top',
-    minHeight: 200,
-    maxHeight: 300,
+    minHeight: 120,
+    maxHeight: 200,
   },
   pasteActions: {
     flexDirection: 'row',

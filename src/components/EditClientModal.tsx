@@ -23,6 +23,7 @@ interface EditClientModalProps {
   client: Client | null;
   onSave: (clientId: string, data: Partial<Client>) => void;
   onClose: () => void;
+  onDelete?: (clientId: string) => Promise<void>;
   showClientInfo?: boolean;
 }
 
@@ -31,6 +32,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   client,
   onSave,
   onClose,
+  onDelete,
   showClientInfo = false,
 }) => {
   const { colors, isDark } = useTheme();
@@ -47,6 +49,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const [pickerDate, setPickerDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (client) {
@@ -161,6 +164,32 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       ...prev,
       [productId]: Math.max(0, (prev[productId] || 0) + delta),
     }));
+  };
+
+  const handleDelete = () => {
+    if (!onDelete || !client) return;
+    Alert.alert(
+      '¿Eliminar cliente?',
+      'Esta acción no se puede deshacer. Se eliminará el cliente y todos sus datos.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await onDelete(client.id);
+              onClose();
+            } catch (e) {
+              Alert.alert('Error', 'No se pudo eliminar el cliente.');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -384,6 +413,15 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSave} disabled={saving}>
               <Text style={styles.saveBtnText}>Guardar</Text>
             </TouchableOpacity>
+            {onDelete && (
+              <TouchableOpacity
+                style={[styles.deleteBtn, deleting && { opacity: 0.5 }]}
+                onPress={handleDelete}
+                disabled={deleting}
+              >
+                <Text style={styles.deleteBtnText}>Eliminar Cliente</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -580,6 +618,20 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   saveBtnText: {
     color: colors.textWhite,
     fontSize: 18,
+    fontWeight: '700',
+  },
+  deleteBtn: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: colors.dangerLight,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+  },
+  deleteBtnText: {
+    color: colors.danger,
+    fontSize: 16,
     fontWeight: '700',
   },
 });

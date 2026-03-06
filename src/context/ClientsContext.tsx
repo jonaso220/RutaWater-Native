@@ -40,6 +40,7 @@ interface ClientsContextType {
     mapsLink?: string,
   ) => Promise<void>;
   changePosition: (clientId: string, newPos: number, day: string) => Promise<void>;
+  deleteClient: (clientId: string) => Promise<void>;
   cloneClient: (client: Client) => Promise<void>;
   findDuplicateClients: () => { staleIds: string[], details: Array<{ name: string, activeId: string, staleId: string }> };
   cleanupDuplicates: () => Promise<number>;

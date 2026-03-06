@@ -33,7 +33,7 @@ const DirectoryScreen = () => {
   const { fontScale } = useLayout();
   const styles = getStyles(colors, fontScale);
   const { isAdmin, user, groupData } = useAuthContext();
-  const { getFilteredDirectory, directoryCounts, scheduleFromDirectory, updateClient, clients, cloneClient } = useClientsContext();
+  const { getFilteredDirectory, directoryCounts, scheduleFromDirectory, updateClient, deleteClient, clients, cloneClient } = useClientsContext();
   const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
@@ -535,6 +535,7 @@ const DirectoryScreen = () => {
           client={editClient}
           onSave={updateClient}
           onClose={() => setEditClient(null)}
+          onDelete={deleteClient}
           showClientInfo
         />
       )}

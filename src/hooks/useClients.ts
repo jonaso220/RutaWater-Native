@@ -709,6 +709,15 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     return staleIds.length;
   }, [findDuplicateClients]);
 
+  // Permanently delete a client from Firestore
+  const deleteClient = useCallback(async (clientId: string) => {
+    try {
+      await db.collection('clients').doc(clientId).delete();
+    } catch (e) {
+      console.error('Error deleting client:', e);
+    }
+  }, []);
+
   // Clone a client (duplicate with same data, for additional visits)
   const cloneClient = useCallback(async (client: Client) => {
     try {
@@ -764,6 +773,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     addNote,
     addClient,
     changePosition,
+    deleteClient,
     cloneClient,
     findDuplicateClients,
     cleanupDuplicates,

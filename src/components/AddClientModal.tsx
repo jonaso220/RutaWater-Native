@@ -4,7 +4,6 @@ import {
   Text,
   Modal,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   TextInput,
   ScrollView,
   StyleSheet,
@@ -422,25 +421,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
 
       {/* Paste Order Overlay (absolute view instead of nested Modal for Android compatibility) */}
       {showPasteModal && (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.pasteOverlay}
-        >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.pasteModal}>
+        <View style={styles.pasteOverlay}>
+          <View style={styles.pasteModal}>
+            <View style={styles.pasteHeader}>
               <Text style={styles.pasteModalTitle}>Pegar Pedido</Text>
-              <Text style={styles.pasteModalHint}>
-                Pega el texto del pedido y se completaran los campos automaticamente
-              </Text>
-              <TextInput
-                style={styles.pasteInput}
-                value={pasteText}
-                onChangeText={setPasteText}
-                placeholder="Pegar texto del pedido aqui..."
-                placeholderTextColor={colors.textHint}
-                multiline
-                autoFocus
-              />
               <View style={styles.pasteActions}>
                 <TouchableOpacity
                   style={styles.pasteCancelBtn}
@@ -453,8 +437,20 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                 </TouchableOpacity>
               </View>
             </View>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
+            <Text style={styles.pasteModalHint}>
+              Pega el texto del pedido y se completaran los campos automaticamente
+            </Text>
+            <TextInput
+              style={styles.pasteInput}
+              value={pasteText}
+              onChangeText={setPasteText}
+              placeholder="Pegar texto del pedido aqui..."
+              placeholderTextColor={colors.textHint}
+              multiline
+              autoFocus
+            />
+          </View>
+        </View>
       )}
     </Modal>
   );
@@ -640,14 +636,21 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   pasteOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.overlay,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     paddingHorizontal: 20,
+    paddingTop: 100,
     zIndex: 999,
   },
   pasteModal: {
     backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
+  },
+  pasteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   pasteModalTitle: {
     fontSize: 20,
@@ -674,9 +677,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   pasteActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     gap: 8,
-    marginTop: 12,
   },
   pasteCancelBtn: {
     paddingHorizontal: 16,

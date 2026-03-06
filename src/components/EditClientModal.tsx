@@ -80,6 +80,10 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       setShowDatePicker(false);
     }
     if (selectedDate) {
+      if (selectedDate.getDay() === 0) {
+        Alert.alert('Error', 'No se puede agendar en Domingo');
+        return;
+      }
       setPickerDate(selectedDate);
       const yyyy = selectedDate.getFullYear();
       const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
@@ -107,6 +111,14 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       notes,
       freq,
     };
+    // Reset lastVisited when frequency changes so getNextVisitDate recalculates correctly
+    if (freq !== client.freq) {
+      (data as any).lastVisited = null;
+    }
+    // Clear specificDate when changing FROM 'once' to a periodic frequency
+    if (client.freq === 'once' && freq !== 'once') {
+      data.specificDate = '';
+    }
     if (needsDate && startDate) {
       data.specificDate = startDate;
       // For 'once' freq (notes), update visitDay/visitDays to match new date
@@ -162,38 +174,66 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             {showClientInfo && (
               <>
                 <Text style={styles.sectionTitle}>Datos del cliente</Text>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Nombre"
-                  placeholderTextColor={colors.textHint}
-                />
-                <TextInput
-                  style={styles.fieldInput}
-                  value={address}
-                  onChangeText={setAddress}
-                  placeholder="Direccion"
-                  placeholderTextColor={colors.textHint}
-                />
-                <TextInput
-                  style={styles.fieldInput}
-                  value={phone}
-                  onChangeText={setPhone}
-                  placeholder="Telefono"
-                  placeholderTextColor={colors.textHint}
-                  keyboardType="phone-pad"
-                />
-                <TextInput
-                  style={styles.fieldInput}
-                  value={mapsLink}
-                  onChangeText={setMapsLink}
-                  placeholder="URL Google Maps"
-                  placeholderTextColor={colors.textHint}
-                  keyboardType="url"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
+                <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <TextInput
+                    style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="Nombre"
+                    placeholderTextColor={colors.textHint}
+                  />
+                  {name.length > 0 && (
+                    <TouchableOpacity onPress={() => setName('')} style={{ padding: 4 }}>
+                      <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <TextInput
+                    style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
+                    value={address}
+                    onChangeText={setAddress}
+                    placeholder="Direccion"
+                    placeholderTextColor={colors.textHint}
+                  />
+                  {address.length > 0 && (
+                    <TouchableOpacity onPress={() => setAddress('')} style={{ padding: 4 }}>
+                      <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <TextInput
+                    style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="Telefono"
+                    placeholderTextColor={colors.textHint}
+                    keyboardType="phone-pad"
+                  />
+                  {phone.length > 0 && (
+                    <TouchableOpacity onPress={() => setPhone('')} style={{ padding: 4 }}>
+                      <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <TextInput
+                    style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
+                    value={mapsLink}
+                    onChangeText={setMapsLink}
+                    placeholder="URL Google Maps"
+                    placeholderTextColor={colors.textHint}
+                    keyboardType="url"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {mapsLink.length > 0 && (
+                    <TouchableOpacity onPress={() => setMapsLink('')} style={{ padding: 4 }}>
+                      <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </>
             )}
 
@@ -224,15 +264,25 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
             {/* Notes */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Notas</Text>
-            <TextInput
-              style={styles.notesInput}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Notas del cliente..."
-              placeholderTextColor={colors.textHint}
-              multiline
-              numberOfLines={3}
-            />
+            <View style={[styles.notesInput, { position: 'relative' }]}>
+              <TextInput
+                style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0, textAlignVertical: 'top', minHeight: 70 }}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Notas del cliente..."
+                placeholderTextColor={colors.textHint}
+                multiline
+                numberOfLines={3}
+              />
+              {notes.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setNotes('')}
+                  style={{ position: 'absolute', top: 8, right: 8, padding: 4 }}
+                >
+                  <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* Frequency */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>

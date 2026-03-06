@@ -105,6 +105,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       setShowPicker(false);
     }
     if (selectedDate) {
+      if (selectedDate.getDay() === 0) {
+        Alert.alert('Error', 'No se puede agendar en Domingo');
+        return;
+      }
       setPickerDate(selectedDate);
       const yyyy = selectedDate.getFullYear();
       const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
@@ -312,15 +316,25 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
             {/* Notes */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Notas</Text>
-            <TextInput
-              style={styles.notesInput}
-              value={localNotes}
-              onChangeText={setLocalNotes}
-              placeholder="Notas del cliente..."
-              placeholderTextColor={colors.textHint}
-              multiline
-              numberOfLines={3}
-            />
+            <View style={[styles.notesInput, { position: 'relative' }]}>
+              <TextInput
+                style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0, textAlignVertical: 'top', minHeight: 70 }}
+                value={localNotes}
+                onChangeText={setLocalNotes}
+                placeholder="Notas del cliente..."
+                placeholderTextColor={colors.textHint}
+                multiline
+                numberOfLines={3}
+              />
+              {localNotes.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setLocalNotes('')}
+                  style={{ position: 'absolute', top: 8, right: 8, padding: 4 }}
+                >
+                  <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </ScrollView>
 
           {/* Save button */}

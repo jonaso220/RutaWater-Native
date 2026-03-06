@@ -90,6 +90,45 @@ const HomeScreen = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [appSettings, setAppSettings] = useState<Record<string, string> | null>(null);
+  const [undoInfo, setUndoInfo] = useState<{
+    client: Client;
+    previousData: Record<string, any>;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  // Fix 3: Detect cross-midnight day change
+  useEffect(() => {
+    let lastKnownToday = getTodayDayName();
+
+    const checkDay = () => {
+      const currentToday = getTodayDayName();
+      if (currentToday !== lastKnownToday) {
+        // Day changed! Only auto-switch if user was viewing the old "today"
+        if (selectedDay === lastKnownToday) {
+          setSelectedDay(currentToday);
+        }
+        lastKnownToday = currentToday;
+      }
+    };
+    const interval = setInterval(checkDay, 60000);
+    return () => clearInterval(interval);
+  }, [selectedDay]);
+
+  // Fix 4: Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fix 5: Clean up undo banner timer on unmount
+  useEffect(() => {
+    return () => {
+      if (undoInfo?.timer) clearTimeout(undoInfo.timer);
+    };
+  }, [undoInfo]);
 
   // Load WhatsApp templates
   useEffect(() => {
@@ -118,9 +157,9 @@ const HomeScreen = () => {
   const visibleClients = useMemo(() => {
     let filtered = allVisibleClients;
 
-    // Fuzzy search filter
-    if (searchTerm.trim()) {
-      const matcher = fuzzyMatch(searchTerm);
+    // Fuzzy search filter (debounced)
+    if (debouncedSearchTerm.trim()) {
+      const matcher = fuzzyMatch(debouncedSearchTerm);
       filtered = filtered.filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
     }
 
@@ -146,7 +185,7 @@ const HomeScreen = () => {
     }
 
     return filtered;
-  }, [allVisibleClients, searchTerm, activeFilters, getClientDebtTotal]);
+  }, [allVisibleClients, debouncedSearchTerm, activeFilters, getClientDebtTotal]);
 
   // Group clients by next visit date for section headers
   const clientSections = useMemo(() => {
@@ -225,7 +264,7 @@ const HomeScreen = () => {
     return items;
   }, [clientSections]);
 
-  const isDragEnabled = searchTerm.trim().length === 0 && activeFilters.size === 0;
+  const isDragEnabled = debouncedSearchTerm.trim().length === 0 && activeFilters.size === 0;
 
   // Load daily load data when day changes
   useEffect(() => {
@@ -234,10 +273,56 @@ const HomeScreen = () => {
 
   const handleMarkDone = useCallback(
     (client: Client) => {
+      // Clear any existing undo timer
+      if (undoInfo?.timer) clearTimeout(undoInfo.timer);
+
+      // Save previous state for undo
+      const previousData: Record<string, any> = {};
+      if (client.freq === 'once') {
+        previousData.isCompleted = client.isCompleted;
+        previousData.completedAt = client.completedAt;
+        previousData.alarm = client.alarm;
+        previousData.isStarred = client.isStarred;
+      } else {
+        previousData.lastVisited = client.lastVisited;
+        previousData.specificDate = client.specificDate;
+        previousData.alarm = client.alarm;
+        previousData.isStarred = client.isStarred;
+      }
+
+      // Execute mark as done
       markAsDone(client.id, client);
+
+      // Show undo banner with 5 second timer
+      const timer = setTimeout(() => {
+        setUndoInfo(null);
+      }, 5000);
+
+      setUndoInfo({ client, previousData, timer });
     },
-    [markAsDone],
+    [markAsDone, undoInfo],
   );
+
+  const handleUndoMarkDone = useCallback(() => {
+    if (!undoInfo) return;
+    clearTimeout(undoInfo.timer);
+
+    const { client, previousData } = undoInfo;
+
+    if (client.freq === 'once') {
+      undoComplete(client.id);
+    } else {
+      // Revert the periodic client
+      updateClient(client.id, {
+        lastVisited: previousData.lastVisited,
+        specificDate: previousData.specificDate,
+        alarm: previousData.alarm,
+        isStarred: previousData.isStarred,
+      } as any);
+    }
+
+    setUndoInfo(null);
+  }, [undoInfo, undoComplete, updateClient]);
 
   const handleDelete = useCallback(
     (client: Client) => {
@@ -248,12 +333,12 @@ const HomeScreen = () => {
           { text: 'Cancelar', style: 'cancel' },
           {
             text: 'Quitar',
-            onPress: () => deleteFromDay(client.id),
+            onPress: () => deleteFromDay(client.id, selectedDay),
           },
         ],
       );
     },
-    [deleteFromDay],
+    [deleteFromDay, selectedDay],
   );
 
   const handleUndoComplete = useCallback(
@@ -678,6 +763,18 @@ const HomeScreen = () => {
         )}
       </NestableScrollContainer>
       </View>
+
+      {/* Undo Banner */}
+      {undoInfo && (
+        <View style={styles.undoBanner}>
+          <Text style={styles.undoBannerText} numberOfLines={1}>
+            {undoInfo.client.name} completado
+          </Text>
+          <TouchableOpacity onPress={handleUndoMarkDone} style={styles.undoButton}>
+            <Text style={styles.undoButtonText}>Deshacer</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Edit Client Modal */}
       <EditClientModal
@@ -1170,6 +1267,43 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontSize: s(17),
     fontWeight: '700',
     color: colors.textWhite,
+  },
+  undoBanner: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    right: 16,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 999,
+  },
+  undoBannerText: {
+    color: '#fff',
+    fontSize: s(15),
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 12,
+  },
+  undoButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  undoButtonText: {
+    color: '#fff',
+    fontSize: s(14),
+    fontWeight: '700',
   },
 });
 };

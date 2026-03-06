@@ -17,7 +17,7 @@ interface ClientsContextType {
   markAsDone: (clientId: string, client: Client) => Promise<void>;
   undoComplete: (clientId: string) => Promise<void>;
   deleteAllCompleted: (day: string) => Promise<void>;
-  deleteFromDay: (clientId: string) => Promise<void>;
+  deleteFromDay: (clientId: string, day: string) => Promise<void>;
   updateClient: (clientId: string, data: Partial<Client>) => Promise<void>;
   scheduleFromDirectory: (
     client: Client,

@@ -311,12 +311,17 @@ export const getNextVisitDate = (client: Client, forDay?: string): Date | null =
     const lastVisitedDay = new Date(lastVisited);
     lastVisitedDay.setHours(0, 0, 0, 0);
 
-    if (lastVisitedDay.getTime() >= today.getTime()) {
-      nextDate.setDate(nextDate.getDate() + intervalWeeks * 7);
-    } else if (intervalWeeks > 1) {
-      const daysSince = (nextDate.getTime() - lastVisitedDay.getTime()) / (1000 * 3600 * 24);
-      if (daysSince < intervalWeeks * 7 - 3 && daysSince < 7) {
-        nextDate.setDate(nextDate.getDate() + (intervalWeeks * 7 - 7));
+    if (intervalWeeks === 1) {
+      // Weekly: if visited today (or future-dated visit), push to next week
+      if (lastVisitedDay.getTime() >= today.getTime()) {
+        nextDate.setDate(nextDate.getDate() + 7);
+      }
+    } else {
+      // Biweekly/triweekly/monthly: ensure at least intervalWeeks*7 days since last visit
+      const minNextDate = new Date(lastVisitedDay);
+      minNextDate.setDate(minNextDate.getDate() + intervalWeeks * 7);
+      while (nextDate < minNextDate) {
+        nextDate.setDate(nextDate.getDate() + 7);
       }
     }
   }

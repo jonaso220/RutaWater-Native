@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { PRODUCTS } from '../constants/products';
 import { useTheme } from '../theme/ThemeContext';
@@ -185,6 +186,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   };
 
   const handlePasteOrder = () => {
+    Keyboard.dismiss();
     if (!pasteText.trim()) {
       setShowPasteModal(false);
       return;
@@ -279,48 +281,76 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
 
             {/* Name */}
             <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Nombre *</Text>
-            <TextInput
-              style={styles.textInput}
-              value={name}
-              onChangeText={setName}
-              placeholder="Nombre del cliente"
-              placeholderTextColor={colors.textHint}
-              autoCapitalize="words"
-            />
+            <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
+              <TextInput
+                style={{ flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 }}
+                value={name}
+                onChangeText={setName}
+                placeholder="Nombre del cliente"
+                placeholderTextColor={colors.textHint}
+                autoCapitalize="words"
+              />
+              {name.length > 0 && (
+                <TouchableOpacity onPress={() => setName('')} style={{ padding: 4 }}>
+                  <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* Address */}
             <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Direccion</Text>
-            <TextInput
-              style={styles.textInput}
-              value={address}
-              onChangeText={setAddress}
-              placeholder="Direccion"
-              placeholderTextColor={colors.textHint}
-            />
+            <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
+              <TextInput
+                style={{ flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 }}
+                value={address}
+                onChangeText={setAddress}
+                placeholder="Direccion"
+                placeholderTextColor={colors.textHint}
+              />
+              {address.length > 0 && (
+                <TouchableOpacity onPress={() => setAddress('')} style={{ padding: 4 }}>
+                  <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* Phone */}
             <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Telefono</Text>
-            <TextInput
-              style={styles.textInput}
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="Telefono"
-              placeholderTextColor={colors.textHint}
-              keyboardType="phone-pad"
-            />
+            <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
+              <TextInput
+                style={{ flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 }}
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="Telefono"
+                placeholderTextColor={colors.textHint}
+                keyboardType="phone-pad"
+              />
+              {phone.length > 0 && (
+                <TouchableOpacity onPress={() => setPhone('')} style={{ padding: 4 }}>
+                  <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* Maps Link */}
             <Text style={[styles.sectionTitle, { marginTop: 16 }]}>URL Google Maps</Text>
-            <TextInput
-              style={styles.textInput}
-              value={mapsLink}
-              onChangeText={setMapsLink}
-              placeholder="https://maps.app.goo.gl/..."
-              placeholderTextColor={colors.textHint}
-              keyboardType="url"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+            <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
+              <TextInput
+                style={{ flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 }}
+                value={mapsLink}
+                onChangeText={setMapsLink}
+                placeholder="https://maps.app.goo.gl/..."
+                placeholderTextColor={colors.textHint}
+                keyboardType="url"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {mapsLink.length > 0 && (
+                <TouchableOpacity onPress={() => setMapsLink('')} style={{ padding: 4 }}>
+                  <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {/* Products */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Productos</Text>
@@ -349,15 +379,25 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
 
             {/* Notes */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Notas</Text>
-            <TextInput
-              style={styles.notesInput}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Notas del cliente..."
-              placeholderTextColor={colors.textHint}
-              multiline
-              numberOfLines={3}
-            />
+            <View style={[styles.notesInput, { position: 'relative' }]}>
+              <TextInput
+                style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0, textAlignVertical: 'top', minHeight: 70 }}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Notas del cliente..."
+                placeholderTextColor={colors.textHint}
+                multiline
+                numberOfLines={3}
+              />
+              {notes.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setNotes('')}
+                  style={{ position: 'absolute', top: 8, right: 8, padding: 4 }}
+                >
+                  <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </ScrollView>
 
           {/* Save button */}
@@ -399,7 +439,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             <View style={styles.pasteActions}>
               <TouchableOpacity
                 style={styles.pasteCancelBtn}
-                onPress={() => { setPasteText(''); setShowPasteModal(false); }}
+                onPress={() => { Keyboard.dismiss(); setPasteText(''); setShowPasteModal(false); }}
               >
                 <Text style={styles.pasteCancelText}>Cancelar</Text>
               </TouchableOpacity>

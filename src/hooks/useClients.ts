@@ -4,6 +4,35 @@ import { Client } from '../types';
 import { normalizeText, fuzzyMatch, getNextVisitDate, getWeekNumber } from '../utils/helpers';
 import { ALL_DAYS, Frequency } from '../constants/products';
 
+const withDefaults = (id: string, data: any): Client => ({
+  id,
+  name: '',
+  phone: '',
+  address: '',
+  notes: '',
+  lat: '',
+  lng: '',
+  mapsLink: '',
+  freq: 'on_demand',
+  visitDay: 'Sin Asignar',
+  visitDays: [],
+  specificDate: '',
+  products: {},
+  listOrder: 0,
+  listOrders: {},
+  isCompleted: false,
+  isStarred: false,
+  isPinned: false,
+  isNote: false,
+  alarm: '',
+  lastVisited: null,
+  completedAt: null,
+  updatedAt: null,
+  startWeek: 0,
+  userId: '',
+  ...data,
+});
+
 interface UseClientsProps {
   userId: string;
   groupId?: string;
@@ -16,6 +45,8 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   // Evita race condition cuando se asignan posiciones rápidamente
   const clientsRef = useRef<Client[]>(clients);
   clientsRef.current = clients;
+  // Guard against double-tap on markAsDone
+  const markingDoneRef = useRef<Set<string>>(new Set());
 
   // Real-time listener on clients collection
   useEffect(() => {
@@ -29,10 +60,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       .where(scopeField, '==', scopeValue)
       .onSnapshot(
         (snapshot) => {
-          const loadedClients: Client[] = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })) as Client[];
+          const loadedClients: Client[] = snapshot.docs.map((doc) => withDefaults(doc.id, doc.data()));
           setClients(loadedClients);
           setLoading(false);
         },
@@ -118,6 +146,8 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
   // Mark a client as done for the day
   const markAsDone = useCallback(async (clientId: string, client: Client) => {
+    if (markingDoneRef.current.has(clientId)) return;
+    markingDoneRef.current.add(clientId);
     try {
       if (client.freq === 'once') {
         // Once: mark as completed permanently
@@ -164,6 +194,8 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       }
     } catch (e) {
       console.error('Error marking as done:', e);
+    } finally {
+      markingDoneRef.current.delete(clientId);
     }
   }, []);
 
@@ -195,14 +227,27 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, [getCompletedClients]);
 
-  // Remove a client from the day's route (move to directory)
-  const deleteFromDay = useCallback(async (clientId: string) => {
+  // Remove a client from a specific day's route (move to directory only if last day)
+  const deleteFromDay = useCallback(async (clientId: string, day: string) => {
     try {
-      await db.collection('clients').doc(clientId).update({
-        freq: 'on_demand',
-        visitDay: 'Sin Asignar',
-        visitDays: [],
-      });
+      const client = clientsRef.current.find((c) => c.id === clientId);
+      const currentDays = client?.visitDays || [];
+
+      if (currentDays.length > 1) {
+        // Client has multiple days — only remove this one
+        const remainingDays = currentDays.filter((d) => d !== day);
+        await db.collection('clients').doc(clientId).update({
+          visitDays: remainingDays,
+          visitDay: remainingDays[0],
+        });
+      } else {
+        // Last (or only) day — move to directory
+        await db.collection('clients').doc(clientId).update({
+          freq: 'on_demand',
+          visitDay: 'Sin Asignar',
+          visitDays: [],
+        });
+      }
     } catch (e) {
       console.error('Error deleting from day:', e);
     }
@@ -250,6 +295,11 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         const d = new Date(newDate + 'T12:00:00');
         const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
         const dayName = dayNames[d.getDay()];
+
+        if (dayName === 'Domingo') {
+          console.warn('scheduleFromDirectory: Cannot schedule on Sunday');
+          return;
+        }
 
         const existingInDay = clients.filter(
           (c) =>
@@ -341,6 +391,12 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       const d = new Date(date + 'T12:00:00');
       const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
       const dayName = dayNames[d.getDay()];
+
+      if (dayName === 'Domingo') {
+        console.warn('addNote: Cannot schedule on Sunday');
+        return;
+      }
+
       const currentWeek = getWeekNumber(new Date());
       const scope = groupId ? { groupId, userId } : { userId };
 
@@ -532,6 +588,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         return c;
       });
 
+    const prevClients = clientsRef.current;
     clientsRef.current = applyUpdate(clientsRef.current);
     setClients((prev) => applyUpdate(prev));
 
@@ -545,6 +602,8 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       await batch.commit();
     } catch (e) {
       console.error('Error changing position:', e);
+      clientsRef.current = prevClients;
+      setClients(prevClients);
     }
   }, [getDayClientsFromSource]);
 

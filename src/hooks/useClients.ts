@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { db } from '../config/firebase';
 import { Client } from '../types';
-import { normalizeText, fuzzyMatch, getNextVisitDate, getWeekNumber } from '../utils/helpers';
+import { normalizeText, fuzzyMatch, getNextVisitDate, getWeekNumber, normalizePhoneForComparison } from '../utils/helpers';
 import { ALL_DAYS, Frequency } from '../constants/products';
 
 const withDefaults = (id: string, data: any): Client => ({
@@ -363,11 +363,14 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         // Reactivate existing client
         await db.collection('clients').doc(clientData.id).update(newData);
       } else {
-        // Check if there's an existing on_demand duplicate to reuse
+        // Check if there's an existing on_demand duplicate to reuse (match by name + phone)
+        const schedNormName = (clientData.name || '').toLowerCase().trim();
+        const schedNormPhone = normalizePhoneForComparison(clientData.phone);
         const existingOnDemand = clientsRef.current.find(
           c => c.id !== clientData.id &&
                c.freq === 'on_demand' &&
-               (c.name || '').toLowerCase().trim() === (clientData.name || '').toLowerCase().trim()
+               (c.name || '').toLowerCase().trim() === schedNormName &&
+               (schedNormPhone ? normalizePhoneForComparison(c.phone) === schedNormPhone : true)
         );
 
         if (existingOnDemand) {
@@ -624,31 +627,64 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, [getDayClientsFromSource]);
 
-  // Find duplicate clients: groups by normalized name, identifies stale on_demand copies
+  // Find duplicate clients: groups by normalized name + phone, identifies stale copies
   const findDuplicateClients = useCallback((): { staleIds: string[], details: Array<{ name: string, activeId: string, staleId: string }> } => {
-    const nameGroups: Record<string, Client[]> = {};
+    const ACTIVE_FREQS: Set<string> = new Set(['weekly', 'biweekly', 'triweekly', 'monthly']);
+
+    // Build groups by composite key: normalized name + normalized phone
+    const groups: Record<string, Client[]> = {};
     clients.filter(c => !c.isNote).forEach(c => {
-      const key = (c.name || '').toLowerCase().trim();
-      if (!key) return;
-      if (!nameGroups[key]) nameGroups[key] = [];
-      nameGroups[key].push(c);
+      const normName = (c.name || '').toLowerCase().trim();
+      if (!normName) return;
+      const normPhone = normalizePhoneForComparison(c.phone);
+      // Key requires both name AND phone to match (phone must be non-empty)
+      const key = normPhone ? `${normName}::${normPhone}` : `${normName}::__no_phone_${c.id}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(c);
     });
 
     const staleIds: string[] = [];
     const details: Array<{ name: string, activeId: string, staleId: string }> = [];
 
-    Object.entries(nameGroups).forEach(([_name, group]) => {
+    Object.values(groups).forEach(group => {
       if (group.length < 2) return;
 
-      // Separate active (scheduled) vs stale (on_demand/directory-only)
-      const active = group.filter(c => c.freq !== 'on_demand' && c.visitDays && c.visitDays.length > 0);
-      const stale = group.filter(c => c.freq === 'on_demand' || !c.visitDays || c.visitDays.length === 0);
+      // Score each client to determine which one to keep
+      // Higher score = more valuable / should be kept
+      const scored = group.map(c => {
+        let score = 0;
+        // Active frequency is most important
+        if (ACTIVE_FREQS.has(c.freq)) score += 1000;
+        // 'once' with visitDays is somewhat active
+        if (c.freq === 'once' && c.visitDays && c.visitDays.length > 0) score += 500;
+        // Has products
+        const productCount = c.products ? Object.values(c.products).filter(v => v && Number(v) > 0).length : 0;
+        score += productCount * 10;
+        // Has notes
+        if (c.notes && c.notes.trim()) score += 5;
+        // Has location
+        if ((c.lat && c.lng) || c.mapsLink) score += 5;
+        // Has address
+        if (c.address && c.address.trim()) score += 3;
+        // More recently updated
+        if (c.updatedAt) {
+          const ts = (c.updatedAt as any).seconds || (c.updatedAt as any).getTime?.() / 1000 || 0;
+          score += Math.min(ts / 1e10, 1); // tiny tiebreaker from timestamp
+        }
+        return { client: c, score };
+      });
 
-      // If there's at least one active version, the stale ones are duplicates
-      if (active.length > 0 && stale.length > 0) {
-        stale.forEach(s => {
-          staleIds.push(s.id);
-          details.push({ name: s.name, activeId: active[0].id, staleId: s.id });
+      // Sort descending by score: best client first
+      scored.sort((a, b) => b.score - a.score);
+
+      const keeper = scored[0].client;
+      // Everything except the keeper is stale
+      for (let i = 1; i < scored.length; i++) {
+        staleIds.push(scored[i].client.id);
+        details.push({
+          name: scored[i].client.name,
+          activeId: keeper.id,
+          staleId: scored[i].client.id,
         });
       }
     });

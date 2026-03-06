@@ -419,24 +419,14 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
         </View>
       </KeyboardAvoidingView>
 
-      {/* Paste Order Overlay (absolute view instead of nested Modal for Android compatibility) */}
-      {showPasteModal && (
-        <View style={styles.pasteOverlay}>
-          <View style={styles.pasteModal}>
-            <View style={styles.pasteHeader}>
-              <Text style={styles.pasteModalTitle}>Pegar Pedido</Text>
-              <View style={styles.pasteActions}>
-                <TouchableOpacity
-                  style={styles.pasteCancelBtn}
-                  onPress={() => { Keyboard.dismiss(); setPasteText(''); setShowPasteModal(false); }}
-                >
-                  <Text style={styles.pasteCancelText}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.pasteConfirmBtn} onPress={handlePasteOrder}>
-                  <Text style={styles.pasteConfirmText}>Procesar</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+      {/* Paste Order Modal */}
+      <Modal visible={showPasteModal} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.pasteOverlay}
+        >
+          <View style={styles.pasteDialog}>
+            <Text style={styles.pasteModalTitle}>📋 Pegar Pedido</Text>
             <Text style={styles.pasteModalHint}>
               Pega el texto del pedido y se completaran los campos automaticamente
             </Text>
@@ -447,11 +437,28 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               placeholder="Pegar texto del pedido aqui..."
               placeholderTextColor={colors.textHint}
               multiline
+              numberOfLines={8}
+              textAlignVertical="top"
               autoFocus
             />
+            <View style={styles.pasteButtons}>
+              <TouchableOpacity
+                style={styles.pasteCancelBtn}
+                onPress={() => { Keyboard.dismiss(); setPasteText(''); setShowPasteModal(false); }}
+              >
+                <Text style={styles.pasteCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.pasteConfirmBtn, !pasteText.trim() && { opacity: 0.4 }]}
+                onPress={handlePasteOrder}
+                disabled={!pasteText.trim()}
+              >
+                <Text style={styles.pasteConfirmText}>Procesar</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      )}
+        </KeyboardAvoidingView>
+      </Modal>
     </Modal>
   );
 };
@@ -634,70 +641,68 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.successMedium,
   },
   pasteOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     backgroundColor: colors.overlay,
-    justifyContent: 'flex-start',
-    paddingHorizontal: 20,
-    paddingTop: 100,
-    zIndex: 999,
+    justifyContent: 'center',
+    padding: 20,
   },
-  pasteModal: {
+  pasteDialog: {
     backgroundColor: colors.card,
     borderRadius: 16,
     padding: 20,
-  },
-  pasteHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    maxWidth: 500,
+    alignSelf: 'center' as const,
+    width: '100%' as const,
   },
   pasteModalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
-    marginBottom: 4,
+    textAlign: 'center',
+    marginBottom: 6,
   },
   pasteModalHint: {
-    fontSize: 15,
+    fontSize: 13,
     color: colors.textMuted,
-    marginBottom: 12,
+    textAlign: 'center',
+    marginBottom: 14,
   },
   pasteInput: {
     backgroundColor: colors.inputBackground,
     borderRadius: 10,
     padding: 12,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.textPrimary,
+    minHeight: 150,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    textAlignVertical: 'top',
-    minHeight: 120,
-    maxHeight: 200,
   },
-  pasteActions: {
+  pasteButtons: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
+    marginTop: 14,
   },
   pasteCancelBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
     backgroundColor: colors.sectionBackground,
+    alignItems: 'center',
   },
   pasteCancelText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textMuted,
   },
   pasteConfirmBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
     backgroundColor: colors.primary,
+    alignItems: 'center',
   },
   pasteConfirmText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.textWhite,
   },

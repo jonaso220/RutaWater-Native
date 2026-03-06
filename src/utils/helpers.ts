@@ -360,6 +360,23 @@ export const normalizePhone = (phone: string): string => {
   return clean;
 };
 
+/**
+ * Normalize phone number for duplicate comparison.
+ * Strips country code (+598 / 598), spaces, dashes, parentheses, and leading zero.
+ * e.g. "098 979 011" -> "98979011", "+598 98 979 011" -> "98979011"
+ */
+export const normalizePhoneForComparison = (phone: string): string => {
+  if (!phone) return '';
+  // Strip all non-digit characters
+  let digits = phone.replace(/\D/g, '');
+  if (!digits) return '';
+  // Strip Uruguay country code (598) from the front
+  if (digits.startsWith('598')) digits = digits.slice(3);
+  // Strip leading zero (local format: 098... -> 98...)
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  return digits;
+};
+
 export const isShortLink = (input: string): boolean => {
   return !!(input && (input.includes('goo.gl') || input.includes('maps.app.goo.gl') || input.includes('google.com/maps')));
 };

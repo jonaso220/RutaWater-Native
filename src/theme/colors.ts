@@ -84,7 +84,7 @@ export const darkColors: typeof lightColors = {
   textPrimary: '#F9FAFB',
   textSecondary: '#E5E7EB',
   textMuted: '#9CA3AF',
-  textHint: '#6B7280',
+  textHint: '#8B95A5',
   textDisabled: '#4B5563',
   textWhite: '#FFFFFF',
 

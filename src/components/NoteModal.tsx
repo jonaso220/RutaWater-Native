@@ -32,6 +32,13 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [showAndroidPicker, setShowAndroidPicker] = useState(false);
 
+  const handleClose = () => {
+    setNotes('');
+    setPickerDate(new Date());
+    setDate(new Date().toISOString().split('T')[0]);
+    onClose();
+  };
+
   const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     // On Android, dismiss the picker on any event (set or dismissed)
     if (Platform.OS === 'android') {
@@ -86,7 +93,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
           <View style={styles.modal}>
             <View style={styles.header}>
               <Text style={styles.headerTitle}>Nueva Nota</Text>
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
                 <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
             </View>

@@ -56,12 +56,97 @@ const DirectoryScreen = () => {
     with_debt: withDebtCount,
   }), [directoryCounts, withDebtCount]);
 
-  // Apply with_debt filter at screen level (needs debts context)
+  // Helper: get last activity date from a client (returns Date or null)
+  const getLastActivityDate = (client: Client): Date | null => {
+    const toDate = (val: any): Date | null => {
+      if (!val) return null;
+      if (typeof val.toDate === 'function') return val.toDate();
+      if (val instanceof Date) return val;
+      return null;
+    };
+    return toDate(client.completedAt) || toDate(client.lastVisited) || toDate(client.updatedAt);
+  };
+
+  // Helper: calculate days since a date (returns number or null if no date)
+  const getDaysSince = (date: Date | null): number | null => {
+    if (!date) return null;
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  };
+
+  // Helper: get recency badge info (label, colors)
+  const getRecencyBadge = (client: Client): { label: string; bgColor: string; textColor: string } => {
+    const lastDate = getLastActivityDate(client);
+    const days = getDaysSince(lastDate);
+
+    if (days === null) {
+      return {
+        label: 'Sin historial',
+        bgColor: isDark ? '#374151' : '#E5E7EB',
+        textColor: colors.textMuted,
+      };
+    }
+
+    if (days <= 7) {
+      return {
+        label: days === 0 ? 'Hoy' : days === 1 ? 'Hace 1 dia' : `Hace ${days} dias`,
+        bgColor: isDark ? '#064E3B' : '#ECFDF5',
+        textColor: isDark ? '#6EE7B7' : '#059669',
+      };
+    }
+
+    if (days <= 21) {
+      return {
+        label: `Hace ${days} dias`,
+        bgColor: isDark ? '#451A03' : '#FFFBEB',
+        textColor: isDark ? '#F59E0B' : '#D97706',
+      };
+    }
+
+    if (days <= 45) {
+      return {
+        label: `Hace ${days} dias`,
+        bgColor: isDark ? '#431407' : '#FFF7ED',
+        textColor: isDark ? '#FB923C' : '#EA580C',
+      };
+    }
+
+    return {
+      label: `Hace ${days} dias`,
+      bgColor: isDark ? '#450A0A' : '#FEF2F2',
+      textColor: isDark ? '#F87171' : '#DC2626',
+    };
+  };
+
+  // Apply with_debt and recurrencia filters at screen level
   const filteredClients = useMemo(() => {
-    const base = getFilteredDirectory(search, activeFilter === 'with_debt' ? 'all' : activeFilter);
-    if (activeFilter !== 'with_debt') return base;
-    return base.filter((c) => debts.some((d) => d.clientId === c.id && d.amount > 0));
-  }, [search, activeFilter, getFilteredDirectory, debts]);
+    const isSpecialFilter = activeFilter === 'with_debt' || activeFilter === 'recurrencia';
+    const base = getFilteredDirectory(search, isSpecialFilter ? 'all' : activeFilter);
+
+    if (activeFilter === 'with_debt') {
+      return base.filter((c) => debts.some((d) => d.clientId === c.id && d.amount > 0));
+    }
+
+    if (activeFilter === 'recurrencia') {
+      return base
+        .filter((c) => c.freq === 'once' || c.freq === 'on_demand')
+        .sort((a, b) => {
+          const dateA = getLastActivityDate(a);
+          const dateB = getLastActivityDate(b);
+          // No date = most stale, appears first
+          if (!dateA && !dateB) return (a.name || '').localeCompare(b.name || '');
+          if (!dateA) return -1;
+          if (!dateB) return 1;
+          // Oldest first (most stale at top)
+          return dateA.getTime() - dateB.getTime();
+        });
+    }
+
+    return base;
+  }, [search, activeFilter, getFilteredDirectory, debts, clients]);
+
+  const isRecurrenciaMode = activeFilter === 'recurrencia';
 
   const FILTERS = [
     { key: 'all', label: 'Todos' },
@@ -69,8 +154,8 @@ const DirectoryScreen = () => {
     { key: 'biweekly', label: 'Quin' },
     { key: 'triweekly', label: 'C/3' },
     { key: 'monthly', label: 'Mens' },
-    { key: 'once', label: '1 vez' },
-    { key: 'on_demand', label: 'Dir' },
+    { key: 'sin_frecuencia', label: 'Pedidos' },
+    { key: 'recurrencia', label: 'Recurrencia' },
     { key: 'no_location', label: 'Sin ubic.' },
     { key: 'with_debt', label: 'Deuda' },
   ];
@@ -196,15 +281,15 @@ const DirectoryScreen = () => {
 
   const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
 
-  const getFreqStyle = (freq: string) => {
+  const getFreqStyle = (freq: string, themeColors: ThemeColors) => {
     switch (freq) {
-      case 'weekly': return { bg: '#DBEAFE', text: '#1D4ED8' };
-      case 'biweekly': return { bg: '#F3E8FF', text: '#7E22CE' };
-      case 'triweekly': return { bg: '#F3E8FF', text: '#7E22CE' };
-      case 'monthly': return { bg: '#E0E7FF', text: '#4338CA' };
-      case 'once': return { bg: '#FFEDD5', text: '#C2410C' };
-      case 'on_demand': return { bg: colors.sectionBackground, text: colors.textMuted };
-      default: return { bg: colors.sectionBackground, text: colors.textMuted };
+      case 'weekly': return { bg: themeColors.primaryLight, text: themeColors.primaryDark };
+      case 'biweekly': return { bg: themeColors.successLighter, text: themeColors.successDark };
+      case 'triweekly': return { bg: themeColors.warningAmberBg, text: themeColors.warningDarker };
+      case 'monthly': return { bg: themeColors.dangerLight, text: themeColors.danger };
+      case 'once': return { bg: themeColors.warningLightBg, text: themeColors.warningOrangeText };
+      case 'on_demand': return { bg: themeColors.sectionBackground, text: themeColors.textMuted };
+      default: return { bg: themeColors.sectionBackground, text: themeColors.textMuted };
     }
   };
 
@@ -214,7 +299,8 @@ const DirectoryScreen = () => {
     const hasLocation = !!(item.lat && item.lng) || !!item.mapsLink;
     const avatarColor = AVATAR_COLORS[(item.name || '').charCodeAt(0) % AVATAR_COLORS.length];
     const initial = (item.name || '?').charAt(0).toUpperCase();
-    const freqStyle = getFreqStyle(item.freq);
+    const freqStyle = getFreqStyle(item.freq, colors);
+    const recencyBadge = isRecurrenciaMode ? getRecencyBadge(item) : null;
 
     // Build product chips
     const prodChips = item.products
@@ -248,6 +334,18 @@ const DirectoryScreen = () => {
               ) : null}
             </View>
           </View>
+
+          {/* RECENCY BADGE (only in Recurrencia mode) */}
+          {recencyBadge && (
+            <View style={styles.recencyRow}>
+              <Text style={[
+                styles.recencyBadge,
+                { backgroundColor: recencyBadge.bgColor, color: recencyBadge.textColor },
+              ]}>
+                {recencyBadge.label}
+              </Text>
+            </View>
+          )}
 
           {/* BADGES: Freq + Days + Debt */}
           <View style={styles.badgesRow}>
@@ -355,6 +453,7 @@ const DirectoryScreen = () => {
             const isActive = activeFilter === f.key;
             const isWarning = f.key === 'no_location';
             const isDanger = f.key === 'with_debt';
+            const isRecurrencia = f.key === 'recurrencia';
             return (
               <TouchableOpacity
                 key={f.key}
@@ -363,6 +462,7 @@ const DirectoryScreen = () => {
                   isActive && styles.filterChipActive,
                   isActive && isWarning && styles.filterChipWarning,
                   isActive && isDanger && styles.filterChipDanger,
+                  isActive && isRecurrencia && styles.filterChipRecurrencia,
                 ]}
                 onPress={() => setActiveFilter(activeFilter === f.key ? 'all' : f.key)}
               >
@@ -530,13 +630,16 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   filterChipDanger: {
     backgroundColor: colors.danger,
   },
+  filterChipRecurrencia: {
+    backgroundColor: colors.warning,
+  },
   filterChipText: {
-    fontSize: s(11),
+    fontSize: s(13),
     fontWeight: '700',
     color: colors.textMuted,
   },
   filterChipTextActive: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
   },
   filterChipCount: {
     fontSize: s(11),
@@ -589,7 +692,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     justifyContent: 'center',
   },
   avatarText: {
-    color: '#FFFFFF',
+    color: colors.textWhite,
     fontWeight: '700',
     fontSize: s(16),
   },
@@ -653,6 +756,18 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     borderRadius: 12,
     overflow: 'hidden',
   },
+  recencyRow: {
+    flexDirection: 'row',
+    marginTop: 2,
+  },
+  recencyBadge: {
+    fontSize: s(11),
+    fontWeight: '700',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   prodChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -708,11 +823,11 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   importBtnText: {
     fontSize: s(16),
     fontWeight: '700',
-    color: '#FFF',
+    color: colors.textWhite,
   },
   pasteOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     padding: 20,
   },
@@ -774,7 +889,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   pasteImportText: {
     fontSize: s(14),
     fontWeight: '700',
-    color: '#FFF',
+    color: colors.textWhite,
   },
   emptyContainer: {
     alignItems: 'center',

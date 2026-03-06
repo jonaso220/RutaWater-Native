@@ -50,7 +50,24 @@
       "Bash(git fetch:*)",
       "Bash(python3:*)",
       "Bash(npm ci:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(killall -9 com.apple.CoreSimulator.CoreSimulatorService)",
+      "Bash(sysctl hw.memsize)",
+      "Bash(vm_stat)",
+      "Bash(launchctl list)",
+      "Bash(killall -9 SimLaunchHostService)",
+      "Bash(sudo purge)",
+      "Bash(xcrun devicectl device process launch --device 00008140-000C11500A53001C com.rutawater.native)",
+      "Bash(wc -l /Volumes/OLIVERA/RutaWater-Master/js/*.js)",
+      "Bash(xargs kill -9)",
+      "Bash(wc -l /Volumes/OLIVERA/RutaWaterNative/src/screens/*.tsx /Volumes/OLIVERA/RutaWaterNative/src/components/*.tsx)",
+      "Bash(grep -r \"width.*[0-9]\\\\|height.*[0-9]\\\\|maxHeight\\\\|maxWidth\" src/components/*.tsx)",
+      "Bash(grep -r \"padding.*[0-9]\\\\|margin.*[0-9]\" src/components/*.tsx)",
+      "Bash(grep -n \"fontSize\\\\|lineHeight\" src/components/*.tsx)",
+      "Bash(export LANG=en_US.UTF-8)",
+      "Bash(export LC_ALL=en_US.UTF-8)",
+      "Bash(SOURCE=\"icon-1024.png\")",
+      "Bash(ios-deploy --bundle build/Build/Products/Debug-iphoneos/RutaWaterNative.app --id 00008140-000C11500A53001C)"
     ]
   }
 }

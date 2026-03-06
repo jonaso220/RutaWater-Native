@@ -1,5 +1,7 @@
 import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, LogBox, View } from 'react-native';
+
+LogBox.ignoreLogs(['ref.measureLayout']);
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuthContext } from './src/context/AuthContext';
 import { ClientsProvider } from './src/context/ClientsContext';

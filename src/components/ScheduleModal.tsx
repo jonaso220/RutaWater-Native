@@ -47,9 +47,11 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const [showPicker, setShowPicker] = useState(false);
   const [localNotes, setLocalNotes] = useState('');
   const [localProducts, setLocalProducts] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (client) {
+      setSaving(false);
       setLocalNotes(client.notes || '');
       setLocalFreq(
         client.freq === 'on_demand' ? 'once' : (client.freq || 'once'),
@@ -127,6 +129,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   };
 
   const handleSubmit = async () => {
+    if (saving) return;
     if (localFreq === 'once' && !localDate) {
       Alert.alert('Error', 'Por favor, selecciona una fecha de entrega.');
       return;
@@ -135,6 +138,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       Alert.alert('Error', 'Por favor, selecciona al menos un dia.');
       return;
     }
+    setSaving(true);
     const cleanProducts: Record<string, number> = {};
     Object.entries(localProducts).forEach(([key, val]) => {
       if (val > 0) cleanProducts[key] = val;
@@ -144,6 +148,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       onClose();
     } catch (e) {
       Alert.alert('Error', 'No se pudo agendar la visita.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -339,7 +345,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
           {/* Save button */}
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSubmit}>
+            <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSubmit} disabled={saving}>
               <Text style={styles.saveBtnText}>Agendar</Text>
             </TouchableOpacity>
           </View>
@@ -418,7 +424,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   freqChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 20,
     backgroundColor: colors.sectionBackground,
     borderWidth: 1,
     borderColor: 'transparent',
@@ -469,7 +475,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   dayChip: {
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 20,
     backgroundColor: colors.sectionBackground,
   },
   dayChipSelected: {

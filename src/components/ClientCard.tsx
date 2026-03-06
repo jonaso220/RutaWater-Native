@@ -352,7 +352,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     },
     dragGrip: {
       fontSize: s(16),
-      color: colors.textDisabled,
+      color: colors.textHint,
       marginTop: 2,
       lineHeight: 16,
     },
@@ -381,7 +381,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       flexDirection: 'row',
       justifyContent: 'flex-end',
       flexWrap: 'wrap',
-      gap: 2,
+      gap: 4,
     },
     actions: {
       flexDirection: 'row',

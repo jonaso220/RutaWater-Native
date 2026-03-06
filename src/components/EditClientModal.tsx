@@ -46,9 +46,11 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const [startDate, setStartDate] = useState<string>('');
   const [pickerDate, setPickerDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (client) {
+      setSaving(false);
       setName(client.name || '');
       setAddress(client.address || '');
       setPhone(client.phone || '');
@@ -102,6 +104,12 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   };
 
   const handleSave = async () => {
+    if (saving) return;
+    if (freq !== 'once' && freq !== 'on_demand' && (!client.visitDays || client.visitDays.length === 0)) {
+      Alert.alert('Error', 'Este cliente no tiene días asignados. Usa el Directorio para agendarlo con días específicos.');
+      return;
+    }
+    setSaving(true);
     const cleanProducts: Record<string, number> = {};
     Object.entries(products).forEach(([key, val]) => {
       if (val > 0) cleanProducts[key] = val;
@@ -143,6 +151,8 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       onClose();
     } catch (e) {
       Alert.alert('Error', 'No se pudo guardar los cambios.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -371,7 +381,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
           {/* Save button */}
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
+            <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSave} disabled={saving}>
               <Text style={styles.saveBtnText}>Guardar</Text>
             </TouchableOpacity>
           </View>

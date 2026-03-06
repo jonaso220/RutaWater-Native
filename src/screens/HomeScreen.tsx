@@ -75,7 +75,10 @@ const HomeScreen = () => {
 
   const scrollRef = useRef<any>(null);
   useScrollToTop(scrollRef);
-  const [selectedDay, setSelectedDay] = useState(getTodayDayName());
+  const [selectedDay, setSelectedDay] = useState(() => {
+    const today = getTodayDayName();
+    return today === 'Domingo' ? 'Lunes' : today;
+  });
   const [showCompleted, setShowCompleted] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [debtClient, setDebtClient] = useState<Client | null>(null);
@@ -99,10 +102,12 @@ const HomeScreen = () => {
 
   // Fix 3: Detect cross-midnight day change
   useEffect(() => {
-    let lastKnownToday = getTodayDayName();
+    const rawToday = getTodayDayName();
+    let lastKnownToday = rawToday === 'Domingo' ? 'Lunes' : rawToday;
 
     const checkDay = () => {
-      const currentToday = getTodayDayName();
+      let currentToday = getTodayDayName();
+      if (currentToday === 'Domingo') currentToday = 'Lunes';
       if (currentToday !== lastKnownToday) {
         // Day changed! Only auto-switch if user was viewing the old "today"
         if (selectedDay === lastKnownToday) {
@@ -280,11 +285,11 @@ const HomeScreen = () => {
       const previousData: Record<string, any> = {};
       if (client.freq === 'once') {
         previousData.isCompleted = client.isCompleted;
-        previousData.completedAt = client.completedAt;
+        previousData.completedAt = client.completedAt ? (client.completedAt.toDate ? client.completedAt.toDate() : client.completedAt) : null;
         previousData.alarm = client.alarm;
         previousData.isStarred = client.isStarred;
       } else {
-        previousData.lastVisited = client.lastVisited;
+        previousData.lastVisited = client.lastVisited ? (client.lastVisited.toDate ? client.lastVisited.toDate() : client.lastVisited) : null;
         previousData.specificDate = client.specificDate;
         previousData.alarm = client.alarm;
         previousData.isStarred = client.isStarred;
@@ -1099,7 +1104,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     backgroundColor: colors.sectionBackground,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: 'transparent',
   },
@@ -1273,7 +1278,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     bottom: 20,
     left: 16,
     right: 16,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: colors.textPrimary,
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1288,7 +1293,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     zIndex: 999,
   },
   undoBannerText: {
-    color: '#fff',
+    color: colors.background,
     fontSize: s(15),
     fontWeight: '600',
     flex: 1,
@@ -1301,7 +1306,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     borderRadius: 8,
   },
   undoButtonText: {
-    color: '#fff',
+    color: colors.textWhite,
     fontSize: s(14),
     fontWeight: '700',
   },

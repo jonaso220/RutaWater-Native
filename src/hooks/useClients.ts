@@ -122,6 +122,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       .filter((c) => {
         if (filter === 'all') return true;
         if (filter === 'no_location') return !((c.lat && c.lng) || c.mapsLink);
+        if (filter === 'sin_frecuencia') return c.freq === 'once' || c.freq === 'on_demand';
         return c.freq === filter;
       })
       .filter((c) => matcher(c.name || '', c.address || '', c.phone || ''))
@@ -132,11 +133,23 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   const directoryCounts = useMemo(() => {
     const all = clients.filter((c) => !c.isNote);
     const counts: Record<string, number> = {
-      total: all.length, weekly: 0, biweekly: 0, triweekly: 0,
-      monthly: 0, once: 0, on_demand: 0, no_location: 0,
+      total: all.length,
+      weekly: 0,
+      biweekly: 0,
+      triweekly: 0,
+      monthly: 0,
+      once: 0,
+      on_demand: 0,
+      sin_frecuencia: 0,
+      recurrencia: 0,
+      no_location: 0,
     };
     all.forEach((c) => {
       if (c.freq && counts[c.freq] !== undefined) counts[c.freq]++;
+      if (c.freq === 'once' || c.freq === 'on_demand') {
+        counts.sin_frecuencia++;
+        counts.recurrencia++;
+      }
       if (!((c.lat && c.lng) || c.mapsLink)) counts.no_location++;
     });
     return counts;
@@ -166,24 +179,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         };
 
         if (client.specificDate) {
-          let interval = 1;
-          if (client.freq === 'biweekly') interval = 2;
-          if (client.freq === 'triweekly') interval = 3;
-          if (client.freq === 'monthly') interval = 4;
-          const currentSpecificDate = new Date(client.specificDate + 'T12:00:00');
-          if (isNaN(currentSpecificDate.getTime())) {
-            updates.specificDate = '';
-          } else {
-            const nextSpecificDate = new Date(currentSpecificDate);
-            nextSpecificDate.setDate(nextSpecificDate.getDate() + interval * 7);
-            const tomorrow = new Date();
-            tomorrow.setHours(0, 0, 0, 0);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            while (nextSpecificDate < tomorrow) {
-              nextSpecificDate.setDate(nextSpecificDate.getDate() + interval * 7);
-            }
-            updates.specificDate = nextSpecificDate.toISOString().split('T')[0];
-          }
+          updates.specificDate = '';
         }
 
         if (client.isStarred) {
@@ -212,16 +208,21 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, []);
 
-  // Delete all completed clients for a day
+  // Delete all completed clients for a day (chunked to avoid Firestore 500 op limit)
   const deleteAllCompleted = useCallback(async (day: string) => {
     try {
       const completed = getCompletedClients(day);
       if (completed.length === 0) return;
-      const batch = db.batch();
-      completed.forEach((c) => {
-        batch.delete(db.collection('clients').doc(c.id));
-      });
-      await batch.commit();
+
+      const BATCH_SIZE = 450;
+      for (let i = 0; i < completed.length; i += BATCH_SIZE) {
+        const chunk = completed.slice(i, i + BATCH_SIZE);
+        const batch = db.batch();
+        chunk.forEach((c) => {
+          batch.delete(db.collection('clients').doc(c.id));
+        });
+        await batch.commit();
+      }
     } catch (e) {
       console.error('Error deleting completed:', e);
     }
@@ -246,6 +247,11 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           freq: 'on_demand',
           visitDay: 'Sin Asignar',
           visitDays: [],
+          specificDate: '',
+          listOrders: {},
+          listOrder: 0,
+          isCompleted: false,
+          completedAt: null,
         });
       }
     } catch (e) {
@@ -301,7 +307,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           return;
         }
 
-        const existingInDay = clients.filter(
+        const existingInDay = clientsRef.current.filter(
           (c) =>
             c.freq !== 'on_demand' &&
             !c.isCompleted &&
@@ -333,7 +339,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
         const listOrders: Record<string, number> = {};
         newDays.forEach((day) => {
-          const existingInDay = clients.filter(
+          const existingInDay = clientsRef.current.filter(
             (c) =>
               c.freq !== 'on_demand' &&
               !c.isCompleted &&
@@ -364,7 +370,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error scheduling client:', e);
     }
-  }, [clients, groupId, userId]);
+  }, [groupId, userId]);
 
   // Toggle star on a client (optimistic update)
   const toggleStar = useCallback(async (clientId: string, currentValue: boolean) => {

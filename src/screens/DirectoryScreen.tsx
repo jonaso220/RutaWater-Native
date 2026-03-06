@@ -427,14 +427,24 @@ const DirectoryScreen = () => {
       {/* Search bar + Import */}
       <View style={styles.searchContainer}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TextInput
-            style={[styles.searchInput, { flex: 1 }]}
-            placeholder="Buscar por nombre, direccion o telefono..."
-            placeholderTextColor={colors.textHint}
-            value={search}
-            onChangeText={setSearch}
-            autoCorrect={false}
-          />
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+            <TextInput
+              style={[styles.searchInput, { flex: 1, paddingRight: search ? 36 : 12 }]}
+              placeholder="Buscar por nombre, direccion o telefono..."
+              placeholderTextColor={colors.textHint}
+              value={search}
+              onChangeText={setSearch}
+              autoCorrect={false}
+            />
+            {search.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearch('')}
+                style={{ position: 'absolute', right: 8, padding: 4 }}
+              >
+                <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <TouchableOpacity
             style={styles.importBtn}
             onPress={() => setShowPasteModal(true)}

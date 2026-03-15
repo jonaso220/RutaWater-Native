@@ -331,17 +331,16 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     noteCard: {
       borderLeftWidth: 4,
       borderLeftColor: colors.warningYellow,
-      backgroundColor: colors.warningAmberBg,
     },
     cardOnce: {
       borderLeftWidth: 4,
       borderLeftColor: colors.warning,
-      backgroundColor: colors.warningLightBg,
+      backgroundColor: colors.cardOnceBg,
     },
     cardStarred: {
       borderLeftWidth: 4,
       borderLeftColor: colors.warningAmber,
-      backgroundColor: colors.warningAmberBg,
+      backgroundColor: colors.cardStarredBg,
     },
     orderBadge: {
       width: 36,

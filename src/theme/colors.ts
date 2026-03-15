@@ -2,6 +2,8 @@ export const lightColors = {
   // Backgrounds
   background: '#F9FAFB',
   card: '#FFFFFF',
+  cardOnceBg: '#FFFAF5',
+  cardStarredBg: '#FFFDF5',
   cardBorder: '#E5E7EB',
   inputBackground: '#F9FAFB',
   inputBorder: '#E5E7EB',
@@ -74,6 +76,8 @@ export const darkColors: typeof lightColors = {
   // Backgrounds
   background: '#111827',
   card: '#1F2937',
+  cardOnceBg: '#1F2520',
+  cardStarredBg: '#23220F',
   cardBorder: '#374151',
   inputBackground: '#1F2937',
   inputBorder: '#374151',

@@ -293,6 +293,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         updatedAt: new Date(),
         notes: newNotes,
         isPinned: false,
+        isCompleted: false,
+        isStarred: false,
+        isNote: false,
+        alarm: '',
         products: newProducts || {},
       };
 

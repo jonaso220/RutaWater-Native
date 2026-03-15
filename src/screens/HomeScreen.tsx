@@ -837,6 +837,7 @@ const HomeScreen = () => {
         onMarkAllPaid={markAllDebtsPaid}
         onEditDebt={editDebt}
         onClose={() => setShowDebtsSheet(false)}
+        onAddDebt={addDebt}
         onTransferPayment={(clientId) => {
           const client = clients.find((c) => c.id === clientId);
           if (!client) return;

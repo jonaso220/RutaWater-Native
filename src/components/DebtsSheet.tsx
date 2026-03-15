@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { Client, Debt } from '../types';
-import { normalizePhone, normalizeText } from '../utils/helpers';
+import { normalizePhone, normalizeText, fuzzyMatch } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -29,6 +29,7 @@ interface DebtsSheetProps {
   onEditDebt: (debtId: string, newAmount: number) => void;
   onClose: () => void;
   onTransferPayment?: (clientId: string) => void;
+  onAddDebt?: (client: Client, amount: number) => void;
 }
 
 type SortMode = 'date' | 'amount';
@@ -37,6 +38,7 @@ interface ClientDebtGroup {
   clientId: string;
   clientName: string;
   clientPhone: string;
+  clientAddress: string;
   total: number;
   debts: Debt[];
   maxAgeDays: number;
@@ -52,11 +54,16 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   onEditDebt,
   onClose,
   onTransferPayment,
+  onAddDebt,
 }) => {
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('date');
+  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [addSearch, setAddSearch] = useState('');
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [addAmount, setAddAmount] = useState('');
 
   const now = Date.now();
 
@@ -77,6 +84,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           clientId: debt.clientId,
           clientName: debt.clientName || client?.name || '',
           clientPhone: client?.phone || '',
+          clientAddress: client?.address || '',
           total: 0,
           debts: [],
           maxAgeDays: 0,
@@ -113,6 +121,32 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
       normalizeText(g.clientName).includes(term),
     );
   }, [clientGroups, searchTerm]);
+
+  // Clients with existing debts (for "Debe" badge)
+  const debtClientIds = useMemo(() => new Set(debts.map((d) => d.clientId)), [debts]);
+
+  // Filtered clients for add panel
+  const addPanelClients = useMemo(() => {
+    const matcher = fuzzyMatch(addSearch);
+    return clients.filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
+  }, [clients, addSearch]);
+
+  const handleAddDebt = () => {
+    if (!selectedClient || !onAddDebt) return;
+    const amount = parseFloat(addAmount);
+    if (!amount || amount <= 0) return;
+    onAddDebt(selectedClient, amount);
+    setAddAmount('');
+    setSelectedClient(null);
+    setShowAddPanel(false);
+  };
+
+  const closeAddPanel = () => {
+    setShowAddPanel(false);
+    setAddSearch('');
+    setSelectedClient(null);
+    setAddAmount('');
+  };
 
   const grandTotal = debts.reduce((sum, d) => sum + (d.amount || 0), 0);
   const uniqueClients = new Set(debts.map((d) => d.clientId)).size;
@@ -177,6 +211,9 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           <Text style={styles.clientName}>
             {(item.clientName || '').toUpperCase()}
           </Text>
+          {item.clientAddress ? (
+            <Text style={styles.clientAddress}>{item.clientAddress}</Text>
+          ) : null}
           <Text style={styles.totalAmount}>
             ${item.total.toLocaleString()}
           </Text>
@@ -250,19 +287,25 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => { setSearchTerm(''); onClose(); }} onDismiss={() => setSearchTerm('')}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => { setSearchTerm(''); closeAddPanel(); onClose(); }} onDismiss={() => { setSearchTerm(''); closeAddPanel(); }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
       >
         <View style={styles.modal}>
           <View style={styles.header}>
-            <View>
-              <Text style={styles.headerTitle}>Deudas</Text>
+            <Text style={styles.headerTitle}>Deudas</Text>
+            <View style={styles.headerRight}>
+              {onAddDebt && (
+                <TouchableOpacity onPress={() => setShowAddPanel(true)} style={styles.addDebtBtn}>
+                  <Ionicons name="add" size={18} color={colors.textWhite} />
+                  <Text style={styles.addDebtBtnText}>Añadir</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                <Ionicons name="close" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
           </View>
 
           {/* Resumen general */}
@@ -346,6 +389,118 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           />
         </View>
       </KeyboardAvoidingView>
+
+      {/* Add Debt Panel */}
+      <Modal visible={showAddPanel} animationType="slide" transparent onRequestClose={closeAddPanel}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.overlay}
+        >
+          <View style={styles.modal}>
+            <View style={styles.header}>
+              <View style={styles.addPanelTitleRow}>
+                <Ionicons name="cash" size={22} color={colors.danger} />
+                <Text style={styles.headerTitle}>Añadir Deuda</Text>
+              </View>
+              <TouchableOpacity onPress={closeAddPanel} style={styles.closeBtn}>
+                <Ionicons name="close" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedClient ? (
+              /* Amount input for selected client */
+              <View style={styles.addAmountSection}>
+                <View style={styles.selectedClientRow}>
+                  <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.avatarText}>{(selectedClient.name || '?')[0].toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.clientName}>{(selectedClient.name || '').toUpperCase()}</Text>
+                    {selectedClient.address ? (
+                      <Text style={styles.clientAddress}>{selectedClient.address}</Text>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity onPress={() => { setSelectedClient(null); setAddAmount(''); }}>
+                    <Ionicons name="arrow-back" size={22} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.addAmountRow}>
+                  <Text style={styles.currencySign}>$</Text>
+                  <TextInput
+                    style={styles.amountInput}
+                    value={addAmount}
+                    onChangeText={setAddAmount}
+                    keyboardType="numeric"
+                    placeholder="Monto"
+                    placeholderTextColor={colors.textHint}
+                    autoFocus
+                  />
+                  <TouchableOpacity
+                    onPress={handleAddDebt}
+                    style={[styles.confirmAddBtn, !addAmount && styles.confirmAddBtnDisabled]}
+                    disabled={!addAmount}
+                  >
+                    <Text style={styles.confirmAddBtnText}>Agregar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              /* Client search list */
+              <>
+                <View style={styles.searchSection}>
+                  <View style={styles.searchInputWrapper}>
+                    <Ionicons name="search" size={16} color={colors.textHint} style={{ marginRight: 6 }} />
+                    <TextInput
+                      style={styles.searchInput}
+                      value={addSearch}
+                      onChangeText={setAddSearch}
+                      placeholder="Buscar cliente..."
+                      placeholderTextColor={colors.textHint}
+                      autoCorrect={false}
+                      autoFocus
+                    />
+                    {addSearch.length > 0 && (
+                      <TouchableOpacity onPress={() => setAddSearch('')} style={styles.clearBtn}>
+                        <Ionicons name="close" size={16} color={colors.textHint} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+                <FlatList
+                  data={addPanelClients}
+                  keyboardShouldPersistTaps="handled"
+                  keyExtractor={(item) => item.id}
+                  contentContainerStyle={styles.addPanelList}
+                  renderItem={({ item: client }) => (
+                    <TouchableOpacity
+                      style={styles.addPanelRow}
+                      onPress={() => setSelectedClient(client)}
+                    >
+                      <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+                        <Text style={styles.avatarText}>{(client.name || '?')[0].toUpperCase()}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.addPanelName}>{(client.name || '').toUpperCase()}</Text>
+                        {client.address ? (
+                          <Text style={styles.addPanelAddress} numberOfLines={1}>{client.address}</Text>
+                        ) : null}
+                      </View>
+                      {debtClientIds.has(client.id) && (
+                        <Text style={styles.debtBadge}>Debe</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  ListEmptyComponent={
+                    <View style={styles.empty}>
+                      <Text style={styles.emptyText}>No se encontraron clientes</Text>
+                    </View>
+                  }
+                />
+              </>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </Modal>
   );
 };
@@ -377,6 +532,30 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  addDebtBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.danger,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  addDebtBtnText: {
+    color: colors.textWhite,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  addPanelTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   closeBtn: {
     width: 32,
@@ -512,6 +691,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
+  clientAddress: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
   totalAmount: {
     fontSize: 20,
     fontWeight: '800',
@@ -608,6 +793,94 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: colors.textHint,
+  },
+  // Add debt panel
+  addPanelList: {
+    paddingHorizontal: 12,
+    paddingBottom: 20,
+  },
+  addPanelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.cardBorder,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: colors.textWhite,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  addPanelName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  addPanelAddress: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  debtBadge: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.danger,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  // Selected client amount input
+  addAmountSection: {
+    padding: 16,
+    gap: 16,
+  },
+  selectedClientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  addAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  currencySign: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  amountInput: {
+    flex: 1,
+    backgroundColor: colors.sectionBackground,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  confirmAddBtn: {
+    backgroundColor: colors.danger,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  confirmAddBtnDisabled: {
+    opacity: 0.5,
+  },
+  confirmAddBtnText: {
+    color: colors.textWhite,
+    fontWeight: '700',
+    fontSize: 16,
   },
 });
 

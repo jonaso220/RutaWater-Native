@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Client, Debt } from '../types';
 import { normalizePhone } from '../utils/helpers';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -131,7 +132,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
               )}
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>✕</Text>
+              <Ionicons name="close" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -185,7 +186,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                           }}
                           style={styles.debtActionBtn}
                         >
-                          <Text>✏️</Text>
+                          <Ionicons name="pencil" size={16} color={colors.textMuted} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => handlePaid(debt)}
@@ -200,7 +201,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
               ))
             ) : (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyEmoji}>💰</Text>
+                <Ionicons name="cash-outline" size={40} color={colors.textHint} style={{ marginBottom: 8 }} />
                 <Text style={styles.emptyText}>Sin deudas registradas</Text>
               </View>
             )}
@@ -213,7 +214,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                   style={styles.whatsappBtn}
                 >
                   <Text style={styles.whatsappBtnText}>
-                    💬 Enviar total (${total.toLocaleString()})
+                    <Ionicons name="chatbubble" size={16} /> Enviar total (${total.toLocaleString()})
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -221,7 +222,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                   style={[styles.whatsappBtn, styles.whatsappBtnSecondary]}
                 >
                   <Text style={styles.whatsappBtnSecondaryText}>
-                    💬 Enviar recordatorio
+                    <Ionicons name="chatbubble" size={16} /> Enviar recordatorio
                   </Text>
                 </TouchableOpacity>
               </View>

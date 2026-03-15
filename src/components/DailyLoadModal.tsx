@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { DailyLoad } from '../hooks/useDailyLoads';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -23,10 +24,10 @@ interface DailyLoadModalProps {
 }
 
 const LOAD_FIELDS = [
-  { key: 'b20', label: '20L', icon: '💧' },
-  { key: 'b12', label: '12L', icon: '💧' },
-  { key: 'b6', label: '6L', icon: '💧' },
-  { key: 'soda', label: 'Soda', icon: '🍾' },
+  { key: 'b20', label: '20L', icon: 'water' },
+  { key: 'b12', label: '12L', icon: 'water' },
+  { key: 'b6', label: '6L', icon: 'water' },
+  { key: 'soda', label: 'Soda', icon: 'wine' },
 ];
 
 const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
@@ -74,7 +75,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
               {LOAD_FIELDS.map((f) => (
                 <View key={f.key} style={styles.fieldRow}>
                   <Text style={styles.fieldLabel}>
-                    {f.icon} {f.label}
+                    <Ionicons name={f.icon} size={16} /> {f.label}
                   </Text>
                   <TextInput
                     style={styles.fieldInput}
@@ -96,7 +97,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
               {LOAD_FIELDS.map((f) => (
                 <View key={`${f.key}_extra`} style={styles.fieldRow}>
                   <Text style={styles.fieldLabel}>
-                    {f.icon} {f.label} Extra
+                    <Ionicons name={f.icon} size={16} /> {f.label} Extra
                   </Text>
                   <TextInput
                     style={styles.fieldInput}

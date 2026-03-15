@@ -9,21 +9,19 @@ import {
   Linking,
   Alert,
   ScrollView,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { Client } from '../types';
-import { normalizePhone, parseContactString, isSafeUrl } from '../utils/helpers';
-import { getWeekNumber } from '../utils/helpers';
-import { db } from '../config/firebase';
+import { normalizePhone } from '../utils/helpers';
 import { PRODUCTS } from '../constants/products';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsContext } from '../context/ClientsContext';
 import { useDebtsContext } from '../context/DebtsContext';
 import ScheduleModal from '../components/ScheduleModal';
 import DebtModal from '../components/DebtModal';
 import EditClientModal from '../components/EditClientModal';
+import AddClientModal from '../components/AddClientModal';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
@@ -32,16 +30,15 @@ const DirectoryScreen = () => {
   const { colors, isDark } = useTheme();
   const { fontScale } = useLayout();
   const styles = getStyles(colors, fontScale);
-  const { isAdmin, user, groupData } = useAuthContext();
-  const { getFilteredDirectory, directoryCounts, scheduleFromDirectory, updateClient, deleteClient, clients, cloneClient } = useClientsContext();
+  const { isAdmin } = useAuthContext();
+  const { getFilteredDirectory, directoryCounts, scheduleFromDirectory, updateClient, deleteClient, clients, cloneClient, addClient } = useClientsContext();
   const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [scheduleClient, setScheduleClient] = useState<Client | null>(null);
   const [debtClient, setDebtClient] = useState<Client | null>(null);
   const [editClient, setEditClient] = useState<Client | null>(null);
-  const [showPasteModal, setShowPasteModal] = useState(false);
-  const [pasteText, setPasteText] = useState('');
+  const [showNewClient, setShowNewClient] = useState(false);
 
   // Compute with_debt count (needs both clients and debts)
   const withDebtCount = useMemo(() => {
@@ -205,56 +202,6 @@ const DirectoryScreen = () => {
     }
   };
 
-  // Magic Paste: parse text and import to directory
-  const handleMagicPaste = async () => {
-    if (!pasteText.trim()) return;
-    const parsed = parseContactString(pasteText);
-    if (!parsed.name && !parsed.link) {
-      Alert.alert('Error', 'No se pudo detectar el formato.');
-      return;
-    }
-    try {
-      const currentWeek = getWeekNumber(new Date());
-      const scope = groupData?.groupId ? { groupId: groupData.groupId, userId: user?.uid } : { userId: user?.uid };
-      const cleanProducts: Record<string, number> = {};
-      Object.entries(parsed.products).filter(([, v]) => v !== '').forEach(([k, v]) => {
-        cleanProducts[k] = parseInt(v) || 0;
-      });
-      const safeMapsLink = (parsed.link && isSafeUrl(parsed.link)) ? parsed.link : '';
-      await db.collection('clients').add({
-        ...scope,
-        userId: user?.uid,
-        name: parsed.name || '',
-        phone: parsed.phone || '',
-        address: parsed.address || '',
-        lat: parsed.lat || '',
-        lng: parsed.lng || '',
-        mapsLink: safeMapsLink,
-        notes: parsed.notes || '',
-        freq: 'on_demand',
-        visitDay: 'Sin Asignar',
-        visitDays: [],
-        specificDate: '',
-        products: cleanProducts,
-        listOrder: 0,
-        listOrders: {},
-        isCompleted: false,
-        isStarred: false,
-        isPinned: false,
-        isNote: false,
-        alarm: '',
-        startWeek: currentWeek,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      setShowPasteModal(false);
-      setPasteText('');
-      Alert.alert('✅', `"${parsed.name}" importado al Directorio.`);
-    } catch (e) {
-      Alert.alert('Error', 'No se pudo importar el cliente.');
-    }
-  };
-
   const handleClone = (client: Client) => {
     Alert.alert(
       'Clonar Cliente',
@@ -265,7 +212,7 @@ const DirectoryScreen = () => {
           text: 'Clonar',
           onPress: async () => {
             await cloneClient(client);
-            Alert.alert('✅', `"${client.name}" clonado al directorio.`);
+            Alert.alert('Listo', `"${client.name}" clonado al directorio.`);
           },
         },
       ],
@@ -308,7 +255,7 @@ const DirectoryScreen = () => {
           .filter((k) => parseInt(String(item.products[k] || 0), 10) > 0)
           .map((k) => {
             const p = PRODUCTS.find((prod) => prod.id === k);
-            return { qty: item.products[k], icon: p ? p.icon : '📦', label: p ? p.short : k };
+            return { qty: item.products[k], icon: p ? p.icon : 'cube', label: p ? p.short : k };
           })
       : [];
 
@@ -330,7 +277,7 @@ const DirectoryScreen = () => {
                 ) : null}
               </View>
               {item.address ? (
-                <Text style={styles.clientAddress} numberOfLines={1}>📍 {item.address}</Text>
+                <Text style={styles.clientAddress} numberOfLines={1}><Ionicons name="location-sharp" size={13} /> {item.address}</Text>
               ) : null}
             </View>
           </View>
@@ -359,7 +306,7 @@ const DirectoryScreen = () => {
             )}
             {debtTotal > 0 && (
               <TouchableOpacity onPress={() => setDebtClient(item)}>
-                <Text style={styles.debtBadge}>💰 ${debtTotal.toLocaleString()}</Text>
+                <Text style={styles.debtBadge}><Ionicons name="cash" size={12} /> ${debtTotal.toLocaleString()}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -369,7 +316,7 @@ const DirectoryScreen = () => {
             <View style={styles.prodChipsRow}>
               {prodChips.map((p, i) => (
                 <Text key={i} style={styles.prodChip}>
-                  {p.icon} {p.qty}x {p.label}
+                  <Ionicons name={p.icon} size={13} /> {p.qty}x {p.label}
                 </Text>
               ))}
             </View>
@@ -379,12 +326,12 @@ const DirectoryScreen = () => {
           <View style={styles.actionsRow}>
             {item.phone ? (
               <TouchableOpacity onPress={() => callClient(item)} style={styles.actionBtn}>
-                <Text style={styles.actionBtnText}>📞</Text>
+                <Ionicons name="call" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             ) : null}
             {item.phone ? (
               <TouchableOpacity onPress={() => sendWhatsApp(item)} style={styles.actionBtn}>
-                <Text style={styles.actionBtnText}>💬</Text>
+                <Ionicons name="chatbubble" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
@@ -392,17 +339,17 @@ const DirectoryScreen = () => {
               style={[styles.actionBtn, !hasLocation && { opacity: 0.3 }]}
               activeOpacity={hasLocation ? 0.6 : 1}
             >
-              <Text style={styles.actionBtnText}>📍</Text>
+              <Ionicons name="location-sharp" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setDebtClient(item)} style={styles.actionBtn}>
-              <Text style={styles.actionBtnText}>{debtTotal > 0 ? '🔴' : '💰'}</Text>
+              <Ionicons name="cash" size={18} color={debtTotal > 0 ? colors.danger : colors.textSecondary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => handleClone(item)} style={styles.actionBtn}>
-              <Text style={styles.actionBtnText}>📋</Text>
+              <Ionicons name="clipboard" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
             {isAdmin && (
               <TouchableOpacity onPress={() => setEditClient(item)} style={styles.actionBtn}>
-                <Text style={styles.actionBtnText}>✏️</Text>
+                <Ionicons name="pencil" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
             <View style={{ flex: 1 }} />
@@ -441,15 +388,15 @@ const DirectoryScreen = () => {
                 onPress={() => setSearch('')}
                 style={{ position: 'absolute', right: 8, padding: 4 }}
               >
-                <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                <Ionicons name="close" size={16} color={colors.textHint} />
               </TouchableOpacity>
             )}
           </View>
           <TouchableOpacity
             style={styles.importBtn}
-            onPress={() => setShowPasteModal(true)}
+            onPress={() => setShowNewClient(true)}
           >
-            <Text style={styles.importBtnText}>📋+</Text>
+            <Text style={styles.importBtnText}><Ionicons name="add" size={16} /></Text>
           </TouchableOpacity>
         </View>
         {/* Filter chips */}
@@ -550,46 +497,14 @@ const DirectoryScreen = () => {
         />
       )}
 
-      {/* Magic Paste Import Modal */}
-      <Modal visible={showPasteModal} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.pasteOverlay}
-        >
-          <View style={styles.pasteDialog}>
-            <Text style={styles.pasteTitle}>📋 Importar Cliente</Text>
-            <Text style={styles.pasteSubtitle}>
-              Pegá el texto del cliente (nombre, dirección, teléfono, productos, link de Maps...)
-            </Text>
-            <TextInput
-              style={styles.pasteInput}
-              placeholder="Pegar texto aquí..."
-              placeholderTextColor={colors.textHint}
-              value={pasteText}
-              onChangeText={setPasteText}
-              multiline
-              numberOfLines={8}
-              textAlignVertical="top"
-              autoFocus
-            />
-            <View style={styles.pasteButtons}>
-              <TouchableOpacity
-                style={styles.pasteCancelBtn}
-                onPress={() => { setShowPasteModal(false); setPasteText(''); }}
-              >
-                <Text style={styles.pasteCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.pasteImportBtn, !pasteText.trim() && { opacity: 0.4 }]}
-                onPress={handleMagicPaste}
-                disabled={!pasteText.trim()}
-              >
-                <Text style={styles.pasteImportText}>Importar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      {/* New Client Modal */}
+      <AddClientModal
+        visible={showNewClient}
+        onSave={async (name, address, phone, targetDay, products, notes, mapsLink) => {
+          await addClient(name, address, phone, targetDay, products, notes, mapsLink);
+        }}
+        onClose={() => setShowNewClient(false)}
+      />
     </View>
   );
 };
@@ -622,6 +537,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   filterBarContent: {
     gap: 6,
     paddingHorizontal: 2,
+    justifyContent: 'center',
+    flexGrow: 1,
   },
   filterChip: {
     flexDirection: 'row',
@@ -683,6 +600,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     elevation: 1,
     borderLeftWidth: 4,
     borderLeftColor: 'transparent',
+    maxWidth: 800,
+    width: '100%',
+    alignSelf: 'center',
   },
   cardDebt: {
     borderLeftColor: colors.danger,
@@ -833,72 +753,6 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   },
   importBtnText: {
     fontSize: s(16),
-    fontWeight: '700',
-    color: colors.textWhite,
-  },
-  pasteOverlay: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  pasteDialog: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    maxWidth: 500,
-    alignSelf: 'center' as const,
-    width: '100%' as const,
-  },
-  pasteTitle: {
-    fontSize: s(18),
-    fontWeight: '700',
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  pasteSubtitle: {
-    fontSize: s(13),
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginBottom: 14,
-  },
-  pasteInput: {
-    backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: s(14),
-    color: colors.textPrimary,
-    minHeight: 150,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  pasteButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
-  },
-  pasteCancelBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: colors.sectionBackground,
-    alignItems: 'center',
-  },
-  pasteCancelText: {
-    fontSize: s(14),
-    fontWeight: '600',
-    color: colors.textMuted,
-  },
-  pasteImportBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-  },
-  pasteImportText: {
-    fontSize: s(14),
     fontWeight: '700',
     color: colors.textWhite,
   },

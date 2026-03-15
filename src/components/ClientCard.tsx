@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
 import { normalizePhone } from '../utils/helpers';
@@ -65,6 +67,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   fontScale = 1,
 }) => {
   const { colors } = useTheme();
+  const s = (v: number) => Math.round(v * fontScale);
   const styles = getStyles(colors, fontScale);
   const [showPositionPrompt, setShowPositionPrompt] = useState(false);
 
@@ -140,13 +143,13 @@ const ClientCard: React.FC<ClientCardProps> = ({
         </TouchableOpacity>
         <View style={styles.cardBody}>
           <View style={styles.headerRow}>
-            <Text style={styles.noteLabel}>📝 NOTA</Text>
+            <Text style={styles.noteLabel}><Ionicons name="document-text" size={s(13)} /> NOTA</Text>
             <View style={styles.actions}>
               <TouchableOpacity onPress={onEdit} style={styles.iconBtn}>
-                <Text>✏️</Text>
+                <Ionicons name="pencil" size={s(16)} color={colors.textMuted} />
               </TouchableOpacity>
               <TouchableOpacity onPress={onDelete} style={styles.iconBtn}>
-                <Text>🗑️</Text>
+                <Ionicons name="trash" size={s(16)} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
           </View>
@@ -157,7 +160,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
             <Text style={styles.badge}>{client.specificDate || 'Una vez'}</Text>
             <View style={{ flex: 1 }} />
             <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
-              <Text style={styles.doneButtonText}>✓ Listo</Text>
+              <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> Listo</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -198,29 +201,29 @@ const ClientCard: React.FC<ClientCardProps> = ({
         <View style={styles.toolbar}>
           {onToggleStar && (
             <TouchableOpacity onPress={onToggleStar} style={styles.iconBtn}>
-              <Text>{client.isStarred ? '⭐' : '☆'}</Text>
+              <Ionicons name={client.isStarred ? 'star' : 'star-outline'} size={s(18)} color={client.isStarred ? '#F5A623' : colors.textMuted} />
             </TouchableOpacity>
           )}
           {onDebt && (
             <TouchableOpacity onPress={onDebt} style={styles.iconBtn}>
-              <Text>{hasDebt ? '🔴' : '💰'}</Text>
+              <Ionicons name="cash" size={s(18)} color={hasDebt ? colors.danger : colors.textMuted} />
             </TouchableOpacity>
           )}
           {onTransfer && (
             <TouchableOpacity onPress={onTransfer} style={styles.iconBtn}>
-              <Text>{hasPendingTransfer ? '🟢' : '🏦'}</Text>
+              <MaterialCommunityIcons name="bank" size={s(18)} color={hasPendingTransfer ? colors.successDark : colors.textMuted} />
             </TouchableOpacity>
           )}
           {onAlarm && (
             <TouchableOpacity onPress={onAlarm} style={styles.iconBtn}>
-              <Text>{client.alarm ? '🔔' : '🔕'}</Text>
+              <Ionicons name={client.alarm ? 'notifications' : 'notifications-off'} size={s(18)} color={client.alarm ? colors.warningDark : colors.textMuted} />
             </TouchableOpacity>
           )}
           <TouchableOpacity onPress={onEdit} style={styles.iconBtn}>
-            <Text>✏️</Text>
+            <Ionicons name="pencil" size={s(18)} color={colors.textMuted} />
           </TouchableOpacity>
           <TouchableOpacity onPress={onDelete} style={styles.iconBtn}>
-            <Text>🗑️</Text>
+            <Ionicons name="trash" size={s(18)} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -233,21 +236,21 @@ const ClientCard: React.FC<ClientCardProps> = ({
         <View style={styles.badgesRow}>
           {hasDebt && (
             <TouchableOpacity onPress={onDebt}>
-              <Text style={styles.debtBadge}>💰 Deuda</Text>
+              <Text style={styles.debtBadge}><Ionicons name="cash" size={s(12)} /> Deuda</Text>
             </TouchableOpacity>
           )}
           {hasPendingTransfer && (
-            <Text style={styles.transferBadge}>🏦 Transferencia</Text>
+            <Text style={styles.transferBadge}><MaterialCommunityIcons name="bank" size={s(12)} /> Transferencia</Text>
           )}
           {client.alarm ? (
-            <Text style={styles.alarmBadge}>🔔 {client.alarm}</Text>
+            <Text style={styles.alarmBadge}><Ionicons name="notifications" size={s(12)} /> {client.alarm}</Text>
           ) : null}
         </View>
 
         {/* Address with location button */}
         {hasLocation ? (
           <TouchableOpacity onPress={openMaps} style={styles.addressRow} activeOpacity={0.6}>
-            <Text style={styles.mapsPinIcon}>📍</Text>
+            <Ionicons name="location-sharp" size={s(16)} color={colors.primary} />
             <Text style={styles.clientAddressLink}>{client.address}</Text>
           </TouchableOpacity>
         ) : (
@@ -257,13 +260,13 @@ const ClientCard: React.FC<ClientCardProps> = ({
         {/* Products */}
         {productSummary ? (
           <View style={styles.productsRow}>
-            <Text style={styles.productsText}>📦 {productSummary}</Text>
+            <Text style={styles.productsText}><Ionicons name="cube" size={s(13)} color={colors.textSecondary} /> {productSummary}</Text>
           </View>
         ) : null}
 
         {/* Notes */}
         {client.notes ? (
-          <Text style={styles.notesText}>💬 {client.notes}</Text>
+          <Text style={styles.notesText}><Ionicons name="chatbubble" size={s(12)} color={colors.textMuted} /> {client.notes}</Text>
         ) : null}
 
         {/* Freq badge */}
@@ -286,20 +289,20 @@ const ClientCard: React.FC<ClientCardProps> = ({
           {client.phone ? (
             <>
               <TouchableOpacity onPress={callClient} style={styles.actionBtnDark}>
-                <Text style={styles.actionBtnIcon}>📞</Text>
+                <Ionicons name="call" size={s(18)} color={colors.textSecondary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={openWhatsAppCamera} style={styles.actionBtnDark}>
-                <Text style={styles.actionBtnIcon}>📷</Text>
+                <Ionicons name="camera" size={s(18)} color={colors.textSecondary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={sendEnCamino} style={styles.enCaminoBtn} activeOpacity={0.7}>
-                <Text style={styles.enCaminoText}>💬 En camino</Text>
+                <Text style={styles.enCaminoText}><Ionicons name="chatbubble" size={s(14)} color={colors.textWhite} /> En camino</Text>
               </TouchableOpacity>
             </>
           ) : (
             <View style={{ flex: 1 }} />
           )}
           <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
-            <Text style={styles.doneButtonText}>✓ Listo</Text>
+            <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> Listo</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -321,6 +324,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       shadowOpacity: 0.05,
       shadowRadius: 3,
       elevation: 1,
+      maxWidth: 800,
+      width: '100%',
+      alignSelf: 'center',
     },
     noteCard: {
       borderLeftWidth: 4,

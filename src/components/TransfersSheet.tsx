@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { Transfer } from '../types';
 import { normalizePhone } from '../utils/helpers';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -87,7 +89,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
             onPress={() => openMaps(item)}
             style={styles.actionBtn}
           >
-            <Text>📍</Text>
+            <Ionicons name="location-sharp" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
         {isAdmin && (
@@ -115,7 +117,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>✕</Text>
+              <Ionicons name="close" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -126,7 +128,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Text style={styles.emptyEmoji}>🏦</Text>
+                <MaterialCommunityIcons name="bank-outline" size={40} color={colors.textHint} style={{ marginBottom: 8 }} />
                 <Text style={styles.emptyText}>
                   No hay transferencias pendientes
                 </Text>

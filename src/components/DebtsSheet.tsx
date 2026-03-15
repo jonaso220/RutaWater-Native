@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { Client, Debt } from '../types';
 import { normalizePhone, normalizeText } from '../utils/helpers';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -185,7 +187,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               onPress={() => openWhatsAppChat(item)}
               style={styles.actionBtn}
             >
-              <Text>💬</Text>
+              <Ionicons name="chatbubble" size={18} color={colors.textSecondary} />
             </TouchableOpacity>
           ) : null}
           {onTransferPayment && (
@@ -193,7 +195,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               onPress={() => onTransferPayment(item.clientId)}
               style={styles.transferBtn}
             >
-              <Text style={styles.transferBtnText}>🏦 Transf</Text>
+              <Text style={styles.transferBtnText}><MaterialCommunityIcons name="bank" size={14} /> Transf</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -241,7 +243,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           onPress={() => handleMarkAllPaid(item)}
           style={styles.payAllBtn}
         >
-          <Text style={styles.payAllBtnText}>✓ Pagar todas ({item.debts.length})</Text>
+          <Text style={styles.payAllBtnText}><Ionicons name="checkmark" size={14} /> Pagar todas ({item.debts.length})</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -259,7 +261,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               <Text style={styles.headerTitle}>Deudas</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>✕</Text>
+              <Ionicons name="close" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -283,7 +285,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 
           <View style={styles.searchSection}>
             <View style={styles.searchInputWrapper}>
-              <Text style={styles.searchIcon}>🔍</Text>
+              <Ionicons name="search" size={16} color={colors.textHint} style={{ marginRight: 6 }} />
               <TextInput
                 style={styles.searchInput}
                 value={searchTerm}
@@ -294,7 +296,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               />
               {searchTerm.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchTerm('')} style={styles.clearBtn}>
-                  <Text style={styles.clearBtnText}>✕</Text>
+                  <Ionicons name="close" size={16} color={colors.textHint} />
                 </TouchableOpacity>
               )}
             </View>
@@ -335,7 +337,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <Text style={styles.emptyEmoji}>💰</Text>
+                <Ionicons name="cash-outline" size={40} color={colors.textHint} style={{ marginBottom: 8 }} />
                 <Text style={styles.emptyText}>
                   No hay deudas pendientes
                 </Text>

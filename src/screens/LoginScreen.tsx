@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -33,7 +34,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSignInWithGoogle, onSignInW
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.emoji}>🚚</Text>
+        <MaterialCommunityIcons name="truck-delivery" size={48} color={colors.primary} />
         <Text style={styles.title}>RutaWater</Text>
         <Text style={styles.subtitle}>Gestion de rutas de agua</Text>
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
-import { Text as RNText } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { useLayout } from '../hooks/useLayout';
 import HomeScreen from '../screens/HomeScreen';
@@ -57,7 +57,7 @@ const AppNavigator = () => {
           component={HomeScreen}
           options={{
             headerTitle: 'RutaWater',
-            tabBarIcon: () => <TabIcon label="🏠" scale={fontScale} />,
+            tabBarIcon: ({ color }) => <Ionicons name="home" size={Math.round(22 * fontScale)} color={color} />,
           }}
         />
         <Tab.Screen
@@ -65,7 +65,7 @@ const AppNavigator = () => {
           component={DirectoryScreen}
           options={{
             headerTitle: 'Directorio',
-            tabBarIcon: () => <TabIcon label="👥" scale={fontScale} />,
+            tabBarIcon: ({ color }) => <Ionicons name="people" size={Math.round(22 * fontScale)} color={color} />,
           }}
         />
         <Tab.Screen
@@ -73,16 +73,12 @@ const AppNavigator = () => {
           component={SettingsScreen}
           options={{
             headerTitle: 'Ajustes',
-            tabBarIcon: () => <TabIcon label="⚙️" scale={fontScale} />,
+            tabBarIcon: ({ color }) => <Ionicons name="settings" size={Math.round(22 * fontScale)} color={color} />,
           }}
         />
       </Tab.Navigator>
     </NavigationContainer>
   );
 };
-
-const TabIcon = ({ label, scale = 1 }: { label: string; scale?: number }) => (
-  <RNText style={{ fontSize: Math.round(22 * scale) }}>{label}</RNText>
-);
 
 export default AppNavigator;

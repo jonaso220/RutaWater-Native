@@ -12,13 +12,14 @@ import {
   Alert,
   Keyboard,
 } from 'react-native';
-import { PRODUCTS } from '../constants/products';
+import { PRODUCTS, ALL_DAYS } from '../constants/products';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
 interface AddClientModalProps {
   visible: boolean;
-  day: string;
+  day?: string;
   onSave: (
     name: string,
     address: string,
@@ -35,7 +36,7 @@ type Destination = 'day' | 'directory';
 
 const AddClientModal: React.FC<AddClientModalProps> = ({
   visible,
-  day,
+  day = '',
   onSave,
   onClose,
 }) => {
@@ -48,10 +49,13 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   const [mapsLink, setMapsLink] = useState('');
   const [notes, setNotes] = useState('');
   const [products, setProducts] = useState<Record<string, number>>({});
-  const [destination, setDestination] = useState<Destination>('day');
+  const [destination, setDestination] = useState<Destination>(day ? 'day' : 'directory');
+  const [selectedDay, setSelectedDay] = useState('');
   const [saving, setSaving] = useState(false);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteText, setPasteText] = useState('');
+
+  const isDirectoryMode = !day;
 
   const parseOrderText = (text: string) => {
     const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -203,7 +207,8 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
     setMapsLink('');
     setNotes('');
     setProducts({});
-    setDestination('day');
+    setDestination(isDirectoryMode ? 'directory' : 'day');
+    setSelectedDay('');
     setSaving(false);
   };
 
@@ -224,9 +229,18 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
       Alert.alert('Error', 'El nombre del cliente es obligatorio.');
       return;
     }
+    if (isDirectoryMode && destination === 'day' && !selectedDay) {
+      Alert.alert('Error', 'Selecciona un dia para agendar.');
+      return;
+    }
     setSaving(true);
     try {
-      const targetDay = destination === 'directory' ? '' : day;
+      let targetDay = '';
+      if (isDirectoryMode) {
+        targetDay = destination === 'directory' ? '' : selectedDay;
+      } else {
+        targetDay = destination === 'directory' ? '' : day;
+      }
       await onSave(name.trim(), address.trim(), phone.trim(), targetDay, products, notes.trim(), mapsLink.trim());
       resetForm();
       onClose();
@@ -250,7 +264,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               <Text style={styles.headerTitle}>Nuevo Cliente</Text>
             </View>
             <TouchableOpacity onPress={() => setShowPasteModal(true)} style={styles.pasteBtn}>
-              <Text style={styles.pasteBtnText}>📋 Pegar Pedido</Text>
+              <Text style={styles.pasteBtnText}><Ionicons name="clipboard" size={14} /> Pegar Pedido</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
@@ -260,24 +274,62 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
             {/* Destination toggle */}
             <Text style={styles.sectionTitle}>Destino</Text>
-            <View style={styles.destRow}>
-              <TouchableOpacity
-                style={[styles.destChip, destination === 'day' && styles.destChipSelected]}
-                onPress={() => setDestination('day')}
-              >
-                <Text style={[styles.destChipText, destination === 'day' && styles.destChipTextSelected]}>
-                  {day}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.destChip, destination === 'directory' && styles.destChipDirectory]}
-                onPress={() => setDestination('directory')}
-              >
-                <Text style={[styles.destChipText, destination === 'directory' && styles.destChipTextDirectory]}>
-                  Solo Directorio
-                </Text>
-              </TouchableOpacity>
-            </View>
+            {isDirectoryMode ? (
+              <>
+                <View style={styles.destRow}>
+                  <TouchableOpacity
+                    style={[styles.destChip, destination === 'directory' && styles.destChipDirectory]}
+                    onPress={() => { setDestination('directory'); setSelectedDay(''); }}
+                  >
+                    <Text style={[styles.destChipText, destination === 'directory' && styles.destChipTextDirectory]}>
+                      Solo Directorio
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.destChip, destination === 'day' && styles.destChipSelected]}
+                    onPress={() => setDestination('day')}
+                  >
+                    <Text style={[styles.destChipText, destination === 'day' && styles.destChipTextSelected]}>
+                      Agendar a un dia
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {destination === 'day' && (
+                  <View style={styles.dayChipsRow}>
+                    {ALL_DAYS.map((d) => (
+                      <TouchableOpacity
+                        key={d}
+                        style={[styles.dayChip, selectedDay === d && styles.dayChipSelected]}
+                        onPress={() => setSelectedDay(d)}
+                      >
+                        <Text style={[styles.dayChipText, selectedDay === d && styles.dayChipTextSelected]}>
+                          {d.slice(0, 3)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </>
+            ) : (
+              <View style={styles.destRow}>
+                <TouchableOpacity
+                  style={[styles.destChip, destination === 'day' && styles.destChipSelected]}
+                  onPress={() => setDestination('day')}
+                >
+                  <Text style={[styles.destChipText, destination === 'day' && styles.destChipTextSelected]}>
+                    {day}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.destChip, destination === 'directory' && styles.destChipDirectory]}
+                  onPress={() => setDestination('directory')}
+                >
+                  <Text style={[styles.destChipText, destination === 'directory' && styles.destChipTextDirectory]}>
+                    Solo Directorio
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Name */}
             <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Nombre *</Text>
@@ -357,7 +409,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             {PRODUCTS.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
-                  {p.icon} {p.label}
+                  <Ionicons name={p.icon} size={16} /> {p.label}
                 </Text>
                 <View style={styles.qtyControls}>
                   <TouchableOpacity
@@ -411,8 +463,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                 {saving
                   ? 'Guardando...'
                   : destination === 'directory'
-                    ? 'Agregar al Directorio'
-                    : `Agregar a ${day}`}
+                    ? 'Guardar en Directorio'
+                    : isDirectoryMode
+                      ? (selectedDay ? `Agendar en ${selectedDay}` : 'Selecciona un dia')
+                      : `Agregar a ${day}`}
               </Text>
             </TouchableOpacity>
           </View>
@@ -426,7 +480,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
           style={styles.pasteOverlay}
         >
           <View style={styles.pasteDialog}>
-            <Text style={styles.pasteModalTitle}>📋 Pegar Pedido</Text>
+            <Text style={styles.pasteModalTitle}><Ionicons name="clipboard" size={18} /> Pegar Pedido</Text>
             <Text style={styles.pasteModalHint}>
               Pega el texto del pedido y se completaran los campos automaticamente
             </Text>
@@ -543,6 +597,29 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   destChipTextDirectory: {
     color: colors.warningOrangeText,
+  },
+  dayChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  dayChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: colors.sectionBackground,
+  },
+  dayChipSelected: {
+    backgroundColor: colors.primary,
+  },
+  dayChipText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  dayChipTextSelected: {
+    color: colors.textWhite,
   },
   textInput: {
     backgroundColor: colors.inputBackground,

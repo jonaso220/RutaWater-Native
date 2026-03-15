@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AlarmData } from '../hooks/useAlarmChecker';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -20,14 +21,14 @@ const AlarmBanner: React.FC<Props> = ({ alarm, onDismiss }) => {
       <View style={styles.overlay}>
         <View style={styles.card}>
           <View style={styles.bellContainer}>
-            <Text style={styles.bellIcon}>🔔</Text>
+            <Ionicons name="notifications" size={30} color="#FFFFFF" />
           </View>
           <Text style={styles.time}>{alarm.time}</Text>
           <Text style={styles.label}>Recordatorio de Visita</Text>
           <View style={styles.clientBox}>
             <Text style={styles.clientName}>{alarm.name}</Text>
             {alarm.address ? (
-              <Text style={styles.clientAddress}>📍 {alarm.address}</Text>
+              <Text style={styles.clientAddress}><Ionicons name="location-sharp" size={14} /> {alarm.address}</Text>
             ) : null}
           </View>
           <TouchableOpacity style={styles.dismissBtn} onPress={onDismiss} activeOpacity={0.8}>

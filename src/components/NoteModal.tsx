@@ -14,6 +14,7 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -138,7 +139,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
                   activeOpacity={Platform.OS === 'android' ? 0.6 : 1}
                 >
                   <Text style={styles.selectedDateText}>
-                    📅 {formatDisplayDate(date)}
+                    <Ionicons name="calendar" size={17} /> {formatDisplayDate(date)}
                   </Text>
                   {Platform.OS === 'android' && (
                     <Text style={[styles.selectedDateHint, { color: colors.textMuted }]}>
@@ -164,7 +165,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
                     style={styles.datePickerBtn}
                     onPress={() => setShowAndroidPicker(true)}
                   >
-                    <Text style={styles.datePickerBtnText}>📅 Seleccionar fecha</Text>
+                    <Text style={styles.datePickerBtnText}><Ionicons name="calendar" size={17} /> Seleccionar fecha</Text>
                   </TouchableOpacity>
                   {showAndroidPicker && (
                     <DateTimePicker

@@ -21,6 +21,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { PRODUCTS, FREQUENCY_LABELS, Frequency } from '../constants/products';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const SettingsScreen = () => {
   const { colors, isDark } = useTheme();
@@ -691,10 +692,10 @@ const SettingsScreen = () => {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Exportar Datos</Text>
         <TouchableOpacity onPress={handleExportCSV} style={styles.exportBtn}>
-          <Text style={styles.exportBtnText}>📤 Exportar Clientes (CSV)</Text>
+          <Text style={styles.exportBtnText}><Ionicons name="share-outline" size={16} /> Exportar Clientes (CSV)</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={handleExportJSON} style={[styles.exportBtn, { marginTop: 8 }]}>
-          <Text style={styles.exportBtnText}>💾 Backup Completo (JSON)</Text>
+          <Text style={styles.exportBtnText}><Ionicons name="save-outline" size={16} /> Backup Completo (JSON)</Text>
         </TouchableOpacity>
       </View>
 

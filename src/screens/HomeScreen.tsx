@@ -18,6 +18,7 @@ import DraggableFlatList, {
 } from 'react-native-draggable-flatlist';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useScrollToTop } from '@react-navigation/native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Client } from '../types';
 import { ALL_DAYS, PRODUCTS } from '../constants/products';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate } from '../utils/helpers';
@@ -630,7 +631,7 @@ const HomeScreen = () => {
       <View style={styles.searchSection}>
         <View style={styles.searchRow}>
           <View style={styles.searchInputWrapper}>
-            <Text style={styles.searchIcon}>🔍</Text>
+            <Ionicons name="search" size={16} color={colors.textHint} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               value={searchTerm}
@@ -684,7 +685,7 @@ const HomeScreen = () => {
                   onPress={() => toggleFilter(p.id)}
                 >
                   <Text style={[styles.filterChipText, activeFilters.has(p.id) && styles.filterChipTextActive]}>
-                    {p.icon} {p.short}
+                    <Ionicons name={p.icon} size={13} /> {p.short}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -708,7 +709,7 @@ const HomeScreen = () => {
           />
         ) : (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>📋</Text>
+            <Ionicons name="clipboard-outline" size={40} color={colors.textHint} style={{ marginBottom: 8 }} />
             <Text style={styles.emptyText}>
               No hay clientes para {selectedDay}
             </Text>
@@ -760,7 +761,7 @@ const HomeScreen = () => {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.deleteAllBtnText}>🗑️ Eliminar todo</Text>
+                  <Text style={styles.deleteAllBtnText}><Ionicons name="trash" size={14} /> Eliminar todo</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -929,6 +930,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     paddingHorizontal: 12,
     paddingVertical: 10,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexGrow: 1,
   },
   dayChip: {
     paddingHorizontal: 14,

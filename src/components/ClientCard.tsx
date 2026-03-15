@@ -271,9 +271,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
 
         {/* Freq badge */}
         <View style={styles.freqRow}>
-          <Text style={styles.badge}>
+          <Text style={[styles.badge, client.freq === 'once' && styles.badgeOnce]}>
             {client.freq === 'once'
-              ? client.specificDate || 'Una vez'
+              ? (client.specificDate ? `Una vez: ${client.specificDate.split('-').reverse().join('/')}` : 'Una vez')
               : client.freq === 'weekly'
                 ? 'Semanal'
                 : client.freq === 'biweekly'
@@ -335,12 +335,10 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     cardOnce: {
       borderLeftWidth: 4,
       borderLeftColor: colors.warning,
-      backgroundColor: colors.cardOnceBg,
     },
     cardStarred: {
       borderLeftWidth: 4,
       borderLeftColor: colors.warningAmber,
-      backgroundColor: colors.cardStarredBg,
     },
     orderBadge: {
       width: 36,
@@ -482,6 +480,15 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       borderRadius: 6,
       overflow: 'hidden',
       alignSelf: 'flex-start',
+    },
+    badgeOnce: {
+      color: colors.warning,
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      borderColor: colors.warning,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 20,
     },
     actionBar: {
       flexDirection: 'row',

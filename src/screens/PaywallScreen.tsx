@@ -125,12 +125,6 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
         />
       </View>
 
-      {/* Trial badge */}
-      <View style={styles.trialBadge}>
-        <Ionicons name="gift" size={18} color={colors.success} />
-        <Text style={styles.trialText}>1 mes de prueba gratis</Text>
-      </View>
-
       {/* Pricing */}
       <View style={styles.pricingSection}>
         <TouchableOpacity
@@ -143,6 +137,10 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
             {monthlyPkg ? monthlyPkg.product.priceString : '$2.99'}
           </Text>
           <Text style={styles.pricePeriod}>por mes</Text>
+          <View style={styles.trialBadge}>
+            <Ionicons name="gift" size={14} color={colors.success} />
+            <Text style={styles.trialText}>1 semana gratis</Text>
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -158,6 +156,10 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
             {annualPkg ? annualPkg.product.priceString : '$29.99'}
           </Text>
           <Text style={[styles.pricePeriod, styles.pricePeriodFeatured]}>por ano</Text>
+          <View style={[styles.trialBadge, styles.trialBadgeFeatured]}>
+            <Ionicons name="gift" size={14} color={colors.primary} />
+            <Text style={[styles.trialText, styles.trialTextFeatured]}>1 mes gratis</Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -274,19 +276,26 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 6,
-      marginTop: 16,
+      gap: 4,
+      marginTop: 12,
       backgroundColor: colors.successBg,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: 10,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 8,
       borderWidth: 1,
       borderColor: colors.successBorder,
     },
+    trialBadgeFeatured: {
+      backgroundColor: colors.primaryLighter,
+      borderColor: colors.primaryBorder,
+    },
     trialText: {
-      fontSize: s(15),
+      fontSize: s(11),
       fontWeight: '700',
       color: colors.successText,
+    },
+    trialTextFeatured: {
+      color: colors.primary,
     },
     pricingSection: {
       flexDirection: 'row',

@@ -568,7 +568,10 @@ const SettingsScreen = () => {
 
       {/* Subscription status */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Suscripcion</Text>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="diamond-outline" size={20} color={colors.primary} />
+          <Text style={styles.sectionTitle}>Suscripcion</Text>
+        </View>
         {isPremium ? (
           <View style={styles.premiumCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -623,7 +626,10 @@ const SettingsScreen = () => {
 
       {/* Promo code section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Codigo Promocional</Text>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="gift-outline" size={20} color={colors.warningDark} />
+          <Text style={styles.sectionTitle}>Codigo Promocional</Text>
+        </View>
         {hasPromo ? (
           <View style={styles.premiumCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -663,7 +669,10 @@ const SettingsScreen = () => {
 
       {/* Group section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Grupo Familiar</Text>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="people-outline" size={20} color={colors.textMuted} />
+          <Text style={styles.sectionTitle}>Grupo Familiar</Text>
+        </View>
 
         {groupData ? (
           <View>
@@ -791,108 +800,139 @@ const SettingsScreen = () => {
       {/* WhatsApp Templates */}
       {waLoaded && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Mensajes WhatsApp</Text>
-          <Text style={styles.templateLabel}>Mensaje "En camino"</Text>
-          <TextInput
-            style={styles.templateInput}
-            value={waEnCamino}
-            onChangeText={setWaEnCamino}
-            placeholder={DEFAULT_EN_CAMINO}
-            placeholderTextColor={colors.textDisabled}
-            multiline
-            numberOfLines={3}
-          />
-          <Text style={[styles.templateLabel, { marginTop: 12 }]}>Mensaje de deuda</Text>
-          <TextInput
-            style={styles.templateInput}
-            value={waDeuda}
-            onChangeText={setWaDeuda}
-            placeholder={DEFAULT_DEUDA}
-            placeholderTextColor={colors.textDisabled}
-            multiline
-            numberOfLines={2}
-          />
-          <Text style={styles.templateHint}>Usa {'${total}'} para insertar el monto</Text>
-          <Text style={[styles.templateLabel, { marginTop: 12 }]}>Mensaje de recordatorio</Text>
-          <TextInput
-            style={styles.templateInput}
-            value={waRecordatorio}
-            onChangeText={setWaRecordatorio}
-            placeholder={DEFAULT_RECORDATORIO}
-            placeholderTextColor={colors.textDisabled}
-            multiline
-            numberOfLines={4}
-          />
+          <View style={styles.sectionHeader}>
+            <Ionicons name="logo-whatsapp" size={20} color={colors.successDark} />
+            <Text style={styles.sectionTitle}>Mensajes WhatsApp</Text>
+          </View>
+          <Text style={styles.sectionSubtitle}>Personaliza los mensajes que se envian a tus clientes por WhatsApp.</Text>
+          <View style={styles.sectionCard}>
+            <Text style={styles.templateLabel}>Mensaje "En camino"</Text>
+            <TextInput
+              style={styles.templateInput}
+              value={waEnCamino}
+              onChangeText={setWaEnCamino}
+              placeholder={DEFAULT_EN_CAMINO}
+              placeholderTextColor={colors.textDisabled}
+              multiline
+              numberOfLines={3}
+            />
+
+            <View style={styles.templateDivider} />
+
+            <Text style={styles.templateLabel}>Mensaje de deuda</Text>
+            <TextInput
+              style={styles.templateInput}
+              value={waDeuda}
+              onChangeText={setWaDeuda}
+              placeholder={DEFAULT_DEUDA}
+              placeholderTextColor={colors.textDisabled}
+              multiline
+              numberOfLines={2}
+            />
+            <Text style={styles.templateHint}>Usa {'${total}'} para insertar el monto</Text>
+
+            <View style={styles.templateDivider} />
+
+            <Text style={styles.templateLabel}>Mensaje de recordatorio</Text>
+            <TextInput
+              style={styles.templateInput}
+              value={waRecordatorio}
+              onChangeText={setWaRecordatorio}
+              placeholder={DEFAULT_RECORDATORIO}
+              placeholderTextColor={colors.textDisabled}
+              multiline
+              numberOfLines={4}
+            />
+          </View>
           <View style={styles.templateActions}>
             <TouchableOpacity onPress={handleSaveTemplates} style={styles.templateSaveBtn}>
+              <Ionicons name="checkmark" size={16} color="#FFFFFF" />
               <Text style={styles.templateSaveBtnText}>Guardar</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={handleResetTemplates} style={styles.templateResetBtn}>
+              <Ionicons name="refresh" size={16} color={colors.textMuted} />
               <Text style={styles.templateResetBtnText}>Restaurar</Text>
             </TouchableOpacity>
           </View>
         </View>
       )}
 
-      {/* Export */}
+      {/* Export & Maintenance */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Exportar Datos</Text>
-        {isPremium ? (
-          <>
-            <TouchableOpacity onPress={handleExportCSV} style={styles.exportBtn}>
-              <Text style={styles.exportBtnText}><Ionicons name="share-outline" size={16} /> Exportar Clientes (CSV)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleExportJSON} style={[styles.exportBtn, { marginTop: 8 }]}>
-              <Text style={styles.exportBtnText}><Ionicons name="save-outline" size={16} /> Backup Completo (JSON)</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <View style={styles.lockedCard}>
-            <Ionicons name="lock-closed" size={24} color={colors.textHint} />
-            <Text style={styles.lockedText}>
-              Exporta tus datos en CSV y JSON con Premium.
-            </Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Paywall')}
-              style={styles.upgradeBtn}
-            >
-              <Ionicons name="diamond" size={16} color="#FFFFFF" />
-              <Text style={styles.upgradeBtnText}>Obtener Premium</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.sectionHeader}>
+          <Ionicons name="construct" size={20} color={colors.textMuted} />
+          <Text style={styles.sectionTitle}>Herramientas</Text>
+        </View>
+        <View style={styles.sectionCard}>
+          {/* Export */}
+          <Text style={styles.cardGroupTitle}>Exportar Datos</Text>
+          {isPremium ? (
+            <View style={styles.cardGroupContent}>
+              <TouchableOpacity onPress={handleExportCSV} style={styles.exportBtn}>
+                <Ionicons name="share-outline" size={18} color={colors.primary} />
+                <Text style={styles.exportBtnText}>Exportar Clientes (CSV)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleExportJSON} style={styles.exportBtn}>
+                <Ionicons name="save-outline" size={18} color={colors.primary} />
+                <Text style={styles.exportBtnText}>Backup Completo (JSON)</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.lockedCard}>
+              <Ionicons name="lock-closed" size={24} color={colors.textHint} />
+              <Text style={styles.lockedText}>
+                Exporta tus datos en CSV y JSON con Premium.
+              </Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Paywall')}
+                style={styles.upgradeBtn}
+              >
+                <Ionicons name="diamond" size={16} color="#FFFFFF" />
+                <Text style={styles.upgradeBtnText}>Obtener Premium</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.templateDivider} />
+
+          {/* Maintenance */}
+          <Text style={styles.cardGroupTitle}>Mantenimiento</Text>
+          <TouchableOpacity onPress={handleCleanupDuplicates} style={styles.exportBtn}>
+            <Ionicons name="copy-outline" size={18} color={colors.primary} />
+            <Text style={styles.exportBtnText}>Limpiar duplicados</Text>
+          </TouchableOpacity>
+          <Text style={styles.cardGroupHint}>
+            Elimina clientes duplicados que quedaron en el directorio.
+          </Text>
+        </View>
       </View>
 
-      {/* Cleanup duplicates */}
+      {/* Account actions */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Mantenimiento</Text>
-        <TouchableOpacity onPress={handleCleanupDuplicates} style={styles.exportBtn}>
-          <Text style={styles.exportBtnText}>Limpiar duplicados</Text>
-        </TouchableOpacity>
-        <Text style={styles.deleteAccountHint}>
-          Elimina clientes duplicados que quedaron en el directorio.
-        </Text>
-      </View>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="person-circle-outline" size={20} color={colors.textMuted} />
+          <Text style={styles.sectionTitle}>Cuenta</Text>
+        </View>
+        <View style={styles.sectionCard}>
+          <TouchableOpacity onPress={onSignOut} style={styles.signOutBtn}>
+            <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+            <Text style={styles.signOutText}>Cerrar Sesion</Text>
+          </TouchableOpacity>
 
-      {/* Sign out */}
-      <View style={styles.section}>
-        <TouchableOpacity onPress={onSignOut} style={styles.signOutBtn}>
-          <Text style={styles.signOutText}>Cerrar Sesion</Text>
-        </TouchableOpacity>
-      </View>
+          <View style={styles.templateDivider} />
 
-      {/* Delete account */}
-      <View style={styles.section}>
-        <TouchableOpacity
-          onPress={handleDeleteAccount}
-          style={styles.deleteAccountBtn}
-          disabled={loading}
-        >
-          <Text style={styles.deleteAccountText}>Eliminar cuenta</Text>
-        </TouchableOpacity>
-        <Text style={styles.deleteAccountHint}>
-          Se eliminaran todos tus datos permanentemente.
-        </Text>
+          <TouchableOpacity
+            onPress={handleDeleteAccount}
+            style={styles.deleteAccountBtn}
+            disabled={loading}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.textHint} />
+            <Text style={styles.deleteAccountText}>Eliminar cuenta</Text>
+          </TouchableOpacity>
+          <Text style={styles.deleteAccountHint}>
+            Se eliminaran todos tus datos permanentemente.
+          </Text>
+        </View>
       </View>
 
       <View style={{ height: 60 }} />
@@ -908,13 +948,50 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     backgroundColor: colors.background,
   },
   section: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 4,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
   },
   sectionTitle: {
     fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  sectionSubtitle: {
+    fontSize: s(13),
+    color: colors.textHint,
     marginBottom: 12,
+    marginLeft: 28,
+  },
+  sectionCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  cardGroupTitle: {
+    fontSize: s(14),
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  cardGroupContent: {
+    gap: 8,
+  },
+  cardGroupHint: {
+    fontSize: s(12),
+    color: colors.textHint,
+    marginTop: 6,
   },
   subsectionTitle: {
     fontSize: s(15),
@@ -1106,6 +1183,11 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontWeight: '700',
     fontSize: s(16),
   },
+  templateDivider: {
+    height: 1,
+    backgroundColor: colors.sectionBackground,
+    marginVertical: 14,
+  },
   templateLabel: {
     fontSize: s(14),
     fontWeight: '600',
@@ -1131,14 +1213,17 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   templateActions: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 12,
+    marginTop: 14,
   },
   templateSaveBtn: {
     flex: 1,
+    flexDirection: 'row',
+    gap: 6,
     backgroundColor: colors.primary,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   templateSaveBtnText: {
     color: colors.textWhite,
@@ -1147,10 +1232,13 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   },
   templateResetBtn: {
     flex: 1,
+    flexDirection: 'row',
+    gap: 6,
     backgroundColor: colors.sectionBackground,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
@@ -1160,9 +1248,12 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontSize: s(15),
   },
   exportBtn: {
+    flexDirection: 'row',
+    gap: 8,
     backgroundColor: colors.primaryLighter,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.primaryBorder,
@@ -1170,15 +1261,13 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   exportBtnText: {
     color: colors.primary,
     fontWeight: '700',
-    fontSize: s(16),
+    fontSize: s(15),
   },
   signOutBtn: {
-    backgroundColor: colors.card,
-    paddingVertical: 14,
-    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 12,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
   },
   signOutText: {
     color: colors.danger,
@@ -1186,14 +1275,15 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontSize: s(16),
   },
   deleteAccountBtn: {
-    paddingVertical: 14,
-    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   deleteAccountText: {
-    color: colors.danger,
+    color: colors.textHint,
     fontWeight: '600',
-    fontSize: s(15),
+    fontSize: s(14),
   },
   deleteAccountHint: {
     color: colors.textHint,

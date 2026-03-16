@@ -48,10 +48,181 @@ type ListItem =
   | { type: 'header'; key: string; title: string; count: number; isToday: boolean }
   | { type: 'client'; key: string; client: Client; sectionDateKey: string };
 
+// --- Memoized SectionHeader to avoid re-renders ---
+interface SectionHeaderProps {
+  title: string;
+  count: number;
+  isToday: boolean;
+  colors: ThemeColors;
+  fontScale: number;
+}
+
+const SectionHeader = React.memo<SectionHeaderProps>(({ title, count, isToday, colors, fontScale }) => {
+  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
+  return (
+    <View style={[styles.sectionHeader, isToday && styles.sectionHeaderToday]}>
+      <Text style={[styles.sectionHeaderText, isToday && styles.sectionHeaderTextToday]}>
+        {title}
+      </Text>
+      <Text style={[styles.sectionHeaderCount, isToday && styles.sectionHeaderCountToday]}>
+        {count}
+      </Text>
+    </View>
+  );
+});
+
+// Stable keyExtractor — defined outside component to avoid re-creation
+const keyExtractor = (item: ListItem) => item.key;
+
+// --- Memoized DaySelector to avoid re-renders when client list changes ---
+interface DaySelectorProps {
+  selectedDay: string;
+  dayCounts: Record<string, number>;
+  isWide: boolean;
+  colors: ThemeColors;
+  fontScale: number;
+  onSelectDay: (day: string) => void;
+}
+
+const DaySelector = React.memo<DaySelectorProps>(({
+  selectedDay,
+  dayCounts,
+  isWide,
+  colors,
+  fontScale,
+  onSelectDay,
+}) => {
+  const styles = getStyles(colors, fontScale);
+  const todayName = useMemo(() => getTodayDayName(), []);
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.daySelector}
+      contentContainerStyle={styles.daySelectorContent}
+    >
+      {ALL_DAYS.map((day) => {
+        const isToday = day === todayName;
+        const isSelected = day === selectedDay;
+        const count = dayCounts[day] || 0;
+
+        return (
+          <TouchableOpacity
+            key={day}
+            onPress={() => onSelectDay(day)}
+            style={[
+              styles.dayChip,
+              isSelected && styles.dayChipSelected,
+              isToday && !isSelected && styles.dayChipToday,
+            ]}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.dayChipText,
+                isSelected && styles.dayChipTextSelected,
+              ]}
+            >
+              {isWide ? day : day.slice(0, 3)}
+            </Text>
+            <Text
+              style={[
+                styles.dayCount,
+                isSelected && styles.dayCountSelected,
+              ]}
+            >
+              {count}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+});
+
+// --- Memoized wrapper to prevent ClientCard re-renders on every day switch ---
+interface ClientItemProps {
+  client: Client;
+  globalIndex: number;
+  isAdmin: boolean;
+  hasDebt: boolean;
+  hasPendingTransfer: boolean;
+  isDragEnabled: boolean;
+  enCaminoMessage?: string;
+  fontScale?: number;
+  selectedDay: string;
+  onMarkDone: (client: Client) => void;
+  onEdit: (client: Client) => void;
+  onDelete: (client: Client) => void;
+  onDebt: (client: Client) => void;
+  onToggleStar: (client: Client) => void;
+  onTransfer: (client: Client) => void;
+  onAlarm: (client: Client) => void;
+  onChangePosition: (clientId: string, newPos: number, day: string) => void;
+  drag?: () => void;
+}
+
+const ClientItem = React.memo<ClientItemProps>(({
+  client,
+  globalIndex,
+  isAdmin,
+  hasDebt,
+  hasPendingTransfer,
+  isDragEnabled,
+  enCaminoMessage,
+  fontScale,
+  selectedDay,
+  onMarkDone,
+  onEdit,
+  onDelete,
+  onDebt,
+  onToggleStar,
+  onTransfer,
+  onAlarm,
+  onChangePosition,
+  drag,
+}) => {
+  const handleMarkDone = useCallback(() => onMarkDone(client), [onMarkDone, client]);
+  const handleEdit = useCallback(() => onEdit(client), [onEdit, client]);
+  const handleDelete = useCallback(() => onDelete(client), [onDelete, client]);
+  const handleDebt = useCallback(() => onDebt(client), [onDebt, client]);
+  const handleToggleStar = useCallback(() => onToggleStar(client), [onToggleStar, client]);
+  const handleTransfer = useCallback(() => onTransfer(client), [onTransfer, client]);
+  const handleAlarm = useCallback(() => onAlarm(client), [onAlarm, client]);
+  const handleChangePosition = useCallback(
+    (newPos: number) => onChangePosition(client.id, newPos, selectedDay),
+    [onChangePosition, client.id, selectedDay],
+  );
+
+  return (
+    <ScaleDecorator activeScale={1.03}>
+      <ClientCard
+        client={client}
+        index={globalIndex}
+        isAdmin={isAdmin}
+        hasDebt={hasDebt}
+        hasPendingTransfer={hasPendingTransfer}
+        onMarkDone={handleMarkDone}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onDebt={handleDebt}
+        onToggleStar={handleToggleStar}
+        onTransfer={handleTransfer}
+        onAlarm={handleAlarm}
+        onChangePosition={handleChangePosition}
+        onDrag={isDragEnabled ? drag : undefined}
+        enCaminoMessage={enCaminoMessage}
+        fontScale={fontScale}
+      />
+    </ScaleDecorator>
+  );
+});
+
 const HomeScreen = () => {
   const { colors, isDark } = useTheme();
   const { fontScale, isWide } = useLayout();
-  const styles = getStyles(colors, fontScale);
+  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
 
   const navigation = useNavigation<any>();
   const { isAdmin, user, groupData } = useAuthContext();
@@ -106,6 +277,12 @@ const HomeScreen = () => {
   } | null>(null);
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
+  // Refs to access state without adding as dependencies (stabilizes callbacks)
+  const undoInfoRef = useRef(undoInfo);
+  undoInfoRef.current = undoInfo;
+  const selectedDayRef = useRef(selectedDay);
+  selectedDayRef.current = selectedDay;
+
   // Fix 3: Detect cross-midnight day change
   useEffect(() => {
     const rawToday = getTodayDayName();
@@ -150,6 +327,16 @@ const HomeScreen = () => {
     }).catch(() => {});
   }, [user?.uid, groupData?.groupId]);
 
+  const handleSelectDay = useCallback((day: string) => {
+    setSelectedDay((prev) => {
+      if (day === prev) {
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        return prev;
+      }
+      return day;
+    });
+  }, []);
+
   const toggleFilter = useCallback((filterId: string) => {
     setActiveFilters((prev) => {
       const next = new Set(prev);
@@ -162,8 +349,8 @@ const HomeScreen = () => {
     });
   }, []);
 
-  const allVisibleClients = getVisibleClients(selectedDay);
-  const completedClients = getCompletedClients(selectedDay);
+  const allVisibleClients = useMemo(() => getVisibleClients(selectedDay), [getVisibleClients, selectedDay]);
+  const completedClients = useMemo(() => getCompletedClients(selectedDay), [getCompletedClients, selectedDay]);
 
   const visibleClients = useMemo(() => {
     let filtered = allVisibleClients;
@@ -202,19 +389,16 @@ const HomeScreen = () => {
   const clientSections = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const todayKey = today.toISOString().split('T')[0];
 
     const groups: Record<string, Client[]> = {};
 
+    // Cache getDayIndex result for selectedDay since it's the same for all clients
     visibleClients.forEach((c) => {
       const nextDate = getNextVisitDate(c, selectedDay);
-      let dateKey: string;
-      if (nextDate) {
-        const d = new Date(nextDate);
-        d.setHours(0, 0, 0, 0);
-        dateKey = d.toISOString().split('T')[0];
-      } else {
-        dateKey = today.toISOString().split('T')[0];
-      }
+      const dateKey = nextDate
+        ? nextDate.toISOString().split('T')[0].slice(0, 10)
+        : todayKey;
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(c);
     });
@@ -284,8 +468,8 @@ const HomeScreen = () => {
 
   const handleMarkDone = useCallback(
     (client: Client) => {
-      // Clear any existing undo timer
-      if (undoInfo?.timer) clearTimeout(undoInfo.timer);
+      // Clear any existing undo timer (via ref to avoid dependency)
+      if (undoInfoRef.current?.timer) clearTimeout(undoInfoRef.current.timer);
 
       // Save previous state for undo
       const previousData: Record<string, any> = {};
@@ -311,7 +495,7 @@ const HomeScreen = () => {
 
       setUndoInfo({ client, previousData, timer });
     },
-    [markAsDone, undoInfo],
+    [markAsDone],
   );
 
   const handleUndoMarkDone = useCallback(() => {
@@ -344,12 +528,12 @@ const HomeScreen = () => {
           { text: 'Cancelar', style: 'cancel' },
           {
             text: 'Quitar',
-            onPress: () => deleteFromDay(client.id, selectedDay),
+            onPress: () => deleteFromDay(client.id, selectedDayRef.current),
           },
         ],
       );
     },
-    [deleteFromDay, selectedDay],
+    [deleteFromDay],
   );
 
   const handleUndoComplete = useCallback(
@@ -425,18 +609,38 @@ const HomeScreen = () => {
     return map;
   }, [getAllDayClients, selectedDay]);
 
+  // Pre-compute debt and transfer maps so we don't call functions inline per-client
+  const debtMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    visibleClients.forEach((c) => {
+      map[c.id] = getClientDebtTotal(c.id) > 0;
+    });
+    return map;
+  }, [visibleClients, getClientDebtTotal]);
+
+  const transferMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    visibleClients.forEach((c) => {
+      map[c.id] = hasPendingTransfer(c.id);
+    });
+    return map;
+  }, [visibleClients, hasPendingTransfer]);
+
+  // Stable callbacks that accept client as parameter (won't change on day switch)
+  const handleEditCb = useCallback((client: Client) => setEditingClient(client), []);
+  const handleDebtCb = useCallback((client: Client) => setDebtClient(client), []);
+
   const renderDraggableItem = useCallback(
-    ({ item, drag, isActive }: RenderItemParams<ListItem>) => {
+    ({ item, drag }: RenderItemParams<ListItem>) => {
       if (item.type === 'header') {
         return (
-          <View style={[styles.sectionHeader, item.isToday && styles.sectionHeaderToday]}>
-            <Text style={[styles.sectionHeaderText, item.isToday && styles.sectionHeaderTextToday]}>
-              {item.title}
-            </Text>
-            <Text style={[styles.sectionHeaderCount, item.isToday && styles.sectionHeaderCountToday]}>
-              {item.count}
-            </Text>
-          </View>
+          <SectionHeader
+            title={item.title}
+            count={item.count}
+            isToday={item.isToday}
+            colors={colors}
+            fontScale={fontScale}
+          />
         );
       }
 
@@ -444,29 +648,29 @@ const HomeScreen = () => {
       const globalIndex = globalPositionMap[client.id] ?? 0;
 
       return (
-        <ScaleDecorator activeScale={1.03}>
-          <ClientCard
-            client={client}
-            index={globalIndex}
-            isAdmin={isAdmin}
-            hasDebt={getClientDebtTotal(client.id) > 0}
-            hasPendingTransfer={hasPendingTransfer(client.id)}
-            onMarkDone={() => handleMarkDone(client)}
-            onEdit={() => setEditingClient(client)}
-            onDelete={() => handleDelete(client)}
-            onDebt={() => setDebtClient(client)}
-            onToggleStar={() => handleToggleStar(client)}
-            onTransfer={() => handleTransfer(client)}
-            onAlarm={() => handleAlarm(client)}
-            onChangePosition={(newPos) => changePosition(client.id, newPos, selectedDay)}
-            onDrag={isDragEnabled ? drag : undefined}
-            enCaminoMessage={appSettings?.whatsappEnCamino}
-            fontScale={fontScale}
-          />
-        </ScaleDecorator>
+        <ClientItem
+          client={client}
+          globalIndex={globalIndex}
+          isAdmin={isAdmin}
+          hasDebt={debtMap[client.id] ?? false}
+          hasPendingTransfer={transferMap[client.id] ?? false}
+          isDragEnabled={isDragEnabled}
+          enCaminoMessage={appSettings?.whatsappEnCamino}
+          fontScale={fontScale}
+          selectedDay={selectedDay}
+          onMarkDone={handleMarkDone}
+          onEdit={handleEditCb}
+          onDelete={handleDelete}
+          onDebt={handleDebtCb}
+          onToggleStar={handleToggleStar}
+          onTransfer={handleTransfer}
+          onAlarm={handleAlarm}
+          onChangePosition={changePosition}
+          drag={drag}
+        />
       );
     },
-    [isDragEnabled, isAdmin, handleMarkDone, handleDelete, getClientDebtTotal, hasPendingTransfer, handleToggleStar, handleTransfer, handleAlarm, changePosition, selectedDay, globalPositionMap, appSettings, styles],
+    [isDragEnabled, isAdmin, handleMarkDone, handleDelete, handleToggleStar, handleTransfer, handleAlarm, changePosition, selectedDay, globalPositionMap, debtMap, transferMap, appSettings, colors, fontScale, handleEditCb, handleDebtCb],
   );
 
   const handleDragEnd = useCallback(
@@ -539,54 +743,14 @@ const HomeScreen = () => {
     <View style={styles.container}>
       <View style={{ flex: 1 }}>
       {/* Day selector */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.daySelector}
-        contentContainerStyle={styles.daySelectorContent}
-      >
-        {ALL_DAYS.map((day) => {
-          const isToday = day === getTodayDayName();
-          const isSelected = day === selectedDay;
-          const count = dayCounts[day] || 0;
-
-          return (
-            <TouchableOpacity
-              key={day}
-              onPress={() => {
-                if (day === selectedDay) {
-                  scrollRef.current?.scrollTo({ y: 0, animated: true });
-                } else {
-                  setSelectedDay(day);
-                }
-              }}
-              style={[
-                styles.dayChip,
-                isSelected && styles.dayChipSelected,
-                isToday && !isSelected && styles.dayChipToday,
-              ]}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.dayChipText,
-                  isSelected && styles.dayChipTextSelected,
-                ]}
-              >
-                {isWide ? day : day.slice(0, 3)}
-              </Text>
-              <Text
-                style={[
-                  styles.dayCount,
-                  isSelected && styles.dayCountSelected,
-                ]}
-              >
-                {count}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <DaySelector
+        selectedDay={selectedDay}
+        dayCounts={dayCounts}
+        isWide={isWide}
+        colors={colors}
+        fontScale={fontScale}
+        onSelectDay={handleSelectDay}
+      />
 
       {/* Product counter — only nearest date */}
       <ProductCounter clients={nearestDateClients} />
@@ -721,9 +885,13 @@ const HomeScreen = () => {
         {flatListData.length > 0 ? (
           <NestableDraggableFlatList
             data={flatListData}
-            keyExtractor={(item) => item.key}
+            keyExtractor={keyExtractor}
             renderItem={renderDraggableItem}
             onDragEnd={handleDragEnd}
+            initialNumToRender={15}
+            maxToRenderPerBatch={10}
+            windowSize={5}
+            removeClippedSubviews
           />
         ) : (
           <View style={styles.emptyContainer}>

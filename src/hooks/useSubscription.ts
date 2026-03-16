@@ -58,13 +58,6 @@ export const useSubscription = ({ userId }: { userId: string | undefined }): Sub
       }
 
       try {
-        // Skip RevenueCat if API key looks invalid (test_ prefix or empty)
-        if (REVENUECAT_API_KEY.startsWith('test_')) {
-          console.warn('RevenueCat: Skipping — test API key detected. Replace with production key.');
-          setLoading(false);
-          return;
-        }
-
         if (!configuredRef.current) {
           Purchases.setLogLevel(LOG_LEVEL.DEBUG);
           Purchases.configure({ apiKey: REVENUECAT_API_KEY });

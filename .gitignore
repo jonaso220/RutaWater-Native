@@ -7,6 +7,7 @@ node_modules/
 # iOS
 ios/Pods/
 ios/build/
+ios/build-release/
 ios/*.xcworkspace
 ios/*.xcodeproj/xcuserdata/
 *.pbxuser

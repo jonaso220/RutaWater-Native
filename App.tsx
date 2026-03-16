@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 // Proveedores de contexto global (estado compartido de la app)
 // ============================================================
 import { AuthProvider, useAuthContext } from './src/context/AuthContext';       // Autenticacion del usuario
+import { SubscriptionProvider } from './src/context/SubscriptionContext';       // Suscripcion Premium
 import { ClientsProvider } from './src/context/ClientsContext';                 // Datos de clientes
 import { DebtsProvider } from './src/context/DebtsContext';                     // Datos de deudas
 import { TransfersProvider } from './src/context/TransfersContext';             // Datos de transferencias
@@ -52,15 +53,17 @@ const AppContent = () => {
   // Usuario autenticado: envuelve la app con los proveedores de datos
   // y renderiza el navegador principal
   return (
-    <ClientsProvider>
-      <DebtsProvider>
-        <TransfersProvider>
-          <DailyLoadsProvider>
-            <AppNavigator />
-          </DailyLoadsProvider>
-        </TransfersProvider>
-      </DebtsProvider>
-    </ClientsProvider>
+    <SubscriptionProvider>
+      <ClientsProvider>
+        <DebtsProvider>
+          <TransfersProvider>
+            <DailyLoadsProvider>
+              <AppNavigator />
+            </DailyLoadsProvider>
+          </TransfersProvider>
+        </DebtsProvider>
+      </ClientsProvider>
+    </SubscriptionProvider>
   );
 };
 

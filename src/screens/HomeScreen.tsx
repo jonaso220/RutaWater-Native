@@ -41,6 +41,8 @@ import TransfersSheet from '../components/TransfersSheet';
 import DebtsSheet from '../components/DebtsSheet';
 import AddClientModal from '../components/AddClientModal';
 import PromptModal from '../components/PromptModal';
+import { useNavigation } from '@react-navigation/native';
+import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 
 type ListItem =
   | { type: 'header'; key: string; title: string; count: number; isToday: boolean }
@@ -51,6 +53,7 @@ const HomeScreen = () => {
   const { fontScale, isWide } = useLayout();
   const styles = getStyles(colors, fontScale);
 
+  const navigation = useNavigation<any>();
   const { isAdmin, user, groupData } = useAuthContext();
   const {
     clients,
@@ -69,6 +72,8 @@ const HomeScreen = () => {
     addClient,
     changePosition,
     dayCounts,
+    canAddClient,
+    clientCount,
   } = useClientsContext();
   const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal, markAllDebtsPaid } = useDebtsContext();
   const { transfers, hasPendingTransfer, addTransfer, markTransferReviewed } = useTransfersContext();
@@ -595,7 +600,20 @@ const HomeScreen = () => {
       >
         <TouchableOpacity
           style={[styles.actionBtn, styles.actionBtnAdd]}
-          onPress={() => setShowAddClientModal(true)}
+          onPress={() => {
+            if (!canAddClient) {
+              Alert.alert(
+                'Limite alcanzado',
+                `Has alcanzado el limite de ${FREE_CLIENT_LIMIT} clientes del plan gratuito. Actualiza a Premium para clientes ilimitados.`,
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Ver Premium', onPress: () => navigation.navigate('Paywall') },
+                ],
+              );
+              return;
+            }
+            setShowAddClientModal(true);
+          }}
         >
           <Text style={[styles.actionBtnText, styles.actionBtnAddText]}>+ Cliente</Text>
         </TouchableOpacity>
@@ -788,6 +806,7 @@ const HomeScreen = () => {
         client={editingClient}
         onSave={updateClient}
         onClose={() => setEditingClient(null)}
+        showClientInfo
       />
 
       {/* Debt Modal */}

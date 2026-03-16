@@ -18,6 +18,8 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsContext } from '../context/ClientsContext';
 import { useDebtsContext } from '../context/DebtsContext';
+import { useNavigation } from '@react-navigation/native';
+import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import ScheduleModal from '../components/ScheduleModal';
 import DebtModal from '../components/DebtModal';
 import EditClientModal from '../components/EditClientModal';
@@ -30,8 +32,9 @@ const DirectoryScreen = () => {
   const { colors, isDark } = useTheme();
   const { fontScale } = useLayout();
   const styles = getStyles(colors, fontScale);
+  const navigation = useNavigation<any>();
   const { isAdmin } = useAuthContext();
-  const { getFilteredDirectory, directoryCounts, scheduleFromDirectory, updateClient, deleteClient, clients, cloneClient, addClient } = useClientsContext();
+  const { getFilteredDirectory, directoryCounts, scheduleFromDirectory, updateClient, deleteClient, clients, cloneClient, addClient, canAddClient, clientCount } = useClientsContext();
   const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
@@ -394,7 +397,20 @@ const DirectoryScreen = () => {
           </View>
           <TouchableOpacity
             style={styles.importBtn}
-            onPress={() => setShowNewClient(true)}
+            onPress={() => {
+              if (!canAddClient) {
+                Alert.alert(
+                  'Limite alcanzado',
+                  `Has alcanzado el limite de ${FREE_CLIENT_LIMIT} clientes del plan gratuito. Actualiza a Premium para clientes ilimitados.`,
+                  [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Ver Premium', onPress: () => navigation.navigate('Paywall') },
+                  ],
+                );
+                return;
+              }
+              setShowNewClient(true);
+            }}
           >
             <Text style={styles.importBtnText}><Ionicons name="add" size={16} /></Text>
           </TouchableOpacity>

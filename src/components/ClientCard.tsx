@@ -248,14 +248,19 @@ const ClientCard: React.FC<ClientCardProps> = ({
         </View>
 
         {/* Address with location button */}
-        {hasLocation ? (
-          <TouchableOpacity onPress={openMaps} style={styles.addressRow} activeOpacity={0.6}>
-            <Ionicons name="location-sharp" size={s(16)} color={colors.primary} />
-            <Text style={styles.clientAddressLink}>{client.address}</Text>
-          </TouchableOpacity>
-        ) : (
-          <Text style={styles.clientAddress}>{client.address}</Text>
-        )}
+        {client.address ? (
+          hasLocation ? (
+            <TouchableOpacity onPress={openMaps} style={styles.addressRow} activeOpacity={0.6}>
+              <Ionicons name="location-sharp" size={s(16)} color={colors.primary} />
+              <Text style={styles.clientAddressLink}>{client.address}</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={onEdit} style={styles.addressRow} activeOpacity={0.6}>
+              <Ionicons name="location-outline" size={s(16)} color={colors.textHint} />
+              <Text style={styles.clientAddress}>{client.address}</Text>
+            </TouchableOpacity>
+          )
+        ) : null}
 
         {/* Products */}
         {productSummary ? (
@@ -299,7 +304,10 @@ const ClientCard: React.FC<ClientCardProps> = ({
               </TouchableOpacity>
             </>
           ) : (
-            <View style={{ flex: 1 }} />
+            <TouchableOpacity onPress={onEdit} style={styles.addPhoneBtn} activeOpacity={0.6}>
+              <Ionicons name="call-outline" size={s(14)} color={colors.textHint} />
+              <Text style={styles.addPhoneText}>Agregar telefono</Text>
+            </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
             <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> Listo</Text>
@@ -524,6 +532,24 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.textWhite,
       fontSize: s(16),
       fontWeight: '700',
+    },
+    addPhoneBtn: {
+      flex: 1,
+      height: 36,
+      borderRadius: 8,
+      backgroundColor: colors.sectionBackground,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 4,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderStyle: 'dashed',
+    },
+    addPhoneText: {
+      fontSize: s(13),
+      color: colors.textHint,
+      fontWeight: '600',
     },
     doneButton: {
       height: 36,

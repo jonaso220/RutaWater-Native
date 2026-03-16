@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
   Share,
+  Linking,
   Platform,
 } from 'react-native';
 import RNFS from 'react-native-fs';
@@ -21,14 +22,21 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { PRODUCTS, FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { FREE_CLIENT_LIMIT } from '../constants/subscription';
+import { useSubscriptionContext } from '../context/SubscriptionContext';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
 
 const SettingsScreen = () => {
+  const navigation = useNavigation<any>();
   const { colors, isDark } = useTheme();
   const { fontScale } = useLayout();
   const styles = getStyles(colors, fontScale);
   const { user: firebaseUser, groupData, isAdmin, signOut, deleteAccount, setGroupData } = useAuthContext();
-  const { clients, findDuplicateClients, cleanupDuplicates } = useClientsContext();
+  const { clients, clientCount, findDuplicateClients, cleanupDuplicates } = useClientsContext();
+  const { isPremium, currentPlan, expirationDate, isTrialActive, hasPromo, redeemCode, removePromo } = useSubscriptionContext();
+  const [promoCode, setPromoCode] = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
   const { debts } = useDebtsContext();
   const { transfers } = useTransfersContext();
   if (!firebaseUser) return null;
@@ -466,6 +474,33 @@ const SettingsScreen = () => {
     );
   };
 
+  const handleRedeemPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    try {
+      const result = await redeemCode(promoCode);
+      Alert.alert(result.success ? 'Exito' : 'Error', result.message);
+      if (result.success) setPromoCode('');
+    } catch {
+      Alert.alert('Error', 'No se pudo canjear el codigo.');
+    }
+    setPromoLoading(false);
+  };
+
+  const handleRemovePromo = () => {
+    Alert.alert('Quitar Premium?', 'Se desactivara tu acceso premium por codigo promocional.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Quitar',
+        style: 'destructive',
+        onPress: async () => {
+          await removePromo();
+          Alert.alert('Listo', 'Premium desactivado.');
+        },
+      },
+    ]);
+  };
+
   const handleDeleteAccount = () => {
     Alert.alert(
       'Eliminar cuenta',
@@ -529,6 +564,101 @@ const SettingsScreen = () => {
             )}
           </View>
         </View>
+      </View>
+
+      {/* Subscription status */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Suscripcion</Text>
+        {isPremium ? (
+          <View style={styles.premiumCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="diamond" size={20} color={colors.primary} />
+              <Text style={styles.premiumLabel}>Premium</Text>
+              {isTrialActive && (
+                <View style={styles.trialTag}>
+                  <Text style={styles.trialTagText}>Prueba</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.premiumPlan}>
+              Plan {currentPlan === 'annual' ? 'Anual' : 'Mensual'}
+            </Text>
+            {expirationDate && (
+              <Text style={styles.premiumExpiry}>
+                Renueva: {new Date(expirationDate).toLocaleDateString()}
+              </Text>
+            )}
+            <TouchableOpacity
+              onPress={() => {
+                Linking.openURL(
+                  Platform.OS === 'ios'
+                    ? 'https://apps.apple.com/account/subscriptions'
+                    : 'https://play.google.com/store/account/subscriptions',
+                );
+              }}
+              style={styles.manageBtn}
+            >
+              <Text style={styles.manageBtnText}>Gestionar suscripcion</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.freeCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={styles.freePlanLabel}>Plan Gratuito</Text>
+              <Text style={styles.freeCount}>{clientCount}/{FREE_CLIENT_LIMIT} clientes</Text>
+            </View>
+            <View style={styles.progressBarBg}>
+              <View style={[styles.progressBarFill, { width: `${Math.min(100, (clientCount / FREE_CLIENT_LIMIT) * 100)}%` }]} />
+            </View>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Paywall')}
+              style={styles.upgradeBtn}
+            >
+              <Ionicons name="diamond" size={18} color="#FFFFFF" />
+              <Text style={styles.upgradeBtnText}>Obtener Premium</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      {/* Promo code section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Codigo Promocional</Text>
+        {hasPromo ? (
+          <View style={styles.premiumCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="gift" size={20} color={colors.primary} />
+              <Text style={styles.premiumLabel}>Premium Activado</Text>
+            </View>
+            <Text style={styles.premiumPlan}>Activado con codigo promocional</Text>
+            <TouchableOpacity onPress={handleRemovePromo} style={styles.manageBtn}>
+              <Text style={[styles.manageBtnText, { color: colors.danger }]}>Desactivar</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.joinRow}>
+            <TextInput
+              style={styles.joinInput}
+              value={promoCode}
+              onChangeText={setPromoCode}
+              placeholder="CODIGO"
+              placeholderTextColor={colors.textHint}
+              autoCapitalize="characters"
+              maxLength={20}
+            />
+            <TouchableOpacity
+              onPress={handleRedeemPromo}
+              style={[styles.joinBtn, (!promoCode.trim() || promoLoading) && styles.joinBtnDisabled]}
+              disabled={!promoCode.trim() || promoLoading}
+            >
+              {promoLoading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.joinBtnText}>Canjear</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Group section */}
@@ -596,7 +726,7 @@ const SettingsScreen = () => {
               )}
             </View>
           </View>
-        ) : (
+        ) : isPremium ? (
           <View>
             <Text style={styles.noGroupText}>
               No estas en ningun grupo. Crea uno o unite con un codigo.
@@ -636,6 +766,22 @@ const SettingsScreen = () => {
                 disabled={!joinCode || loading}
               >
                 <Text style={styles.joinBtnText}>Unirse</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View>
+            <View style={styles.lockedCard}>
+              <Ionicons name="lock-closed" size={24} color={colors.textHint} />
+              <Text style={styles.lockedText}>
+                Los grupos son una funcion Premium. Crea o unite a grupos para trabajar en equipo.
+              </Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Paywall')}
+                style={styles.upgradeBtn}
+              >
+                <Ionicons name="diamond" size={16} color="#FFFFFF" />
+                <Text style={styles.upgradeBtnText}>Obtener Premium</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -691,12 +837,30 @@ const SettingsScreen = () => {
       {/* Export */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Exportar Datos</Text>
-        <TouchableOpacity onPress={handleExportCSV} style={styles.exportBtn}>
-          <Text style={styles.exportBtnText}><Ionicons name="share-outline" size={16} /> Exportar Clientes (CSV)</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleExportJSON} style={[styles.exportBtn, { marginTop: 8 }]}>
-          <Text style={styles.exportBtnText}><Ionicons name="save-outline" size={16} /> Backup Completo (JSON)</Text>
-        </TouchableOpacity>
+        {isPremium ? (
+          <>
+            <TouchableOpacity onPress={handleExportCSV} style={styles.exportBtn}>
+              <Text style={styles.exportBtnText}><Ionicons name="share-outline" size={16} /> Exportar Clientes (CSV)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleExportJSON} style={[styles.exportBtn, { marginTop: 8 }]}>
+              <Text style={styles.exportBtnText}><Ionicons name="save-outline" size={16} /> Backup Completo (JSON)</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <View style={styles.lockedCard}>
+            <Ionicons name="lock-closed" size={24} color={colors.textHint} />
+            <Text style={styles.lockedText}>
+              Exporta tus datos en CSV y JSON con Premium.
+            </Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Paywall')}
+              style={styles.upgradeBtn}
+            >
+              <Ionicons name="diamond" size={16} color="#FFFFFF" />
+              <Text style={styles.upgradeBtnText}>Obtener Premium</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Cleanup duplicates */}
@@ -1036,6 +1200,109 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontSize: s(13),
     textAlign: 'center',
     marginTop: 4,
+  },
+  premiumCard: {
+    backgroundColor: colors.primaryLighter,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+  },
+  premiumLabel: {
+    fontSize: s(18),
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  premiumPlan: {
+    fontSize: s(14),
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+  premiumExpiry: {
+    fontSize: s(13),
+    color: colors.textHint,
+    marginTop: 2,
+  },
+  trialTag: {
+    backgroundColor: colors.successBg,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+  },
+  trialTagText: {
+    fontSize: s(11),
+    fontWeight: '700',
+    color: colors.successText,
+  },
+  manageBtn: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  manageBtnText: {
+    fontSize: s(14),
+    color: colors.primary,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  freeCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  freePlanLabel: {
+    fontSize: s(16),
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  freeCount: {
+    fontSize: s(14),
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: colors.sectionBackground,
+    borderRadius: 3,
+    marginTop: 10,
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 3,
+  },
+  upgradeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  upgradeBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: s(16),
+  },
+  lockedCard: {
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    gap: 10,
+  },
+  lockedText: {
+    fontSize: s(14),
+    color: colors.textMuted,
+    textAlign: 'center',
   },
 });
 };

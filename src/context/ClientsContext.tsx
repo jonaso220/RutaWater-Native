@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useClients } from '../hooks/useClients';
 import { useAuthContext } from './AuthContext';
+import { useSubscriptionContext } from './SubscriptionContext';
 import { Client } from '../types';
 import { Frequency } from '../constants/products';
 import { ALL_DAYS } from '../constants/products';
 import { db } from '../config/firebase';
+import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 
 interface ClientsContextType {
   clients: Client[];
@@ -46,12 +48,17 @@ interface ClientsContextType {
   cleanupDuplicates: () => Promise<number>;
   /** Pre-computed client counts per day for the day selector */
   dayCounts: Record<string, number>;
+  /** Whether the user can add more clients (premium or under free limit) */
+  canAddClient: boolean;
+  /** Number of real clients (excluding notes) */
+  clientCount: number;
 }
 
 const ClientsContext = createContext<ClientsContextType | null>(null);
 
 export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, groupData } = useAuthContext();
+  const { isPremium } = useSubscriptionContext();
 
   const hook = useClients({
     userId: user?.uid || '',
@@ -109,9 +116,16 @@ export const ClientsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [hook.clients]);
 
+  // Count real clients (not notes) for free tier limit
+  const clientCount = useMemo(
+    () => hook.clients.filter((c) => c.name && !c.isNote).length,
+    [hook.clients],
+  );
+  const canAddClient = isPremium || clientCount < FREE_CLIENT_LIMIT;
+
   const value = useMemo(
-    () => ({ ...hook, dayCounts }),
-    [hook.clients, hook.loading, dayCounts], // eslint-disable-line react-hooks/exhaustive-deps
+    () => ({ ...hook, dayCounts, canAddClient, clientCount }),
+    [hook.clients, hook.loading, dayCounts, canAddClient, clientCount], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   return (

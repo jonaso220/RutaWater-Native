@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { DailyLoad } from '../hooks/useDailyLoads';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
@@ -37,6 +38,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
   onSave,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = getStyles(colors);
   const [data, setData] = useState<DailyLoad>(initialData);
@@ -62,7 +64,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
       >
         <View style={styles.modal}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Carga - {day}</Text>
+            <Text style={styles.headerTitle}>{t('dailyLoad.title', { day })}</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
@@ -70,7 +72,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
 
           <ScrollView style={styles.body}>
             {/* Main loads */}
-            <Text style={styles.sectionTitle}>Carga Principal</Text>
+            <Text style={styles.sectionTitle}>{t('dailyLoad.mainLoad')}</Text>
             <View style={styles.grid}>
               {LOAD_FIELDS.map((f) => (
                 <View key={f.key} style={styles.fieldRow}>
@@ -91,13 +93,13 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
 
             {/* Extra loads */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
-              Extras
+              {t('dailyLoad.extras')}
             </Text>
             <View style={styles.grid}>
               {LOAD_FIELDS.map((f) => (
                 <View key={`${f.key}_extra`} style={styles.fieldRow}>
                   <Text style={styles.fieldLabel}>
-                    <Ionicons name={f.icon} size={16} /> {f.label} Extra
+                    <Ionicons name={f.icon} size={16} /> {f.label} {t('dailyLoad.extra')}
                   </Text>
                   <TextInput
                     style={styles.fieldInput}
@@ -113,13 +115,13 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
 
             {/* Notes */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
-              Notas del dia
+              {t('dailyLoad.dayNotes')}
             </Text>
             <TextInput
               style={styles.notesInput}
               value={data.pedidos_note}
               onChangeText={(v) => updateField('pedidos_note', v)}
-              placeholder="Notas sobre pedidos..."
+              placeholder={t('dailyLoad.notesPlaceholder')}
               placeholderTextColor={colors.textHint}
               multiline
               numberOfLines={3}
@@ -128,7 +130,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
 
           <View style={styles.footer}>
             <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-              <Text style={styles.saveBtnText}>Guardar</Text>
+              <Text style={styles.saveBtnText}>{t('save')}</Text>
             </TouchableOpacity>
           </View>
         </View>

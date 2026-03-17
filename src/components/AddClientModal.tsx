@@ -16,6 +16,7 @@ import { PRODUCTS, ALL_DAYS } from '../constants/products';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useTranslation } from 'react-i18next';
 
 interface AddClientModalProps {
   visible: boolean;
@@ -41,6 +42,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   onClose,
 }) => {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const styles = getStyles(colors);
 
   const [name, setName] = useState('');
@@ -226,11 +228,11 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('Error', 'El nombre del cliente es obligatorio.');
+      Alert.alert(t('error'), t('addModal.nameRequired'));
       return;
     }
     if (isDirectoryMode && destination === 'day' && !selectedDay) {
-      Alert.alert('Error', 'Selecciona un dia para agendar.');
+      Alert.alert(t('error'), t('addModal.dayRequired'));
       return;
     }
     setSaving(true);
@@ -245,7 +247,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
       resetForm();
       onClose();
     } catch (e) {
-      Alert.alert('Error', 'No se pudo guardar el cliente.');
+      Alert.alert(t('error'), t('addModal.saveError'));
     } finally {
       setSaving(false);
     }
@@ -261,10 +263,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Nuevo Cliente</Text>
+              <Text style={styles.headerTitle}>{t('addModal.title')}</Text>
             </View>
             <TouchableOpacity onPress={() => setShowPasteModal(true)} style={styles.pasteBtn}>
-              <Text style={styles.pasteBtnText}><Ionicons name="clipboard" size={14} /> Pegar Pedido</Text>
+              <Text style={styles.pasteBtnText}><Ionicons name="clipboard" size={14} /> {t('addModal.pasteOrder')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
@@ -273,7 +275,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
             {/* Destination toggle */}
-            <Text style={styles.sectionTitle}>Destino</Text>
+            <Text style={styles.sectionTitle}>{t('addModal.destination')}</Text>
             {isDirectoryMode ? (
               <>
                 <View style={styles.destRow}>
@@ -282,7 +284,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                     onPress={() => { setDestination('directory'); setSelectedDay(''); }}
                   >
                     <Text style={[styles.destChipText, destination === 'directory' && styles.destChipTextDirectory]}>
-                      Solo Directorio
+                      {t('addModal.directoryOnly')}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -290,7 +292,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                     onPress={() => setDestination('day')}
                   >
                     <Text style={[styles.destChipText, destination === 'day' && styles.destChipTextSelected]}>
-                      Agendar a un dia
+                      {t('addModal.scheduleToDay')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -325,20 +327,20 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                   onPress={() => setDestination('directory')}
                 >
                   <Text style={[styles.destChipText, destination === 'directory' && styles.destChipTextDirectory]}>
-                    Solo Directorio
+                    {t('addModal.directoryOnly')}
                   </Text>
                 </TouchableOpacity>
               </View>
             )}
 
             {/* Name */}
-            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Nombre *</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('addModal.name')}</Text>
             <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
               <TextInput
                 style={{ flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 }}
                 value={name}
                 onChangeText={setName}
-                placeholder="Nombre del cliente"
+                placeholder={t('addModal.namePlaceholder')}
                 placeholderTextColor={colors.textHint}
                 autoCapitalize="words"
               />
@@ -350,13 +352,13 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             </View>
 
             {/* Address */}
-            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Direccion</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('addModal.address')}</Text>
             <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
               <TextInput
                 style={{ flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 }}
                 value={address}
                 onChangeText={setAddress}
-                placeholder="Direccion"
+                placeholder={t('addModal.addressPlaceholder')}
                 placeholderTextColor={colors.textHint}
               />
               {address.length > 0 && (
@@ -367,13 +369,13 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             </View>
 
             {/* Phone */}
-            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>Telefono</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('addModal.phone')}</Text>
             <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
               <TextInput
                 style={{ flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 }}
                 value={phone}
                 onChangeText={setPhone}
-                placeholder="Telefono"
+                placeholder={t('addModal.phonePlaceholder')}
                 placeholderTextColor={colors.textHint}
                 keyboardType="phone-pad"
               />
@@ -385,7 +387,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             </View>
 
             {/* Maps Link */}
-            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>URL Google Maps</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('addModal.mapsUrl')}</Text>
             <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
               <TextInput
                 style={{ flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 }}
@@ -405,7 +407,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             </View>
 
             {/* Products */}
-            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Productos</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('addModal.products')}</Text>
             {PRODUCTS.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
@@ -430,13 +432,13 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             ))}
 
             {/* Notes */}
-            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Notas</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('addModal.notes')}</Text>
             <View style={[styles.notesInput, { position: 'relative' }]}>
               <TextInput
                 style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0, textAlignVertical: 'top', minHeight: 70 }}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Notas del cliente..."
+                placeholder={t('addModal.notesPlaceholder')}
                 placeholderTextColor={colors.textHint}
                 multiline
                 numberOfLines={3}
@@ -461,12 +463,12 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             >
               <Text style={styles.saveBtnText}>
                 {saving
-                  ? 'Guardando...'
+                  ? t('addModal.saving')
                   : destination === 'directory'
-                    ? 'Guardar en Directorio'
+                    ? t('addModal.saveToDirectory')
                     : isDirectoryMode
-                      ? (selectedDay ? `Agendar en ${selectedDay}` : 'Selecciona un dia')
-                      : `Agregar a ${day}`}
+                      ? (selectedDay ? t('addModal.scheduleIn', { day: selectedDay }) : t('addModal.selectDay'))
+                      : t('addModal.addTo', { day })}
               </Text>
             </TouchableOpacity>
           </View>
@@ -480,15 +482,15 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
           style={styles.pasteOverlay}
         >
           <View style={styles.pasteDialog}>
-            <Text style={styles.pasteModalTitle}><Ionicons name="clipboard" size={18} /> Pegar Pedido</Text>
+            <Text style={styles.pasteModalTitle}><Ionicons name="clipboard" size={18} /> {t('addModal.pasteOrder')}</Text>
             <Text style={styles.pasteModalHint}>
-              Pega el texto del pedido y se completaran los campos automaticamente
+              {t('addModal.pasteHint')}
             </Text>
             <TextInput
               style={styles.pasteInput}
               value={pasteText}
               onChangeText={setPasteText}
-              placeholder="Pegar texto del pedido aqui..."
+              placeholder={t('addModal.pastePlaceholder')}
               placeholderTextColor={colors.textHint}
               multiline
               numberOfLines={8}
@@ -500,14 +502,14 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                 style={styles.pasteCancelBtn}
                 onPress={() => { Keyboard.dismiss(); setPasteText(''); setShowPasteModal(false); }}
               >
-                <Text style={styles.pasteCancelText}>Cancelar</Text>
+                <Text style={styles.pasteCancelText}>{t('cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.pasteConfirmBtn, !pasteText.trim() && { opacity: 0.4 }]}
                 onPress={handlePasteOrder}
                 disabled={!pasteText.trim()}
               >
-                <Text style={styles.pasteConfirmText}>Procesar</Text>
+                <Text style={styles.pasteConfirmText}>{t('addModal.process')}</Text>
               </TouchableOpacity>
             </View>
           </View>

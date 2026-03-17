@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
 import { useTheme } from '../theme/ThemeContext';
@@ -11,6 +12,7 @@ interface ProductCounterProps {
 
 const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const styles = getStyles(colors);
 
   const totals = React.useMemo(() => {
@@ -44,7 +46,7 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
             <Text style={styles.qty}>{totals[p.id]}</Text>
             <Text style={styles.label}>{p.short}</Text>
             {p.id === 'soda' && (
-              <Text style={styles.crateLabel}>({Math.ceil(totals[p.id] / 6)} caj.)</Text>
+              <Text style={styles.crateLabel}>({Math.ceil(totals[p.id] / 6)} {t('productCounter.crate')})</Text>
             )}
           </View>
         ) : null,

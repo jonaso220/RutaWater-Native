@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { useLayout } from '../hooks/useLayout';
 import HomeScreen from '../screens/HomeScreen';
@@ -19,6 +20,7 @@ const Stack = createStackNavigator();
 const TabNavigator = () => {
   const { colors } = useTheme();
   const { fontScale } = useLayout();
+  const { t } = useTranslation();
   useAutoMergeDuplicates();
   const { activeAlarm, dismissAlarm } = useAlarmChecker();
 
@@ -48,6 +50,7 @@ const TabNavigator = () => {
           component={HomeScreen}
           options={{
             headerTitle: 'RutaWater',
+            tabBarLabel: t('nav.home'),
             tabBarIcon: ({ color }) => <Ionicons name="home" size={Math.round(22 * fontScale)} color={color} />,
           }}
         />
@@ -55,7 +58,8 @@ const TabNavigator = () => {
           name="Directorio"
           component={DirectoryScreen}
           options={{
-            headerTitle: 'Directorio',
+            headerTitle: t('nav.directory'),
+            tabBarLabel: t('nav.directory'),
             tabBarIcon: ({ color }) => <Ionicons name="people" size={Math.round(22 * fontScale)} color={color} />,
           }}
         />
@@ -63,7 +67,8 @@ const TabNavigator = () => {
           name="Ajustes"
           component={SettingsScreen}
           options={{
-            headerTitle: 'Ajustes',
+            headerTitle: t('nav.settings'),
+            tabBarLabel: t('nav.settings'),
             tabBarIcon: ({ color }) => <Ionicons name="settings" size={Math.round(22 * fontScale)} color={color} />,
           }}
         />

@@ -26,9 +26,11 @@ import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { useSubscriptionContext } from '../context/SubscriptionContext';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { fontScale } = useLayout();
   const styles = getStyles(colors, fontScale);
@@ -82,10 +84,10 @@ const SettingsScreen = () => {
       if (waDeuda.trim()) settings.whatsappDeuda = waDeuda.trim();
       if (waRecordatorio.trim()) settings.whatsappRecordatorio = waRecordatorio.trim();
       await db.collection('settings').doc(settingsDocId).set(settings, { merge: true });
-      Alert.alert('Guardado', 'Templates actualizados');
+      Alert.alert(t('settings.templatesSaved'), t('settings.templatesSavedMsg'));
     } catch (e) {
       console.error('Error saving templates:', e);
-      Alert.alert('Error', 'No se pudieron guardar los templates');
+      Alert.alert(t('error'), t('settings.templatesSaveError'));
     }
   };
 
@@ -98,7 +100,7 @@ const SettingsScreen = () => {
       { whatsappEnCamino: null, whatsappDeuda: null, whatsappRecordatorio: null },
       { merge: true },
     ).catch((e) => console.error('Error resetting templates:', e));
-    Alert.alert('Templates reseteados', 'Se usarán los mensajes por defecto');
+    Alert.alert(t('settings.templatesReset'), t('settings.templatesResetMsg'));
   };
 
   // Load group members
@@ -189,7 +191,7 @@ const SettingsScreen = () => {
       onGroupUpdate({ groupId, role: 'admin', code });
     } catch (e) {
       console.error('Error creating group:', e);
-      Alert.alert('Error', 'No se pudo crear el grupo.');
+      Alert.alert(t('error'), t('settings.createGroupError'));
     }
     setLoading(false);
   };
@@ -204,7 +206,7 @@ const SettingsScreen = () => {
         .get();
 
       if (snap.empty) {
-        Alert.alert('Error', 'Codigo no encontrado.');
+        Alert.alert(t('error'), t('settings.joinError'));
         setLoading(false);
         return;
       }
@@ -225,16 +227,16 @@ const SettingsScreen = () => {
       setJoinCode('');
     } catch (e) {
       console.error('Error joining group:', e);
-      Alert.alert('Error', 'No se pudo unir al grupo.');
+      Alert.alert(t('error'), t('settings.joinGroupError'));
     }
     setLoading(false);
   };
 
   const handleLeaveGroup = () => {
-    Alert.alert('Salir del grupo?', 'Tu datos se quedaran en el grupo.', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('settings.leaveGroupTitle'), t('settings.leaveGroupMsg'), [
+      { text: t('cancel'), style: 'cancel' },
       {
-        text: 'Salir',
+        text: t('settings.leave'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -244,7 +246,7 @@ const SettingsScreen = () => {
               .update({ groupId: null, role: null });
             onGroupUpdate(null);
           } catch (e) {
-            Alert.alert('Error', 'No se pudo salir del grupo.');
+            Alert.alert(t('error'), t('settings.leaveError'));
           }
         },
       },
@@ -253,12 +255,12 @@ const SettingsScreen = () => {
 
   const handleRemoveMember = (memberId: string, memberName: string) => {
     Alert.alert(
-      'Quitar miembro?',
-      `Quitar a ${memberName} del grupo?`,
+      t('settings.removeMemberTitle'),
+      t('settings.removeMemberMsg', { name: memberName }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Quitar',
+          text: t('settings.removeMember'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -267,7 +269,7 @@ const SettingsScreen = () => {
                 .doc(memberId)
                 .update({ groupId: null, role: null });
             } catch (e) {
-              Alert.alert('Error', 'No se pudo quitar al miembro.');
+              Alert.alert(t('error'), t('settings.removeMemberError'));
             }
           },
         },
@@ -277,12 +279,12 @@ const SettingsScreen = () => {
 
   const handleDissolveGroup = () => {
     Alert.alert(
-      'Disolver grupo?',
-      'Se eliminara el grupo y todos los miembros seran removidos. Los datos se mantienen.',
+      t('settings.dissolveTitle'),
+      t('settings.dissolveMsg'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Disolver',
+          text: t('settings.dissolve'),
           style: 'destructive',
           onPress: async () => {
             if (!groupData?.groupId) return;
@@ -317,7 +319,7 @@ const SettingsScreen = () => {
 
               onGroupUpdate(null);
             } catch (e) {
-              Alert.alert('Error', 'No se pudo disolver el grupo.');
+              Alert.alert(t('error'), t('settings.dissolveError'));
             }
             setLoading(false);
           },
@@ -351,7 +353,7 @@ const SettingsScreen = () => {
     try {
       const allClients = clients.filter((c) => c.name);
       if (allClients.length === 0) {
-        Alert.alert('Sin datos', 'No hay clientes para exportar.');
+        Alert.alert(t('settings.noDataCSV'), t('settings.noClientsToExport'));
         return;
       }
 
@@ -388,10 +390,10 @@ const SettingsScreen = () => {
       const date = new Date().toISOString().split('T')[0];
       await shareFile(csvContent, `RutaWater_Clientes_${date}.csv`);
 
-      Alert.alert('Exportado', `${allClients.length} clientes exportados a CSV`);
+      Alert.alert(t('settings.csvExported', { count: allClients.length }), '');
     } catch (e) {
       console.error('Error exporting CSV:', e);
-      Alert.alert('Error', 'No se pudo exportar. Intenta de nuevo.');
+      Alert.alert(t('error'), t('settings.exportError'));
     }
   };
 
@@ -399,7 +401,7 @@ const SettingsScreen = () => {
     try {
       const allClients = clients.filter((c) => c.name);
       if (allClients.length === 0 && debts.length === 0 && transfers.length === 0) {
-        Alert.alert('Sin datos', 'No hay datos para exportar.');
+        Alert.alert(t('settings.noDataCSV'), t('settings.noDataToExport'));
         return;
       }
 
@@ -436,37 +438,37 @@ const SettingsScreen = () => {
       await shareFile(jsonContent, `RutaWater_Backup_${date}.json`);
 
       const counts: string[] = [];
-      if (backup.clients.length > 0) counts.push(`${backup.clients.length} clientes`);
-      if (backup.debts.length > 0) counts.push(`${backup.debts.length} deudas`);
-      if (backup.transfers.length > 0) counts.push(`${backup.transfers.length} transf.`);
-      Alert.alert('Backup listo', counts.join(', '));
+      if (backup.clients.length > 0) counts.push(t('settings.backupClients', { count: backup.clients.length }));
+      if (backup.debts.length > 0) counts.push(t('settings.backupDebts', { count: backup.debts.length }));
+      if (backup.transfers.length > 0) counts.push(t('settings.backupTransfers', { count: backup.transfers.length }));
+      Alert.alert(t('settings.backupReady'), counts.join(', '));
     } catch (e) {
       console.error('Error exporting JSON:', e);
-      Alert.alert('Error', 'No se pudo exportar. Intenta de nuevo.');
+      Alert.alert(t('error'), t('settings.exportError'));
     }
   };
 
   const handleCleanupDuplicates = () => {
     const { staleIds } = findDuplicateClients();
     if (staleIds.length === 0) {
-      Alert.alert('Sin duplicados', 'No se encontraron duplicados.');
+      Alert.alert(t('settings.noDuplicatesTitle'), t('settings.noDuplicates'));
       return;
     }
     Alert.alert(
-      'Limpiar duplicados',
-      `Se encontraron ${staleIds.length} clientes duplicados. ¿Eliminar?`,
+      t('settings.duplicatesFoundTitle'),
+      t('settings.duplicatesFoundMsg', { count: staleIds.length }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: t('settings.cleanDuplicatesAction'),
           style: 'destructive',
           onPress: async () => {
             try {
               const count = await cleanupDuplicates();
-              Alert.alert('Listo', `Se eliminaron ${count} duplicados.`);
+              Alert.alert(t('done'), t('settings.duplicatesCleaned', { count }));
             } catch (e) {
               console.error('Error cleaning duplicates:', e);
-              Alert.alert('Error', 'No se pudieron eliminar los duplicados.');
+              Alert.alert(t('error'), t('settings.duplicatesCleanError'));
             }
           },
         },
@@ -479,23 +481,23 @@ const SettingsScreen = () => {
     setPromoLoading(true);
     try {
       const result = await redeemCode(promoCode);
-      Alert.alert(result.success ? 'Exito' : 'Error', result.message);
+      Alert.alert(result.success ? t('settings.promoSuccess') : t('error'), result.message);
       if (result.success) setPromoCode('');
     } catch {
-      Alert.alert('Error', 'No se pudo canjear el codigo.');
+      Alert.alert(t('error'), t('settings.promoRedeemError'));
     }
     setPromoLoading(false);
   };
 
   const handleRemovePromo = () => {
-    Alert.alert('Quitar Premium?', 'Se desactivara tu acceso premium por codigo promocional.', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('settings.removePromoTitle'), t('settings.removePromoMsg'), [
+      { text: t('cancel'), style: 'cancel' },
       {
-        text: 'Quitar',
+        text: t('settings.removeMember'),
         style: 'destructive',
         onPress: async () => {
           await removePromo();
-          Alert.alert('Listo', 'Premium desactivado.');
+          Alert.alert(t('done'), t('settings.premiumDeactivated'));
         },
       },
     ]);
@@ -503,21 +505,21 @@ const SettingsScreen = () => {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Eliminar cuenta',
-      'Se eliminaran permanentemente tu cuenta y todos tus datos (clientes, deudas, transferencias). Esta accion no se puede deshacer.',
+      t('settings.deleteAccount'),
+      t('settings.deleteAccountMsg'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Eliminar cuenta',
+          text: t('settings.deleteAccount'),
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              'Confirmar eliminacion',
-              'Estas seguro? Todos tus datos seran eliminados permanentemente.',
+              t('settings.confirmDeleteTitle'),
+              t('settings.confirmDeleteMsg'),
               [
-                { text: 'No, cancelar', style: 'cancel' },
+                { text: t('settings.noCancel'), style: 'cancel' },
                 {
-                  text: 'Si, eliminar',
+                  text: t('settings.yesDelete'),
                   style: 'destructive',
                   onPress: async () => {
                     setLoading(true);
@@ -526,11 +528,11 @@ const SettingsScreen = () => {
                     } catch (e: any) {
                       if (e.message === 'REQUIRES_RECENT_LOGIN') {
                         Alert.alert(
-                          'Sesion expirada',
-                          'Por seguridad, necesitas iniciar sesion de nuevo antes de eliminar tu cuenta. Cierra sesion y vuelve a entrar.',
+                          t('settings.sessionExpired'),
+                          t('settings.sessionExpiredMsg'),
                         );
                       } else {
-                        Alert.alert('Error', 'No se pudo eliminar la cuenta. Intenta de nuevo.');
+                        Alert.alert(t('error'), t('settings.deleteAccountError'));
                       }
                     }
                     setLoading(false);
@@ -559,7 +561,7 @@ const SettingsScreen = () => {
             <Text style={styles.userEmail}>{user.email}</Text>
             {groupData && (
               <Text style={styles.roleBadge}>
-                {groupData.role === 'admin' ? 'Admin' : 'Miembro'}
+                {groupData.role === 'admin' ? t('settings.admin') : t('settings.member')}
               </Text>
             )}
           </View>
@@ -570,25 +572,25 @@ const SettingsScreen = () => {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="diamond-outline" size={20} color={colors.primary} />
-          <Text style={styles.sectionTitle}>Suscripcion</Text>
+          <Text style={styles.sectionTitle}>{t('settings.subscription')}</Text>
         </View>
         {isPremium ? (
           <View style={styles.premiumCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="diamond" size={20} color={colors.primary} />
-              <Text style={styles.premiumLabel}>Premium</Text>
+              <Text style={styles.premiumLabel}>{t('settings.premiumLabel')}</Text>
               {isTrialActive && (
                 <View style={styles.trialTag}>
-                  <Text style={styles.trialTagText}>Prueba</Text>
+                  <Text style={styles.trialTagText}>{t('settings.trialLabel')}</Text>
                 </View>
               )}
             </View>
             <Text style={styles.premiumPlan}>
-              Plan {currentPlan === 'annual' ? 'Anual' : 'Mensual'}
+              {t('settings.plan')} {currentPlan === 'annual' ? t('settings.annual') : t('settings.monthly')}
             </Text>
             {expirationDate && (
               <Text style={styles.premiumExpiry}>
-                Renueva: {new Date(expirationDate).toLocaleDateString()}
+                {t('settings.renews')}: {new Date(expirationDate).toLocaleDateString()}
               </Text>
             )}
             <TouchableOpacity
@@ -601,14 +603,14 @@ const SettingsScreen = () => {
               }}
               style={styles.manageBtn}
             >
-              <Text style={styles.manageBtnText}>Gestionar suscripcion</Text>
+              <Text style={styles.manageBtnText}>{t('settings.manageSub')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.freeCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={styles.freePlanLabel}>Plan Gratuito</Text>
-              <Text style={styles.freeCount}>{clientCount}/{FREE_CLIENT_LIMIT} clientes</Text>
+              <Text style={styles.freePlanLabel}>{t('settings.freePlan')}</Text>
+              <Text style={styles.freeCount}>{t('settings.clientsUsed', { count: clientCount, limit: FREE_CLIENT_LIMIT })}</Text>
             </View>
             <View style={styles.progressBarBg}>
               <View style={[styles.progressBarFill, { width: `${Math.min(100, (clientCount / FREE_CLIENT_LIMIT) * 100)}%` }]} />
@@ -618,7 +620,7 @@ const SettingsScreen = () => {
               style={styles.upgradeBtn}
             >
               <Ionicons name="diamond" size={18} color="#FFFFFF" />
-              <Text style={styles.upgradeBtnText}>Obtener Premium</Text>
+              <Text style={styles.upgradeBtnText}>{t('settings.getPremium')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -628,17 +630,17 @@ const SettingsScreen = () => {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="gift-outline" size={20} color={colors.warningDark} />
-          <Text style={styles.sectionTitle}>Codigo Promocional</Text>
+          <Text style={styles.sectionTitle}>{t('settings.promoCode')}</Text>
         </View>
         {hasPromo ? (
           <View style={styles.premiumCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="gift" size={20} color={colors.primary} />
-              <Text style={styles.premiumLabel}>Premium Activado</Text>
+              <Text style={styles.premiumLabel}>{t('settings.premiumActivated')}</Text>
             </View>
-            <Text style={styles.premiumPlan}>Activado con codigo promocional</Text>
+            <Text style={styles.premiumPlan}>{t('settings.activatedWithCode')}</Text>
             <TouchableOpacity onPress={handleRemovePromo} style={styles.manageBtn}>
-              <Text style={[styles.manageBtnText, { color: colors.danger }]}>Desactivar</Text>
+              <Text style={[styles.manageBtnText, { color: colors.danger }]}>{t('settings.deactivate')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -647,7 +649,7 @@ const SettingsScreen = () => {
               style={styles.joinInput}
               value={promoCode}
               onChangeText={setPromoCode}
-              placeholder="CODIGO"
+              placeholder={t('settings.promoPlaceholder')}
               placeholderTextColor={colors.textHint}
               autoCapitalize="characters"
               maxLength={20}
@@ -660,7 +662,7 @@ const SettingsScreen = () => {
               {promoLoading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.joinBtnText}>Canjear</Text>
+                <Text style={styles.joinBtnText}>{t('settings.redeem')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -671,23 +673,23 @@ const SettingsScreen = () => {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="people-outline" size={20} color={colors.textMuted} />
-          <Text style={styles.sectionTitle}>Grupo Familiar</Text>
+          <Text style={styles.sectionTitle}>{t('settings.familyGroup')}</Text>
         </View>
 
         {groupData ? (
           <View>
             {/* Group code */}
             <View style={styles.codeCard}>
-              <Text style={styles.codeLabel}>Codigo del grupo</Text>
+              <Text style={styles.codeLabel}>{t('settings.groupCode')}</Text>
               <Text style={styles.codeValue}>{groupData.code}</Text>
               <Text style={styles.codeHint}>
-                Comparte este codigo para que otros se unan
+                {t('settings.shareCodeHint')}
               </Text>
             </View>
 
             {/* Members */}
             <Text style={styles.subsectionTitle}>
-              Miembros ({members.length})
+              {t('settings.members')} ({members.length})
             </Text>
             {members.map((member) => (
               <View key={member.id} style={styles.memberRow}>
@@ -696,7 +698,7 @@ const SettingsScreen = () => {
                     {member.displayName || member.email}
                   </Text>
                   <Text style={styles.memberRole}>
-                    {member.role === 'admin' ? 'Admin' : 'Miembro'}
+                    {member.role === 'admin' ? t('settings.admin') : t('settings.member')}
                   </Text>
                 </View>
                 {isAdmin && member.id !== user.uid && (
@@ -709,7 +711,7 @@ const SettingsScreen = () => {
                     }
                     style={styles.removeBtn}
                   >
-                    <Text style={styles.removeBtnText}>Quitar</Text>
+                    <Text style={styles.removeBtnText}>{t('settings.removeMember')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -722,7 +724,7 @@ const SettingsScreen = () => {
                   onPress={handleLeaveGroup}
                   style={styles.dangerBtn}
                 >
-                  <Text style={styles.dangerBtnText}>Salir del grupo</Text>
+                  <Text style={styles.dangerBtnText}>{t('settings.leaveGroup')}</Text>
                 </TouchableOpacity>
               )}
               {isAdmin && (
@@ -730,7 +732,7 @@ const SettingsScreen = () => {
                   onPress={handleDissolveGroup}
                   style={styles.dangerBtn}
                 >
-                  <Text style={styles.dangerBtnText}>Disolver grupo</Text>
+                  <Text style={styles.dangerBtnText}>{t('settings.dissolveGroup')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -738,7 +740,7 @@ const SettingsScreen = () => {
         ) : isPremium ? (
           <View>
             <Text style={styles.noGroupText}>
-              No estas en ningun grupo. Crea uno o unite con un codigo.
+              {t('settings.noGroupText')}
             </Text>
 
             <TouchableOpacity
@@ -749,13 +751,13 @@ const SettingsScreen = () => {
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.primaryBtnText}>Crear Grupo</Text>
+                <Text style={styles.primaryBtnText}>{t('settings.createGroup')}</Text>
               )}
             </TouchableOpacity>
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>o</Text>
+              <Text style={styles.dividerText}>{t('settings.or')}</Text>
               <View style={styles.dividerLine} />
             </View>
 
@@ -764,7 +766,7 @@ const SettingsScreen = () => {
                 style={styles.joinInput}
                 value={joinCode}
                 onChangeText={setJoinCode}
-                placeholder="Codigo"
+                placeholder={t('settings.joinPlaceholder')}
                 placeholderTextColor={colors.textHint}
                 autoCapitalize="characters"
                 maxLength={6}
@@ -774,7 +776,7 @@ const SettingsScreen = () => {
                 style={[styles.joinBtn, !joinCode && styles.joinBtnDisabled]}
                 disabled={!joinCode || loading}
               >
-                <Text style={styles.joinBtnText}>Unirse</Text>
+                <Text style={styles.joinBtnText}>{t('settings.joinGroup')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -783,14 +785,14 @@ const SettingsScreen = () => {
             <View style={styles.lockedCard}>
               <Ionicons name="lock-closed" size={24} color={colors.textHint} />
               <Text style={styles.lockedText}>
-                Los grupos son una funcion Premium. Crea o unite a grupos para trabajar en equipo.
+                {t('settings.groupsPremiumMsg')}
               </Text>
               <TouchableOpacity
                 onPress={() => navigation.navigate('Paywall')}
                 style={styles.upgradeBtn}
               >
                 <Ionicons name="diamond" size={16} color="#FFFFFF" />
-                <Text style={styles.upgradeBtnText}>Obtener Premium</Text>
+                <Text style={styles.upgradeBtnText}>{t('settings.getPremium')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -802,11 +804,11 @@ const SettingsScreen = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="logo-whatsapp" size={20} color={colors.successDark} />
-            <Text style={styles.sectionTitle}>Mensajes WhatsApp</Text>
+            <Text style={styles.sectionTitle}>{t('settings.whatsappMessages')}</Text>
           </View>
-          <Text style={styles.sectionSubtitle}>Personaliza los mensajes que se envian a tus clientes por WhatsApp.</Text>
+          <Text style={styles.sectionSubtitle}>{t('settings.whatsappSubtitle')}</Text>
           <View style={styles.sectionCard}>
-            <Text style={styles.templateLabel}>Mensaje "En camino"</Text>
+            <Text style={styles.templateLabel}>{t('settings.enCaminoLabel')}</Text>
             <TextInput
               style={styles.templateInput}
               value={waEnCamino}
@@ -819,7 +821,7 @@ const SettingsScreen = () => {
 
             <View style={styles.templateDivider} />
 
-            <Text style={styles.templateLabel}>Mensaje de deuda</Text>
+            <Text style={styles.templateLabel}>{t('settings.debtLabel')}</Text>
             <TextInput
               style={styles.templateInput}
               value={waDeuda}
@@ -829,11 +831,11 @@ const SettingsScreen = () => {
               multiline
               numberOfLines={2}
             />
-            <Text style={styles.templateHint}>Usa {'${total}'} para insertar el monto</Text>
+            <Text style={styles.templateHint}>{t('settings.debtHint')}</Text>
 
             <View style={styles.templateDivider} />
 
-            <Text style={styles.templateLabel}>Mensaje de recordatorio</Text>
+            <Text style={styles.templateLabel}>{t('settings.reminderLabel')}</Text>
             <TextInput
               style={styles.templateInput}
               value={waRecordatorio}
@@ -847,11 +849,11 @@ const SettingsScreen = () => {
           <View style={styles.templateActions}>
             <TouchableOpacity onPress={handleSaveTemplates} style={styles.templateSaveBtn}>
               <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-              <Text style={styles.templateSaveBtnText}>Guardar</Text>
+              <Text style={styles.templateSaveBtnText}>{t('settings.saveTemplates')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={handleResetTemplates} style={styles.templateResetBtn}>
               <Ionicons name="refresh" size={16} color={colors.textMuted} />
-              <Text style={styles.templateResetBtnText}>Restaurar</Text>
+              <Text style={styles.templateResetBtnText}>{t('settings.resetTemplates')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -861,34 +863,34 @@ const SettingsScreen = () => {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="construct" size={20} color={colors.textMuted} />
-          <Text style={styles.sectionTitle}>Herramientas</Text>
+          <Text style={styles.sectionTitle}>{t('settings.tools')}</Text>
         </View>
         <View style={styles.sectionCard}>
           {/* Export */}
-          <Text style={styles.cardGroupTitle}>Exportar Datos</Text>
+          <Text style={styles.cardGroupTitle}>{t('settings.exportDataTitle')}</Text>
           {isPremium ? (
             <View style={styles.cardGroupContent}>
               <TouchableOpacity onPress={handleExportCSV} style={styles.exportBtn}>
                 <Ionicons name="share-outline" size={18} color={colors.primary} />
-                <Text style={styles.exportBtnText}>Exportar Clientes (CSV)</Text>
+                <Text style={styles.exportBtnText}>{t('settings.exportCSV')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleExportJSON} style={styles.exportBtn}>
                 <Ionicons name="save-outline" size={18} color={colors.primary} />
-                <Text style={styles.exportBtnText}>Backup Completo (JSON)</Text>
+                <Text style={styles.exportBtnText}>{t('settings.exportJSON')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.lockedCard}>
               <Ionicons name="lock-closed" size={24} color={colors.textHint} />
               <Text style={styles.lockedText}>
-                Exporta tus datos en CSV y JSON con Premium.
+                {t('settings.exportPremiumMsg')}
               </Text>
               <TouchableOpacity
                 onPress={() => navigation.navigate('Paywall')}
                 style={styles.upgradeBtn}
               >
                 <Ionicons name="diamond" size={16} color="#FFFFFF" />
-                <Text style={styles.upgradeBtnText}>Obtener Premium</Text>
+                <Text style={styles.upgradeBtnText}>{t('settings.getPremium')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -896,13 +898,13 @@ const SettingsScreen = () => {
           <View style={styles.templateDivider} />
 
           {/* Maintenance */}
-          <Text style={styles.cardGroupTitle}>Mantenimiento</Text>
+          <Text style={styles.cardGroupTitle}>{t('settings.maintenance')}</Text>
           <TouchableOpacity onPress={handleCleanupDuplicates} style={styles.exportBtn}>
             <Ionicons name="copy-outline" size={18} color={colors.primary} />
-            <Text style={styles.exportBtnText}>Limpiar duplicados</Text>
+            <Text style={styles.exportBtnText}>{t('settings.cleanDuplicates')}</Text>
           </TouchableOpacity>
           <Text style={styles.cardGroupHint}>
-            Elimina clientes duplicados que quedaron en el directorio.
+            {t('settings.cleanDuplicatesHint')}
           </Text>
         </View>
       </View>
@@ -911,12 +913,12 @@ const SettingsScreen = () => {
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="person-circle-outline" size={20} color={colors.textMuted} />
-          <Text style={styles.sectionTitle}>Cuenta</Text>
+          <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
         </View>
         <View style={styles.sectionCard}>
           <TouchableOpacity onPress={onSignOut} style={styles.signOutBtn}>
             <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-            <Text style={styles.signOutText}>Cerrar Sesion</Text>
+            <Text style={styles.signOutText}>{t('settings.signOut')}</Text>
           </TouchableOpacity>
 
           <View style={styles.templateDivider} />
@@ -927,10 +929,10 @@ const SettingsScreen = () => {
             disabled={loading}
           >
             <Ionicons name="trash-outline" size={18} color={colors.textHint} />
-            <Text style={styles.deleteAccountText}>Eliminar cuenta</Text>
+            <Text style={styles.deleteAccountText}>{t('settings.deleteAccount')}</Text>
           </TouchableOpacity>
           <Text style={styles.deleteAccountHint}>
-            Se eliminaran todos tus datos permanentemente.
+            {t('settings.deleteAccountHint')}
           </Text>
         </View>
       </View>
@@ -1370,9 +1372,11 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'center',
     gap: 6,
     backgroundColor: colors.primary,
     paddingVertical: 12,
+    paddingHorizontal: 32,
     borderRadius: 10,
   },
   upgradeBtnText: {

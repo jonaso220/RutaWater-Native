@@ -10,6 +10,7 @@ import {
   Platform,
   KeyboardTypeOptions,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -34,6 +35,7 @@ const PromptModal: React.FC<PromptModalProps> = ({
   onSubmit,
   onCancel,
 }) => {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const styles = getStyles(colors);
   const [value, setValue] = useState(defaultValue);
@@ -71,14 +73,14 @@ const PromptModal: React.FC<PromptModalProps> = ({
           />
           <View style={styles.buttons}>
             <TouchableOpacity onPress={onCancel} style={styles.cancelBtn}>
-              <Text style={styles.cancelText}>Cancelar</Text>
+              <Text style={styles.cancelText}>{t('cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleSubmit}
               style={[styles.submitBtn, !value.trim() && styles.submitBtnDisabled]}
               disabled={!value.trim()}
             >
-              <Text style={styles.submitText}>Guardar</Text>
+              <Text style={styles.submitText}>{t('save')}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
@@ -42,6 +43,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   onEditDebt,
 }) => {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = getStyles(colors);
   const [newAmount, setNewAmount] = useState('');
   const [editingDebt, setEditingDebt] = useState<string | null>(null);
@@ -61,12 +63,12 @@ const DebtModal: React.FC<DebtModalProps> = ({
 
   const handlePaid = (debt: Debt) => {
     Alert.alert(
-      'Confirmar pago',
-      `${debt.clientName} pago $${debt.amount?.toLocaleString()}?`,
+      t('debtModal.confirmPayment'),
+      t('debtModal.paidConfirm', { name: debt.clientName, amount: debt.amount?.toLocaleString() }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Pagada',
+          text: t('debtModal.paid'),
           onPress: () => onMarkPaid(debt),
         },
       ],
@@ -148,7 +150,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                         value={editAmount}
                         onChangeText={setEditAmount}
                         keyboardType="numeric"
-                        placeholder="Monto"
+                        placeholder={t('amount')}
                         placeholderTextColor={colors.textHint}
                         autoFocus
                       />
@@ -192,7 +194,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                           onPress={() => handlePaid(debt)}
                           style={[styles.debtActionBtn, styles.paidBtn]}
                         >
-                          <Text style={styles.paidBtnText}>Pagada</Text>
+                          <Text style={styles.paidBtnText}>{t('debtModal.paid')}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -202,7 +204,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
             ) : (
               <View style={styles.emptyState}>
                 <Ionicons name="cash-outline" size={40} color={colors.textHint} style={{ marginBottom: 8 }} />
-                <Text style={styles.emptyText}>Sin deudas registradas</Text>
+                <Text style={styles.emptyText}>{t('debtModal.noDebts')}</Text>
               </View>
             )}
 
@@ -214,7 +216,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                   style={styles.whatsappBtn}
                 >
                   <Text style={styles.whatsappBtnText}>
-                    <Ionicons name="chatbubble" size={16} /> Enviar total (${total.toLocaleString()})
+                    <Ionicons name="chatbubble" size={16} /> {t('debtModal.sendTotal', { amount: total.toLocaleString() })}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -222,7 +224,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                   style={[styles.whatsappBtn, styles.whatsappBtnSecondary]}
                 >
                   <Text style={styles.whatsappBtnSecondaryText}>
-                    <Ionicons name="chatbubble" size={16} /> Enviar recordatorio
+                    <Ionicons name="chatbubble" size={16} /> {t('debtModal.sendReminder')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -238,7 +240,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                 value={newAmount}
                 onChangeText={setNewAmount}
                 keyboardType="numeric"
-                placeholder="Monto"
+                placeholder={t('amount')}
                 placeholderTextColor={colors.textHint}
               />
               <TouchableOpacity
@@ -249,7 +251,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                 ]}
                 disabled={!newAmount}
               >
-                <Text style={styles.addBtnText}>Agregar</Text>
+                <Text style={styles.addBtnText}>{t('add')}</Text>
               </TouchableOpacity>
             </View>
           </View>

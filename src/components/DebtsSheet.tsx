@@ -17,6 +17,7 @@ import { normalizePhone, normalizeText, fuzzyMatch } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
+import { useTranslation } from 'react-i18next';
 import { ThemeColors } from '../theme/colors';
 
 interface DebtsSheetProps {
@@ -57,6 +58,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   onAddDebt,
 }) => {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const styles = getStyles(colors);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('date');
@@ -166,12 +168,12 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 
   const handleMarkPaid = (debt: Debt) => {
     Alert.alert(
-      'Confirmar pago',
-      `${debt.clientName} pagó $${debt.amount?.toLocaleString()}?`,
+      t('debtModal.confirmPayment'),
+      t('debtModal.paidConfirm', { name: debt.clientName, amount: debt.amount?.toLocaleString() }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Pagada',
+          text: t('debtModal.paid'),
           onPress: () => onMarkPaid(debt),
         },
       ],
@@ -180,12 +182,12 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 
   const handleMarkAllPaid = (group: ClientDebtGroup) => {
     Alert.alert(
-      '¿Todas pagadas?',
-      `Confirmar que ${group.clientName} pagó todas sus deudas (${group.debts.length}) por un total de $${group.total.toLocaleString()}`,
+      t('debtsSheet.allPaidTitle'),
+      t('debtsSheet.allPaidMsg', { name: group.clientName, count: group.debts.length, total: group.total.toLocaleString() }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Todas pagadas',
+          text: t('debtsSheet.allPaid'),
           onPress: () => onMarkAllPaid(group.clientId, group.debts.map((d) => d.id)),
         },
       ],
@@ -232,7 +234,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               onPress={() => onTransferPayment(item.clientId)}
               style={styles.transferBtn}
             >
-              <Text style={styles.transferBtnText}><MaterialCommunityIcons name="bank" size={14} /> Transf</Text>
+              <Text style={styles.transferBtnText}><MaterialCommunityIcons name="bank" size={14} /> {t('clientCard.transfer')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -269,7 +271,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               onPress={() => handleMarkPaid(debt)}
               style={styles.paidBtn}
             >
-              <Text style={styles.paidBtnText}>Pagada</Text>
+              <Text style={styles.paidBtnText}>{t('debtModal.paid')}</Text>
             </TouchableOpacity>
           </View>
         );
@@ -280,7 +282,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           onPress={() => handleMarkAllPaid(item)}
           style={styles.payAllBtn}
         >
-          <Text style={styles.payAllBtnText}><Ionicons name="checkmark" size={14} /> Pagar todas ({item.debts.length})</Text>
+          <Text style={styles.payAllBtnText}><Ionicons name="checkmark" size={14} /> {t('debtsSheet.payAll', { count: item.debts.length })}</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -294,12 +296,12 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
       >
         <View style={styles.modal}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Deudas</Text>
+            <Text style={styles.headerTitle}>{t('debtsSheet.title')}</Text>
             <View style={styles.headerRight}>
               {onAddDebt && (
                 <TouchableOpacity onPress={() => setShowAddPanel(true)} style={styles.addDebtBtn}>
                   <Ionicons name="add" size={18} color={colors.textWhite} />
-                  <Text style={styles.addDebtBtnText}>Añadir</Text>
+                  <Text style={styles.addDebtBtnText}>{t('debtsSheet.addBtn')}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -313,15 +315,15 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             <View style={styles.summaryRow}>
               <View style={[styles.summaryBox, styles.summaryBoxDanger]}>
                 <Text style={styles.summaryValueDanger}>${grandTotal.toLocaleString()}</Text>
-                <Text style={styles.summaryLabelDanger}>Total</Text>
+                <Text style={styles.summaryLabelDanger}>{t('total')}</Text>
               </View>
               <View style={styles.summaryBox}>
                 <Text style={styles.summaryValue}>{uniqueClients}</Text>
-                <Text style={styles.summaryLabel}>Cliente{uniqueClients !== 1 ? 's' : ''}</Text>
+                <Text style={styles.summaryLabel}>{t('debtsSheet.client', { count: uniqueClients })}</Text>
               </View>
               <View style={styles.summaryBox}>
                 <Text style={styles.summaryValue}>{debts.length}</Text>
-                <Text style={styles.summaryLabel}>Deuda{debts.length !== 1 ? 's' : ''}</Text>
+                <Text style={styles.summaryLabel}>{t('debtsSheet.debt', { count: debts.length })}</Text>
               </View>
             </View>
           )}
@@ -333,7 +335,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                 style={styles.searchInput}
                 value={searchTerm}
                 onChangeText={setSearchTerm}
-                placeholder="Buscar cliente..."
+                placeholder={t('debtsSheet.searchPlaceholder')}
                 placeholderTextColor={colors.textHint}
                 autoCorrect={false}
               />
@@ -345,7 +347,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             </View>
             {searchTerm.trim().length > 0 && (
               <Text style={styles.searchResultCount}>
-                {filteredGroups.length} resultado{filteredGroups.length !== 1 ? 's' : ''}
+                {t('debtsSheet.resultCount', { count: filteredGroups.length })}
               </Text>
             )}
           </View>
@@ -358,7 +360,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                 style={[styles.sortBtn, sortMode === 'date' && styles.sortBtnActive]}
               >
                 <Text style={[styles.sortBtnText, sortMode === 'date' && styles.sortBtnTextActive]}>
-                  Más reciente
+                  {t('debtsSheet.sortRecent')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -366,7 +368,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                 style={[styles.sortBtn, sortMode === 'amount' && styles.sortBtnActive]}
               >
                 <Text style={[styles.sortBtnText, sortMode === 'amount' && styles.sortBtnTextActive]}>
-                  Mayor monto
+                  {t('debtsSheet.sortAmount')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -382,7 +384,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               <View style={styles.empty}>
                 <Ionicons name="cash-outline" size={40} color={colors.textHint} style={{ marginBottom: 8 }} />
                 <Text style={styles.emptyText}>
-                  No hay deudas pendientes
+                  {t('debtsSheet.noDebts')}
                 </Text>
               </View>
             }
@@ -400,7 +402,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             <View style={styles.header}>
               <View style={styles.addPanelTitleRow}>
                 <Ionicons name="cash" size={22} color={colors.danger} />
-                <Text style={styles.headerTitle}>Añadir Deuda</Text>
+                <Text style={styles.headerTitle}>{t('debtsSheet.addDebtTitle')}</Text>
               </View>
               <TouchableOpacity onPress={closeAddPanel} style={styles.closeBtn}>
                 <Ionicons name="close" size={18} color={colors.textMuted} />
@@ -431,7 +433,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                     value={addAmount}
                     onChangeText={setAddAmount}
                     keyboardType="numeric"
-                    placeholder="Monto"
+                    placeholder={t('amount')}
                     placeholderTextColor={colors.textHint}
                     autoFocus
                   />
@@ -440,7 +442,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                     style={[styles.confirmAddBtn, !addAmount && styles.confirmAddBtnDisabled]}
                     disabled={!addAmount}
                   >
-                    <Text style={styles.confirmAddBtnText}>Agregar</Text>
+                    <Text style={styles.confirmAddBtnText}>{t('add')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -454,7 +456,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                       style={styles.searchInput}
                       value={addSearch}
                       onChangeText={setAddSearch}
-                      placeholder="Buscar cliente..."
+                      placeholder={t('debtsSheet.searchPlaceholder')}
                       placeholderTextColor={colors.textHint}
                       autoCorrect={false}
                       autoFocus
@@ -486,13 +488,13 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                         ) : null}
                       </View>
                       {debtClientIds.has(client.id) && (
-                        <Text style={styles.debtBadge}>Debe</Text>
+                        <Text style={styles.debtBadge}>{t('debtsSheet.owes')}</Text>
                       )}
                     </TouchableOpacity>
                   )}
                   ListEmptyComponent={
                     <View style={styles.empty}>
-                      <Text style={styles.emptyText}>No se encontraron clientes</Text>
+                      <Text style={styles.emptyText}>{t('debtsSheet.noClientsFound')}</Text>
                     </View>
                   }
                 />

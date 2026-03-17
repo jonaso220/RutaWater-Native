@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AlarmData } from '../hooks/useAlarmChecker';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -12,6 +13,7 @@ interface Props {
 
 const AlarmBanner: React.FC<Props> = ({ alarm, onDismiss }) => {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const styles = getStyles(colors);
 
   if (!alarm) return null;
@@ -24,7 +26,7 @@ const AlarmBanner: React.FC<Props> = ({ alarm, onDismiss }) => {
             <Ionicons name="notifications" size={30} color="#FFFFFF" />
           </View>
           <Text style={styles.time}>{alarm.time}</Text>
-          <Text style={styles.label}>Recordatorio de Visita</Text>
+          <Text style={styles.label}>{t('alarm.visitReminder')}</Text>
           <View style={styles.clientBox}>
             <Text style={styles.clientName}>{alarm.name}</Text>
             {alarm.address ? (
@@ -32,7 +34,7 @@ const AlarmBanner: React.FC<Props> = ({ alarm, onDismiss }) => {
             ) : null}
           </View>
           <TouchableOpacity style={styles.dismissBtn} onPress={onDismiss} activeOpacity={0.8}>
-            <Text style={styles.dismissText}>¡Entendido!</Text>
+            <Text style={styles.dismissText}>{t('alarm.understood')}</Text>
           </TouchableOpacity>
         </View>
       </View>

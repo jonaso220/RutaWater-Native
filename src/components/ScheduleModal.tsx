@@ -16,6 +16,7 @@ import { Client } from '../types';
 import { PRODUCTS, ALL_DAYS, FREQUENCY_LABELS, Frequency } from '../constants/products';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useTranslation } from 'react-i18next';
 
 interface ScheduleModalProps {
   visible: boolean;
@@ -38,6 +39,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   onClose,
 }) => {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const styles = getStyles(colors);
 
   const [localDays, setLocalDays] = useState<string[]>(['Lunes']);
@@ -108,7 +110,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     }
     if (selectedDate) {
       if (selectedDate.getDay() === 0) {
-        Alert.alert('Error', 'No se puede agendar en Domingo');
+        Alert.alert(t('error'), t('scheduleModal.errorSunday'));
         return;
       }
       setPickerDate(selectedDate);
@@ -123,19 +125,19 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     if (!dateStr) return '';
     const d = new Date(dateStr + 'T12:00:00');
     if (isNaN(d.getTime())) return dateStr;
-    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const dayNames = t('dayNames', { returnObjects: true }) as string[];
+    const monthNames = t('monthNames', { returnObjects: true }) as string[];
     return `${dayNames[d.getDay()]} ${d.getDate()} de ${monthNames[d.getMonth()]}`;
   };
 
   const handleSubmit = async () => {
     if (saving) return;
     if (localFreq === 'once' && !localDate) {
-      Alert.alert('Error', 'Por favor, selecciona una fecha de entrega.');
+      Alert.alert(t('error'), t('scheduleModal.errorDate'));
       return;
     }
     if (localFreq !== 'once' && localDays.length === 0) {
-      Alert.alert('Error', 'Por favor, selecciona al menos un dia.');
+      Alert.alert(t('error'), t('scheduleModal.errorDays'));
       return;
     }
     setSaving(true);
@@ -147,18 +149,18 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       await onSave(client, localDays, localFreq, localDate, localNotes, cleanProducts);
       onClose();
     } catch (e) {
-      Alert.alert('Error', 'No se pudo agendar la visita.');
+      Alert.alert(t('error'), t('scheduleModal.errorSave'));
     } finally {
       setSaving(false);
     }
   };
 
   const freqOptions: { key: Frequency; label: string }[] = [
-    { key: 'once', label: 'Una Vez' },
-    { key: 'weekly', label: 'Semanal' },
-    { key: 'biweekly', label: 'Cada 2 Sem' },
-    { key: 'triweekly', label: 'Cada 3 Sem' },
-    { key: 'monthly', label: 'Mensual' },
+    { key: 'once', label: t('scheduleModal.freqOnce') },
+    { key: 'weekly', label: t('scheduleModal.freqWeekly') },
+    { key: 'biweekly', label: t('scheduleModal.freqBiweekly') },
+    { key: 'triweekly', label: t('scheduleModal.freqTriweekly') },
+    { key: 'monthly', label: t('scheduleModal.freqMonthly') },
   ];
 
   // Format today's date as YYYY-MM-DD for the default
@@ -174,9 +176,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Agendar Visita</Text>
+              <Text style={styles.headerTitle}>{t('scheduleModal.title')}</Text>
               <Text style={styles.headerSubtitle}>
-                Programar a {client.name}
+                {t('scheduleModal.scheduleFor', { name: client.name })}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -186,7 +188,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
             {/* Frequency selector */}
-            <Text style={styles.sectionTitle}>Tipo de Pedido</Text>
+            <Text style={styles.sectionTitle}>{t('scheduleModal.orderType')}</Text>
             <View style={styles.freqGrid}>
               {freqOptions.map(({ key, label }) => (
                 <TouchableOpacity
@@ -212,7 +214,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             {/* Date or Days selector */}
             {localFreq === 'once' ? (
               <View style={{ marginTop: 16 }}>
-                <Text style={styles.sectionTitle}>Fecha de Entrega</Text>
+                <Text style={styles.sectionTitle}>{t('scheduleModal.deliveryDate')}</Text>
                 {localDate ? (
                   <View style={styles.selectedDateRow}>
                     <Text style={styles.selectedDateText}>
@@ -238,7 +240,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                       onPress={() => setShowPicker(true)}
                     >
                       <Text style={styles.selectedDateText}>
-                        {localDate ? formatDisplayDate(localDate) : 'Elegir fecha'}
+                        {localDate ? formatDisplayDate(localDate) : t('scheduleModal.chooseDate')}
                       </Text>
                     </TouchableOpacity>
                     {showPicker && (
@@ -257,8 +259,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             ) : (
               <View style={{ marginTop: 16 }}>
                 <Text style={styles.sectionTitle}>
-                  Dias de Visita{' '}
-                  <Text style={styles.hintInline}>(puede elegir varios)</Text>
+                  {t('scheduleModal.visitDays')}{' '}
+                  <Text style={styles.hintInline}>{t('scheduleModal.canSelectMultiple')}</Text>
                 </Text>
                 <View style={styles.daysGrid}>
                   {ALL_DAYS.map((day) => (
@@ -283,7 +285,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 </View>
                 {localDays.length > 1 && (
                   <Text style={styles.dayCountText}>
-                    {localDays.length} dias seleccionados
+                    {t('scheduleModal.daysSelected', { count: localDays.length })}
                   </Text>
                 )}
               </View>
@@ -291,7 +293,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
             {/* Products */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
-              Productos
+              {t('scheduleModal.products')}
             </Text>
             {PRODUCTS.map((p) => (
               <View key={p.id} style={styles.productRow}>
@@ -321,13 +323,13 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             ))}
 
             {/* Notes */}
-            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Notas</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('scheduleModal.notes')}</Text>
             <View style={[styles.notesInput, { position: 'relative' }]}>
               <TextInput
                 style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0, textAlignVertical: 'top', minHeight: 70 }}
                 value={localNotes}
                 onChangeText={setLocalNotes}
-                placeholder="Notas del cliente..."
+                placeholder={t('scheduleModal.notesPlaceholder')}
                 placeholderTextColor={colors.textHint}
                 multiline
                 numberOfLines={3}
@@ -346,7 +348,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           {/* Save button */}
           <View style={styles.footer}>
             <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSubmit} disabled={saving}>
-              <Text style={styles.saveBtnText}>Agendar</Text>
+              <Text style={styles.saveBtnText}>{t('scheduleModal.scheduleBtn')}</Text>
             </TouchableOpacity>
           </View>
         </View>

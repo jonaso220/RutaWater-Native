@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { useLayout } from '../hooks/useLayout';
 import { useSubscriptionContext } from '../context/SubscriptionContext';
@@ -25,6 +26,7 @@ interface Props {
 const PaywallScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
   const { fontScale } = useLayout();
+  const { t } = useTranslation();
   const styles = getStyles(colors, fontScale);
   const { packages, purchasePackage, restorePurchases, isPremium } = useSubscriptionContext();
   const [purchasing, setPurchasing] = useState(false);
@@ -39,12 +41,12 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const success = await purchasePackage(pkg);
       if (success) {
-        Alert.alert('Bienvenido a Premium!', 'Ya tienes acceso a todas las funciones.', [
+        Alert.alert(t('paywall.welcomePremium'), t('paywall.welcomePremiumMsg'), [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       }
     } catch (error: any) {
-      Alert.alert('Error', 'No se pudo completar la compra. Intenta de nuevo.');
+      Alert.alert(t('error'), t('paywall.purchaseError'));
     } finally {
       setPurchasing(false);
     }
@@ -55,14 +57,14 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const restored = await restorePurchases();
       if (restored) {
-        Alert.alert('Compras restauradas', 'Tu suscripcion Premium ha sido restaurada.', [
+        Alert.alert(t('paywall.restored'), t('paywall.restoredMsg'), [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       } else {
-        Alert.alert('Sin compras', 'No se encontraron compras previas para restaurar.');
+        Alert.alert(t('paywall.noRestored'), t('paywall.noRestoredMsg'));
       }
     } catch {
-      Alert.alert('Error', 'No se pudieron restaurar las compras.');
+      Alert.alert(t('error'), t('paywall.restoreError'));
     } finally {
       setRestoring(false);
     }
@@ -73,12 +75,12 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.container}>
         <View style={styles.premiumActive}>
           <Ionicons name="checkmark-circle" size={64} color={colors.success} />
-          <Text style={styles.premiumActiveTitle}>Ya eres Premium</Text>
+          <Text style={styles.premiumActiveTitle}>{t('paywall.alreadyPremium')}</Text>
           <Text style={styles.premiumActiveSubtitle}>
-            Tienes acceso a todas las funciones.
+            {t('paywall.alreadyPremiumDesc')}
           </Text>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
-            <Text style={styles.closeBtnText}>Volver</Text>
+            <Text style={styles.closeBtnText}>{t('back')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -96,30 +98,30 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
         <View style={styles.iconCircle}>
           <Ionicons name="diamond" size={40} color={colors.primary} />
         </View>
-        <Text style={styles.title}>RutaWater Premium</Text>
-        <Text style={styles.subtitle}>Desbloquea todo el potencial de tu ruta</Text>
+        <Text style={styles.title}>{t('paywall.title')}</Text>
+        <Text style={styles.subtitle}>{t('paywall.subtitle')}</Text>
       </View>
 
       {/* Features */}
       <View style={styles.featuresCard}>
         <FeatureRow
           icon="people"
-          title="Clientes ilimitados"
-          description={`Sin limite de ${FREE_CLIENT_LIMIT} clientes`}
+          title={t('paywall.unlimitedClients')}
+          description={t('paywall.unlimitedClientsDesc', { limit: FREE_CLIENT_LIMIT })}
           colors={colors}
           fontScale={fontScale}
         />
         <FeatureRow
           icon="person-add"
-          title="Grupos de trabajo"
-          description="Crea y unite a grupos colaborativos"
+          title={t('paywall.workGroups')}
+          description={t('paywall.workGroupsDesc')}
           colors={colors}
           fontScale={fontScale}
         />
         <FeatureRow
           icon="download"
-          title="Exportar datos"
-          description="Exporta tus clientes en CSV y JSON"
+          title={t('paywall.exportData')}
+          description={t('paywall.exportDataDesc')}
           colors={colors}
           fontScale={fontScale}
         />
@@ -128,37 +130,37 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
       {/* Pricing */}
       <View style={styles.pricingSection}>
         <TouchableOpacity
-          onPress={() => monthlyPkg ? handlePurchase(monthlyPkg) : Alert.alert('No disponible', 'Las compras no estan disponibles en este momento. Intenta mas tarde.')}
+          onPress={() => monthlyPkg ? handlePurchase(monthlyPkg) : Alert.alert(t('paywall.notAvailable'), t('paywall.notAvailableMsg'))}
           style={styles.priceCard}
           disabled={purchasing}
         >
-          <Text style={styles.priceLabel}>Mensual</Text>
+          <Text style={styles.priceLabel}>{t('paywall.monthly')}</Text>
           <Text style={styles.priceAmount}>
             {monthlyPkg ? monthlyPkg.product.priceString : '$2.99'}
           </Text>
-          <Text style={styles.pricePeriod}>por mes</Text>
+          <Text style={styles.pricePeriod}>{t('paywall.perMonth')}</Text>
           <View style={styles.trialBadge}>
             <Ionicons name="gift" size={14} color={colors.success} />
-            <Text style={styles.trialText}>1 semana gratis</Text>
+            <Text style={styles.trialText}>{t('paywall.freeWeek')}</Text>
           </View>
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => annualPkg ? handlePurchase(annualPkg) : Alert.alert('No disponible', 'Las compras no estan disponibles en este momento. Intenta mas tarde.')}
+          onPress={() => annualPkg ? handlePurchase(annualPkg) : Alert.alert(t('paywall.notAvailable'), t('paywall.notAvailableMsg'))}
           style={[styles.priceCard, styles.priceCardFeatured]}
           disabled={purchasing}
         >
           <View style={styles.saveBadge}>
-            <Text style={styles.saveBadgeText}>Ahorra ~16%</Text>
+            <Text style={styles.saveBadgeText}>{t('paywall.save16')}</Text>
           </View>
-          <Text style={[styles.priceLabel, styles.priceLabelFeatured]}>Anual</Text>
+          <Text style={[styles.priceLabel, styles.priceLabelFeatured]}>{t('paywall.annual')}</Text>
           <Text style={[styles.priceAmount, styles.priceAmountFeatured]}>
             {annualPkg ? annualPkg.product.priceString : '$29.99'}
           </Text>
-          <Text style={[styles.pricePeriod, styles.pricePeriodFeatured]}>por ano</Text>
+          <Text style={[styles.pricePeriod, styles.pricePeriodFeatured]}>{t('paywall.perYear')}</Text>
           <View style={[styles.trialBadge, styles.trialBadgeFeatured]}>
             <Ionicons name="gift" size={14} color={colors.primary} />
-            <Text style={[styles.trialText, styles.trialTextFeatured]}>1 mes gratis</Text>
+            <Text style={[styles.trialText, styles.trialTextFeatured]}>{t('paywall.freeMonth')}</Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -172,16 +174,13 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
         {restoring ? (
           <ActivityIndicator size="small" color={colors.textMuted} />
         ) : (
-          <Text style={styles.restoreText}>Restaurar compras</Text>
+          <Text style={styles.restoreText}>{t('paywall.restorePurchases')}</Text>
         )}
       </TouchableOpacity>
 
       {/* Legal */}
       <Text style={styles.legalText}>
-        El pago se cargara a tu cuenta de {Platform.OS === 'ios' ? 'Apple' : 'Google'}.
-        La suscripcion se renueva automaticamente a menos que se cancele al menos 24 horas
-        antes del final del periodo actual. Puedes gestionar tu suscripcion desde los ajustes
-        de tu dispositivo.
+        {t('paywall.legalText', { store: Platform.OS === 'ios' ? 'Apple' : 'Google' })}
       </Text>
 
       <View style={{ height: 40 }} />
@@ -313,7 +312,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     },
     priceCardFeatured: {
       borderColor: colors.primary,
-      backgroundColor: colors.primaryLighter,
+      backgroundColor: colors.card,
     },
     saveBadge: {
       position: 'absolute',
@@ -335,7 +334,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       marginBottom: 4,
     },
     priceLabelFeatured: {
-      color: colors.primary,
+      color: colors.textPrimary,
     },
     priceAmount: {
       fontSize: s(28),
@@ -343,7 +342,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.textPrimary,
     },
     priceAmountFeatured: {
-      color: colors.primary,
+      color: colors.textPrimary,
     },
     pricePeriod: {
       fontSize: s(13),
@@ -351,7 +350,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       marginTop: 2,
     },
     pricePeriodFeatured: {
-      color: colors.primary,
+      color: colors.textMuted,
     },
     loadingPackages: {
       flexDirection: 'row',

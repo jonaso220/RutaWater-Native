@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
@@ -31,6 +32,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   onReview,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors);
 
@@ -50,12 +52,12 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
 
   const handleReview = (transfer: Transfer) => {
     Alert.alert(
-      'Transferencia revisada?',
-      `Confirmar que revisaste la transferencia de ${transfer.clientName}`,
+      t('transfers.reviewTitle'),
+      t('transfers.reviewMsg', { name: transfer.clientName }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Revisada',
+          text: t('transfers.reviewed'),
           onPress: () => onReview(transfer),
         },
       ],
@@ -97,7 +99,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
             onPress={() => handleReview(item)}
             style={styles.reviewBtn}
           >
-            <Text style={styles.reviewBtnText}>Revisada</Text>
+            <Text style={styles.reviewBtnText}>{t('transfers.reviewed')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -110,10 +112,9 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
         <View style={styles.modal}>
           <View style={styles.header}>
             <View>
-              <Text style={styles.headerTitle}>Transferencias</Text>
+              <Text style={styles.headerTitle}>{t('transfers.title')}</Text>
               <Text style={styles.headerCount}>
-                {transfers.length} pendiente
-                {transfers.length !== 1 ? 's' : ''}
+                {t('transfers.pendingCount', { count: transfers.length })}
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
@@ -130,7 +131,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
               <View style={styles.empty}>
                 <MaterialCommunityIcons name="bank-outline" size={40} color={colors.textHint} style={{ marginBottom: 8 }} />
                 <Text style={styles.emptyText}>
-                  No hay transferencias pendientes
+                  {t('transfers.noTransfers')}
                 </Text>
               </View>
             }

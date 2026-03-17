@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -11,6 +12,7 @@ interface LoginScreenProps {
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onSignInWithGoogle, onSignInWithApple }) => {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const styles = getStyles(colors);
   const [loading, setLoading] = React.useState<'google' | 'apple' | null>(null);
   const [error, setError] = React.useState('');
@@ -25,7 +27,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSignInWithGoogle, onSignInW
         await onSignInWithApple();
       }
     } catch (e: any) {
-      setError(e.message || 'Error al iniciar sesion');
+      setError(e.message || t('login.signInError'));
     } finally {
       setLoading(null);
     }
@@ -36,7 +38,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSignInWithGoogle, onSignInW
       <View style={styles.card}>
         <MaterialCommunityIcons name="truck-delivery" size={48} color={colors.primary} />
         <Text style={styles.title}>RutaWater</Text>
-        <Text style={styles.subtitle}>Gestion de rutas de agua</Text>
+        <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -48,7 +50,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSignInWithGoogle, onSignInW
             activeOpacity={0.7}
           >
             <Text style={styles.appleButtonText}>
-              {loading === 'apple' ? 'Conectando...' : '\uF8FF  Iniciar con Apple'}
+              {loading === 'apple' ? t('login.connecting') : `\uF8FF  ${t('login.signInApple')}`}
             </Text>
           </TouchableOpacity>
         )}
@@ -60,7 +62,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onSignInWithGoogle, onSignInW
           activeOpacity={0.7}
         >
           <Text style={styles.buttonText}>
-            {loading === 'google' ? 'Conectando...' : 'Iniciar con Google'}
+            {loading === 'google' ? t('login.connecting') : t('login.signInGoogle')}
           </Text>
         </TouchableOpacity>
       </View>

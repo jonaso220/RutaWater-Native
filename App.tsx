@@ -3,6 +3,7 @@
 // ============================================================
 import React from 'react';
 import { ActivityIndicator, LogBox, View } from 'react-native';
+import './src/i18n';
 
 // Suprime la advertencia conocida de measureLayout en la consola
 LogBox.ignoreLogs(['ref.measureLayout']);

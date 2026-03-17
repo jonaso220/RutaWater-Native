@@ -17,6 +17,7 @@ import { PRODUCTS } from '../constants/products';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useTranslation } from 'react-i18next';
 
 interface EditClientModalProps {
   visible: boolean;
@@ -36,6 +37,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   showClientInfo = false,
 }) => {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const styles = getStyles(colors);
 
   const [name, setName] = useState('');
@@ -86,7 +88,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     }
     if (selectedDate) {
       if (selectedDate.getDay() === 0) {
-        Alert.alert('Error', 'No se puede agendar en Domingo');
+        Alert.alert(t('error'), t('editModal.errorSunday'));
         return;
       }
       setPickerDate(selectedDate);
@@ -101,15 +103,15 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     if (!dateStr) return '';
     const d = new Date(dateStr + 'T12:00:00');
     if (isNaN(d.getTime())) return dateStr;
-    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const dayNames = t('dayNames', { returnObjects: true }) as string[];
+    const monthNames = t('monthNames', { returnObjects: true }) as string[];
     return `${dayNames[d.getDay()]} ${d.getDate()} de ${monthNames[d.getMonth()]}`;
   };
 
   const handleSave = async () => {
     if (saving) return;
     if (freq !== 'once' && freq !== 'on_demand' && (!client.visitDays || client.visitDays.length === 0)) {
-      Alert.alert('Error', 'Este cliente no tiene días asignados. Usa el Directorio para agendarlo con días específicos.');
+      Alert.alert(t('error'), t('editModal.errorNoDays'));
       return;
     }
     setSaving(true);
@@ -153,7 +155,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       await onSave(client.id, data);
       onClose();
     } catch (e) {
-      Alert.alert('Error', 'No se pudo guardar los cambios.');
+      Alert.alert(t('error'), t('editModal.saveError'));
     } finally {
       setSaving(false);
     }
@@ -169,12 +171,12 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const handleDelete = () => {
     if (!onDelete || !client) return;
     Alert.alert(
-      '¿Eliminar cliente?',
-      'Esta acción no se puede deshacer. Se eliminará el cliente y todos sus datos.',
+      t('editModal.deleteTitle'),
+      t('editModal.deleteMsg'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: t('editModal.deleteConfirm'),
           style: 'destructive',
           onPress: async () => {
             setDeleting(true);
@@ -182,7 +184,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
               await onDelete(client.id);
               onClose();
             } catch (e) {
-              Alert.alert('Error', 'No se pudo eliminar el cliente.');
+              Alert.alert(t('error'), t('editModal.deleteError'));
             } finally {
               setDeleting(false);
             }
@@ -202,7 +204,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>
-              {showClientInfo ? 'Editar Cliente' : (client.name || '').toUpperCase()}
+              {showClientInfo ? t('editModal.editClient') : (client.name || '').toUpperCase()}
             </Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
@@ -212,13 +214,13 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {showClientInfo && (
               <>
-                <Text style={styles.sectionTitle}>Datos del cliente</Text>
+                <Text style={styles.sectionTitle}>{t('editModal.clientData')}</Text>
                 <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
                   <TextInput
                     style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
                     value={name}
                     onChangeText={setName}
-                    placeholder="Nombre"
+                    placeholder={t('editModal.namePlaceholder')}
                     placeholderTextColor={colors.textHint}
                   />
                   {name.length > 0 && (
@@ -232,7 +234,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                     style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
                     value={address}
                     onChangeText={setAddress}
-                    placeholder="Direccion"
+                    placeholder={t('editModal.addressPlaceholder')}
                     placeholderTextColor={colors.textHint}
                   />
                   {address.length > 0 && (
@@ -246,7 +248,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                     style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
                     value={phone}
                     onChangeText={setPhone}
-                    placeholder="Telefono"
+                    placeholder={t('editModal.phonePlaceholder')}
                     placeholderTextColor={colors.textHint}
                     keyboardType="phone-pad"
                   />
@@ -261,7 +263,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                     style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
                     value={mapsLink}
                     onChangeText={setMapsLink}
-                    placeholder="URL Google Maps"
+                    placeholder={t('editModal.mapsPlaceholder')}
                     placeholderTextColor={colors.textHint}
                     keyboardType="url"
                     autoCapitalize="none"
@@ -277,7 +279,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             )}
 
             {/* Products */}
-            <Text style={[styles.sectionTitle, showClientInfo && { marginTop: 20 }]}>Productos</Text>
+            <Text style={[styles.sectionTitle, showClientInfo && { marginTop: 20 }]}>{t('editModal.products')}</Text>
             {PRODUCTS.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
@@ -302,13 +304,13 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             ))}
 
             {/* Notes */}
-            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Notas</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('editModal.notes')}</Text>
             <View style={[styles.notesInput, { position: 'relative' }]}>
               <TextInput
                 style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0, textAlignVertical: 'top', minHeight: 70 }}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Notas del cliente..."
+                placeholder={t('editModal.notesPlaceholder')}
                 placeholderTextColor={colors.textHint}
                 multiline
                 numberOfLines={3}
@@ -325,7 +327,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
             {/* Frequency */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
-              Frecuencia
+              {t('editModal.frequency')}
             </Text>
             <View style={styles.freqGrid}>
               {(Object.entries(FREQUENCY_LABELS) as [Frequency, string][]).map(
@@ -355,7 +357,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             {needsDate && (
               <View style={{ marginTop: 16 }}>
                 <Text style={styles.sectionTitle}>
-                  {freq === 'once' ? 'Fecha' : 'Fecha de inicio'}
+                  {freq === 'once' ? t('editModal.date') : t('editModal.startDate')}
                 </Text>
                 {startDate ? (
                   <View style={styles.selectedDateRow}>
@@ -363,12 +365,12 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                       {formatDisplayDate(startDate)}
                     </Text>
                     <TouchableOpacity onPress={() => { setStartDate(''); setShowDatePicker(false); }}>
-                      <Text style={styles.clearDateText}>Quitar</Text>
+                      <Text style={styles.clearDateText}>{t('editModal.clearDate')}</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
                   <Text style={styles.dateHint}>
-                    Selecciona desde cuando inicia la frecuencia
+                    {t('editModal.dateHint')}
                   </Text>
                 )}
                 {Platform.OS === 'ios' ? (
@@ -389,7 +391,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                       onPress={() => setShowDatePicker(true)}
                     >
                       <Text style={styles.dateBtnText}>
-                        {startDate ? formatDisplayDate(startDate) : 'Elegir fecha'}
+                        {startDate ? formatDisplayDate(startDate) : t('editModal.chooseDate')}
                       </Text>
                     </TouchableOpacity>
                     {showDatePicker && (
@@ -411,7 +413,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
           {/* Save button */}
           <View style={styles.footer}>
             <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSave} disabled={saving}>
-              <Text style={styles.saveBtnText}>Guardar</Text>
+              <Text style={styles.saveBtnText}>{t('editModal.save')}</Text>
             </TouchableOpacity>
             {onDelete && (
               <TouchableOpacity
@@ -419,7 +421,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                 onPress={handleDelete}
                 disabled={deleting}
               >
-                <Text style={styles.deleteBtnText}>Eliminar Cliente</Text>
+                <Text style={styles.deleteBtnText}>{t('editModal.deleteClient')}</Text>
               </TouchableOpacity>
             )}
           </View>

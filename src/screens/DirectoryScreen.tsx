@@ -24,12 +24,14 @@ import ScheduleModal from '../components/ScheduleModal';
 import DebtModal from '../components/DebtModal';
 import EditClientModal from '../components/EditClientModal';
 import AddClientModal from '../components/AddClientModal';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 
 const DirectoryScreen = () => {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const { fontScale } = useLayout();
   const styles = getStyles(colors, fontScale);
   const navigation = useNavigation<any>();
@@ -82,7 +84,7 @@ const DirectoryScreen = () => {
 
     if (days === null) {
       return {
-        label: 'Sin historial',
+        label: t('directory.noHistory'),
         bgColor: isDark ? '#374151' : '#E5E7EB',
         textColor: colors.textMuted,
       };
@@ -90,7 +92,7 @@ const DirectoryScreen = () => {
 
     if (days <= 7) {
       return {
-        label: days === 0 ? 'Hoy' : days === 1 ? 'Hace 1 dia' : `Hace ${days} dias`,
+        label: days === 0 ? t('directory.today') : t('directory.daysAgo', { count: days }),
         bgColor: isDark ? '#064E3B' : '#ECFDF5',
         textColor: isDark ? '#6EE7B7' : '#059669',
       };
@@ -98,7 +100,7 @@ const DirectoryScreen = () => {
 
     if (days <= 21) {
       return {
-        label: `Hace ${days} dias`,
+        label: t('directory.daysAgo', { count: days }),
         bgColor: isDark ? '#451A03' : '#FFFBEB',
         textColor: isDark ? '#F59E0B' : '#D97706',
       };
@@ -106,7 +108,7 @@ const DirectoryScreen = () => {
 
     if (days <= 45) {
       return {
-        label: `Hace ${days} dias`,
+        label: t('directory.daysAgo', { count: days }),
         bgColor: isDark ? '#431407' : '#FFF7ED',
         textColor: isDark ? '#FB923C' : '#EA580C',
       };
@@ -149,22 +151,22 @@ const DirectoryScreen = () => {
   const isRecurrenciaMode = activeFilter === 'recurrencia';
 
   const FILTERS = [
-    { key: 'all', label: 'Todos' },
-    { key: 'weekly', label: 'Sem' },
-    { key: 'biweekly', label: 'Quin' },
-    { key: 'triweekly', label: 'C/3' },
-    { key: 'monthly', label: 'Mens' },
-    { key: 'sin_frecuencia', label: 'Pedidos' },
-    { key: 'recurrencia', label: 'Recurrencia' },
-    { key: 'no_location', label: 'Sin ubic.' },
-    { key: 'with_debt', label: 'Deuda' },
+    { key: 'all', label: t('directory.filterAll') },
+    { key: 'weekly', label: t('directory.filterWeekly') },
+    { key: 'biweekly', label: t('directory.filterBiweekly') },
+    { key: 'triweekly', label: t('directory.filterTriweekly') },
+    { key: 'monthly', label: t('directory.filterMonthly') },
+    { key: 'sin_frecuencia', label: t('directory.filterOrders') },
+    { key: 'recurrencia', label: t('directory.filterRecurrence') },
+    { key: 'no_location', label: t('directory.filterNoLocation') },
+    { key: 'with_debt', label: t('directory.filterDebt') },
   ];
 
   const sendWhatsApp = (client: Client) => {
     if (!client.phone) return;
     const cleanPhone = normalizePhone(client.phone);
     Linking.openURL(`whatsapp://send?phone=${cleanPhone}`).catch(() => {
-      Alert.alert('Error', 'No se pudo abrir WhatsApp.');
+      Alert.alert(t('error'), t('directory.errorWhatsApp'));
     });
   };
 
@@ -173,11 +175,11 @@ const DirectoryScreen = () => {
       Linking.openURL(
         `https://www.google.com/maps/dir/?api=1&destination=${client.lat},${client.lng}`,
       ).catch(() => {
-        Alert.alert('Error', 'No se pudo abrir Google Maps.');
+        Alert.alert(t('error'), t('directory.errorMaps'));
       });
     } else if (client.mapsLink) {
       Linking.openURL(client.mapsLink).catch(() => {
-        Alert.alert('Error', 'No se pudo abrir el enlace de mapa.');
+        Alert.alert(t('error'), t('directory.errorMapsLink'));
       });
     }
   };
@@ -194,28 +196,20 @@ const DirectoryScreen = () => {
   };
 
   const getFreqLabel = (freq: string): string => {
-    switch (freq) {
-      case 'weekly': return 'Semanal';
-      case 'biweekly': return 'Quincenal';
-      case 'triweekly': return 'Cada 3 sem';
-      case 'monthly': return 'Mensual';
-      case 'once': return 'Una vez';
-      case 'on_demand': return 'Solo Directorio';
-      default: return freq || '';
-    }
+    return t('freq.' + freq, { defaultValue: freq || '' });
   };
 
   const handleClone = (client: Client) => {
     Alert.alert(
-      'Clonar Cliente',
-      `¿Duplicar "${client.name}" al directorio?`,
+      t('directory.cloneClient'),
+      t('directory.cloneConfirm', { name: client.name }),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Clonar',
+          text: t('directory.clone'),
           onPress: async () => {
             await cloneClient(client);
-            Alert.alert('Listo', `"${client.name}" clonado al directorio.`);
+            Alert.alert(t('done'), t('directory.cloneDone', { name: client.name }));
           },
         },
       ],
@@ -225,7 +219,7 @@ const DirectoryScreen = () => {
   const callClient = (client: Client) => {
     if (!client.phone) return;
     Linking.openURL(`tel:${client.phone}`).catch(() => {
-      Alert.alert('Error', 'No se pudo realizar la llamada.');
+      Alert.alert(t('error'), t('directory.errorCall'));
     });
   };
 
@@ -362,7 +356,7 @@ const DirectoryScreen = () => {
               activeOpacity={0.7}
             >
               <Text style={styles.scheduleButtonText}>
-                {isOnDemand ? 'Agendar' : '+ Visita'}
+                {isOnDemand ? t('directory.schedule') : t('directory.addVisit')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -380,7 +374,7 @@ const DirectoryScreen = () => {
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
             <TextInput
               style={[styles.searchInput, { flex: 1, paddingRight: search ? 36 : 12 }]}
-              placeholder="Buscar por nombre, direccion o telefono..."
+              placeholder={t('directory.searchPlaceholder')}
               placeholderTextColor={colors.textHint}
               value={search}
               onChangeText={setSearch}
@@ -400,11 +394,11 @@ const DirectoryScreen = () => {
             onPress={() => {
               if (!canAddClient) {
                 Alert.alert(
-                  'Limite alcanzado',
-                  `Has alcanzado el limite de ${FREE_CLIENT_LIMIT} clientes del plan gratuito. Actualiza a Premium para clientes ilimitados.`,
+                  t('home.limitReached'),
+                  t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
                   [
-                    { text: 'Cancelar', style: 'cancel' },
-                    { text: 'Ver Premium', onPress: () => navigation.navigate('Paywall') },
+                    { text: t('cancel'), style: 'cancel' },
+                    { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
                   ],
                 );
                 return;
@@ -464,8 +458,7 @@ const DirectoryScreen = () => {
       </View>
 
       <Text style={styles.countText}>
-        {filteredClients.length} cliente{filteredClients.length !== 1 ? 's' : ''}
-        {activeFilter !== 'all' ? ` de ${counts.total}` : ' en el directorio'}
+        {t('directory.clientCount', { count: filteredClients.length })} {activeFilter !== 'all' ? t('directory.ofTotal', { total: counts.total }) : t('directory.inDirectory')}
       </Text>
 
       {/* Client list */}
@@ -476,7 +469,7 @@ const DirectoryScreen = () => {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No se encontraron clientes</Text>
+            <Text style={styles.emptyText}>{t('directory.noClients')}</Text>
           </View>
         }
       />

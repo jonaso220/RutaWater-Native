@@ -42,6 +42,7 @@ import DebtsSheet from '../components/DebtsSheet';
 import AddClientModal from '../components/AddClientModal';
 import PromptModal from '../components/PromptModal';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 
 type ListItem =
@@ -220,6 +221,7 @@ const ClientItem = React.memo<ClientItemProps>(({
 });
 
 const HomeScreen = () => {
+  const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { fontScale, isWide } = useLayout();
   const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
@@ -403,8 +405,8 @@ const HomeScreen = () => {
       groups[dateKey].push(c);
     });
 
-    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const dayNames = [t('days.domingo'), t('days.lunes'), t('days.martes'), t('days.miercoles'), t('days.jueves'), t('days.viernes'), t('days.sabado')];
+    const monthNames = [t('months.ene'), t('months.feb'), t('months.mar'), t('months.abr'), t('months.may'), t('months.jun'), t('months.jul'), t('months.ago'), t('months.sep'), t('months.oct'), t('months.nov'), t('months.dic')];
 
     return Object.keys(groups)
       .sort()
@@ -414,9 +416,9 @@ const HomeScreen = () => {
 
         let label: string;
         if (diffDays <= 0) {
-          label = `Hoy — ${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
+          label = `${t('home.today')} — ${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
         } else if (diffDays === 1) {
-          label = `Mañana — ${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
+          label = `${t('home.tomorrow')} — ${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
         } else {
           label = `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
         }
@@ -522,12 +524,12 @@ const HomeScreen = () => {
   const handleDelete = useCallback(
     (client: Client) => {
       Alert.alert(
-        'Quitar de la lista?',
-        'Se guardara en el Directorio.',
+        t('home.removeFromList'),
+        t('home.removeFromListMsg'),
         [
-          { text: 'Cancelar', style: 'cancel' },
+          { text: t('cancel'), style: 'cancel' },
           {
-            text: 'Quitar',
+            text: t('home.remove'),
             onPress: () => deleteFromDay(client.id, selectedDayRef.current),
           },
         ],
@@ -554,12 +556,12 @@ const HomeScreen = () => {
     (client: Client) => {
       if (client.alarm) {
         Alert.alert(
-          'Alarma activa',
+          t('home.activeAlarm'),
           `Alarma: ${client.alarm}`,
           [
-            { text: 'Cerrar', style: 'cancel' },
+            { text: t('close'), style: 'cancel' },
             {
-              text: 'Quitar alarma',
+              text: t('home.removeAlarm'),
               style: 'destructive',
               onPress: () => saveAlarm(client.id, ''),
             },
@@ -582,12 +584,12 @@ const HomeScreen = () => {
         setShowTransfersSheet(true);
       } else {
         Alert.alert(
-          'Agregar transferencia?',
-          `Marcar transferencia pendiente para ${client.name}`,
+          t('home.addTransfer'),
+          t('home.addTransferMsg', { name: client.name }),
           [
-            { text: 'Cancelar', style: 'cancel' },
+            { text: t('cancel'), style: 'cancel' },
             {
-              text: 'Agregar',
+              text: t('add'),
               onPress: () => addTransfer(client),
             },
           ],
@@ -734,7 +736,7 @@ const HomeScreen = () => {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Cargando clientes...</Text>
+        <Text style={styles.loadingText}>{t('home.loadingClients')}</Text>
       </View>
     );
   }
@@ -767,11 +769,11 @@ const HomeScreen = () => {
           onPress={() => {
             if (!canAddClient) {
               Alert.alert(
-                'Limite alcanzado',
-                `Has alcanzado el limite de ${FREE_CLIENT_LIMIT} clientes del plan gratuito. Actualiza a Premium para clientes ilimitados.`,
+                t('home.limitReached'),
+                t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
                 [
-                  { text: 'Cancelar', style: 'cancel' },
-                  { text: 'Ver Premium', onPress: () => navigation.navigate('Paywall') },
+                  { text: t('cancel'), style: 'cancel' },
+                  { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
                 ],
               );
               return;
@@ -779,13 +781,13 @@ const HomeScreen = () => {
             setShowAddClientModal(true);
           }}
         >
-          <Text style={[styles.actionBtnText, styles.actionBtnAddText]}>+ Cliente</Text>
+          <Text style={[styles.actionBtnText, styles.actionBtnAddText]}>+ {t('home.client')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, styles.actionBtnNote]}
           onPress={() => setShowNoteModal(true)}
         >
-          <Text style={[styles.actionBtnText, styles.actionBtnNoteText]}>+ Nota</Text>
+          <Text style={[styles.actionBtnText, styles.actionBtnNoteText]}>+ {t('home.note')}</Text>
         </TouchableOpacity>
         {debts.length > 0 && (
           <TouchableOpacity
@@ -793,7 +795,7 @@ const HomeScreen = () => {
             onPress={() => setShowDebtsSheet(true)}
           >
             <Text style={[styles.actionBtnText, styles.actionBtnDebtText]}>
-              Deudas ({debts.length})
+              {t('home.debts')} ({debts.length})
             </Text>
           </TouchableOpacity>
         )}
@@ -803,7 +805,7 @@ const HomeScreen = () => {
             onPress={() => setShowTransfersSheet(true)}
           >
             <Text style={[styles.actionBtnText, styles.actionBtnTransferText]}>
-              Transf ({pendingTransferCount})
+              {t('home.transfers')} ({pendingTransferCount})
             </Text>
           </TouchableOpacity>
         )}
@@ -818,7 +820,7 @@ const HomeScreen = () => {
               style={styles.searchInput}
               value={searchTerm}
               onChangeText={setSearchTerm}
-              placeholder="Buscar por nombre o direccion..."
+              placeholder={t('home.searchPlaceholder')}
               placeholderTextColor={colors.textHint}
               autoCorrect={false}
             />
@@ -833,20 +835,20 @@ const HomeScreen = () => {
             onPress={() => setShowFilters(!showFilters)}
           >
             <Text style={[styles.filterToggleText, showFilters && styles.filterToggleTextActive]}>
-              Filtros{activeFilters.size > 0 ? ` (${activeFilters.size})` : ''}
+              {t('home.filters')}{activeFilters.size > 0 ? ` (${activeFilters.size})` : ''}
             </Text>
           </TouchableOpacity>
         </View>
         {showFilters && (
           <View style={styles.filtersPanel}>
-            <Text style={styles.filterSectionTitle}>TIPO</Text>
+            <Text style={styles.filterSectionTitle}>{t('home.filterType')}</Text>
             <View style={styles.filterChipsRow}>
               <TouchableOpacity
                 style={[styles.filterChip, activeFilters.has('once_starred') && styles.filterChipActive]}
                 onPress={() => toggleFilter('once_starred')}
               >
                 <Text style={[styles.filterChipText, activeFilters.has('once_starred') && styles.filterChipTextActive]}>
-                  ☆ Una vez / Favoritos
+                  ☆ {t('home.filterOnceStarred')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -854,11 +856,11 @@ const HomeScreen = () => {
                 onPress={() => toggleFilter('con_deuda')}
               >
                 <Text style={[styles.filterChipText, activeFilters.has('con_deuda') && styles.filterChipTextActive]}>
-                  $ Con deuda
+                  $ {t('home.filterWithDebt')}
                 </Text>
               </TouchableOpacity>
             </View>
-            <Text style={[styles.filterSectionTitle, { marginTop: 10 }]}>PRODUCTOS</Text>
+            <Text style={[styles.filterSectionTitle, { marginTop: 10 }]}>{t('home.filterProducts')}</Text>
             <View style={styles.filterChipsRow}>
               {PRODUCTS.map((p) => (
                 <TouchableOpacity
@@ -897,7 +899,7 @@ const HomeScreen = () => {
           <View style={styles.emptyContainer}>
             <Ionicons name="clipboard-outline" size={40} color={colors.textHint} style={{ marginBottom: 8 }} />
             <Text style={styles.emptyText}>
-              No hay clientes para {selectedDay}
+              {t('home.noClients', { day: selectedDay })}
             </Text>
           </View>
         )}
@@ -911,7 +913,7 @@ const HomeScreen = () => {
               activeOpacity={0.7}
             >
               <Text style={styles.completedTitle}>
-                {showCompleted ? '▼' : '▶'} Completados ({completedClients.length})
+                {showCompleted ? '▼' : '▶'} {t('home.completed')} ({completedClients.length})
               </Text>
             </TouchableOpacity>
             {showCompleted && (
@@ -926,19 +928,19 @@ const HomeScreen = () => {
                     <Text style={styles.completedName}>
                       {(client.name || '').toUpperCase()}
                     </Text>
-                    <Text style={styles.completedHint}>Tocar para deshacer</Text>
+                    <Text style={styles.completedHint}>{t('home.tapToUndo')}</Text>
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
                   style={styles.deleteAllBtn}
                   onPress={() => {
                     Alert.alert(
-                      'Eliminar completados',
-                      `Eliminar ${completedClients.length} cliente${completedClients.length !== 1 ? 's' : ''} completado${completedClients.length !== 1 ? 's' : ''}?`,
+                      t('home.deleteAllTitle'),
+                      t('home.deleteAllMessage', { count: completedClients.length, day: selectedDay }),
                       [
-                        { text: 'Cancelar', style: 'cancel' },
+                        { text: t('cancel'), style: 'cancel' },
                         {
-                          text: 'Eliminar todo',
+                          text: t('home.deleteAllConfirm'),
                           style: 'destructive',
                           onPress: () => deleteAllCompleted(selectedDay),
                         },
@@ -947,7 +949,7 @@ const HomeScreen = () => {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.deleteAllBtnText}><Ionicons name="trash" size={14} /> Eliminar todo</Text>
+                  <Text style={styles.deleteAllBtnText}><Ionicons name="trash" size={14} /> {t('home.deleteAll')}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -960,10 +962,10 @@ const HomeScreen = () => {
       {undoInfo && (
         <View style={styles.undoBanner}>
           <Text style={styles.undoBannerText} numberOfLines={1}>
-            {undoInfo.client.name} completado
+            {t('home.clientCompleted', { name: undoInfo.client.name })}
           </Text>
           <TouchableOpacity onPress={handleUndoMarkDone} style={styles.undoButton}>
-            <Text style={styles.undoButtonText}>Deshacer</Text>
+            <Text style={styles.undoButtonText}>{t('home.undo')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1049,7 +1051,7 @@ const HomeScreen = () => {
       <Modal visible={!!alarmPromptClient} animationType="fade" transparent>
         <View style={styles.alarmOverlay}>
           <View style={styles.alarmModal}>
-            <Text style={styles.alarmTitle}>Seleccionar hora</Text>
+            <Text style={styles.alarmTitle}>{t('home.selectTime')}</Text>
             <DateTimePicker
               value={alarmTime}
               mode="time"
@@ -1066,7 +1068,7 @@ const HomeScreen = () => {
                 style={styles.alarmCancelBtn}
                 onPress={() => setAlarmPromptClient(null)}
               >
-                <Text style={styles.alarmCancelText}>Cancelar</Text>
+                <Text style={styles.alarmCancelText}>{t('cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.alarmSaveBtn}
@@ -1079,7 +1081,7 @@ const HomeScreen = () => {
                   setAlarmPromptClient(null);
                 }}
               >
-                <Text style={styles.alarmSaveText}>Guardar</Text>
+                <Text style={styles.alarmSaveText}>{t('save')}</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -1,3 +1,5 @@
+import i18n from '../i18n';
+
 // Productos - mismos IDs que la web app para compatibilidad con Firestore
 export interface Product {
   id: string;
@@ -17,6 +19,19 @@ export const PRODUCTS: Product[] = [
   { id: 'disp_nat', label: 'Disp. Natural', icon: 'leaf', short: 'Nat' },
 ];
 
+// Translated product helpers
+export const getProductLabel = (id: string): string => {
+  return i18n.t(`products.${id}`, { defaultValue: id });
+};
+
+export const getProductShort = (id: string): string => {
+  return i18n.t(`productShort.${id}`, { defaultValue: id });
+};
+
+export const getTranslatedDays = (): string[] => {
+  return i18n.t('allDays', { returnObjects: true }) as string[];
+};
+
 export const ALL_DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 export type Frequency = 'weekly' | 'biweekly' | 'triweekly' | 'monthly' | 'once' | 'on_demand';
@@ -28,4 +43,8 @@ export const FREQUENCY_LABELS: Record<Frequency, string> = {
   monthly: 'Mensual',
   once: 'Una vez',
   on_demand: 'Solo Directorio',
+};
+
+export const getFreqLabel = (freq: string): string => {
+  return i18n.t(`freq.${freq}`, { defaultValue: freq });
 };

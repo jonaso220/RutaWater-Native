@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -26,6 +27,7 @@ interface NoteModalProps {
 
 const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
   const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
   const styles = getStyles(colors);
 
   const [notes, setNotes] = useState('');
@@ -48,7 +50,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
     if (event.type === 'dismissed') return;
     if (selectedDate) {
       if (selectedDate.getDay() === 0) {
-        Alert.alert('Error', 'No se puede agendar en Domingo');
+        Alert.alert(t('error'), t('noteModal.errorSunday'));
         return;
       }
       setPickerDate(selectedDate);
@@ -63,18 +65,18 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
     if (!dateStr) return '';
     const d = new Date(dateStr + 'T12:00:00');
     if (isNaN(d.getTime())) return dateStr;
-    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    const dayNames = t('dayNames', { returnObjects: true }) as string[];
+    const monthNames = t('monthNames', { returnObjects: true }) as string[];
     return `${dayNames[d.getDay()]} ${d.getDate()} de ${monthNames[d.getMonth()]}`;
   };
 
   const handleSave = () => {
     if (!notes.trim()) {
-      Alert.alert('Error', 'Escribe una nota.');
+      Alert.alert(t('error'), t('noteModal.noteRequired'));
       return;
     }
     if (!date) {
-      Alert.alert('Error', 'Selecciona una fecha.');
+      Alert.alert(t('error'), t('noteModal.dateRequired'));
       return;
     }
     onSave(notes.trim(), date);
@@ -93,7 +95,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.modal}>
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>Nueva Nota</Text>
+              <Text style={styles.headerTitle}>{t('noteModal.title')}</Text>
               <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
                 <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
@@ -105,13 +107,13 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.label}>Nota</Text>
+              <Text style={styles.label}>{t('noteModal.noteLabel')}</Text>
               <View style={[styles.notesInput, { position: 'relative' }]}>
                 <TextInput
                   style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0, textAlignVertical: 'top', minHeight: 70 }}
                   value={notes}
                   onChangeText={setNotes}
-                  placeholder="Escribe tu nota aqui..."
+                  placeholder={t('noteModal.notePlaceholder')}
                   placeholderTextColor={colors.textHint}
                   multiline
                   numberOfLines={3}
@@ -130,7 +132,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
               </View>
 
               <Text style={[styles.label, { marginTop: 16 }]}>
-                Fecha de entrega
+                {t('noteModal.dateLabel')}
               </Text>
               {date ? (
                 <TouchableOpacity
@@ -143,7 +145,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
                   </Text>
                   {Platform.OS === 'android' && (
                     <Text style={[styles.selectedDateHint, { color: colors.textMuted }]}>
-                      Toca para cambiar fecha
+                      {t('noteModal.tapToChange')}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -165,7 +167,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
                     style={styles.datePickerBtn}
                     onPress={() => setShowAndroidPicker(true)}
                   >
-                    <Text style={styles.datePickerBtnText}><Ionicons name="calendar" size={17} /> Seleccionar fecha</Text>
+                    <Text style={styles.datePickerBtnText}><Ionicons name="calendar" size={17} /> {t('noteModal.selectDate')}</Text>
                   </TouchableOpacity>
                   {showAndroidPicker && (
                     <DateTimePicker
@@ -182,7 +184,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
 
             <View style={styles.footer}>
               <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-                <Text style={styles.saveBtnText}>Agregar Nota</Text>
+                <Text style={styles.saveBtnText}>{t('noteModal.addNote')}</Text>
               </TouchableOpacity>
             </View>
           </View>

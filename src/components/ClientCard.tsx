@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Client } from '../types';
@@ -67,6 +68,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   fontScale = 1,
 }) => {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const s = (v: number) => Math.round(v * fontScale);
   const styles = getStyles(colors, fontScale);
   const [showPositionPrompt, setShowPositionPrompt] = useState(false);
@@ -124,8 +126,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
       <View style={[styles.card, styles.noteCard]}>
         <PromptModal
           visible={showPositionPrompt}
-          title="Cambiar posicion"
-          message={`Posicion actual: ${index + 1}\nIngresa la nueva posicion:`}
+          title={t('clientCard.changePosition')}
+          message={t('clientCard.currentPosition', { pos: index + 1 })}
           defaultValue={String(index + 1)}
           keyboardType="number-pad"
           onSubmit={(text) => {
@@ -143,7 +145,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
         </TouchableOpacity>
         <View style={styles.cardBody}>
           <View style={styles.headerRow}>
-            <Text style={styles.noteLabel}><Ionicons name="document-text" size={s(13)} /> NOTA</Text>
+            <Text style={styles.noteLabel}><Ionicons name="document-text" size={s(13)} /> {t('clientCard.note')}</Text>
             <View style={styles.actions}>
               <TouchableOpacity onPress={onEdit} style={styles.iconBtn}>
                 <Ionicons name="pencil" size={s(16)} color={colors.textMuted} />
@@ -157,10 +159,10 @@ const ClientCard: React.FC<ClientCardProps> = ({
             {parseTextWithLinks(client.notes || '', colors.primary)}
           </Text>
           <View style={styles.actionBar}>
-            <Text style={styles.badge}>{client.specificDate || 'Una vez'}</Text>
+            <Text style={styles.badge}>{client.specificDate || t('clientCard.onceLabel')}</Text>
             <View style={{ flex: 1 }} />
             <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
-              <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> Listo</Text>
+              <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> {t('done')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -179,8 +181,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
     >
       <PromptModal
         visible={showPositionPrompt}
-        title="Cambiar posicion"
-        message={`Posicion actual: ${index + 1}\nIngresa la nueva posicion:`}
+        title={t('clientCard.changePosition')}
+        message={t('clientCard.currentPosition', { pos: index + 1 })}
         defaultValue={String(index + 1)}
         keyboardType="number-pad"
         onSubmit={(text) => {
@@ -236,11 +238,11 @@ const ClientCard: React.FC<ClientCardProps> = ({
         <View style={styles.badgesRow}>
           {hasDebt && (
             <TouchableOpacity onPress={onDebt}>
-              <Text style={styles.debtBadge}><Ionicons name="cash" size={s(12)} /> Deuda</Text>
+              <Text style={styles.debtBadge}><Ionicons name="cash" size={s(12)} /> {t('clientCard.debt')}</Text>
             </TouchableOpacity>
           )}
           {hasPendingTransfer && (
-            <Text style={styles.transferBadge}><MaterialCommunityIcons name="bank" size={s(12)} /> Transferencia</Text>
+            <Text style={styles.transferBadge}><MaterialCommunityIcons name="bank" size={s(12)} /> {t('clientCard.transfer')}</Text>
           )}
           {client.alarm ? (
             <Text style={styles.alarmBadge}><Ionicons name="notifications" size={s(12)} /> {client.alarm}</Text>
@@ -278,14 +280,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
         <View style={styles.freqRow}>
           <Text style={[styles.badge, client.freq === 'once' && styles.badgeOnce]}>
             {client.freq === 'once'
-              ? (client.specificDate ? `Una vez: ${client.specificDate.split('-').reverse().join('/')}` : 'Una vez')
-              : client.freq === 'weekly'
-                ? 'Semanal'
-                : client.freq === 'biweekly'
-                  ? 'Quincenal'
-                  : client.freq === 'triweekly'
-                    ? 'Cada 3 sem'
-                    : 'Mensual'}
+              ? (client.specificDate ? t('clientCard.onceWithDate', { date: client.specificDate.split('-').reverse().join('/') }) : t('clientCard.onceLabel'))
+              : t(`freq.${client.freq}`)}
           </Text>
         </View>
 
@@ -300,17 +296,17 @@ const ClientCard: React.FC<ClientCardProps> = ({
                 <Ionicons name="camera" size={s(18)} color={colors.textSecondary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={sendEnCamino} style={styles.enCaminoBtn} activeOpacity={0.7}>
-                <Text style={styles.enCaminoText}><Ionicons name="chatbubble" size={s(14)} color={colors.textWhite} /> En camino</Text>
+                <Text style={styles.enCaminoText}><Ionicons name="chatbubble" size={s(14)} color={colors.textWhite} /> {t('clientCard.onTheWay')}</Text>
               </TouchableOpacity>
             </>
           ) : (
             <TouchableOpacity onPress={onEdit} style={styles.addPhoneBtn} activeOpacity={0.6}>
               <Ionicons name="call-outline" size={s(14)} color={colors.textHint} />
-              <Text style={styles.addPhoneText}>Agregar telefono</Text>
+              <Text style={styles.addPhoneText}>{t('clientCard.addPhone')}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
-            <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> Listo</Text>
+            <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> {t('done')}</Text>
           </TouchableOpacity>
         </View>
       </View>

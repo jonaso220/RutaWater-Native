@@ -203,29 +203,29 @@ const ClientCard: React.FC<ClientCardProps> = ({
         <View style={styles.toolbar}>
           {onToggleStar && (
             <TouchableOpacity onPress={onToggleStar} style={styles.iconBtn}>
-              <Ionicons name={client.isStarred ? 'star' : 'star-outline'} size={s(18)} color={client.isStarred ? '#F5A623' : colors.textMuted} />
+              <Text style={{ fontSize: s(16) }}>{client.isStarred ? '⭐' : '☆'}</Text>
             </TouchableOpacity>
           )}
           {onDebt && (
             <TouchableOpacity onPress={onDebt} style={styles.iconBtn}>
-              <Ionicons name="cash" size={s(18)} color={hasDebt ? colors.danger : colors.textMuted} />
+              <Text style={{ fontSize: s(16) }}>{hasDebt ? '💰' : '💲'}</Text>
             </TouchableOpacity>
           )}
           {onTransfer && (
             <TouchableOpacity onPress={onTransfer} style={styles.iconBtn}>
-              <MaterialCommunityIcons name="bank" size={s(18)} color={hasPendingTransfer ? colors.successDark : colors.textMuted} />
+              <Text style={{ fontSize: s(16) }}>{hasPendingTransfer ? '🏦' : '🏧'}</Text>
             </TouchableOpacity>
           )}
           {onAlarm && (
             <TouchableOpacity onPress={onAlarm} style={styles.iconBtn}>
-              <Ionicons name={client.alarm ? 'notifications' : 'notifications-off'} size={s(18)} color={client.alarm ? colors.warningDark : colors.textMuted} />
+              <Text style={{ fontSize: s(16) }}>{client.alarm ? '🔔' : '🔕'}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity onPress={onEdit} style={styles.iconBtn}>
-            <Ionicons name="pencil" size={s(18)} color={colors.textMuted} />
+            <Text style={{ fontSize: s(16) }}>✏️</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onDelete} style={styles.iconBtn}>
-            <Ionicons name="trash" size={s(18)} color={colors.textMuted} />
+            <Text style={{ fontSize: s(16) }}>🗑️</Text>
           </TouchableOpacity>
         </View>
 

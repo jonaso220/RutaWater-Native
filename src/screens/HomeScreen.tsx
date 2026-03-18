@@ -24,10 +24,10 @@ import { ALL_DAYS, PRODUCTS } from '../constants/products';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate } from '../utils/helpers';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
-import { useClientsContext } from '../context/ClientsContext';
-import { useDebtsContext } from '../context/DebtsContext';
-import { useTransfersContext } from '../context/TransfersContext';
-import { useDailyLoadsContext } from '../context/DailyLoadsContext';
+import { useClientsStore } from '../stores/clientsStore';
+import { useDebtsStore } from '../stores/debtsStore';
+import { useTransfersStore } from '../stores/transfersStore';
+import { useDailyLoadsStore } from '../stores/dailyLoadsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
@@ -228,29 +228,36 @@ const HomeScreen = () => {
 
   const navigation = useNavigation<any>();
   const { isAdmin, user, groupData } = useAuthContext();
-  const {
-    clients,
-    loading,
-    getAllDayClients,
-    getVisibleClients,
-    getCompletedClients,
-    markAsDone,
-    undoComplete,
-    deleteAllCompleted,
-    deleteFromDay,
-    updateClient,
-    toggleStar,
-    saveAlarm,
-    addNote,
-    addClient,
-    changePosition,
-    dayCounts,
-    canAddClient,
-    clientCount,
-  } = useClientsContext();
-  const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal, markAllDebtsPaid } = useDebtsContext();
-  const { transfers, hasPendingTransfer, addTransfer, markTransferReviewed } = useTransfersContext();
-  const { dailyLoad, loadForDay, saveDailyLoad } = useDailyLoadsContext();
+  const clients = useClientsStore((s) => s.clients);
+  const loading = useClientsStore((s) => s.loading);
+  const getAllDayClients = useClientsStore((s) => s.getAllDayClients);
+  const getVisibleClients = useClientsStore((s) => s.getVisibleClients);
+  const getCompletedClients = useClientsStore((s) => s.getCompletedClients);
+  const markAsDone = useClientsStore((s) => s.markAsDone);
+  const undoComplete = useClientsStore((s) => s.undoComplete);
+  const deleteAllCompleted = useClientsStore((s) => s.deleteAllCompleted);
+  const deleteFromDay = useClientsStore((s) => s.deleteFromDay);
+  const updateClient = useClientsStore((s) => s.updateClient);
+  const toggleStar = useClientsStore((s) => s.toggleStar);
+  const saveAlarm = useClientsStore((s) => s.saveAlarm);
+  const addNote = useClientsStore((s) => s.addNote);
+  const addClient = useClientsStore((s) => s.addClient);
+  const changePosition = useClientsStore((s) => s.changePosition);
+  const dayCounts = useClientsStore((s) => s.dayCounts);
+  const canAddClient = useClientsStore((s) => s.canAddClient);
+  const debts = useDebtsStore((s) => s.debts);
+  const addDebt = useDebtsStore((s) => s.addDebt);
+  const markDebtPaid = useDebtsStore((s) => s.markDebtPaid);
+  const editDebt = useDebtsStore((s) => s.editDebt);
+  const getClientDebtTotal = useDebtsStore((s) => s.getClientDebtTotal);
+  const markAllDebtsPaid = useDebtsStore((s) => s.markAllDebtsPaid);
+  const transfers = useTransfersStore((s) => s.transfers);
+  const hasPendingTransfer = useTransfersStore((s) => s.hasPendingTransfer);
+  const addTransfer = useTransfersStore((s) => s.addTransfer);
+  const markTransferReviewed = useTransfersStore((s) => s.markTransferReviewed);
+  const dailyLoad = useDailyLoadsStore((s) => s.dailyLoad);
+  const loadForDay = useDailyLoadsStore((s) => s.loadForDay);
+  const saveDailyLoad = useDailyLoadsStore((s) => s.saveDailyLoad);
 
   const scrollRef = useRef<any>(null);
   useScrollToTop(scrollRef);
@@ -815,7 +822,7 @@ const HomeScreen = () => {
       <View style={styles.searchSection}>
         <View style={styles.searchRow}>
           <View style={styles.searchInputWrapper}>
-            <Ionicons name="search" size={16} color={colors.textHint} style={styles.searchIcon} />
+            <Text style={[styles.searchIcon, { fontSize: 14 }]}>🔍</Text>
             <TextInput
               style={styles.searchInput}
               value={searchTerm}
@@ -848,7 +855,7 @@ const HomeScreen = () => {
                 onPress={() => toggleFilter('once_starred')}
               >
                 <Text style={[styles.filterChipText, activeFilters.has('once_starred') && styles.filterChipTextActive]}>
-                  ☆ {t('home.filterOnceStarred')}
+                  ⭐ {t('home.filterOnceStarred')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -856,7 +863,7 @@ const HomeScreen = () => {
                 onPress={() => toggleFilter('con_deuda')}
               >
                 <Text style={[styles.filterChipText, activeFilters.has('con_deuda') && styles.filterChipTextActive]}>
-                  $ {t('home.filterWithDebt')}
+                  💰 {t('home.filterWithDebt')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -869,7 +876,7 @@ const HomeScreen = () => {
                   onPress={() => toggleFilter(p.id)}
                 >
                   <Text style={[styles.filterChipText, activeFilters.has(p.id) && styles.filterChipTextActive]}>
-                    <Ionicons name={p.icon} size={13} /> {p.short}
+                    {p.emoji} {p.short}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -890,10 +897,10 @@ const HomeScreen = () => {
             keyExtractor={keyExtractor}
             renderItem={renderDraggableItem}
             onDragEnd={handleDragEnd}
+            activationDistance={10}
             initialNumToRender={15}
             maxToRenderPerBatch={10}
-            windowSize={5}
-            removeClippedSubviews
+            windowSize={7}
           />
         ) : (
           <View style={styles.emptyContainer}>

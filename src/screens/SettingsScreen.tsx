@@ -15,15 +15,15 @@ import {
 import RNFS from 'react-native-fs';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
-import { useClientsContext } from '../context/ClientsContext';
-import { useDebtsContext } from '../context/DebtsContext';
-import { useTransfersContext } from '../context/TransfersContext';
+import { useClientsStore } from '../stores/clientsStore';
+import { useDebtsStore } from '../stores/debtsStore';
+import { useTransfersStore } from '../stores/transfersStore';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { PRODUCTS, FREQUENCY_LABELS, Frequency } from '../constants/products';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
-import { useSubscriptionContext } from '../context/SubscriptionContext';
+import { useSubscriptionStore } from '../stores/subscriptionStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -35,12 +35,21 @@ const SettingsScreen = () => {
   const { fontScale } = useLayout();
   const styles = getStyles(colors, fontScale);
   const { user: firebaseUser, groupData, isAdmin, signOut, deleteAccount, setGroupData } = useAuthContext();
-  const { clients, clientCount, findDuplicateClients, cleanupDuplicates } = useClientsContext();
-  const { isPremium, currentPlan, expirationDate, isTrialActive, hasPromo, redeemCode, removePromo } = useSubscriptionContext();
+  const clients = useClientsStore((s) => s.clients);
+  const clientCount = useClientsStore((s) => s.clientCount);
+  const findDuplicateClients = useClientsStore((s) => s.findDuplicateClients);
+  const cleanupDuplicates = useClientsStore((s) => s.cleanupDuplicates);
+  const isPremium = useSubscriptionStore((s) => s.isPremium);
+  const currentPlan = useSubscriptionStore((s) => s.currentPlan);
+  const expirationDate = useSubscriptionStore((s) => s.expirationDate);
+  const isTrialActive = useSubscriptionStore((s) => s.isTrialActive);
+  const hasPromo = useSubscriptionStore((s) => s.hasPromo);
+  const redeemCode = useSubscriptionStore((s) => s.redeemCode);
+  const removePromo = useSubscriptionStore((s) => s.removePromo);
   const [promoCode, setPromoCode] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
-  const { debts } = useDebtsContext();
-  const { transfers } = useTransfersContext();
+  const debts = useDebtsStore((s) => s.debts);
+  const transfers = useTransfersStore((s) => s.transfers);
   if (!firebaseUser) return null;
   const user = {
     uid: firebaseUser.uid,

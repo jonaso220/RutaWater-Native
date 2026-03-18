@@ -26,9 +26,9 @@ interface DebtModalProps {
   debtTemplate?: string;
   reminderTemplate?: string;
   onClose: () => void;
-  onAddDebt: (client: Client, amount: number) => void;
-  onMarkPaid: (debt: Debt) => void;
-  onEditDebt: (debtId: string, newAmount: number) => void;
+  onAddDebt: (client: Client, amount: number) => Promise<void>;
+  onMarkPaid: (debt: Debt) => Promise<void>;
+  onEditDebt: (debtId: string, newAmount: number) => Promise<void>;
 }
 
 const DebtModal: React.FC<DebtModalProps> = ({
@@ -48,17 +48,23 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const [newAmount, setNewAmount] = useState('');
   const [editingDebt, setEditingDebt] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
+  const [saving, setSaving] = useState(false);
 
   if (!client) return null;
 
   const clientDebts = debts.filter((d) => d.clientId === client.id);
   const total = clientDebts.reduce((sum, d) => sum + (d.amount || 0), 0);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const amount = parseFloat(newAmount);
-    if (!amount || amount <= 0) return;
-    onAddDebt(client, amount);
-    setNewAmount('');
+    if (!amount || amount <= 0 || saving) return;
+    setSaving(true);
+    try {
+      await onAddDebt(client, amount);
+      setNewAmount('');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handlePaid = (debt: Debt) => {
@@ -69,18 +75,30 @@ const DebtModal: React.FC<DebtModalProps> = ({
         { text: t('cancel'), style: 'cancel' },
         {
           text: t('debtModal.paid'),
-          onPress: () => onMarkPaid(debt),
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await onMarkPaid(debt);
+            } finally {
+              setSaving(false);
+            }
+          },
         },
       ],
     );
   };
 
-  const handleSaveEdit = (debtId: string) => {
+  const handleSaveEdit = async (debtId: string) => {
     const amount = parseFloat(editAmount);
-    if (!amount || amount <= 0) return;
-    onEditDebt(debtId, amount);
-    setEditingDebt(null);
-    setEditAmount('');
+    if (!amount || amount <= 0 || saving) return;
+    setSaving(true);
+    try {
+      await onEditDebt(debtId, amount);
+      setEditingDebt(null);
+      setEditAmount('');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const sendDebtTotal = () => {
@@ -156,7 +174,8 @@ const DebtModal: React.FC<DebtModalProps> = ({
                       />
                       <TouchableOpacity
                         onPress={() => handleSaveEdit(debt.id)}
-                        style={styles.saveEditBtn}
+                        style={[styles.saveEditBtn, saving && { opacity: 0.5 }]}
+                        disabled={saving}
                       >
                         <Text style={styles.saveEditText}>OK</Text>
                       </TouchableOpacity>
@@ -192,7 +211,8 @@ const DebtModal: React.FC<DebtModalProps> = ({
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => handlePaid(debt)}
-                          style={[styles.debtActionBtn, styles.paidBtn]}
+                          style={[styles.debtActionBtn, styles.paidBtn, saving && { opacity: 0.5 }]}
+                          disabled={saving}
                         >
                           <Text style={styles.paidBtnText}>{t('debtModal.paid')}</Text>
                         </TouchableOpacity>
@@ -247,9 +267,9 @@ const DebtModal: React.FC<DebtModalProps> = ({
                 onPress={handleAdd}
                 style={[
                   styles.addBtn,
-                  !newAmount && styles.addBtnDisabled,
+                  (!newAmount || saving) && styles.addBtnDisabled,
                 ]}
-                disabled={!newAmount}
+                disabled={!newAmount || saving}
               >
                 <Text style={styles.addBtnText}>{t('add')}</Text>
               </TouchableOpacity>

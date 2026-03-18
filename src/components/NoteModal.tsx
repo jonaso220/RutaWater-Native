@@ -151,16 +151,18 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
                 </TouchableOpacity>
               ) : null}
               {Platform.OS === 'ios' ? (
-                <DateTimePicker
-                  value={pickerDate}
-                  mode="date"
-                  display="inline"
-                  onChange={onDateChange}
-                  minimumDate={new Date()}
-                  locale="es-ES"
-                  style={styles.datePicker}
-                  themeVariant={isDark ? 'dark' : 'light'}
-                />
+                <View style={styles.datePickerWrapper}>
+                  <DateTimePicker
+                    value={pickerDate}
+                    mode="date"
+                    display="inline"
+                    onChange={onDateChange}
+                    minimumDate={new Date()}
+                    locale="es-ES"
+                    style={styles.datePicker}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                  />
+                </View>
               ) : (
                 <>
                   <TouchableOpacity
@@ -271,7 +273,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     textAlign: 'center',
   },
   datePicker: {
-    height: 340,
+    height: 350,
+  },
+  datePickerWrapper: {
+    alignSelf: 'center' as const,
+    width: 330,
+    overflow: 'hidden' as const,
   },
   selectedDateHint: {
     fontSize: 13,

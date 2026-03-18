@@ -14,6 +14,7 @@ import {
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
 import { PRODUCTS, ALL_DAYS, FREQUENCY_LABELS, Frequency } from '../constants/products';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
@@ -223,16 +224,18 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                   </View>
                 ) : null}
                 {Platform.OS === 'ios' ? (
-                  <DateTimePicker
-                    value={pickerDate}
-                    mode="date"
-                    display="inline"
-                    onChange={onDateChange}
-                    minimumDate={new Date()}
-                    locale="es-ES"
-                    style={styles.datePicker}
-                    themeVariant={isDark ? 'dark' : 'light'}
-                  />
+                  <View style={styles.datePickerWrapper}>
+                    <DateTimePicker
+                      value={pickerDate}
+                      mode="date"
+                      display="inline"
+                      onChange={onDateChange}
+                      minimumDate={new Date()}
+                      locale="es-ES"
+                      style={styles.datePicker}
+                      themeVariant={isDark ? 'dark' : 'light'}
+                    />
+                  </View>
                 ) : (
                   <>
                     <TouchableOpacity
@@ -298,7 +301,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             {PRODUCTS.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
-                  {p.icon} {p.label}
+                  {p.emoji} {p.label}
                 </Text>
                 <View style={styles.qtyControls}>
                   <TouchableOpacity
@@ -462,7 +465,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     textAlign: 'center',
   },
   datePicker: {
-    height: 340,
+    height: 350,
+  },
+  datePickerWrapper: {
+    alignSelf: 'center' as const,
+    width: 330,
+    overflow: 'hidden' as const,
   },
   hintText: {
     fontSize: 13,

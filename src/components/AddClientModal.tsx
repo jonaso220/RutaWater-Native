@@ -59,7 +59,63 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
 
   const isDirectoryMode = !day;
 
+  // Detect if text is the simple "Name - Address - Link" format
+  const isSimpleFormat = (text: string): boolean => {
+    const trimmed = text.trim();
+    // Single line (or single meaningful line) with dash separators
+    const lines = trimmed.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length > 2) return false;
+    // Must have at least one " - " separator
+    const singleLine = lines.join(' ');
+    return singleLine.includes(' - ') && !(/^(pedido|nombre|direcci[oó]n|tel[eé]fono|producto)\s*:/im.test(trimmed));
+  };
+
+  // Parse simple format: "Name - Address - Link" or "Name - Address"
+  const parseSimpleFormat = (text: string) => {
+    const singleLine = text.trim().split('\n').map((l) => l.trim()).filter(Boolean).join(' ');
+    const parts = singleLine.split(/\s+-\s+/).map((s) => s.trim()).filter(Boolean);
+
+    let parsedName = '';
+    let parsedAddress = '';
+    let parsedMapsLink = '';
+
+    // Extract URL from any part
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const urlMatch = parts[i].match(/(https?:\/\/[^\s]+)/);
+      if (urlMatch) {
+        parsedMapsLink = urlMatch[1];
+        // Remove the URL from the part; if the part is only the URL, remove it entirely
+        const remainder = parts[i].replace(urlMatch[1], '').trim();
+        if (remainder) {
+          parts[i] = remainder;
+        } else {
+          parts.splice(i, 1);
+        }
+        break;
+      }
+    }
+
+    // First part = name, rest = address
+    if (parts.length >= 2) {
+      parsedName = parts[0];
+      parsedAddress = parts.slice(1).join(' - ');
+    } else if (parts.length === 1) {
+      parsedName = parts[0];
+    }
+
+    if (parsedName) setName(parsedName);
+    if (parsedAddress) setAddress(parsedAddress);
+    if (parsedMapsLink) setMapsLink(parsedMapsLink);
+  };
+
   const parseOrderText = (text: string) => {
+    // Try simple format first: "Name - Address - Link"
+    if (isSimpleFormat(text)) {
+      parseSimpleFormat(text);
+      return;
+    }
+
+    // Full order format with labeled fields
     const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
 
     let parsedName = '';
@@ -411,7 +467,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             {PRODUCTS.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
-                  <Ionicons name={p.icon} size={16} /> {p.label}
+                  {p.emoji} {p.label}
                 </Text>
                 <View style={styles.qtyControls}>
                   <TouchableOpacity

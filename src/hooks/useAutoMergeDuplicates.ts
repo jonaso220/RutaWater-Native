@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
-import { useClientsContext } from '../context/ClientsContext';
-import { useDebtsContext } from '../context/DebtsContext';
-import { useTransfersContext } from '../context/TransfersContext';
+import { useClientsStore } from '../stores/clientsStore';
+import { useDebtsStore } from '../stores/debtsStore';
+import { useTransfersStore } from '../stores/transfersStore';
 
 /**
  * Auto-merge duplicate on_demand clients with the same phone number.
@@ -12,9 +12,9 @@ import { useTransfersContext } from '../context/TransfersContext';
  */
 export const useAutoMergeDuplicates = () => {
   const { user } = useAuthContext();
-  const { clients } = useClientsContext();
-  const { debts } = useDebtsContext();
-  const { transfers } = useTransfersContext();
+  const clients = useClientsStore((s) => s.clients);
+  const debts = useDebtsStore((s) => s.debts);
+  const transfers = useTransfersStore((s) => s.transfers);
   const mergingRef = useRef(false);
 
   useEffect(() => {

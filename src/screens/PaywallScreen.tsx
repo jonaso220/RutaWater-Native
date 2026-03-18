@@ -14,7 +14,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { useLayout } from '../hooks/useLayout';
-import { useSubscriptionContext } from '../context/SubscriptionContext';
+import { useSubscriptionStore } from '../stores/subscriptionStore';
 import { ThemeColors } from '../theme/colors';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { PACKAGE_TYPE } from 'react-native-purchases';
@@ -28,7 +28,10 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
   const { fontScale } = useLayout();
   const { t } = useTranslation();
   const styles = getStyles(colors, fontScale);
-  const { packages, purchasePackage, restorePurchases, isPremium } = useSubscriptionContext();
+  const packages = useSubscriptionStore((s) => s.packages);
+  const purchasePackage = useSubscriptionStore((s) => s.purchasePackage);
+  const restorePurchases = useSubscriptionStore((s) => s.restorePurchases);
+  const isPremium = useSubscriptionStore((s) => s.isPremium);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
 

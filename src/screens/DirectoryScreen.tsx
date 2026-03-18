@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
-  FlatList,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -16,8 +15,8 @@ import { PRODUCTS } from '../constants/products';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuthContext } from '../context/AuthContext';
-import { useClientsContext } from '../context/ClientsContext';
-import { useDebtsContext } from '../context/DebtsContext';
+import { useClientsStore } from '../stores/clientsStore';
+import { useDebtsStore } from '../stores/debtsStore';
 import { useNavigation } from '@react-navigation/native';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import ScheduleModal from '../components/ScheduleModal';
@@ -27,6 +26,7 @@ import AddClientModal from '../components/AddClientModal';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { FlashList } from '@shopify/flash-list';
 import { useLayout } from '../hooks/useLayout';
 
 const DirectoryScreen = () => {
@@ -36,8 +36,20 @@ const DirectoryScreen = () => {
   const styles = getStyles(colors, fontScale);
   const navigation = useNavigation<any>();
   const { isAdmin } = useAuthContext();
-  const { getFilteredDirectory, directoryCounts, scheduleFromDirectory, updateClient, deleteClient, clients, cloneClient, addClient, canAddClient, clientCount } = useClientsContext();
-  const { debts, addDebt, markDebtPaid, editDebt, getClientDebtTotal } = useDebtsContext();
+  const getFilteredDirectory = useClientsStore((s) => s.getFilteredDirectory);
+  const directoryCounts = useClientsStore((s) => s.directoryCounts);
+  const scheduleFromDirectory = useClientsStore((s) => s.scheduleFromDirectory);
+  const updateClient = useClientsStore((s) => s.updateClient);
+  const deleteClient = useClientsStore((s) => s.deleteClient);
+  const clients = useClientsStore((s) => s.clients);
+  const cloneClient = useClientsStore((s) => s.cloneClient);
+  const addClient = useClientsStore((s) => s.addClient);
+  const canAddClient = useClientsStore((s) => s.canAddClient);
+  const debts = useDebtsStore((s) => s.debts);
+  const addDebt = useDebtsStore((s) => s.addDebt);
+  const markDebtPaid = useDebtsStore((s) => s.markDebtPaid);
+  const editDebt = useDebtsStore((s) => s.editDebt);
+  const getClientDebtTotal = useDebtsStore((s) => s.getClientDebtTotal);
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [scheduleClient, setScheduleClient] = useState<Client | null>(null);
@@ -252,7 +264,7 @@ const DirectoryScreen = () => {
           .filter((k) => parseInt(String(item.products[k] || 0), 10) > 0)
           .map((k) => {
             const p = PRODUCTS.find((prod) => prod.id === k);
-            return { qty: item.products[k], icon: p ? p.icon : 'cube', label: p ? p.short : k };
+            return { qty: item.products[k], emoji: p ? p.emoji : '📦', label: p ? p.short : k };
           })
       : [];
 
@@ -313,7 +325,7 @@ const DirectoryScreen = () => {
             <View style={styles.prodChipsRow}>
               {prodChips.map((p, i) => (
                 <Text key={i} style={styles.prodChip}>
-                  <Ionicons name={p.icon} size={13} /> {p.qty}x {p.label}
+                  {p.emoji} {p.qty}x {p.label}
                 </Text>
               ))}
             </View>
@@ -323,12 +335,12 @@ const DirectoryScreen = () => {
           <View style={styles.actionsRow}>
             {item.phone ? (
               <TouchableOpacity onPress={() => callClient(item)} style={styles.actionBtn}>
-                <Ionicons name="call" size={18} color={colors.textSecondary} />
+                <Text style={{ fontSize: 18 }}>📞</Text>
               </TouchableOpacity>
             ) : null}
             {item.phone ? (
               <TouchableOpacity onPress={() => sendWhatsApp(item)} style={styles.actionBtn}>
-                <Ionicons name="chatbubble" size={18} color={colors.textSecondary} />
+                <Text style={{ fontSize: 18 }}>💬</Text>
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
@@ -336,17 +348,14 @@ const DirectoryScreen = () => {
               style={[styles.actionBtn, !hasLocation && { opacity: 0.3 }]}
               activeOpacity={hasLocation ? 0.6 : 1}
             >
-              <Ionicons name="location-sharp" size={18} color={colors.textSecondary} />
+              <Text style={{ fontSize: 18 }}>📍</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setDebtClient(item)} style={styles.actionBtn}>
-              <Ionicons name="cash" size={18} color={debtTotal > 0 ? colors.danger : colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleClone(item)} style={styles.actionBtn}>
-              <Ionicons name="clipboard" size={18} color={colors.textSecondary} />
+              <Text style={{ fontSize: 18 }}>{debtTotal > 0 ? '💰' : '💲'}</Text>
             </TouchableOpacity>
             {isAdmin && (
               <TouchableOpacity onPress={() => setEditClient(item)} style={styles.actionBtn}>
-                <Ionicons name="pencil" size={18} color={colors.textSecondary} />
+                <Text style={{ fontSize: 18 }}>✏️</Text>
               </TouchableOpacity>
             )}
             <View style={{ flex: 1 }} />
@@ -462,7 +471,7 @@ const DirectoryScreen = () => {
       </Text>
 
       {/* Client list */}
-      <FlatList
+      <FlashList
         data={filteredClients}
         renderItem={renderClient}
         keyExtractor={(item) => item.id}

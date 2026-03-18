@@ -283,8 +283,12 @@ export const getWeekNumber = (d: Date): number => {
 };
 
 export const getNextVisitDate = (client: Client, forDay?: string): Date | null => {
-  if (client.specificDate) return new Date(client.specificDate + 'T12:00:00');
-  if (client.freq === 'once') return null;
+  // Only use specificDate as-is for 'once' clients (one-time orders).
+  // For periodic clients, specificDate is a start-date hint and should not
+  // override the normal next-visit calculation.
+  if (client.freq === 'once') {
+    return client.specificDate ? new Date(client.specificDate + 'T12:00:00') : null;
+  }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Vibration } from 'react-native';
-import { useClientsContext } from '../context/ClientsContext';
+import { useClientsStore } from '../stores/clientsStore';
 
 export interface AlarmData {
   clientId: string;
@@ -15,7 +15,8 @@ export interface AlarmData {
  * Auto-clears the alarm after firing so it doesn't repeat.
  */
 export const useAlarmChecker = () => {
-  const { clients, saveAlarm } = useClientsContext();
+  const clients = useClientsStore((s) => s.clients);
+  const saveAlarm = useClientsStore((s) => s.saveAlarm);
   const [activeAlarm, setActiveAlarm] = useState<AlarmData | null>(null);
   const firedAlarmsRef = useRef<Set<string>>(new Set());
 

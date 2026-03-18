@@ -25,12 +25,12 @@ interface DebtsSheetProps {
   debts: Debt[];
   clients: Client[];
   isAdmin: boolean;
-  onMarkPaid: (debt: Debt) => void;
-  onMarkAllPaid: (clientId: string, debtIds: string[]) => void;
-  onEditDebt: (debtId: string, newAmount: number) => void;
+  onMarkPaid: (debt: Debt) => Promise<void>;
+  onMarkAllPaid: (clientId: string, debtIds: string[]) => Promise<void>;
+  onEditDebt: (debtId: string, newAmount: number) => Promise<void>;
   onClose: () => void;
   onTransferPayment?: (clientId: string) => void;
-  onAddDebt?: (client: Client, amount: number) => void;
+  onAddDebt?: (client: Client, amount: number) => Promise<void>;
 }
 
 type SortMode = 'date' | 'amount';
@@ -66,6 +66,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const [addSearch, setAddSearch] = useState('');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [addAmount, setAddAmount] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const now = Date.now();
 
@@ -133,14 +134,19 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     return clients.filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
   }, [clients, addSearch]);
 
-  const handleAddDebt = () => {
-    if (!selectedClient || !onAddDebt) return;
+  const handleAddDebt = async () => {
+    if (!selectedClient || !onAddDebt || saving) return;
     const amount = parseFloat(addAmount);
     if (!amount || amount <= 0) return;
-    onAddDebt(selectedClient, amount);
-    setAddAmount('');
-    setSelectedClient(null);
-    setShowAddPanel(false);
+    setSaving(true);
+    try {
+      await onAddDebt(selectedClient, amount);
+      setAddAmount('');
+      setSelectedClient(null);
+      setShowAddPanel(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const closeAddPanel = () => {
@@ -167,6 +173,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   };
 
   const handleMarkPaid = (debt: Debt) => {
+    if (saving) return;
     Alert.alert(
       t('debtModal.confirmPayment'),
       t('debtModal.paidConfirm', { name: debt.clientName, amount: debt.amount?.toLocaleString() }),
@@ -174,13 +181,21 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
         { text: t('cancel'), style: 'cancel' },
         {
           text: t('debtModal.paid'),
-          onPress: () => onMarkPaid(debt),
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await onMarkPaid(debt);
+            } finally {
+              setSaving(false);
+            }
+          },
         },
       ],
     );
   };
 
   const handleMarkAllPaid = (group: ClientDebtGroup) => {
+    if (saving) return;
     Alert.alert(
       t('debtsSheet.allPaidTitle'),
       t('debtsSheet.allPaidMsg', { name: group.clientName, count: group.debts.length, total: group.total.toLocaleString() }),
@@ -188,7 +203,14 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
         { text: t('cancel'), style: 'cancel' },
         {
           text: t('debtsSheet.allPaid'),
-          onPress: () => onMarkAllPaid(group.clientId, group.debts.map((d) => d.id)),
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await onMarkAllPaid(group.clientId, group.debts.map((d) => d.id));
+            } finally {
+              setSaving(false);
+            }
+          },
         },
       ],
     );
@@ -269,7 +291,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             </View>
             <TouchableOpacity
               onPress={() => handleMarkPaid(debt)}
-              style={styles.paidBtn}
+              style={[styles.paidBtn, saving && { opacity: 0.5 }]}
+              disabled={saving}
             >
               <Text style={styles.paidBtnText}>{t('debtModal.paid')}</Text>
             </TouchableOpacity>
@@ -280,7 +303,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
       {item.debts.length > 1 && (
         <TouchableOpacity
           onPress={() => handleMarkAllPaid(item)}
-          style={styles.payAllBtn}
+          style={[styles.payAllBtn, saving && { opacity: 0.5 }]}
+          disabled={saving}
         >
           <Text style={styles.payAllBtnText}><Ionicons name="checkmark" size={14} /> {t('debtsSheet.payAll', { count: item.debts.length })}</Text>
         </TouchableOpacity>
@@ -439,8 +463,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                   />
                   <TouchableOpacity
                     onPress={handleAddDebt}
-                    style={[styles.confirmAddBtn, !addAmount && styles.confirmAddBtnDisabled]}
-                    disabled={!addAmount}
+                    style={[styles.confirmAddBtn, (!addAmount || saving) && styles.confirmAddBtnDisabled]}
+                    disabled={!addAmount || saving}
                   >
                     <Text style={styles.confirmAddBtnText}>{t('add')}</Text>
                   </TouchableOpacity>

@@ -15,6 +15,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
@@ -134,13 +135,23 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     }
     if (needsDate && startDate) {
       data.specificDate = startDate;
-      // For 'once' freq (notes), update visitDay/visitDays to match new date
+      // For 'once' freq, update visitDay/visitDays and listOrders to match new date
       if (freq === 'once') {
         const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
         const d = new Date(startDate + 'T12:00:00');
         const newDay = dayNames[d.getDay()];
+        const oldDay = client.visitDay;
         data.visitDay = newDay;
         data.visitDays = [newDay];
+        // When the day changes, update listOrders so the client has a valid position on the new day
+        if (newDay !== oldDay) {
+          const oldOrders = client.listOrders || {};
+          const oldPos = oldOrders[oldDay] ?? client.listOrder ?? 0;
+          const newOrders = { ...oldOrders };
+          delete newOrders[oldDay];
+          newOrders[newDay] = oldPos;
+          (data as any).listOrders = newOrders;
+        }
       }
     } else if (!needsDate) {
       data.specificDate = '';
@@ -283,7 +294,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             {PRODUCTS.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
-                  {p.icon} {p.label}
+                  {p.emoji} {p.label}
                 </Text>
                 <View style={styles.qtyControls}>
                   <TouchableOpacity
@@ -374,16 +385,18 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                   </Text>
                 )}
                 {Platform.OS === 'ios' ? (
-                  <DateTimePicker
-                    value={pickerDate}
-                    mode="date"
-                    display="inline"
-                    onChange={onDateChange}
-                    minimumDate={new Date()}
-                    locale="es-ES"
-                    style={styles.datePicker}
-                    themeVariant={isDark ? 'dark' : 'light'}
-                  />
+                  <View style={styles.datePickerWrapper}>
+                    <DateTimePicker
+                      value={pickerDate}
+                      mode="date"
+                      display="inline"
+                      onChange={onDateChange}
+                      minimumDate={new Date()}
+                      locale="es-ES"
+                      style={styles.datePicker}
+                      themeVariant={isDark ? 'dark' : 'light'}
+                    />
+                  </View>
                 ) : (
                   <>
                     <TouchableOpacity
@@ -593,6 +606,12 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: 8,
   },
   datePicker: {
+    height: 350,
+  },
+  datePickerWrapper: {
+    alignSelf: 'center' as const,
+    width: 330,
+    overflow: 'hidden' as const,
     marginTop: 4,
   },
   dateBtn: {

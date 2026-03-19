@@ -273,7 +273,10 @@ const ClientCard: React.FC<ClientCardProps> = ({
 
         {/* Notes */}
         {client.notes ? (
-          <Text style={styles.notesText}><Ionicons name="chatbubble" size={s(12)} color={colors.textMuted} /> {client.notes}</Text>
+          <View style={styles.notesRow}>
+            <Ionicons name="document-text" size={s(14)} color={colors.warningDark} />
+            <Text style={styles.notesText} numberOfLines={3}>{client.notes}</Text>
+          </View>
         ) : null}
 
         {/* Freq badge */}
@@ -466,10 +469,23 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       fontWeight: '600',
       color: colors.textSecondary,
     },
+    notesRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 6,
+      backgroundColor: colors.warningAmberBg,
+      borderRadius: 8,
+      padding: 8,
+      marginTop: 2,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.warningDark,
+    },
     notesText: {
+      flex: 1,
       fontSize: s(13),
-      color: colors.textMuted,
-      fontStyle: 'italic',
+      color: colors.textSecondary,
+      fontWeight: '500',
+      lineHeight: s(18),
     },
     freqRow: {
       marginTop: 2,

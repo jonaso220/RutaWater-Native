@@ -56,6 +56,28 @@ export const useAuth = () => {
     }
   };
 
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      await auth().signInWithEmailAndPassword(email, password);
+    } catch (error: any) {
+      // If user not found, try creating account
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
+        throw error;
+      }
+      console.error('Email Sign-In Error:', error);
+      throw error;
+    }
+  };
+
+  const signUpWithEmail = async (email: string, password: string) => {
+    try {
+      await auth().createUserWithEmailAndPassword(email, password);
+    } catch (error) {
+      console.error('Email Sign-Up Error:', error);
+      throw error;
+    }
+  };
+
   const signInWithGoogle = async () => {
     try {
       await GoogleSignin.hasPlayServices();
@@ -194,6 +216,8 @@ export const useAuth = () => {
     loading,
     groupData,
     isAdmin,
+    signInWithEmail,
+    signUpWithEmail,
     signInWithGoogle,
     signInWithApple,
     signOut,

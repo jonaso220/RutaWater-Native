@@ -13,7 +13,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 
 const AppContent = () => {
-  const { user, loading: authLoading, signInWithGoogle, signInWithApple } = useAuthContext();
+  const { user, loading: authLoading, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple } = useAuthContext();
   const { colors } = useTheme();
 
   if (authLoading) {
@@ -25,7 +25,7 @@ const AppContent = () => {
   }
 
   if (!user) {
-    return <LoginScreen onSignInWithGoogle={signInWithGoogle} onSignInWithApple={signInWithApple} />;
+    return <LoginScreen onSignInWithEmail={signInWithEmail} onSignUpWithEmail={signUpWithEmail} onSignInWithGoogle={signInWithGoogle} onSignInWithApple={signInWithApple} />;
   }
 
   return (

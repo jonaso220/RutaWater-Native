@@ -50,30 +50,23 @@ const SettingsScreen = () => {
   const [promoLoading, setPromoLoading] = useState(false);
   const debts = useDebtsStore((s) => s.debts);
   const transfers = useTransfersStore((s) => s.transfers);
-  if (!firebaseUser) return null;
-  const user = {
-    uid: firebaseUser.uid,
-    email: firebaseUser.email,
-    displayName: firebaseUser.displayName,
-  };
-  const onSignOut = signOut;
-  const onGroupUpdate = setGroupData;
+  // ALL hooks must be called before any early return (Rules of Hooks)
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
-  // WhatsApp templates
-  const DEFAULT_EN_CAMINO = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
-  const DEFAULT_DEUDA = 'La deuda es de ${total}. Saludos';
-  const DEFAULT_RECORDATORIO = 'Hola, buenas \nEste es un mensaje automatico para informarle que, segun nuestros registros, quedo pendiente un saldo por regularizar.\nCuando pueda, le agradecemos que nos indique en que fecha podriamos saldarlo. Si necesita nuevamente los datos de la cuenta, con gusto se los enviamos.\nMuchas gracias.';
   const [waEnCamino, setWaEnCamino] = useState('');
   const [waDeuda, setWaDeuda] = useState('');
   const [waRecordatorio, setWaRecordatorio] = useState('');
   const [waLoaded, setWaLoaded] = useState(false);
 
+  const uid = firebaseUser?.uid || '';
+  const userEmail = firebaseUser?.email || '';
+  const userDisplayName = firebaseUser?.displayName || '';
+
   // Load WhatsApp templates from settings
   useEffect(() => {
-    if (!user.uid) return;
-    const settingsDocId = groupData?.groupId || user.uid;
+    if (!uid) return;
+    const settingsDocId = groupData?.groupId || uid;
     db.collection('settings').doc(settingsDocId).get().then((doc) => {
       if (doc.exists) {
         const data = doc.data();
@@ -83,7 +76,39 @@ const SettingsScreen = () => {
       }
       setWaLoaded(true);
     }).catch(() => setWaLoaded(true));
-  }, [user.uid, groupData?.groupId]);
+  }, [uid, groupData?.groupId]);
+
+  // Load group members
+  useEffect(() => {
+    if (!groupData?.groupId) {
+      setMembers([]);
+      return;
+    }
+    const unsubscribe = db
+      .collection('users')
+      .where('groupId', '==', groupData.groupId)
+      .onSnapshot((snapshot) => {
+        const loaded = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setMembers(loaded);
+      });
+    return () => unsubscribe();
+  }, [groupData?.groupId]);
+
+  if (!firebaseUser) return null;
+  const user = {
+    uid,
+    email: userEmail,
+    displayName: userDisplayName,
+  };
+  const onSignOut = signOut;
+  const onGroupUpdate = setGroupData;
+  // WhatsApp templates
+  const DEFAULT_EN_CAMINO = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
+  const DEFAULT_DEUDA = 'La deuda es de ${total}. Saludos';
+  const DEFAULT_RECORDATORIO = 'Hola, buenas \nEste es un mensaje automatico para informarle que, segun nuestros registros, quedo pendiente un saldo por regularizar.\nCuando pueda, le agradecemos que nos indique en que fecha podriamos saldarlo. Si necesita nuevamente los datos de la cuenta, con gusto se los enviamos.\nMuchas gracias.';
 
   const handleSaveTemplates = async () => {
     try {
@@ -111,25 +136,6 @@ const SettingsScreen = () => {
     ).catch((e) => console.error('Error resetting templates:', e));
     Alert.alert(t('settings.templatesReset'), t('settings.templatesResetMsg'));
   };
-
-  // Load group members
-  useEffect(() => {
-    if (!groupData?.groupId) {
-      setMembers([]);
-      return;
-    }
-    const unsubscribe = db
-      .collection('users')
-      .where('groupId', '==', groupData.groupId)
-      .onSnapshot((snapshot) => {
-        const loaded = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setMembers(loaded);
-      });
-    return () => unsubscribe();
-  }, [groupData?.groupId]);
 
   const generateCode = (): string => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

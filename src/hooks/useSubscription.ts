@@ -92,7 +92,7 @@ export const useSubscription = ({ userId }: { userId: string | undefined }): Sub
     });
 
     return () => {
-      listener.remove();
+      listener?.remove?.();
     };
   }, [processCustomerInfo]);
 

@@ -151,5 +151,16 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
     });
   }, [dailyLoadsHook.dailyLoad, dailyLoadsHook.loadForDay, dailyLoadsHook.saveDailyLoad]);
 
+  // Reset all stores on unmount (sign out) to prevent stale references
+  useEffect(() => {
+    return () => {
+      useClientsStore.setState(useClientsStore.getInitialState());
+      useDebtsStore.setState(useDebtsStore.getInitialState());
+      useTransfersStore.setState(useTransfersStore.getInitialState());
+      useDailyLoadsStore.setState(useDailyLoadsStore.getInitialState());
+      useSubscriptionStore.setState(useSubscriptionStore.getInitialState());
+    };
+  }, []);
+
   return <>{children}</>;
 };

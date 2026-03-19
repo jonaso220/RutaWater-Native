@@ -135,23 +135,29 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     }
     if (needsDate && startDate) {
       data.specificDate = startDate;
-      // For 'once' freq, update visitDay/visitDays and listOrders to match new date
+      const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const d = new Date(startDate + 'T12:00:00');
+      const newDay = dayNames[d.getDay()];
+      const oldDay = client.visitDay;
+
       if (freq === 'once') {
-        const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-        const d = new Date(startDate + 'T12:00:00');
-        const newDay = dayNames[d.getDay()];
-        const oldDay = client.visitDay;
+        // For 'once' freq, update visitDay/visitDays to match the date
         data.visitDay = newDay;
         data.visitDays = [newDay];
-        // When the day changes, update listOrders so the client has a valid position on the new day
-        if (newDay !== oldDay) {
-          const oldOrders = client.listOrders || {};
-          const oldPos = oldOrders[oldDay] ?? client.listOrder ?? 0;
-          const newOrders = { ...oldOrders };
-          delete newOrders[oldDay];
-          newOrders[newDay] = oldPos;
-          (data as any).listOrders = newOrders;
-        }
+      } else if (client.visitDays && client.visitDays.length === 1 && newDay !== oldDay) {
+        // For periodic clients with a single visit day, move to the new day
+        data.visitDay = newDay;
+        data.visitDays = [newDay];
+      }
+
+      // When the day changes, update listOrders so the client has a valid position on the new day
+      if (newDay !== oldDay && (freq === 'once' || (client.visitDays && client.visitDays.length === 1))) {
+        const oldOrders = client.listOrders || {};
+        const oldPos = oldOrders[oldDay] ?? client.listOrder ?? 0;
+        const newOrders = { ...oldOrders };
+        delete newOrders[oldDay];
+        newOrders[newDay] = oldPos;
+        (data as any).listOrders = newOrders;
       }
     } else if (!needsDate) {
       data.specificDate = '';
@@ -446,9 +452,11 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 8,
   },
   modal: {
     backgroundColor: colors.card,

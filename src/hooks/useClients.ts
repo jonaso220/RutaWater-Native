@@ -208,7 +208,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, []);
 
-  // Delete all completed clients for a day (chunked to avoid Firestore 500 op limit)
+  // Clear all completed clients for a day:
+  // - Notes (isNote): delete permanently
+  // - Real clients: move back to directory (on_demand) so they stay in the system
   const deleteAllCompleted = useCallback(async (day: string) => {
     try {
       const completed = getCompletedClients(day);
@@ -219,12 +221,29 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         const chunk = completed.slice(i, i + BATCH_SIZE);
         const batch = db.batch();
         chunk.forEach((c) => {
-          batch.delete(db.collection('clients').doc(c.id));
+          const ref = db.collection('clients').doc(c.id);
+          if (c.isNote) {
+            // Notes: delete permanently (they don't belong in the directory)
+            batch.delete(ref);
+          } else {
+            // Real clients: move to directory instead of deleting
+            batch.update(ref, {
+              freq: 'on_demand',
+              visitDay: 'Sin Asignar',
+              visitDays: [],
+              specificDate: '',
+              listOrders: {},
+              listOrder: 0,
+              isCompleted: false,
+              completedAt: null,
+              updatedAt: new Date(),
+            });
+          }
         });
         await batch.commit();
       }
     } catch (e) {
-      console.error('Error deleting completed:', e);
+      console.error('Error clearing completed:', e);
     }
   }, [getCompletedClients]);
 

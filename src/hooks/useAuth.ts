@@ -103,6 +103,12 @@ export const useAuth = () => {
 
   const signOut = async () => {
     try {
+      // Clear user first to unmount StoreSync and detach Firestore listeners
+      // BEFORE Firebase auth signs out (avoids permission-denied crashes)
+      setUser(null);
+      setGroupData(null);
+      // Wait for React to process the unmount
+      await new Promise((r) => setTimeout(r, 100));
       await GoogleSignin.signOut().catch(() => {});
       await auth().signOut();
     } catch (error) {

@@ -144,9 +144,11 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 8,
   },
   modal: {
     backgroundColor: colors.card,

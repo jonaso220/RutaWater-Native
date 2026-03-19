@@ -1,5 +1,5 @@
-import React, {createContext, useContext, useEffect, useState} from 'react';
-import {useColorScheme, Appearance} from 'react-native';
+import React, {createContext, useContext, useSyncExternalStore} from 'react';
+import {Appearance} from 'react-native';
 import {lightColors, darkColors, ThemeColors} from './colors';
 
 interface ThemeContextType {
@@ -12,21 +12,16 @@ const ThemeContext = createContext<ThemeContextType>({
   isDark: false,
 });
 
+// Subscribe to Appearance changes using useSyncExternalStore for zero-flash
+const subscribe = (callback: () => void) => {
+  const listener = Appearance.addChangeListener(callback);
+  return () => listener.remove();
+};
+
+const getSnapshot = () => Appearance.getColorScheme() === 'dark';
+
 export const ThemeProvider: React.FC<{children: React.ReactNode}> = ({children}) => {
-  const systemScheme = useColorScheme();
-  const [isDark, setIsDark] = useState(systemScheme === 'dark');
-
-  useEffect(() => {
-    const listener = Appearance.addChangeListener(({colorScheme}) => {
-      setIsDark(colorScheme === 'dark');
-    });
-    return () => listener.remove();
-  }, []);
-
-  useEffect(() => {
-    setIsDark(systemScheme === 'dark');
-  }, [systemScheme]);
-
+  const isDark = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   const colors = isDark ? darkColors : lightColors;
 
   return (

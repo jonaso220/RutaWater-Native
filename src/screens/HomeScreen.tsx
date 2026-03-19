@@ -11,14 +11,11 @@ import {
   Modal,
 } from 'react-native';
 import DraggableFlatList, {
-  NestableScrollContainer,
-  NestableDraggableFlatList,
   ScaleDecorator,
   RenderItemParams,
 } from 'react-native-draggable-flatlist';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useScrollToTop } from '@react-navigation/native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Client } from '../types';
 import { ALL_DAYS, PRODUCTS } from '../constants/products';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate } from '../utils/helpers';
@@ -339,7 +336,7 @@ const HomeScreen = () => {
   const handleSelectDay = useCallback((day: string) => {
     setSelectedDay((prev) => {
       if (day === prev) {
-        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        scrollRef.current?.scrollToOffset?.({ offset: 0, animated: true });
         return prev;
       }
       return day;
@@ -470,9 +467,13 @@ const HomeScreen = () => {
 
   const isDragEnabled = debouncedSearchTerm.trim().length === 0 && activeFilters.size === 0;
 
-  // Load daily load data when day changes
+  // Load daily load data when day changes + scroll to top
   useEffect(() => {
     loadForDay(selectedDay);
+    // Scroll to top on day change for instant feel
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+    });
   }, [selectedDay, loadForDay]);
 
   const handleMarkDone = useCallback(
@@ -639,6 +640,20 @@ const HomeScreen = () => {
   const handleEditCb = useCallback((client: Client) => setEditingClient(client), []);
   const handleDebtCb = useCallback((client: Client) => setDebtClient(client), []);
 
+  // Use refs for data that changes frequently but shouldn't recreate renderItem
+  const globalPositionMapRef = useRef(globalPositionMap);
+  globalPositionMapRef.current = globalPositionMap;
+  const debtMapRef = useRef(debtMap);
+  debtMapRef.current = debtMap;
+  const transferMapRef = useRef(transferMap);
+  transferMapRef.current = transferMap;
+  const isDragEnabledRef = useRef(isDragEnabled);
+  isDragEnabledRef.current = isDragEnabled;
+  const selectedDayForRenderRef = useRef(selectedDay);
+  selectedDayForRenderRef.current = selectedDay;
+  const appSettingsRef = useRef(appSettings);
+  appSettingsRef.current = appSettings;
+
   const renderDraggableItem = useCallback(
     ({ item, drag }: RenderItemParams<ListItem>) => {
       if (item.type === 'header') {
@@ -654,19 +669,19 @@ const HomeScreen = () => {
       }
 
       const client = item.client;
-      const globalIndex = globalPositionMap[client.id] ?? 0;
+      const globalIndex = globalPositionMapRef.current[client.id] ?? 0;
 
       return (
         <ClientItem
           client={client}
           globalIndex={globalIndex}
           isAdmin={isAdmin}
-          hasDebt={debtMap[client.id] ?? false}
-          hasPendingTransfer={transferMap[client.id] ?? false}
-          isDragEnabled={isDragEnabled}
-          enCaminoMessage={appSettings?.whatsappEnCamino}
+          hasDebt={debtMapRef.current[client.id] ?? false}
+          hasPendingTransfer={transferMapRef.current[client.id] ?? false}
+          isDragEnabled={isDragEnabledRef.current}
+          enCaminoMessage={appSettingsRef.current?.whatsappEnCamino}
           fontScale={fontScale}
-          selectedDay={selectedDay}
+          selectedDay={selectedDayForRenderRef.current}
           onMarkDone={handleMarkDone}
           onEdit={handleEditCb}
           onDelete={handleDelete}
@@ -679,15 +694,18 @@ const HomeScreen = () => {
         />
       );
     },
-    [isDragEnabled, isAdmin, handleMarkDone, handleDelete, handleToggleStar, handleTransfer, handleAlarm, changePosition, selectedDay, globalPositionMap, debtMap, transferMap, appSettings, colors, fontScale, handleEditCb, handleDebtCb],
+    [isAdmin, handleMarkDone, handleDelete, handleToggleStar, handleTransfer, handleAlarm, changePosition, colors, fontScale, handleEditCb, handleDebtCb],
   );
+
+  const flatListDataRef = useRef(flatListData);
+  flatListDataRef.current = flatListData;
 
   const handleDragEnd = useCallback(
     ({ data, from, to }: { data: ListItem[]; from: number; to: number }) => {
       if (from === to) return;
 
-      const movedItem = flatListData[from];
-      if (movedItem.type !== 'client') return;
+      const movedItem = flatListDataRef.current[from];
+      if (!movedItem || movedItem.type !== 'client') return;
 
       // Find which section the item landed in (walk backward in reordered data)
       let landedSectionKey: string | null = null;
@@ -721,22 +739,23 @@ const HomeScreen = () => {
       }
 
       // Map neighbor to position in the full day client list
-      const allDayClients = getAllDayClients(selectedDay);
+      const day = selectedDayRef.current;
+      const allDayClients = getAllDayClients(day);
       let targetPos: number;
 
       if (prevClientId) {
         const prevIdx = allDayClients.findIndex((c) => c.id === prevClientId);
-        targetPos = prevIdx >= 0 ? prevIdx + 2 : 1; // 1-indexed, after prev
+        targetPos = prevIdx >= 0 ? prevIdx + 2 : 1;
       } else if (nextClientId) {
         const nextIdx = allDayClients.findIndex((c) => c.id === nextClientId);
-        targetPos = nextIdx >= 0 ? nextIdx + 1 : 1; // 1-indexed, at next's position
+        targetPos = nextIdx >= 0 ? nextIdx + 1 : 1;
       } else {
         targetPos = 1;
       }
 
-      changePosition(movedItem.client.id, targetPos, selectedDay);
+      changePosition(movedItem.client.id, targetPos, day);
     },
-    [flatListData, changePosition, selectedDay, getAllDayClients],
+    [changePosition, getAllDayClients],
   );
 
   if (loading) {
@@ -886,33 +905,29 @@ const HomeScreen = () => {
       </View>
 
       {/* Client list */}
-      <NestableScrollContainer
+      <DraggableFlatList
         ref={scrollRef}
-        style={{ flex: 1 }}
+        data={flatListData}
+        extraData={`${selectedDay}-${debts.length}-${transfers.length}`}
+        keyExtractor={keyExtractor}
+        renderItem={renderDraggableItem}
+        onDragEnd={handleDragEnd}
+        activationDistance={15}
+        containerStyle={{ flex: 1 }}
         contentContainerStyle={styles.listContent}
-      >
-        {flatListData.length > 0 ? (
-          <NestableDraggableFlatList
-            data={flatListData}
-            keyExtractor={keyExtractor}
-            renderItem={renderDraggableItem}
-            onDragEnd={handleDragEnd}
-            activationDistance={10}
-            initialNumToRender={15}
-            maxToRenderPerBatch={10}
-            windowSize={7}
-          />
-        ) : (
+        initialNumToRender={10}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        updateCellsBatchingPeriod={50}
+        ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="clipboard-outline" size={40} color={colors.textHint} style={{ marginBottom: 8 }} />
+            <Text style={{ fontSize: 40, marginBottom: 8 }}>📋</Text>
             <Text style={styles.emptyText}>
               {t('home.noClients', { day: selectedDay })}
             </Text>
           </View>
-        )}
-
-        {/* Completed section */}
-        {completedClients.length > 0 && (
+        }
+        ListFooterComponent={completedClients.length > 0 ? (
           <View style={styles.completedSection}>
             <TouchableOpacity
               onPress={() => setShowCompleted(!showCompleted)}
@@ -956,13 +971,13 @@ const HomeScreen = () => {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.deleteAllBtnText}><Ionicons name="trash" size={14} /> {t('home.deleteAll')}</Text>
+                  <Text style={styles.deleteAllBtnText}>🗑️ {t('home.deleteAll')}</Text>
                 </TouchableOpacity>
               </>
             )}
           </View>
-        )}
-      </NestableScrollContainer>
+        ) : null}
+      />
       </View>
 
       {/* Undo Banner */}

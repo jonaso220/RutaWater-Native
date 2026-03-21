@@ -33,7 +33,7 @@ export const getTranslatedDays = (): string[] => {
   return i18n.t('allDays', { returnObjects: true }) as string[];
 };
 
-export const ALL_DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+export const ALL_DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
 export type Frequency = 'weekly' | 'biweekly' | 'triweekly' | 'monthly' | 'once' | 'on_demand';
 

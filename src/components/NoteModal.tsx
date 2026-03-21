@@ -49,10 +49,6 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
     }
     if (event.type === 'dismissed') return;
     if (selectedDate) {
-      if (selectedDate.getDay() === 0) {
-        Alert.alert(t('error'), t('noteModal.errorSunday'));
-        return;
-      }
       setPickerDate(selectedDate);
       const yyyy = selectedDate.getFullYear();
       const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');

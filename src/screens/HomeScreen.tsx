@@ -259,8 +259,7 @@ const HomeScreen = () => {
   const scrollRef = useRef<any>(null);
   useScrollToTop(scrollRef);
   const [selectedDay, setSelectedDay] = useState(() => {
-    const today = getTodayDayName();
-    return today === 'Domingo' ? 'Lunes' : today;
+    return getTodayDayName();
   });
   const [showCompleted, setShowCompleted] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -291,12 +290,10 @@ const HomeScreen = () => {
 
   // Fix 3: Detect cross-midnight day change
   useEffect(() => {
-    const rawToday = getTodayDayName();
-    let lastKnownToday = rawToday === 'Domingo' ? 'Lunes' : rawToday;
+    let lastKnownToday = getTodayDayName();
 
     const checkDay = () => {
-      let currentToday = getTodayDayName();
-      if (currentToday === 'Domingo') currentToday = 'Lunes';
+      const currentToday = getTodayDayName();
       if (currentToday !== lastKnownToday) {
         // Day changed! Only auto-switch if user was viewing the old "today"
         if (selectedDay === lastKnownToday) {

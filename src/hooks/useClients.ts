@@ -328,11 +328,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
         const dayName = dayNames[d.getDay()];
 
-        if (dayName === 'Domingo') {
-          console.warn('scheduleFromDirectory: Cannot schedule on Sunday');
-          return;
-        }
-
         const existingInDay = clientsRef.current.filter(
           (c) =>
             c.freq !== 'on_demand' &&
@@ -437,11 +432,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       const d = new Date(date + 'T12:00:00');
       const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
       const dayName = dayNames[d.getDay()];
-
-      if (dayName === 'Domingo') {
-        console.warn('addNote: Cannot schedule on Sunday');
-        return;
-      }
 
       const currentWeek = getWeekNumber(new Date());
       const scope = groupId ? { groupId, userId } : { userId };

@@ -222,6 +222,8 @@ export default {
     freeMonth: '1 month free',
     restorePurchases: 'Restore purchases',
     legalText: 'Payment will be charged to your {{store}} account. The subscription renews automatically unless canceled at least 24 hours before the end of the current period. You can manage your subscription from your device settings.',
+    privacyPolicy: 'Privacy Policy',
+    termsOfUse: 'Terms of Use',
     alreadyPremium: 'Already Premium',
     alreadyPremiumDesc: 'You have access to all features.',
     welcomePremium: 'Welcome to Premium!',

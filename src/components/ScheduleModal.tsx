@@ -55,25 +55,17 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   useEffect(() => {
     if (client) {
       setSaving(false);
-      setLocalNotes(client.notes || '');
+      // Reset notes and products so each new scheduling starts clean
+      setLocalNotes('');
       setLocalFreq(
         client.freq === 'on_demand' ? 'once' : (client.freq || 'once'),
       );
-      setLocalDate(client.specificDate || '');
+      setLocalDate('');
       setShowPicker(false);
-      if (client.specificDate) {
-        const parsed = new Date(client.specificDate + 'T12:00:00');
-        if (!isNaN(parsed.getTime())) {
-          setPickerDate(parsed);
-        } else {
-          setPickerDate(new Date());
-        }
-      } else {
-        setPickerDate(new Date());
-      }
+      setPickerDate(new Date());
       const prods: Record<string, number> = {};
       PRODUCTS.forEach((p) => {
-        prods[p.id] = parseInt(String(client.products?.[p.id] || 0), 10);
+        prods[p.id] = 0;
       });
       setLocalProducts(prods);
       if (client.visitDays && client.visitDays.length > 0) {

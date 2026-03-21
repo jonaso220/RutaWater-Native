@@ -186,6 +186,17 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
         {t('paywall.legalText', { store: Platform.OS === 'ios' ? 'Apple' : 'Google' })}
       </Text>
 
+      {/* Privacy Policy & Terms of Use links */}
+      <View style={styles.legalLinks}>
+        <TouchableOpacity onPress={() => Linking.openURL('https://rutawater-privacy.netlify.app/')}>
+          <Text style={styles.legalLink}>{t('paywall.privacyPolicy')}</Text>
+        </TouchableOpacity>
+        <Text style={styles.legalSeparator}>|</Text>
+        <TouchableOpacity onPress={() => Linking.openURL('https://rutawater-privacy.netlify.app/terms.html')}>
+          <Text style={styles.legalLink}>{t('paywall.termsOfUse')}</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={{ height: 40 }} />
     </ScrollView>
   );
@@ -382,6 +393,22 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       textAlign: 'center',
       marginTop: 12,
       lineHeight: s(16),
+    },
+    legalLinks: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 12,
+      gap: 8,
+    },
+    legalLink: {
+      fontSize: s(12),
+      color: colors.primary,
+      textDecorationLine: 'underline',
+    },
+    legalSeparator: {
+      fontSize: s(12),
+      color: colors.textHint,
     },
     premiumActive: {
       flex: 1,

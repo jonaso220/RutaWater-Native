@@ -162,7 +162,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     if (markingDoneRef.current.has(clientId)) return;
     markingDoneRef.current.add(clientId);
     try {
-      if (client.freq === 'once') {
+      if (client.isNote) {
+        // Notes: delete permanently (they don't belong in the directory)
+        await db.collection('clients').doc(clientId).delete();
+      } else if (client.freq === 'once') {
         // Once: mark as completed permanently
         await db.collection('clients').doc(clientId).update({
           isCompleted: true,

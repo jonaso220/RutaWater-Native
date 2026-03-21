@@ -61,12 +61,25 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   );
   const canAddClient = isPremium || clientCount < FREE_CLIENT_LIMIT;
 
-  // Auto-cleanup: expired completed 'once' clients
+  // Auto-cleanup: expired completed 'once' clients + stale notes
   const cleanupDoneRef = useRef(false);
   useEffect(() => {
     if (cleanupDoneRef.current) return;
     if (clientsHook.clients.length === 0) return;
     cleanupDoneRef.current = true;
+
+    // Delete notes that are completed or have a past date (keep today's active notes)
+    const staleNotes = clientsHook.clients.filter((c) => {
+      if (!c.isNote) return false;
+      if (c.isCompleted) return true;
+      if (c.specificDate && new Date(c.specificDate + 'T23:59:59') < today) return true;
+      return false;
+    });
+    if (staleNotes.length > 0) {
+      const noteBatch = db.batch();
+      staleNotes.forEach((c) => noteBatch.delete(db.collection('clients').doc(c.id)));
+      noteBatch.commit().catch((err) => console.error('Note cleanup error:', err));
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);

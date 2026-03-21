@@ -70,10 +70,15 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       setNotes(client.notes || '');
       setFreq(client.freq || 'weekly');
       setStartDate(client.specificDate || '');
+      // Always start the calendar from today so it doesn't show old dates
+      const today = new Date();
+      today.setHours(12, 0, 0, 0);
       if (client.specificDate) {
-        setPickerDate(new Date(client.specificDate + 'T12:00:00'));
+        const clientDate = new Date(client.specificDate + 'T12:00:00');
+        // Use client date only if it's today or in the future, otherwise use today
+        setPickerDate(clientDate >= today ? clientDate : today);
       } else {
-        setPickerDate(new Date());
+        setPickerDate(today);
       }
       setShowDatePicker(false);
     }
@@ -111,7 +116,10 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
   const handleSave = async () => {
     if (saving) return;
-    if (freq !== 'once' && freq !== 'on_demand' && (!client.visitDays || client.visitDays.length === 0)) {
+    // Allow saving if client has visitDay OR visitDays OR user selected a new date
+    const hasDay = (client.visitDays && client.visitDays.length > 0) || (client.visitDay && client.visitDay !== 'Sin Asignar');
+    const hasNewDate = needsDate && startDate;
+    if (freq !== 'once' && freq !== 'on_demand' && !hasDay && !hasNewDate) {
       Alert.alert(t('error'), t('editModal.errorNoDays'));
       return;
     }

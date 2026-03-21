@@ -125,6 +125,35 @@ export const levenshtein = (a: string, b: string): number => {
   return matrix[b.length][a.length];
 };
 
+// Check if search chars appear in order within text (like WhatsApp/Sublime)
+const subsequenceMatch = (text: string, search: string): boolean => {
+  let si = 0;
+  for (let ti = 0; ti < text.length && si < search.length; ti++) {
+    if (text[ti] === search[si]) si++;
+  }
+  return si === search.length;
+};
+
+// Levenshtein on a sliding window: find best distance of `search` within `text`
+// Limited to short search terms to avoid performance issues with large texts
+const substringLevenshtein = (text: string, search: string): number => {
+  const sLen = search.length;
+  if (sLen === 0) return 0;
+  if (text.length === 0) return sLen;
+  if (sLen > 12 || text.length > 100) return sLen; // skip for long inputs
+  let best = sLen;
+  const minWin = Math.max(1, sLen - 1);
+  const maxWin = sLen + 1;
+  for (let win = minWin; win <= maxWin; win++) {
+    for (let start = 0; start <= text.length - win; start++) {
+      const d = levenshtein(text.substring(start, start + win), search);
+      if (d < best) best = d;
+      if (best === 0) return 0;
+    }
+  }
+  return best;
+};
+
 export const fuzzyMatch = (searchTerm: string): ((...fields: string[]) => boolean) => {
   if (!searchTerm) return () => true;
   const cleaned = normalizeText(searchTerm).trim().replace(/\s+/g, ' ');
@@ -142,13 +171,26 @@ export const fuzzyMatch = (searchTerm: string): ((...fields: string[]) => boolea
       if (combined.includes(w)) return true;
 
       const textWords = combined.split(/\s+/);
-      const maxDist = w.length <= 2 ? 0 : w.length <= 4 ? 1 : 2;
+
+      // Tolerance: 1 error for 3-4 chars, 2 for 5-7, 3 for 8+
+      const maxDist = w.length <= 2 ? 0 : w.length <= 4 ? 1 : w.length <= 7 ? 2 : 3;
+
+      // 1) Prefix match: any text word starts with search word or vice versa
+      if (textWords.some((tw) => tw.startsWith(w) || w.startsWith(tw))) return true;
+
+      // 2) Subsequence match: chars appear in order (e.g. "mria" in "maria")
+      if (w.length >= 3 && textWords.some((tw) => subsequenceMatch(tw, w))) return true;
+
       if (maxDist === 0) return false;
 
-      return textWords.some((tw) => {
-        if (tw.startsWith(w) || w.startsWith(tw)) return true;
-        return levenshtein(tw, w) <= maxDist;
-      });
+      // 3) Word-level Levenshtein (typos like "maris" for "maria")
+      if (textWords.some((tw) => levenshtein(tw, w) <= maxDist)) return true;
+
+      // 4) Substring Levenshtein: find approximate match anywhere in the combined text
+      //    (handles cases where word boundaries don't align)
+      if (w.length >= 3 && substringLevenshtein(combined, w) <= maxDist) return true;
+
+      return false;
     });
   };
 };
@@ -325,6 +367,18 @@ export const getNextVisitDate = (client: Client, forDay?: string): Date | null =
       const minNextDate = new Date(lastVisitedDay);
       minNextDate.setDate(minNextDate.getDate() + intervalWeeks * 7);
       while (nextDate < minNextDate) {
+        nextDate.setDate(nextDate.getDate() + 7);
+      }
+    }
+  }
+
+  // For periodic clients, respect specificDate as a minimum start date.
+  // If the user set a future start date, don't show the client before that date.
+  if (client.specificDate) {
+    const startDate = new Date(client.specificDate + 'T00:00:00');
+    if (startDate > today && nextDate < startDate) {
+      // Push nextDate forward to the first matching day on or after startDate
+      while (nextDate < startDate) {
         nextDate.setDate(nextDate.getDate() + 7);
       }
     }

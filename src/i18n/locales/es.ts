@@ -222,6 +222,8 @@ export default {
     freeMonth: '1 mes gratis',
     restorePurchases: 'Restaurar compras',
     legalText: 'El pago se cargara a tu cuenta de {{store}}. La suscripcion se renueva automaticamente a menos que se cancele al menos 24 horas antes del final del periodo actual. Puedes gestionar tu suscripcion desde los ajustes de tu dispositivo.',
+    privacyPolicy: 'Politica de Privacidad',
+    termsOfUse: 'Terminos de Uso',
     alreadyPremium: 'Ya eres Premium',
     alreadyPremiumDesc: 'Tienes acceso a todas las funciones.',
     welcomePremium: 'Bienvenido a Premium!',

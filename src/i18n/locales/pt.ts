@@ -222,6 +222,8 @@ export default {
     freeMonth: '1 mes gratis',
     restorePurchases: 'Restaurar compras',
     legalText: 'O pagamento sera cobrado na sua conta {{store}}. A assinatura renova automaticamente a menos que seja cancelada pelo menos 24 horas antes do final do periodo atual. Voce pode gerenciar sua assinatura nas configuracoes do dispositivo.',
+    privacyPolicy: 'Politica de Privacidade',
+    termsOfUse: 'Termos de Uso',
     alreadyPremium: 'Ja e Premium',
     alreadyPremiumDesc: 'Voce tem acesso a todas as funcoes.',
     welcomePremium: 'Bem-vindo ao Premium!',

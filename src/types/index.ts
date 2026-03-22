@@ -28,10 +28,59 @@ export interface Client {
   startWeek: number;
   userId: string;
   groupId?: string;
+  relationships?: Record<string, string>; // clientId → relationship type
   // Computed at runtime
   hasDebt?: boolean;
   hasPendingTransfer?: boolean;
 }
+
+// Relationship types for client family links
+export const RELATIONSHIP_TYPES = [
+  'esposo', 'esposa',
+  'padre', 'madre',
+  'hijo', 'hija',
+  'hermano', 'hermana',
+  'suegro', 'suegra',
+  'yerno', 'nuera',
+  'abuelo', 'abuela',
+  'nieto', 'nieta',
+  'tio', 'tia',
+  'sobrino', 'sobrina',
+  'primo', 'prima',
+  'cunado', 'cunada',
+  'otro',
+] as const;
+
+export type RelationshipType = typeof RELATIONSHIP_TYPES[number];
+
+// Inverse uses generic form when gender of the other person is unknown
+export const RELATIONSHIP_INVERSE: Record<string, string> = {
+  esposo: 'esposa',
+  esposa: 'esposo',
+  padre: 'hijo',
+  madre: 'hijo',
+  hijo: 'padre',
+  hija: 'madre',
+  hermano: 'hermano',
+  hermana: 'hermana',
+  suegro: 'yerno',
+  suegra: 'nuera',
+  yerno: 'suegro',
+  nuera: 'suegra',
+  abuelo: 'nieto',
+  abuela: 'nieta',
+  nieto: 'abuelo',
+  nieta: 'abuela',
+  tio: 'sobrino',
+  tia: 'sobrina',
+  sobrino: 'tio',
+  sobrina: 'tia',
+  primo: 'primo',
+  prima: 'prima',
+  cunado: 'cunado',
+  cunada: 'cunada',
+  otro: 'otro',
+};
 
 // Debt document in Firestore 'debts' collection
 export interface Debt {

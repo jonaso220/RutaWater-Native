@@ -38,6 +38,7 @@ import TransfersSheet from '../components/TransfersSheet';
 import DebtsSheet from '../components/DebtsSheet';
 import AddClientModal from '../components/AddClientModal';
 import PromptModal from '../components/PromptModal';
+import RelationshipsModal from '../components/RelationshipsModal';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
@@ -146,6 +147,7 @@ interface ClientItemProps {
   isAdmin: boolean;
   hasDebt: boolean;
   hasPendingTransfer: boolean;
+  hasRelationships: boolean;
   isDragEnabled: boolean;
   enCaminoMessage?: string;
   fontScale?: number;
@@ -157,6 +159,7 @@ interface ClientItemProps {
   onToggleStar: (client: Client) => void;
   onTransfer: (client: Client) => void;
   onAlarm: (client: Client) => void;
+  onRelationships: (client: Client) => void;
   onChangePosition: (clientId: string, newPos: number, day: string) => void;
   drag?: () => void;
 }
@@ -167,6 +170,7 @@ const ClientItem = React.memo<ClientItemProps>(({
   isAdmin,
   hasDebt,
   hasPendingTransfer,
+  hasRelationships,
   isDragEnabled,
   enCaminoMessage,
   fontScale,
@@ -178,6 +182,7 @@ const ClientItem = React.memo<ClientItemProps>(({
   onToggleStar,
   onTransfer,
   onAlarm,
+  onRelationships,
   onChangePosition,
   drag,
 }) => {
@@ -188,6 +193,7 @@ const ClientItem = React.memo<ClientItemProps>(({
   const handleToggleStar = useCallback(() => onToggleStar(client), [onToggleStar, client]);
   const handleTransfer = useCallback(() => onTransfer(client), [onTransfer, client]);
   const handleAlarm = useCallback(() => onAlarm(client), [onAlarm, client]);
+  const handleRelationships = useCallback(() => onRelationships(client), [onRelationships, client]);
   const handleChangePosition = useCallback(
     (newPos: number) => onChangePosition(client.id, newPos, selectedDay),
     [onChangePosition, client.id, selectedDay],
@@ -201,6 +207,7 @@ const ClientItem = React.memo<ClientItemProps>(({
         isAdmin={isAdmin}
         hasDebt={hasDebt}
         hasPendingTransfer={hasPendingTransfer}
+        hasRelationships={hasRelationships}
         onMarkDone={handleMarkDone}
         onEdit={handleEdit}
         onDelete={handleDelete}
@@ -208,6 +215,7 @@ const ClientItem = React.memo<ClientItemProps>(({
         onToggleStar={handleToggleStar}
         onTransfer={handleTransfer}
         onAlarm={handleAlarm}
+        onRelationships={handleRelationships}
         onChangePosition={handleChangePosition}
         onDrag={isDragEnabled ? drag : undefined}
         enCaminoMessage={enCaminoMessage}
@@ -240,6 +248,8 @@ const HomeScreen = () => {
   const addNote = useClientsStore((s) => s.addNote);
   const addClient = useClientsStore((s) => s.addClient);
   const changePosition = useClientsStore((s) => s.changePosition);
+  const addRelationship = useClientsStore((s) => s.addRelationship);
+  const removeRelationship = useClientsStore((s) => s.removeRelationship);
   const dayCounts = useClientsStore((s) => s.dayCounts);
   const canAddClient = useClientsStore((s) => s.canAddClient);
   const debts = useDebtsStore((s) => s.debts);
@@ -269,6 +279,7 @@ const HomeScreen = () => {
   const [showTransfersSheet, setShowTransfersSheet] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
+  const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
   const [alarmTime, setAlarmTime] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
@@ -633,9 +644,18 @@ const HomeScreen = () => {
     return map;
   }, [visibleClients, hasPendingTransfer]);
 
+  const relationshipMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    visibleClients.forEach((c) => {
+      map[c.id] = !!(c.relationships && Object.keys(c.relationships).length > 0);
+    });
+    return map;
+  }, [visibleClients]);
+
   // Stable callbacks that accept client as parameter (won't change on day switch)
   const handleEditCb = useCallback((client: Client) => setEditingClient(client), []);
   const handleDebtCb = useCallback((client: Client) => setDebtClient(client), []);
+  const handleRelationshipsCb = useCallback((client: Client) => setRelationshipClient(client), []);
 
   // Use refs for data that changes frequently but shouldn't recreate renderItem
   const globalPositionMapRef = useRef(globalPositionMap);
@@ -644,6 +664,8 @@ const HomeScreen = () => {
   debtMapRef.current = debtMap;
   const transferMapRef = useRef(transferMap);
   transferMapRef.current = transferMap;
+  const relationshipMapRef = useRef(relationshipMap);
+  relationshipMapRef.current = relationshipMap;
   const isDragEnabledRef = useRef(isDragEnabled);
   isDragEnabledRef.current = isDragEnabled;
   const selectedDayForRenderRef = useRef(selectedDay);
@@ -675,6 +697,7 @@ const HomeScreen = () => {
           isAdmin={isAdmin}
           hasDebt={debtMapRef.current[client.id] ?? false}
           hasPendingTransfer={transferMapRef.current[client.id] ?? false}
+          hasRelationships={relationshipMapRef.current[client.id] ?? false}
           isDragEnabled={isDragEnabledRef.current}
           enCaminoMessage={appSettingsRef.current?.whatsappEnCamino}
           fontScale={fontScale}
@@ -686,12 +709,13 @@ const HomeScreen = () => {
           onToggleStar={handleToggleStar}
           onTransfer={handleTransfer}
           onAlarm={handleAlarm}
+          onRelationships={handleRelationshipsCb}
           onChangePosition={changePosition}
           drag={drag}
         />
       );
     },
-    [isAdmin, handleMarkDone, handleDelete, handleToggleStar, handleTransfer, handleAlarm, changePosition, colors, fontScale, handleEditCb, handleDebtCb],
+    [isAdmin, handleMarkDone, handleDelete, handleToggleStar, handleTransfer, handleAlarm, changePosition, colors, fontScale, handleEditCb, handleDebtCb, handleRelationshipsCb],
   );
 
   const flatListDataRef = useRef(flatListData);
@@ -1064,6 +1088,16 @@ const HomeScreen = () => {
         isAdmin={isAdmin}
         onReview={markTransferReviewed}
         onClose={() => setShowTransfersSheet(false)}
+      />
+
+      {/* Relationships Modal */}
+      <RelationshipsModal
+        visible={!!relationshipClient}
+        client={relationshipClient ? (clients.find((c) => c.id === relationshipClient.id) || relationshipClient) : null}
+        allClients={clients}
+        onClose={() => setRelationshipClient(null)}
+        onAddRelationship={addRelationship}
+        onRemoveRelationship={removeRelationship}
       />
 
       {/* Alarm Time Picker Modal */}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import firestore from '@react-native-firebase/firestore';
 import { db } from '../config/firebase';
-import { Client } from '../types';
+import { Client, RELATIONSHIP_INVERSE } from '../types';
 import { normalizeText, fuzzyMatch, getNextVisitDate, getWeekNumber, normalizePhoneForComparison } from '../utils/helpers';
 import { ALL_DAYS, Frequency } from '../constants/products';
 
@@ -725,10 +726,62 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     return staleIds.length;
   }, [findDuplicateClients]);
 
-  // Permanently delete a client from Firestore
+  // Add a family relationship between two clients (bidirectional)
+  const addRelationship = useCallback(async (clientId: string, targetId: string, type: string) => {
+    try {
+      const inverse = RELATIONSHIP_INVERSE[type] || 'otro';
+      const batch = db.batch();
+      batch.update(db.collection('clients').doc(clientId), {
+        [`relationships.${targetId}`]: type,
+      });
+      batch.update(db.collection('clients').doc(targetId), {
+        [`relationships.${clientId}`]: inverse,
+      });
+      await batch.commit();
+    } catch (e) {
+      console.error('Error adding relationship:', e);
+    }
+  }, []);
+
+  // Remove a family relationship between two clients (bidirectional)
+  const removeRelationship = useCallback(async (clientId: string, targetId: string) => {
+    try {
+      const FieldValue = firestore.FieldValue;
+      const batch = db.batch();
+      batch.update(db.collection('clients').doc(clientId), {
+        [`relationships.${targetId}`]: FieldValue.delete(),
+      });
+      batch.update(db.collection('clients').doc(targetId), {
+        [`relationships.${clientId}`]: FieldValue.delete(),
+      });
+      await batch.commit();
+    } catch (e) {
+      console.error('Error removing relationship:', e);
+    }
+  }, []);
+
+  // Permanently delete a client from Firestore (cleans up relationship references)
   const deleteClient = useCallback(async (clientId: string) => {
     try {
-      await db.collection('clients').doc(clientId).delete();
+      // Clean up relationship references in other clients
+      const client = clientsRef.current.find((c) => c.id === clientId);
+      if (client?.relationships && Object.keys(client.relationships).length > 0) {
+        const FieldValue = firestore.FieldValue;
+        // Only clean up related clients that still exist locally
+        const existingRelatedIds = Object.keys(client.relationships).filter(
+          (relId) => clientsRef.current.some((c) => c.id === relId),
+        );
+        const batch = db.batch();
+        batch.delete(db.collection('clients').doc(clientId));
+        existingRelatedIds.forEach((relatedId) => {
+          batch.update(db.collection('clients').doc(relatedId), {
+            [`relationships.${clientId}`]: FieldValue.delete(),
+          });
+        });
+        await batch.commit();
+      } else {
+        await db.collection('clients').doc(clientId).delete();
+      }
     } catch (e) {
       console.error('Error deleting client:', e);
     }
@@ -793,5 +846,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     cloneClient,
     findDuplicateClients,
     cleanupDuplicates,
+    addRelationship,
+    removeRelationship,
   };
 };

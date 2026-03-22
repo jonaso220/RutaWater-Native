@@ -40,6 +40,8 @@ interface ClientsStore {
   cloneClient: (client: Client) => Promise<void>;
   findDuplicateClients: () => { staleIds: string[], details: Array<{ name: string, activeId: string, staleId: string }> };
   cleanupDuplicates: () => Promise<number>;
+  addRelationship: (clientId: string, targetId: string, type: string) => Promise<void>;
+  removeRelationship: (clientId: string, targetId: string) => Promise<void>;
   dayCounts: Record<string, number>;
   canAddClient: boolean;
   clientCount: number;
@@ -70,6 +72,8 @@ export const useClientsStore = create<ClientsStore>()(() => ({
   cloneClient: noop,
   findDuplicateClients: () => ({ staleIds: [], details: [] }),
   cleanupDuplicates: async () => 0,
+  addRelationship: noop as any,
+  removeRelationship: noop,
   dayCounts: {},
   canAddClient: true,
   clientCount: 0,

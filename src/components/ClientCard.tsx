@@ -36,6 +36,7 @@ interface ClientCardProps {
   isAdmin: boolean;
   hasDebt?: boolean;
   hasPendingTransfer?: boolean;
+  hasRelationships?: boolean;
   enCaminoMessage?: string;
   onMarkDone: () => void;
   onEdit: () => void;
@@ -44,6 +45,7 @@ interface ClientCardProps {
   onToggleStar?: () => void;
   onTransfer?: () => void;
   onAlarm?: () => void;
+  onRelationships?: () => void;
   onChangePosition?: (newPosition: number) => void;
   onDrag?: () => void;
   fontScale?: number;
@@ -55,6 +57,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   isAdmin,
   hasDebt,
   hasPendingTransfer,
+  hasRelationships,
   onMarkDone,
   onEdit,
   onDelete,
@@ -62,6 +65,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   onToggleStar,
   onTransfer,
   onAlarm,
+  onRelationships,
   onChangePosition,
   onDrag,
   enCaminoMessage,
@@ -213,12 +217,17 @@ const ClientCard: React.FC<ClientCardProps> = ({
           )}
           {onTransfer && (
             <TouchableOpacity onPress={onTransfer} style={styles.iconBtn}>
-              <Text style={{ fontSize: s(16) }}>{hasPendingTransfer ? '🏦' : '🏧'}</Text>
+              <Text style={{ fontSize: s(16) }}>{hasPendingTransfer ? '📩' : '💸'}</Text>
             </TouchableOpacity>
           )}
           {onAlarm && (
             <TouchableOpacity onPress={onAlarm} style={styles.iconBtn}>
               <Text style={{ fontSize: s(16) }}>{client.alarm ? '🔔' : '🔕'}</Text>
+            </TouchableOpacity>
+          )}
+          {onRelationships && (
+            <TouchableOpacity onPress={onRelationships} style={styles.iconBtn}>
+              <Text style={{ fontSize: s(16) }}>{hasRelationships ? '👨‍👩‍👧' : '👥'}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity onPress={onEdit} style={styles.iconBtn}>
@@ -247,6 +256,11 @@ const ClientCard: React.FC<ClientCardProps> = ({
           {client.alarm ? (
             <Text style={styles.alarmBadge}><Ionicons name="notifications" size={s(12)} /> {client.alarm}</Text>
           ) : null}
+          {hasRelationships && onRelationships && (
+            <TouchableOpacity onPress={onRelationships}>
+              <Text style={styles.familyBadge}><Ionicons name="people" size={s(12)} /> {t('relationships.badge')}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Address with location button */}
@@ -436,6 +450,16 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       fontWeight: '700',
       color: colors.warningDark,
       backgroundColor: colors.warningAmberBg,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+      overflow: 'hidden',
+    },
+    familyBadge: {
+      fontSize: s(12),
+      fontWeight: '700',
+      color: colors.primary,
+      backgroundColor: colors.primaryLight,
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 6,

@@ -260,7 +260,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.background,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.cardBorder,
     marginBottom: 12,
     width: '100%',
     paddingHorizontal: 12,
@@ -305,7 +305,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: colors.border,
+    backgroundColor: colors.cardBorder,
   },
   dividerText: {
     color: colors.textHint,

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   TextInput,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   Platform,
   KeyboardTypeOptions,
 } from 'react-native';
+import ModalOverlay from './ModalOverlay';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -53,7 +53,7 @@ const PromptModal: React.FC<PromptModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} animationType="fade" transparent>
+    <ModalOverlay visible={visible} onClose={onCancel} animationType="fade">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -85,7 +85,7 @@ const PromptModal: React.FC<PromptModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    </ModalOverlay>
   );
 };
 

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   TextInput,
   ScrollView,
@@ -11,6 +10,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import ModalOverlay from './ModalOverlay';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
 import { PRODUCTS, ALL_DAYS, FREQUENCY_LABELS, Frequency } from '../constants/products';
@@ -60,9 +60,13 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       setLocalFreq(
         client.freq === 'on_demand' ? 'once' : (client.freq || 'once'),
       );
-      setLocalDate('');
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      setLocalDate(`${yyyy}-${mm}-${dd}`);
       setShowPicker(false);
-      setPickerDate(new Date());
+      setPickerDate(now);
       const prods: Record<string, number> = {};
       PRODUCTS.forEach((p) => {
         prods[p.id] = 0;
@@ -156,7 +160,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const today = new Date().toISOString().split('T')[0];
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -344,7 +348,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    </ModalOverlay>
   );
 };
 
@@ -360,7 +364,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '90%',
+    maxHeight: Platform.OS === 'android' ? '100%' : '90%',
     maxWidth: 600,
     alignSelf: 'center' as const,
     width: '100%' as const,

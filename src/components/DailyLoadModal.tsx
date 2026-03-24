@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   TextInput,
   ScrollView,
@@ -10,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import ModalOverlay from './ModalOverlay';
 import { useTranslation } from 'react-i18next';
 import { DailyLoad } from '../hooks/useDailyLoads';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -57,7 +57,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -135,7 +135,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    </ModalOverlay>
   );
 };
 
@@ -151,7 +151,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.modalBackground,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '85%',
+    maxHeight: Platform.OS === 'android' ? '100%' : '85%',
     maxWidth: 600,
     alignSelf: 'center' as const,
     width: '100%' as const,

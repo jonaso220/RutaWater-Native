@@ -23,6 +23,7 @@ import ScheduleModal from '../components/ScheduleModal';
 import DebtModal from '../components/DebtModal';
 import EditClientModal from '../components/EditClientModal';
 import AddClientModal from '../components/AddClientModal';
+import RelationshipsModal from '../components/RelationshipsModal';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -45,6 +46,8 @@ const DirectoryScreen = () => {
   const cloneClient = useClientsStore((s) => s.cloneClient);
   const addClient = useClientsStore((s) => s.addClient);
   const canAddClient = useClientsStore((s) => s.canAddClient);
+  const addRelationship = useClientsStore((s) => s.addRelationship);
+  const removeRelationship = useClientsStore((s) => s.removeRelationship);
   const debts = useDebtsStore((s) => s.debts);
   const addDebt = useDebtsStore((s) => s.addDebt);
   const markDebtPaid = useDebtsStore((s) => s.markDebtPaid);
@@ -56,6 +59,7 @@ const DirectoryScreen = () => {
   const [debtClient, setDebtClient] = useState<Client | null>(null);
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [showNewClient, setShowNewClient] = useState(false);
+  const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
 
   // Compute with_debt count (needs both clients and debts)
   const withDebtCount = useMemo(() => {
@@ -251,6 +255,7 @@ const DirectoryScreen = () => {
 
   const renderClient = ({ item }: { item: Client }) => {
     const debtTotal = getClientDebtTotal(item.id);
+    const hasRelationships = !!(item.relationships && Object.keys(item.relationships).length > 0);
     const isOnDemand = item.freq === 'on_demand' || !item.visitDays?.length;
     const hasLocation = !!(item.lat && item.lng) || !!item.mapsLink;
     const avatarColor = AVATAR_COLORS[(item.name || '').charCodeAt(0) % AVATAR_COLORS.length];
@@ -318,6 +323,11 @@ const DirectoryScreen = () => {
                 <Text style={styles.debtBadge}><Ionicons name="cash" size={12} /> ${debtTotal.toLocaleString()}</Text>
               </TouchableOpacity>
             )}
+            {hasRelationships && (
+              <TouchableOpacity onPress={() => setRelationshipClient(item)}>
+                <Text style={styles.familyBadge}><Ionicons name="people" size={12} /> {t('relationships.badge')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* PRODUCT CHIPS */}
@@ -352,6 +362,9 @@ const DirectoryScreen = () => {
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setDebtClient(item)} style={styles.actionBtn}>
               <Text style={{ fontSize: 18 }}>{debtTotal > 0 ? '💰' : '💲'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setRelationshipClient(item)} style={styles.actionBtn}>
+              <Text style={{ fontSize: 18 }}>{hasRelationships ? '👨‍👩‍👧' : '👥'}</Text>
             </TouchableOpacity>
             {isAdmin && (
               <TouchableOpacity onPress={() => setEditClient(item)} style={styles.actionBtn}>
@@ -514,6 +527,16 @@ const DirectoryScreen = () => {
           showClientInfo
         />
       )}
+
+      {/* Relationships Modal */}
+      <RelationshipsModal
+        visible={!!relationshipClient}
+        client={relationshipClient ? (clients.find((c) => c.id === relationshipClient.id) || relationshipClient) : null}
+        allClients={clients}
+        onClose={() => setRelationshipClient(null)}
+        onAddRelationship={addRelationship}
+        onRemoveRelationship={removeRelationship}
+      />
 
       {/* New Client Modal */}
       <AddClientModal
@@ -700,6 +723,16 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontWeight: '700',
     color: colors.danger,
     backgroundColor: colors.dangerLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  familyBadge: {
+    fontSize: s(10),
+    fontWeight: '700',
+    color: colors.primary,
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,

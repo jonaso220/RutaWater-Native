@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import ModalOverlay from './ModalOverlay';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AlarmData } from '../hooks/useAlarmChecker';
 import { useTranslation } from 'react-i18next';
@@ -19,7 +20,7 @@ const AlarmBanner: React.FC<Props> = ({ alarm, onDismiss }) => {
   if (!alarm) return null;
 
   return (
-    <Modal visible transparent animationType="fade">
+    <ModalOverlay visible onClose={onDismiss} animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.card}>
           <View style={styles.bellContainer}>
@@ -38,7 +39,7 @@ const AlarmBanner: React.FC<Props> = ({ alarm, onDismiss }) => {
           </TouchableOpacity>
         </View>
       </View>
-    </Modal>
+    </ModalOverlay>
   );
 };
 

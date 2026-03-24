@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef, useDeferredValue, useTransition } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,9 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
-  Modal,
+  Platform,
 } from 'react-native';
+import ModalOverlay from '../components/ModalOverlay';
 import DraggableFlatList, {
   ScaleDecorator,
   RenderItemParams,
@@ -74,6 +75,9 @@ const SectionHeader = React.memo<SectionHeaderProps>(({ title, count, isToday, c
 const keyExtractor = (item: ListItem) => item.key;
 
 // --- Memoized DaySelector to avoid re-renders when client list changes ---
+// Use gesture-handler components to avoid touch conflicts in horizontal ScrollView on Android
+import { ScrollView as GHScrollView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
+
 interface DaySelectorProps {
   selectedDay: string;
   dayCounts: Record<string, number>;
@@ -95,7 +99,7 @@ const DaySelector = React.memo<DaySelectorProps>(({
   const todayName = useMemo(() => getTodayDayName(), []);
 
   return (
-    <ScrollView
+    <GHScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       style={styles.daySelector}
@@ -107,7 +111,7 @@ const DaySelector = React.memo<DaySelectorProps>(({
         const count = dayCounts[day] || 0;
 
         return (
-          <TouchableOpacity
+          <GHTouchableOpacity
             key={day}
             onPress={() => onSelectDay(day)}
             style={[
@@ -133,10 +137,10 @@ const DaySelector = React.memo<DaySelectorProps>(({
             >
               {count}
             </Text>
-          </TouchableOpacity>
+          </GHTouchableOpacity>
         );
       })}
-    </ScrollView>
+    </GHScrollView>
   );
 });
 
@@ -271,6 +275,10 @@ const HomeScreen = () => {
   const [selectedDay, setSelectedDay] = useState(() => {
     return getTodayDayName();
   });
+  // Deferred day: tab highlights instantly, list updates in background
+  const deferredDay = useDeferredValue(selectedDay);
+  const isDayPending = selectedDay !== deferredDay;
+  const [, startTransition] = useTransition();
   const [showCompleted, setShowCompleted] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [debtClient, setDebtClient] = useState<Client | null>(null);
@@ -349,7 +357,7 @@ const HomeScreen = () => {
       }
       return day;
     });
-  }, []);
+  }, [startTransition]);
 
   const toggleFilter = useCallback((filterId: string) => {
     setActiveFilters((prev) => {
@@ -363,8 +371,8 @@ const HomeScreen = () => {
     });
   }, []);
 
-  const allVisibleClients = useMemo(() => getVisibleClients(selectedDay), [getVisibleClients, selectedDay]);
-  const completedClients = useMemo(() => getCompletedClients(selectedDay), [getCompletedClients, selectedDay]);
+  const allVisibleClients = useMemo(() => getVisibleClients(deferredDay), [getVisibleClients, deferredDay]);
+  const completedClients = useMemo(() => getCompletedClients(deferredDay), [getCompletedClients, deferredDay]);
 
   const visibleClients = useMemo(() => {
     let filtered = allVisibleClients;
@@ -409,7 +417,7 @@ const HomeScreen = () => {
 
     // Cache getDayIndex result for selectedDay since it's the same for all clients
     visibleClients.forEach((c) => {
-      const nextDate = getNextVisitDate(c, selectedDay);
+      const nextDate = getNextVisitDate(c, deferredDay);
       const dateKey = nextDate
         ? nextDate.toISOString().split('T')[0].slice(0, 10)
         : todayKey;
@@ -442,7 +450,7 @@ const HomeScreen = () => {
           data: groups[dateKey],
         };
       });
-  }, [visibleClients, selectedDay]);
+  }, [visibleClients, deferredDay]);
 
   // Clients for the nearest date only (for the product counter)
   const nearestDateClients = useMemo(() => {
@@ -477,12 +485,12 @@ const HomeScreen = () => {
 
   // Load daily load data when day changes + scroll to top
   useEffect(() => {
-    loadForDay(selectedDay);
+    loadForDay(deferredDay);
     // Scroll to top on day change for instant feel
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
     });
-  }, [selectedDay, loadForDay]);
+  }, [deferredDay, loadForDay]);
 
   const handleMarkDone = useCallback(
     (client: Client) => {
@@ -618,14 +626,14 @@ const HomeScreen = () => {
   const pendingTransferCount = transfers.length;
 
   // Map client ID to its global position among ALL clients for the day
+  // Reuse allVisibleClients instead of calling getAllDayClients again
   const globalPositionMap = useMemo(() => {
-    const allClients = getAllDayClients(selectedDay);
     const map: Record<string, number> = {};
-    allClients.forEach((c, idx) => {
+    allVisibleClients.forEach((c, idx) => {
       map[c.id] = idx;
     });
     return map;
-  }, [getAllDayClients, selectedDay]);
+  }, [allVisibleClients]);
 
   // Pre-compute debt and transfer maps so we don't call functions inline per-client
   const debtMap = useMemo(() => {
@@ -929,17 +937,17 @@ const HomeScreen = () => {
       <DraggableFlatList
         ref={scrollRef}
         data={flatListData}
-        extraData={`${selectedDay}-${debts.length}-${transfers.length}`}
+        extraData={`${debts.length}-${transfers.length}`}
         keyExtractor={keyExtractor}
         renderItem={renderDraggableItem}
         onDragEnd={handleDragEnd}
         activationDistance={15}
-        containerStyle={{ flex: 1 }}
+        containerStyle={[{ flex: 1 }, isDayPending && { opacity: 0.6 }]}
         contentContainerStyle={styles.listContent}
-        initialNumToRender={10}
-        maxToRenderPerBatch={6}
+        initialNumToRender={15}
+        maxToRenderPerBatch={10}
         windowSize={5}
-        updateCellsBatchingPeriod={50}
+        updateCellsBatchingPeriod={30}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={{ fontSize: 40, marginBottom: 8 }}>📋</Text>
@@ -1100,46 +1108,63 @@ const HomeScreen = () => {
         onRemoveRelationship={removeRelationship}
       />
 
-      {/* Alarm Time Picker Modal */}
-      <Modal visible={!!alarmPromptClient} animationType="fade" transparent>
-        <View style={styles.alarmOverlay}>
-          <View style={styles.alarmModal}>
-            <Text style={styles.alarmTitle}>{t('home.selectTime')}</Text>
-            <DateTimePicker
-              value={alarmTime}
-              mode="time"
-              display="spinner"
-              onChange={(_event: DateTimePickerEvent, date?: Date) => {
-                if (date) setAlarmTime(date);
-              }}
-              locale="es-ES"
-              themeVariant={isDark ? 'dark' : 'light'}
-              style={{ height: 150 }}
-            />
-            <View style={styles.alarmActions}>
-              <TouchableOpacity
-                style={styles.alarmCancelBtn}
-                onPress={() => setAlarmPromptClient(null)}
-              >
-                <Text style={styles.alarmCancelText}>{t('cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.alarmSaveBtn}
-                onPress={() => {
-                  if (alarmPromptClient) {
-                    const hours = alarmTime.getHours().toString().padStart(2, '0');
-                    const minutes = alarmTime.getMinutes().toString().padStart(2, '0');
-                    saveAlarm(alarmPromptClient.id, `${hours}:${minutes}`);
-                  }
-                  setAlarmPromptClient(null);
+      {/* Alarm Time Picker */}
+      {Platform.OS === 'android' && !!alarmPromptClient && (
+        <DateTimePicker
+          value={alarmTime}
+          mode="time"
+          display="default"
+          onChange={(event: DateTimePickerEvent, date?: Date) => {
+            if (event.type === 'set' && date && alarmPromptClient) {
+              const hours = date.getHours().toString().padStart(2, '0');
+              const minutes = date.getMinutes().toString().padStart(2, '0');
+              saveAlarm(alarmPromptClient.id, `${hours}:${minutes}`);
+            }
+            setAlarmPromptClient(null);
+          }}
+        />
+      )}
+      {Platform.OS === 'ios' && (
+        <ModalOverlay visible={!!alarmPromptClient} onClose={() => setAlarmPromptClient(null)} animationType="fade">
+          <View style={styles.alarmOverlay}>
+            <View style={styles.alarmModal}>
+              <Text style={styles.alarmTitle}>{t('home.selectTime')}</Text>
+              <DateTimePicker
+                value={alarmTime}
+                mode="time"
+                display="spinner"
+                onChange={(_event: DateTimePickerEvent, date?: Date) => {
+                  if (date) setAlarmTime(date);
                 }}
-              >
-                <Text style={styles.alarmSaveText}>{t('save')}</Text>
-              </TouchableOpacity>
+                locale="es-ES"
+                themeVariant={isDark ? 'dark' : 'light'}
+                style={{ height: 150 }}
+              />
+              <View style={styles.alarmActions}>
+                <TouchableOpacity
+                  style={styles.alarmCancelBtn}
+                  onPress={() => setAlarmPromptClient(null)}
+                >
+                  <Text style={styles.alarmCancelText}>{t('cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.alarmSaveBtn}
+                  onPress={() => {
+                    if (alarmPromptClient) {
+                      const hours = alarmTime.getHours().toString().padStart(2, '0');
+                      const minutes = alarmTime.getMinutes().toString().padStart(2, '0');
+                      saveAlarm(alarmPromptClient.id, `${hours}:${minutes}`);
+                    }
+                    setAlarmPromptClient(null);
+                  }}
+                >
+                  <Text style={styles.alarmSaveText}>{t('save')}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </ModalOverlay>
+      )}
     </View>
   );
 };

@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   TextInput,
   ScrollView,
@@ -12,6 +11,7 @@ import {
   Alert,
   Keyboard,
 } from 'react-native';
+import ModalOverlay from './ModalOverlay';
 import { PRODUCTS, ALL_DAYS } from '../constants/products';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
@@ -310,7 +310,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <ModalOverlay visible={visible} onClose={handleClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -532,7 +532,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
       </KeyboardAvoidingView>
 
       {/* Paste Order Modal */}
-      <Modal visible={showPasteModal} animationType="slide" transparent>
+      <ModalOverlay visible={showPasteModal} onClose={() => { Keyboard.dismiss(); setPasteText(''); setShowPasteModal(false); }} animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.pasteOverlay}
@@ -570,8 +570,8 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             </View>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
-    </Modal>
+      </ModalOverlay>
+    </ModalOverlay>
   );
 };
 
@@ -587,7 +587,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '90%',
+    maxHeight: Platform.OS === 'android' ? '100%' : '90%',
     maxWidth: 600,
     alignSelf: 'center' as const,
     width: '100%' as const,

@@ -3,13 +3,14 @@ import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   FlatList,
   StyleSheet,
   Alert,
   Linking,
+  Platform,
 } from 'react-native';
+import ModalOverlay from './ModalOverlay';
 import { Transfer } from '../types';
 import { normalizePhone } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -107,7 +108,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <View style={styles.header}>
@@ -138,7 +139,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
           />
         </View>
       </View>
-    </Modal>
+    </ModalOverlay>
   );
 };
 
@@ -154,7 +155,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
+    maxHeight: Platform.OS === 'android' ? '100%' : '80%',
     maxWidth: 600,
     alignSelf: 'center' as const,
     width: '100%' as const,

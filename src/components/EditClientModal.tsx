@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   TextInput,
   ScrollView,
@@ -11,6 +10,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import ModalOverlay from './ModalOverlay';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
@@ -216,7 +216,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <ModalOverlay visible={visible} onClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -232,7 +232,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={Platform.OS === 'android' ? { paddingBottom: 60 } : undefined}>
             {showClientInfo && (
               <>
                 <Text style={styles.sectionTitle}>{t('editModal.clientData')}</Text>
@@ -450,13 +450,13 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    </ModalOverlay>
   );
 };
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
     alignItems: 'center',
@@ -466,7 +466,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '85%',
+    maxHeight: Platform.OS === 'android' ? '100%' : '85%',
     maxWidth: 600,
     alignSelf: 'center' as const,
     width: '100%' as const,
@@ -639,6 +639,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   footer: {
     padding: 16,
+    paddingBottom: Platform.OS === 'android' ? 32 : 16,
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },

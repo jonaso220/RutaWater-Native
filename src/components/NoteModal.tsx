@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   TextInput,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
+import ModalOverlay from './ModalOverlay';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
@@ -83,7 +83,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
+    <ModalOverlay visible={visible} onClose={handleClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -161,12 +161,14 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
                 </View>
               ) : (
                 <>
-                  <TouchableOpacity
-                    style={styles.datePickerBtn}
-                    onPress={() => setShowAndroidPicker(true)}
-                  >
-                    <Text style={styles.datePickerBtnText}><Ionicons name="calendar" size={17} /> {t('noteModal.selectDate')}</Text>
-                  </TouchableOpacity>
+                  {!date && (
+                    <TouchableOpacity
+                      style={styles.datePickerBtn}
+                      onPress={() => setShowAndroidPicker(true)}
+                    >
+                      <Text style={styles.datePickerBtnText}><Ionicons name="calendar" size={17} /> {t('noteModal.selectDate')}</Text>
+                    </TouchableOpacity>
+                  )}
                   {showAndroidPicker && (
                     <DateTimePicker
                       value={pickerDate}
@@ -188,7 +190,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
-    </Modal>
+    </ModalOverlay>
   );
 };
 
@@ -204,7 +206,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '92%',
+    maxHeight: Platform.OS === 'android' ? '100%' : '92%',
     maxWidth: 600,
     alignSelf: 'center' as const,
     width: '100%' as const,

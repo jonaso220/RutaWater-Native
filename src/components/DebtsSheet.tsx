@@ -2,7 +2,6 @@ import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   FlatList,
   StyleSheet,
@@ -12,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
 import { normalizePhone, normalizeText, fuzzyMatch } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -313,7 +313,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => { setSearchTerm(''); closeAddPanel(); onClose(); }} onDismiss={() => { setSearchTerm(''); closeAddPanel(); }}>
+    <ModalOverlay visible={visible} onClose={() => { setSearchTerm(''); closeAddPanel(); onClose(); }} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -417,7 +417,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
       </KeyboardAvoidingView>
 
       {/* Add Debt Panel */}
-      <Modal visible={showAddPanel} animationType="slide" transparent onRequestClose={closeAddPanel}>
+      <ModalOverlay visible={showAddPanel} onClose={closeAddPanel} animationType="slide">
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.overlay}
@@ -526,8 +526,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             )}
           </View>
         </KeyboardAvoidingView>
-      </Modal>
-    </Modal>
+      </ModalOverlay>
+    </ModalOverlay>
   );
 };
 
@@ -543,7 +543,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '85%',
+    maxHeight: Platform.OS === 'android' ? '100%' : '85%',
     maxWidth: 600,
     alignSelf: 'center' as const,
     width: '100%' as const,

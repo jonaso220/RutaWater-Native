@@ -289,7 +289,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
         {client.notes ? (
           <View style={styles.notesRow}>
             <Ionicons name="document-text" size={s(14)} color={colors.warningDark} />
-            <Text style={styles.notesText} numberOfLines={3}>{client.notes}</Text>
+            <Text style={styles.notesText} numberOfLines={3}>{parseTextWithLinks(client.notes, colors.primary)}</Text>
           </View>
         ) : null}
 

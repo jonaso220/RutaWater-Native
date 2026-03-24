@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   TextInput,
   ScrollView,
@@ -13,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import ModalOverlay from './ModalOverlay';
 import { Client, RELATIONSHIP_TYPES } from '../types';
 import { normalizePhone, fuzzyMatch } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -129,7 +129,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
+    <ModalOverlay visible={visible} onClose={handleClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -293,7 +293,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+    </ModalOverlay>
   );
 };
 
@@ -307,7 +307,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   modal: {
     backgroundColor: colors.modalBackground,
     borderRadius: 20,
-    maxHeight: '80%',
+    maxHeight: Platform.OS === 'android' ? '100%' : '80%',
     maxWidth: 500,
     alignSelf: 'center' as const,
     width: '100%' as const,

@@ -347,7 +347,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                   <Text style={styles.addDebtBtnText}>{t('debtsSheet.addBtn')}</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <TouchableOpacity onPress={() => { setSearchTerm(''); closeAddPanel(); onClose(); }} style={styles.closeBtn}>
                 <Ionicons name="close" size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </View>

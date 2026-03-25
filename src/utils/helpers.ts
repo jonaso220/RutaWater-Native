@@ -358,8 +358,12 @@ export const getNextVisitDate = (client: Client, forDay?: string): Date | null =
     lastVisitedDay.setHours(0, 0, 0, 0);
 
     if (intervalWeeks === 1) {
-      // Weekly: if visited today (or future-dated visit), push to next week
-      if (lastVisitedDay.getTime() >= today.getTime()) {
+      // Weekly: if visited after the previous occurrence of the target day,
+      // the client was already served this cycle — push to next week.
+      // This handles marking "Listo" on a day before the scheduled day.
+      const prevOccurrence = new Date(nextDate);
+      prevOccurrence.setDate(prevOccurrence.getDate() - 7);
+      if (lastVisitedDay.getTime() > prevOccurrence.getTime()) {
         nextDate.setDate(nextDate.getDate() + 7);
       }
     } else {

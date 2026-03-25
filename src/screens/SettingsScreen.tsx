@@ -562,7 +562,7 @@ const SettingsScreen = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* User info */}
       <View style={styles.section}>
         <View style={styles.userCard}>
@@ -963,6 +963,11 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  contentContainer: {
+    maxWidth: 800,
+    width: '100%' as const,
+    alignSelf: 'center' as const,
   },
   section: {
     paddingHorizontal: 16,

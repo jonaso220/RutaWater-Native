@@ -401,7 +401,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                 autoCapitalize="words"
               />
               {name.length > 0 && (
-                <TouchableOpacity onPress={() => setName('')} style={{ padding: 4 }}>
+                <TouchableOpacity onPress={() => setName('')} style={{ padding: 10 }}>
                   <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                 </TouchableOpacity>
               )}
@@ -418,7 +418,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                 placeholderTextColor={colors.textHint}
               />
               {address.length > 0 && (
-                <TouchableOpacity onPress={() => setAddress('')} style={{ padding: 4 }}>
+                <TouchableOpacity onPress={() => setAddress('')} style={{ padding: 10 }}>
                   <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                 </TouchableOpacity>
               )}
@@ -436,7 +436,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                 keyboardType="phone-pad"
               />
               {phone.length > 0 && (
-                <TouchableOpacity onPress={() => setPhone('')} style={{ padding: 4 }}>
+                <TouchableOpacity onPress={() => setPhone('')} style={{ padding: 10 }}>
                   <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                 </TouchableOpacity>
               )}
@@ -456,7 +456,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                 autoCorrect={false}
               />
               {mapsLink.length > 0 && (
-                <TouchableOpacity onPress={() => setMapsLink('')} style={{ padding: 4 }}>
+                <TouchableOpacity onPress={() => setMapsLink('')} style={{ padding: 10 }}>
                   <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                 </TouchableOpacity>
               )}
@@ -502,7 +502,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               {notes.length > 0 && (
                 <TouchableOpacity
                   onPress={() => setNotes('')}
-                  style={{ position: 'absolute', top: 8, right: 8, padding: 4 }}
+                  style={{ position: 'absolute', top: 4, right: 4, padding: 10 }}
                 >
                   <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                 </TouchableOpacity>

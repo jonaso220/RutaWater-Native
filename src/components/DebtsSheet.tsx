@@ -679,7 +679,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: 0,
   },
   clearBtn: {
-    padding: 4,
+    padding: 10,
   },
   clearBtnText: {
     fontSize: 16,

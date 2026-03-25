@@ -332,7 +332,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
               {localNotes.length > 0 && (
                 <TouchableOpacity
                   onPress={() => setLocalNotes('')}
-                  style={{ position: 'absolute', top: 8, right: 8, padding: 4 }}
+                  style={{ position: 'absolute', top: 4, right: 4, padding: 10 }}
                 >
                   <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                 </TouchableOpacity>
@@ -342,7 +342,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
           {/* Save button */}
           <View style={styles.footer}>
-            <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSubmit} disabled={saving}>
+            <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSubmit} disabled={saving}>
               <Text style={styles.saveBtnText}>{t('scheduleModal.scheduleBtn')}</Text>
             </TouchableOpacity>
           </View>

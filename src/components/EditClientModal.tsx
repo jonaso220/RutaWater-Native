@@ -245,7 +245,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                     placeholderTextColor={colors.textHint}
                   />
                   {name.length > 0 && (
-                    <TouchableOpacity onPress={() => setName('')} style={{ padding: 4 }}>
+                    <TouchableOpacity onPress={() => setName('')} style={{ padding: 10 }}>
                       <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                     </TouchableOpacity>
                   )}
@@ -259,7 +259,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                     placeholderTextColor={colors.textHint}
                   />
                   {address.length > 0 && (
-                    <TouchableOpacity onPress={() => setAddress('')} style={{ padding: 4 }}>
+                    <TouchableOpacity onPress={() => setAddress('')} style={{ padding: 10 }}>
                       <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                     </TouchableOpacity>
                   )}
@@ -274,7 +274,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                     keyboardType="phone-pad"
                   />
                   {phone.length > 0 && (
-                    <TouchableOpacity onPress={() => setPhone('')} style={{ padding: 4 }}>
+                    <TouchableOpacity onPress={() => setPhone('')} style={{ padding: 10 }}>
                       <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                     </TouchableOpacity>
                   )}
@@ -291,7 +291,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                     autoCorrect={false}
                   />
                   {mapsLink.length > 0 && (
-                    <TouchableOpacity onPress={() => setMapsLink('')} style={{ padding: 4 }}>
+                    <TouchableOpacity onPress={() => setMapsLink('')} style={{ padding: 10 }}>
                       <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                     </TouchableOpacity>
                   )}
@@ -339,7 +339,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
               {notes.length > 0 && (
                 <TouchableOpacity
                   onPress={() => setNotes('')}
-                  style={{ position: 'absolute', top: 8, right: 8, padding: 4 }}
+                  style={{ position: 'absolute', top: 4, right: 4, padding: 10 }}
                 >
                   <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                 </TouchableOpacity>
@@ -435,7 +435,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
           {/* Save button */}
           <View style={styles.footer}>
-            <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={handleSave} disabled={saving}>
+            <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
               <Text style={styles.saveBtnText}>{t('editModal.save')}</Text>
             </TouchableOpacity>
             {onDelete && (

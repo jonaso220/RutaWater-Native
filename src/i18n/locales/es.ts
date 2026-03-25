@@ -132,6 +132,8 @@ export default {
     note: 'Nota',
     transfers: 'Transferencias',
     noClientsSubtitle: 'Agrega clientes desde el Directorio',
+    noSearchResults: 'No se encontraron resultados',
+    noSearchResultsSubtitle: 'Intenta con otro nombre o direccion',
     completedCount: '{{count}} completado',
     completedCount_plural: '{{count}} completados',
     hideCompleted: 'Ocultar completados',

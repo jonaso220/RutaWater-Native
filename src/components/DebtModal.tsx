@@ -174,7 +174,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                       />
                       <TouchableOpacity
                         onPress={() => handleSaveEdit(debt.id)}
-                        style={[styles.saveEditBtn, saving && { opacity: 0.5 }]}
+                        style={[styles.saveEditBtn, saving && { opacity: 0.6 }]}
                         disabled={saving}
                       >
                         <Text style={styles.saveEditText}>OK</Text>
@@ -211,7 +211,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => handlePaid(debt)}
-                          style={[styles.debtActionBtn, styles.paidBtn, saving && { opacity: 0.5 }]}
+                          style={[styles.debtActionBtn, styles.paidBtn, saving && { opacity: 0.6 }]}
                           disabled={saving}
                         >
                           <Text style={styles.paidBtnText}>{t('debtModal.paid')}</Text>
@@ -472,7 +472,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: 10,
   },
   addBtnDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
   addBtnText: {
     color: colors.textWhite,

@@ -412,7 +412,7 @@ const DirectoryScreen = () => {
             {search.length > 0 && (
               <TouchableOpacity
                 onPress={() => setSearch('')}
-                style={{ position: 'absolute', right: 8, padding: 4 }}
+                style={{ position: 'absolute', right: 4, padding: 10 }}
               >
                 <Ionicons name="close" size={16} color={colors.textHint} />
               </TouchableOpacity>
@@ -498,7 +498,13 @@ const DirectoryScreen = () => {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{t('directory.noClients')}</Text>
+            <Text style={{ fontSize: 40, marginBottom: 8 }}>{search ? '🔍' : '📋'}</Text>
+            <Text style={styles.emptyText}>
+              {search ? t('home.noSearchResults') : t('directory.noClients')}
+            </Text>
+            {search && (
+              <Text style={styles.emptySubtext}>{t('home.noSearchResultsSubtitle')}</Text>
+            )}
           </View>
         }
       />
@@ -778,7 +784,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 8,
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
@@ -821,6 +827,12 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   emptyText: {
     fontSize: s(17),
     color: colors.textHint,
+  },
+  emptySubtext: {
+    fontSize: s(14),
+    color: colors.textHint,
+    marginTop: 6,
+    opacity: 0.7,
   },
 });
 };

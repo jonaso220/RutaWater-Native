@@ -132,6 +132,8 @@ export default {
     note: 'Note',
     transfers: 'Transfers',
     noClientsSubtitle: 'Add clients from the Directory',
+    noSearchResults: 'No results found',
+    noSearchResultsSubtitle: 'Try a different name or address',
     completedCount: '{{count}} completed',
     completedCount_plural: '{{count}} completed',
     hideCompleted: 'Hide completed',

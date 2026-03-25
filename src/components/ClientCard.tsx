@@ -405,14 +405,14 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       flexDirection: 'row',
       justifyContent: 'flex-end',
       flexWrap: 'wrap',
-      gap: 4,
+      gap: 8,
     },
     actions: {
       flexDirection: 'row',
-      gap: 4,
+      gap: 6,
     },
     iconBtn: {
-      padding: 4,
+      padding: 6,
       borderRadius: 6,
     },
     clientName: {

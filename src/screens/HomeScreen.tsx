@@ -949,7 +949,7 @@ const HomeScreen = () => {
         renderItem={renderDraggableItem}
         onDragEnd={handleDragEnd}
         activationDistance={15}
-        containerStyle={[{ flex: 1 }, isDayPending && { opacity: 0.6 }]}
+        containerStyle={{ flex: 1 }}
         contentContainerStyle={styles.listContent}
         initialNumToRender={15}
         maxToRenderPerBatch={10}
@@ -957,10 +957,17 @@ const HomeScreen = () => {
         updateCellsBatchingPeriod={30}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={{ fontSize: 40, marginBottom: 8 }}>📋</Text>
+            <Text style={{ fontSize: 40, marginBottom: 8 }}>{searchTerm || activeFilters.size > 0 ? '🔍' : '📋'}</Text>
             <Text style={styles.emptyText}>
-              {t('home.noClients', { day: selectedDay })}
+              {searchTerm || activeFilters.size > 0
+                ? t('home.noSearchResults')
+                : t('home.noClients', { day: selectedDay })}
             </Text>
+            {searchTerm || activeFilters.size > 0 ? (
+              <Text style={styles.emptySubtext}>{t('home.noSearchResultsSubtitle')}</Text>
+            ) : (
+              <Text style={styles.emptySubtext}>{t('home.noClientsSubtitle')}</Text>
+            )}
           </View>
         }
         ListFooterComponent={completedClients.length > 0 ? (
@@ -1336,7 +1343,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     padding: 0,
   },
   clearBtn: {
-    padding: 4,
+    padding: 10,
   },
   clearBtnText: {
     fontSize: s(16),
@@ -1450,6 +1457,12 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   emptyText: {
     fontSize: s(17),
     color: colors.textHint,
+  },
+  emptySubtext: {
+    fontSize: s(14),
+    color: colors.textHint,
+    marginTop: 6,
+    opacity: 0.7,
   },
   completedSection: {
     borderTopWidth: 2,

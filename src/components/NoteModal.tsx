@@ -120,7 +120,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
                 {notes.length > 0 && (
                   <TouchableOpacity
                     onPress={() => setNotes('')}
-                    style={{ position: 'absolute', top: 8, right: 8, padding: 4 }}
+                    style={{ position: 'absolute', top: 4, right: 4, padding: 10 }}
                   >
                     <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
                   </TouchableOpacity>

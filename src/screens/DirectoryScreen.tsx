@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
 import { useDebtsStore } from '../stores/debtsStore';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import ScheduleModal from '../components/ScheduleModal';
 import DebtModal from '../components/DebtModal';
@@ -60,6 +60,13 @@ const DirectoryScreen = () => {
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [showNewClient, setShowNewClient] = useState(false);
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
+
+  // Clear search when leaving this tab
+  useFocusEffect(
+    useCallback(() => {
+      return () => setSearch('');
+    }, []),
+  );
 
   // Compute with_debt count (needs both clients and debts)
   const withDebtCount = useMemo(() => {

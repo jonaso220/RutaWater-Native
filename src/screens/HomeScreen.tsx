@@ -16,7 +16,7 @@ import DraggableFlatList, {
   RenderItemParams,
 } from 'react-native-draggable-flatlist';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { useScrollToTop } from '@react-navigation/native';
+import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
 import { ALL_DAYS, PRODUCTS } from '../constants/products';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate } from '../utils/helpers';
@@ -300,6 +300,13 @@ const HomeScreen = () => {
     timer: ReturnType<typeof setTimeout>;
   } | null>(null);
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  // Clear search when leaving this tab
+  useFocusEffect(
+    useCallback(() => {
+      return () => setSearchTerm('');
+    }, []),
+  );
 
   // Refs to access state without adding as dependencies (stabilizes callbacks)
   const undoInfoRef = useRef(undoInfo);

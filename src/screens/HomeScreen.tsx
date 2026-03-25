@@ -1085,6 +1085,7 @@ const HomeScreen = () => {
         onEditDebt={editDebt}
         onClose={() => setShowDebtsSheet(false)}
         onAddDebt={addDebt}
+        reminderTemplate={appSettings?.whatsappRecordatorio}
         onTransferPayment={(clientId) => {
           const client = clients.find((c) => c.id === clientId);
           if (!client) return;

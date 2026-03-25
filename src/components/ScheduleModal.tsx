@@ -354,7 +354,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
     alignItems: 'center',

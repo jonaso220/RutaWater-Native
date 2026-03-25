@@ -31,6 +31,7 @@ interface DebtsSheetProps {
   onClose: () => void;
   onTransferPayment?: (clientId: string) => void;
   onAddDebt?: (client: Client, amount: number) => Promise<void>;
+  reminderTemplate?: string;
 }
 
 type SortMode = 'date' | 'amount';
@@ -56,6 +57,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   onClose,
   onTransferPayment,
   onAddDebt,
+  reminderTemplate,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
@@ -222,6 +224,14 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     Linking.openURL(`whatsapp://send?phone=${cleanPhone}`);
   };
 
+  const sendReminder = (group: ClientDebtGroup) => {
+    if (!group.clientPhone) return;
+    const cleanPhone = normalizePhone(group.clientPhone);
+    const defaultMsg = 'Hola, buenas \nEste es un mensaje automatico para informarle que, segun nuestros registros, quedo pendiente un saldo por regularizar.\nCuando pueda, le agradecemos que nos indique en que fecha podriamos saldarlo. Si necesita nuevamente los datos de la cuenta, con gusto se los enviamos.\nMuchas gracias.';
+    const msg = encodeURIComponent(reminderTemplate || defaultMsg);
+    Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
+  };
+
   const getBorderColor = (maxAge: number) => {
     if (maxAge > 30) return colors.danger;
     if (maxAge > 15) return colors.warningAmber;
@@ -309,6 +319,15 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           <Text style={styles.payAllBtnText}><Ionicons name="checkmark" size={14} /> {t('debtsSheet.payAll', { count: item.debts.length })}</Text>
         </TouchableOpacity>
       )}
+      {/* Reminder button */}
+      {item.clientPhone ? (
+        <TouchableOpacity
+          onPress={() => sendReminder(item)}
+          style={styles.reminderBtn}
+        >
+          <Text style={styles.reminderBtnText}><Ionicons name="chatbubble" size={14} /> {t('debtModal.sendReminder')}</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 
@@ -533,7 +552,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    flex: 1,
     backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
     alignItems: 'center',
@@ -810,6 +829,19 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   payAllBtnText: {
     color: colors.textWhite,
     fontWeight: '800',
+    fontSize: 14,
+  },
+  reminderBtn: {
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  reminderBtnText: {
+    color: colors.textSecondary,
+    fontWeight: '600',
     fontSize: 14,
   },
   // Empty

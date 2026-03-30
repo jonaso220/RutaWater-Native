@@ -33,5 +33,13 @@ target 'RutaWaterNative' do
           :mac_catalyst_enabled => false,
           # :ccache_enabled => true
         )
+
+        # Fix fmt consteval error with Xcode 26+
+        fmt_base = File.join(installer.sandbox.root, 'fmt/include/fmt/base.h')
+        if File.exist?(fmt_base)
+          content = File.read(fmt_base)
+          patched = content.gsub('#if FMT_USE_CONSTEVAL', '#if FMT_USE_CONSTEVAL && !defined(__APPLE__)')
+          File.write(fmt_base, patched) if content != patched
+        end
     end
 end

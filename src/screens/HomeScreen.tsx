@@ -347,13 +347,14 @@ const HomeScreen = () => {
     };
   }, [undoInfo]);
 
-  // Load WhatsApp templates
+  // Load WhatsApp templates (real-time listener)
   useEffect(() => {
     if (!user?.uid) return;
     const settingsDocId = groupData?.groupId || user.uid;
-    db.collection('settings').doc(settingsDocId).get().then((doc) => {
+    const unsubscribe = db.collection('settings').doc(settingsDocId).onSnapshot((doc) => {
       if (doc.exists) setAppSettings(doc.data() as Record<string, string>);
-    }).catch(() => {});
+    }, () => {});
+    return () => unsubscribe();
   }, [user?.uid, groupData?.groupId]);
 
   const handleSelectDay = useCallback((day: string) => {

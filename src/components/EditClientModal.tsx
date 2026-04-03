@@ -133,6 +133,10 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     if (freq !== client.freq) {
       (data as any).lastVisited = null;
     }
+    // Reset lastVisited when date changes on a periodic client so it reappears on the new date
+    if (needsDate && startDate && freq !== 'once' && client.specificDate !== startDate) {
+      (data as any).lastVisited = null;
+    }
     // Clear specificDate when changing FROM 'once' to a periodic frequency
     if (client.freq === 'once' && freq !== 'once') {
       data.specificDate = '';
@@ -401,7 +405,6 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                       mode="date"
                       display="inline"
                       onChange={onDateChange}
-                      minimumDate={new Date()}
                       locale="es-ES"
                       style={styles.datePicker}
                       themeVariant={isDark ? 'dark' : 'light'}
@@ -423,7 +426,6 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                         mode="date"
                         display="default"
                         onChange={onDateChange}
-                        minimumDate={new Date()}
                         locale="es-ES"
                       />
                     )}

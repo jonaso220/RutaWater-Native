@@ -376,14 +376,26 @@ export const getNextVisitDate = (client: Client, forDay?: string): Date | null =
     }
   }
 
-  // For periodic clients, respect specificDate as a minimum start date.
-  // If the user set a future start date, don't show the client before that date.
+  // For periodic clients, respect specificDate as an anchor date.
   if (client.specificDate) {
     const startDate = new Date(client.specificDate + 'T00:00:00');
     if (startDate > today && nextDate < startDate) {
-      // Push nextDate forward to the first matching day on or after startDate
+      // Future start date: push nextDate forward to the first matching day on or after startDate
       while (nextDate < startDate) {
         nextDate.setDate(nextDate.getDate() + 7);
+      }
+    } else if (!lastVisited && startDate <= today && nextDate > today) {
+      // Past/today date with no lastVisited (just edited): pull nextDate back to the
+      // occurrence in the same week as specificDate so the client reappears immediately.
+      // Only do this if specificDate is recent (within the last 7 days) to avoid
+      // pulling back clients with stale specificDates from weeks ago.
+      const daysSinceStart = Math.round((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysSinceStart < 7) {
+        const candidate = new Date(nextDate);
+        candidate.setDate(candidate.getDate() - 7);
+        if (candidate >= startDate) {
+          nextDate.setTime(candidate.getTime());
+        }
       }
     }
   }

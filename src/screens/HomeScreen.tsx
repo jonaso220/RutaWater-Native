@@ -358,6 +358,7 @@ const HomeScreen = () => {
   }, [user?.uid, groupData?.groupId]);
 
   const handleSelectDay = useCallback((day: string) => {
+    setShowFilters(false);
     setSelectedDay((prev) => {
       if (day === prev) {
         scrollRef.current?.scrollToOffset?.({ offset: 0, animated: true });
@@ -940,7 +941,6 @@ const HomeScreen = () => {
           </View>
         )}
       </View>
-
       {/* Client list */}
       <DraggableFlatList
         ref={scrollRef}
@@ -949,6 +949,7 @@ const HomeScreen = () => {
         keyExtractor={keyExtractor}
         renderItem={renderDraggableItem}
         onDragEnd={handleDragEnd}
+        onScrollBeginDrag={() => showFilters && setShowFilters(false)}
         activationDistance={15}
         containerStyle={{ flex: 1 }}
         contentContainerStyle={styles.listContent}

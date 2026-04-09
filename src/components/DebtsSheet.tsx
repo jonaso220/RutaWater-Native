@@ -69,6 +69,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [addAmount, setAddAmount] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<string | null>(null);
+  const [editAmount, setEditAmount] = useState('');
 
   const now = Date.now();
 
@@ -156,6 +158,19 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     setAddSearch('');
     setSelectedClient(null);
     setAddAmount('');
+  };
+
+  const handleSaveEdit = async (debtId: string) => {
+    const amount = parseFloat(editAmount);
+    if (!amount || amount <= 0 || saving) return;
+    setSaving(true);
+    try {
+      await onEditDebt(debtId, amount);
+      setEditingDebt(null);
+      setEditAmount('');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const grandTotal = debts.reduce((sum, d) => sum + (d.amount || 0), 0);
@@ -284,28 +299,68 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               idx === 0 ? styles.debtRowFirst : styles.debtRowDashed,
             ]}
           >
-            <View>
-              <View style={styles.dateRow}>
-                <Text style={styles.debtDate}>{formatDate(debt.createdAt)}</Text>
-                {showBadge && (
-                  <View style={[styles.ageBadge, { backgroundColor: badgeBg }]}>
-                    <Text style={[styles.ageBadgeText, { color: badgeText }]}>
-                      {ageDays}d
-                    </Text>
-                  </View>
-                )}
+            {editingDebt === debt.id ? (
+              <View style={styles.editRow}>
+                <TextInput
+                  style={styles.editInput}
+                  value={editAmount}
+                  onChangeText={setEditAmount}
+                  keyboardType="numeric"
+                  placeholder={t('amount')}
+                  placeholderTextColor={colors.textHint}
+                  autoFocus
+                />
+                <TouchableOpacity
+                  onPress={() => handleSaveEdit(debt.id)}
+                  style={[styles.saveEditBtn, saving && { opacity: 0.6 }]}
+                  disabled={saving}
+                >
+                  <Text style={styles.saveEditText}>OK</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => { setEditingDebt(null); setEditAmount(''); }}
+                  style={styles.cancelEditBtn}
+                >
+                  <Text style={styles.cancelEditText}>X</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.debtAmount}>
-                ${debt.amount?.toLocaleString()}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => handleMarkPaid(debt)}
-              style={[styles.paidBtn, saving && { opacity: 0.5 }]}
-              disabled={saving}
-            >
-              <Text style={styles.paidBtnText}>{t('debtModal.paid')}</Text>
-            </TouchableOpacity>
+            ) : (
+              <>
+                <View>
+                  <View style={styles.dateRow}>
+                    <Text style={styles.debtDate}>{formatDate(debt.createdAt)}</Text>
+                    {showBadge && (
+                      <View style={[styles.ageBadge, { backgroundColor: badgeBg }]}>
+                        <Text style={[styles.ageBadgeText, { color: badgeText }]}>
+                          {ageDays}d
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.debtAmount}>
+                    ${debt.amount?.toLocaleString()}
+                  </Text>
+                </View>
+                <View style={styles.debtActions}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setEditingDebt(debt.id);
+                      setEditAmount(String(debt.amount || ''));
+                    }}
+                    style={styles.editBtn}
+                  >
+                    <Ionicons name="pencil" size={16} color={colors.textMuted} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleMarkPaid(debt)}
+                    style={[styles.paidBtn, saving && { opacity: 0.5 }]}
+                    disabled={saving}
+                  >
+                    <Text style={styles.paidBtnText}>{t('debtModal.paid')}</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         );
       })}
@@ -332,7 +387,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   );
 
   return (
-    <ModalOverlay visible={visible} onClose={() => { setSearchTerm(''); closeAddPanel(); onClose(); }} animationType="slide">
+    <ModalOverlay visible={visible} onClose={() => { setSearchTerm(''); setEditingDebt(null); setEditAmount(''); closeAddPanel(); onClose(); }} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -347,7 +402,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                   <Text style={styles.addDebtBtnText}>{t('debtsSheet.addBtn')}</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity onPress={() => { setSearchTerm(''); closeAddPanel(); onClose(); }} style={styles.closeBtn}>
+              <TouchableOpacity onPress={() => { setSearchTerm(''); setEditingDebt(null); setEditAmount(''); closeAddPanel(); onClose(); }} style={styles.closeBtn}>
                 <Ionicons name="close" size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
@@ -806,6 +861,50 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   ageBadgeText: {
     fontSize: 10,
     fontWeight: '800',
+  },
+  debtActions: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  editBtn: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  editInput: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    borderWidth: 1,
+    borderColor: colors.textDisabled,
+  },
+  saveEditBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  saveEditText: {
+    color: colors.textWhite,
+    fontWeight: '700',
+  },
+  cancelEditBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  cancelEditText: {
+    color: colors.textMuted,
+    fontWeight: '700',
   },
   paidBtn: {
     backgroundColor: colors.success,

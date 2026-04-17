@@ -5,6 +5,7 @@ import {
   BackHandler,
   Platform,
   Modal,
+  useWindowDimensions,
 } from 'react-native';
 
 interface ModalOverlayProps {
@@ -30,6 +31,12 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
   children,
   animationType = 'slide',
 }) => {
+  // Force wrapper to follow window size. On iPadOS apps running on Mac, the
+  // native Modal's hosting view does not always resize with the app window,
+  // which leaves flex-based children misaligned. Pinning explicit dimensions
+  // guarantees the overlay fills the entire window so children center correctly.
+  const { width, height } = useWindowDimensions();
+
   // Handle Android back button
   useEffect(() => {
     if (Platform.OS !== 'android' || !visible) return;
@@ -44,7 +51,7 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
   if (Platform.OS === 'ios') {
     return (
       <Modal visible={visible} animationType={animationType} transparent>
-        <View style={styles.iosWrapper}>
+        <View style={[styles.iosWrapper, { width, height }]}>
           {children}
         </View>
       </Modal>

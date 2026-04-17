@@ -46,7 +46,8 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 768;
-  const styles = getStyles(colors, isTablet);
+  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const styles = getStyles(colors, isTablet, modalWidth);
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -578,7 +579,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -593,10 +594,10 @@ const getStyles = (colors: ThemeColors, isTablet: boolean) => StyleSheet.create(
     borderTopRightRadius: 20,
     borderBottomLeftRadius: isTablet ? 20 : 0,
     borderBottomRightRadius: isTablet ? 20 : 0,
-    maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '90%',
-    maxWidth: isTablet ? 720 : 600,
+    maxHeight: Platform.OS === 'android' ? '100%' : '90%',
+    maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
-    width: '100%' as const,
+    width: isTablet ? modalWidth : ('100%' as const),
     overflow: 'hidden' as const,
   },
   header: {

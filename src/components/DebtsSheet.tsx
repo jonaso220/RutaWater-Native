@@ -64,7 +64,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 768;
-  const styles = getStyles(colors, isTablet);
+  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const styles = getStyles(colors, isTablet, modalWidth);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('date');
   const [showAddPanel, setShowAddPanel] = useState(false);
@@ -608,7 +609,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -624,9 +625,9 @@ const getStyles = (colors: ThemeColors, isTablet: boolean) => StyleSheet.create(
     borderBottomLeftRadius: isTablet ? 20 : 0,
     borderBottomRightRadius: isTablet ? 20 : 0,
     maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '85%',
-    maxWidth: isTablet ? 720 : 600,
+    maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
-    width: '100%' as const,
+    width: isTablet ? modalWidth : ('100%' as const),
     overflow: 'hidden' as const,
   },
   header: {

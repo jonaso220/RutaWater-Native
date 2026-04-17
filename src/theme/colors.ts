@@ -25,6 +25,7 @@ export const lightColors = {
   primaryLighter: '#EFF6FF',
   primaryBorder: '#93C5FD',
   primaryInactiveBorder: '#BFDBFE',
+  primaryText: '#1D4ED8',
 
   // Success (Green)
   success: '#10B981',
@@ -99,6 +100,7 @@ export const darkColors: typeof lightColors = {
   primaryLighter: '#172554',
   primaryBorder: '#1E40AF',
   primaryInactiveBorder: '#1E3A5F',
+  primaryText: '#93C5FD',
 
   // Success (Green)
   success: '#10B981',

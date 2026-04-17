@@ -1409,7 +1409,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     color: colors.textSecondary,
   },
   filterChipTextActive: {
-    color: colors.primaryDark,
+    color: colors.primaryText,
   },
   listContent: {
     padding: 12,

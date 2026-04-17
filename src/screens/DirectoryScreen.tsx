@@ -822,7 +822,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   scheduleButtonText: {
     fontSize: s(14),
     fontWeight: '700',
-    color: colors.primaryDark,
+    color: colors.primaryText,
   },
   importBtn: {
     backgroundColor: colors.primary,

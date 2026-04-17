@@ -270,9 +270,14 @@ const ClientCard: React.FC<ClientCardProps> = ({
         {/* Address with location button */}
         {client.address ? (
           hasLocation ? (
-            <TouchableOpacity onPress={openMaps} style={styles.addressRow} activeOpacity={0.6}>
-              <Ionicons name="location-sharp" size={s(16)} color={colors.primary} />
-              <Text style={styles.clientAddressLink}>{client.address}</Text>
+            <TouchableOpacity
+              onPress={openMaps}
+              style={styles.addressButton}
+              activeOpacity={0.6}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="location-sharp" size={s(18)} color={colors.primary} />
+              <Text style={styles.clientAddressLink} numberOfLines={1}>{client.address}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity onPress={onEdit} style={styles.addressRow} activeOpacity={0.6}>
@@ -448,7 +453,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     transferBadge: {
       fontSize: s(12),
       fontWeight: '700',
-      color: colors.successDark,
+      color: colors.successText,
       backgroundColor: colors.successLighter,
       paddingHorizontal: 6,
       paddingVertical: 2,
@@ -468,7 +473,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     familyBadge: {
       fontSize: s(12),
       fontWeight: '700',
-      color: colors.primary,
+      color: colors.primaryText,
       backgroundColor: colors.primaryLight,
       paddingHorizontal: 6,
       paddingVertical: 2,
@@ -484,12 +489,27 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       alignItems: 'center',
       gap: 4,
     },
+    addressButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.primaryLight,
+      borderWidth: 1,
+      borderColor: colors.primaryBorder,
+      borderRadius: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      marginTop: 2,
+      alignSelf: 'flex-start',
+      maxWidth: '100%',
+    },
     mapsPinIcon: {
       fontSize: s(16),
     },
     clientAddressLink: {
       fontSize: s(14),
-      color: colors.primary,
+      fontWeight: '600',
+      color: colors.textPrimary,
       flex: 1,
     },
     productsRow: {

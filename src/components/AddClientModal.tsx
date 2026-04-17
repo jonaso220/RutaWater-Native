@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
   Keyboard,
+  useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { PRODUCTS, ALL_DAYS } from '../constants/products';
@@ -43,7 +44,9 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
-  const styles = getStyles(colors);
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 768;
+  const styles = getStyles(colors, isTablet);
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -575,22 +578,26 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
-    justifyContent: 'flex-end',
+    justifyContent: isTablet ? 'center' : 'flex-end',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: isTablet ? 24 : 8,
+    paddingVertical: isTablet ? 24 : 0,
   },
   modal: {
     backgroundColor: colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: Platform.OS === 'android' ? '100%' : '90%',
-    maxWidth: 600,
+    borderBottomLeftRadius: isTablet ? 20 : 0,
+    borderBottomRightRadius: isTablet ? 20 : 0,
+    maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '90%',
+    maxWidth: isTablet ? 720 : 600,
     alignSelf: 'center' as const,
     width: '100%' as const,
+    overflow: 'hidden' as const,
   },
   header: {
     flexDirection: 'row',

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Text, View } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
@@ -49,7 +50,19 @@ const TabNavigator = () => {
           name="Inicio"
           component={HomeScreen}
           options={{
-            headerTitle: 'RutaWater',
+            headerTitle: () => (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons
+                  name="truck-delivery"
+                  size={s(22)}
+                  color={colors.headerText}
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={{ color: colors.headerText, fontWeight: '700', fontSize: s(17) }}>
+                  RutaWater
+                </Text>
+              </View>
+            ),
             tabBarLabel: t('nav.home'),
             tabBarIcon: () => <Text style={{ fontSize: Math.round(22 * fontScale) }}>🏠</Text>,
           }}

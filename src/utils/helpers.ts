@@ -154,6 +154,26 @@ const substringLevenshtein = (text: string, search: string): number => {
   return best;
 };
 
+export const matchScore = (searchTerm: string, name: string, address: string, phone: string): number => {
+  const term = normalizeText(searchTerm).trim();
+  if (!term) return 0;
+  const n = normalizeText(name);
+  const a = normalizeText(address);
+  const p = normalizeText(phone);
+  const wordStartsWith = (text: string, q: string): boolean =>
+    text.split(/\s+/).some((w) => w.startsWith(q));
+
+  if (n === term) return 1000;
+  if (n.startsWith(term)) return 800;
+  if (wordStartsWith(n, term)) return 700;
+  if (n.includes(term)) return 500;
+  if (a.startsWith(term)) return 400;
+  if (wordStartsWith(a, term)) return 350;
+  if (a.includes(term)) return 300;
+  if (p.includes(term)) return 200;
+  return 100;
+};
+
 export const fuzzyMatch = (searchTerm: string): ((...fields: string[]) => boolean) => {
   if (!searchTerm) return () => true;
   const cleaned = normalizeText(searchTerm).trim().replace(/\s+/g, ' ');

@@ -51,6 +51,7 @@ const DirectoryScreen = () => {
   const debts = useDebtsStore((s) => s.debts);
   const addDebt = useDebtsStore((s) => s.addDebt);
   const markDebtPaid = useDebtsStore((s) => s.markDebtPaid);
+  const markAllDebtsPaid = useDebtsStore((s) => s.markAllDebtsPaid);
   const editDebt = useDebtsStore((s) => s.editDebt);
   const getClientDebtTotal = useDebtsStore((s) => s.getClientDebtTotal);
   const [search, setSearch] = useState('');
@@ -298,7 +299,24 @@ const DirectoryScreen = () => {
                 ) : null}
               </View>
               {item.address ? (
-                <Text style={styles.clientAddress} numberOfLines={1}><Ionicons name="location-sharp" size={13} /> {item.address}</Text>
+                <TouchableOpacity
+                  onPress={() => hasLocation ? openMaps(item) : undefined}
+                  activeOpacity={hasLocation ? 0.6 : 1}
+                  disabled={!hasLocation}
+                >
+                  <Text
+                    style={[styles.clientAddress, hasLocation && styles.clientAddressLink]}
+                    numberOfLines={1}
+                  >
+                    <Ionicons name="location-sharp" size={13} /> {item.address}
+                  </Text>
+                </TouchableOpacity>
+              ) : hasLocation ? (
+                <TouchableOpacity onPress={() => openMaps(item)} activeOpacity={0.6}>
+                  <Text style={[styles.clientAddress, styles.clientAddressLink]} numberOfLines={1}>
+                    <Ionicons name="location-sharp" size={13} /> {t('directory.viewLocation')}
+                  </Text>
+                </TouchableOpacity>
               ) : null}
             </View>
           </View>
@@ -360,15 +378,8 @@ const DirectoryScreen = () => {
                 <Text style={{ fontSize: 18 }}>💬</Text>
               </TouchableOpacity>
             ) : null}
-            <TouchableOpacity
-              onPress={() => hasLocation ? openMaps(item) : undefined}
-              style={[styles.actionBtn, !hasLocation && { opacity: 0.3 }]}
-              activeOpacity={hasLocation ? 0.6 : 1}
-            >
-              <Text style={{ fontSize: 18 }}>📍</Text>
-            </TouchableOpacity>
             <TouchableOpacity onPress={() => setDebtClient(item)} style={styles.actionBtn}>
-              <Text style={{ fontSize: 18 }}>{debtTotal > 0 ? '💰' : '💲'}</Text>
+              <Text style={{ fontSize: 18 }}>{debtTotal > 0 ? '💰' : '💵'}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setRelationshipClient(item)} style={styles.actionBtn}>
               <Text style={{ fontSize: 18 }}>{hasRelationships ? '👨‍👩‍👧' : '👥'}</Text>
@@ -526,6 +537,7 @@ const DirectoryScreen = () => {
         onClose={() => setDebtClient(null)}
         onAddDebt={addDebt}
         onMarkPaid={markDebtPaid}
+        onMarkAllPaid={markAllDebtsPaid}
         onEditDebt={editDebt}
       />
 
@@ -706,6 +718,10 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontSize: s(12),
     color: colors.textMuted,
     marginTop: 2,
+  },
+  clientAddressLink: {
+    color: colors.primary,
+    textDecorationLine: 'underline',
   },
   badgesRow: {
     flexDirection: 'row',

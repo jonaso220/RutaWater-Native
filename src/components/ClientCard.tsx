@@ -77,15 +77,19 @@ const ClientCard: React.FC<ClientCardProps> = ({
   const styles = getStyles(colors, fontScale);
   const [showPositionPrompt, setShowPositionPrompt] = useState(false);
 
-  const productSummary = React.useMemo(() => {
-    if (!client.products) return '';
+  const productList = React.useMemo(() => {
+    if (!client.products) return [] as { id: string; qty: number; emoji: string; short: string }[];
     return Object.keys(client.products)
       .filter((k) => parseInt(String(client.products[k] || 0), 10) > 0)
       .map((k) => {
         const p = PRODUCTS.find((prod) => prod.id === k);
-        return `${client.products[k]}x ${p ? p.short : k}`;
-      })
-      .join(', ');
+        return {
+          id: k,
+          qty: parseInt(String(client.products[k]), 10),
+          emoji: p?.emoji || '📦',
+          short: p?.short || k,
+        };
+      });
   }, [client.products]);
 
   const handleOrderTap = () => {
@@ -212,12 +216,12 @@ const ClientCard: React.FC<ClientCardProps> = ({
           )}
           {onDebt && (
             <TouchableOpacity onPress={onDebt} style={styles.iconBtn}>
-              <Text style={{ fontSize: s(16) }}>{hasDebt ? '💰' : '💲'}</Text>
+              <Text style={{ fontSize: s(16) }}>{hasDebt ? '💰' : '💵'}</Text>
             </TouchableOpacity>
           )}
           {onTransfer && (
             <TouchableOpacity onPress={onTransfer} style={styles.iconBtn}>
-              <Text style={{ fontSize: s(16) }}>{hasPendingTransfer ? '📩' : '💸'}</Text>
+              <Text style={{ fontSize: s(16) }}>{hasPendingTransfer ? '📩' : '🏦'}</Text>
             </TouchableOpacity>
           )}
           {onAlarm && (
@@ -279,9 +283,15 @@ const ClientCard: React.FC<ClientCardProps> = ({
         ) : null}
 
         {/* Products */}
-        {productSummary ? (
+        {productList.length > 0 ? (
           <View style={styles.productsRow}>
-            <Text style={styles.productsText}><Ionicons name="cube" size={s(13)} color={colors.textSecondary} /> {productSummary}</Text>
+            {productList.map((p) => (
+              <View key={p.id} style={styles.productChip}>
+                <Text style={styles.productEmoji}>{p.emoji}</Text>
+                <Text style={styles.productQty}>{p.qty}</Text>
+                <Text style={styles.productShort}>{p.short}</Text>
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -483,13 +493,32 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       flex: 1,
     },
     productsRow: {
-      backgroundColor: colors.sectionBackground,
-      borderRadius: 8,
-      padding: 6,
-      marginTop: 2,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 4,
     },
-    productsText: {
+    productChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      paddingVertical: 4,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      gap: 4,
+    },
+    productEmoji: {
+      fontSize: s(14),
+    },
+    productQty: {
       fontSize: s(13),
+      fontWeight: '800',
+      color: colors.primary,
+    },
+    productShort: {
+      fontSize: s(12),
       fontWeight: '600',
       color: colors.textSecondary,
     },

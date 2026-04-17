@@ -951,6 +951,8 @@ const HomeScreen = () => {
         onDragEnd={handleDragEnd}
         onScrollBeginDrag={() => showFilters && setShowFilters(false)}
         activationDistance={15}
+        autoscrollThreshold={30}
+        autoscrollSpeed={40}
         containerStyle={{ flex: 1 }}
         contentContainerStyle={styles.listContent}
         initialNumToRender={15}
@@ -1056,6 +1058,7 @@ const HomeScreen = () => {
         onClose={() => setDebtClient(null)}
         onAddDebt={addDebt}
         onMarkPaid={markDebtPaid}
+        onMarkAllPaid={markAllDebtsPaid}
         onEditDebt={editDebt}
       />
 

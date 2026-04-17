@@ -203,6 +203,7 @@ export default {
     errorMaps: 'No se pudo abrir Google Maps.',
     errorMapsLink: 'No se pudo abrir el enlace de mapa.',
     errorCall: 'No se pudo realizar la llamada.',
+    viewLocation: 'Ver ubicacion',
   },
 
   // Paywall

@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import { db } from '../config/firebase';
 import { Client, RELATIONSHIP_INVERSE } from '../types';
-import { normalizeText, fuzzyMatch, getNextVisitDate, getWeekNumber, normalizePhoneForComparison } from '../utils/helpers';
+import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, getWeekNumber, normalizePhoneForComparison } from '../utils/helpers';
 import { ALL_DAYS, Frequency } from '../constants/products';
+import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
 
 const withDefaults = (id: string, data: any): Client => ({
   id,
@@ -118,7 +119,8 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   // Get directory (all clients, searchable with fuzzy match)
   const getFilteredDirectory = useCallback((searchTerm: string, filter: string = 'all'): Client[] => {
     const matcher = fuzzyMatch(searchTerm);
-    return clients
+    const hasSearch = !!searchTerm.trim();
+    const matched = clients
       .filter((c) => !c.isNote)
       .filter((c) => {
         if (filter === 'all') return true;
@@ -126,8 +128,14 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         if (filter === 'sin_frecuencia') return c.freq === 'once' || c.freq === 'on_demand';
         return c.freq === filter;
       })
-      .filter((c) => matcher(c.name || '', c.address || '', c.phone || ''))
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      .filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
+    if (!hasSearch) {
+      return matched.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+    return matched
+      .map((c) => ({ c, score: matchScore(searchTerm, c.name || '', c.address || '', c.phone || '') }))
+      .sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || ''))
+      .map((entry) => entry.c);
   }, [clients]);
 
   // Directory category counts (excluding notes)
@@ -422,6 +430,13 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   const saveAlarm = useCallback(async (clientId: string, time: string) => {
     try {
       await db.collection('clients').doc(clientId).update({ alarm: time });
+      if (time) {
+        await requestNotificationPermission();
+        const client = clientsRef.current.find((c) => c.id === clientId);
+        await scheduleClientAlarm(clientId, client?.name || '', client?.address || '', time);
+      } else {
+        await cancelClientAlarm(clientId);
+      }
     } catch (e) {
       console.error('Error saving alarm:', e);
     }
@@ -763,6 +778,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   // Permanently delete a client from Firestore (cleans up relationship references)
   const deleteClient = useCallback(async (clientId: string) => {
     try {
+      await cancelClientAlarm(clientId);
       // Clean up relationship references in other clients
       const client = clientsRef.current.find((c) => c.id === clientId);
       if (client?.relationships && Object.keys(client.relationships).length > 0) {

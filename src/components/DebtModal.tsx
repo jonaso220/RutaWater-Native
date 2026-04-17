@@ -28,6 +28,7 @@ interface DebtModalProps {
   onClose: () => void;
   onAddDebt: (client: Client, amount: number) => Promise<void>;
   onMarkPaid: (debt: Debt) => Promise<void>;
+  onMarkAllPaid: (clientId: string, debtIds: string[]) => Promise<void>;
   onEditDebt: (debtId: string, newAmount: number) => Promise<void>;
 }
 
@@ -40,6 +41,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   onClose,
   onAddDebt,
   onMarkPaid,
+  onMarkAllPaid,
   onEditDebt,
 }) => {
   const { colors } = useTheme();
@@ -79,6 +81,32 @@ const DebtModal: React.FC<DebtModalProps> = ({
             setSaving(true);
             try {
               await onMarkPaid(debt);
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleMarkAllPaid = () => {
+    if (saving || clientDebts.length < 2) return;
+    Alert.alert(
+      t('debtsSheet.allPaidTitle'),
+      t('debtsSheet.allPaidMsg', {
+        name: client.name,
+        count: clientDebts.length,
+        total: total.toLocaleString(),
+      }),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: t('debtsSheet.allPaid'),
+          onPress: async () => {
+            setSaving(true);
+            try {
+              await onMarkAllPaid(client.id, clientDebts.map((d) => d.id));
             } finally {
               setSaving(false);
             }
@@ -226,6 +254,19 @@ const DebtModal: React.FC<DebtModalProps> = ({
                 <Ionicons name="cash-outline" size={40} color={colors.textHint} style={{ marginBottom: 8 }} />
                 <Text style={styles.emptyText}>{t('debtModal.noDebts')}</Text>
               </View>
+            )}
+
+            {/* Pay all button - solo si hay más de 1 deuda */}
+            {clientDebts.length > 1 && (
+              <TouchableOpacity
+                onPress={handleMarkAllPaid}
+                style={[styles.payAllBtn, saving && { opacity: 0.5 }]}
+                disabled={saving}
+              >
+                <Text style={styles.payAllBtnText}>
+                  <Ionicons name="checkmark" size={14} /> {t('debtsSheet.payAll', { count: clientDebts.length })}
+                </Text>
+              </TouchableOpacity>
             )}
 
             {/* WhatsApp buttons */}
@@ -415,6 +456,18 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: colors.textHint,
+  },
+  payAllBtn: {
+    backgroundColor: colors.success,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  payAllBtnText: {
+    color: colors.textWhite,
+    fontWeight: '800',
+    fontSize: 16,
   },
   whatsappSection: {
     marginTop: 16,

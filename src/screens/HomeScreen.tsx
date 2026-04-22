@@ -1053,6 +1053,7 @@ const HomeScreen = () => {
         visible={!!debtClient}
         client={debtClient}
         debts={debts}
+        allClients={clients}
         debtTemplate={appSettings?.whatsappDeuda}
         reminderTemplate={appSettings?.whatsappRecordatorio}
         onClose={() => setDebtClient(null)}
@@ -1113,7 +1114,6 @@ const HomeScreen = () => {
       <TransfersSheet
         visible={showTransfersSheet}
         transfers={transfers}
-        isAdmin={isAdmin}
         onReview={markTransferReviewed}
         onClose={() => setShowTransfersSheet(false)}
       />

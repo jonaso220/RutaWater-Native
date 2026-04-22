@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, normalizeText, fuzzyMatch } from '../utils/helpers';
+import { normalizePhone, normalizeText, fuzzyMatch, getClientMatchKey } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -84,28 +84,39 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     return Math.floor((now - ts) / 86400000);
   };
 
-  // Group debts by client
+  // Agrupa deudas por "cliente humano" (nombre+teléfono normalizados),
+  // no por clientId. Así si un cliente del directorio fue agregado varias veces
+  // a la ruta (p.ej. semanal + una vez para otra ubicación), las deudas de
+  // ambas instancias se muestran en una sola tarjeta.
   const clientGroups: ClientDebtGroup[] = useMemo(() => {
     const grouped: Record<string, ClientDebtGroup> = {};
 
     debts.forEach((debt) => {
-      if (!grouped[debt.clientId]) {
-        const client = clients.find((c) => c.id === debt.clientId);
-        grouped[debt.clientId] = {
+      const client = clients.find((c) => c.id === debt.clientId);
+      const name = debt.clientName || client?.name || '';
+      const phone = client?.phone || '';
+      const key = getClientMatchKey(name, phone, debt.clientId);
+
+      if (!grouped[key]) {
+        grouped[key] = {
           clientId: debt.clientId,
-          clientName: debt.clientName || client?.name || '',
-          clientPhone: client?.phone || '',
+          clientName: name,
+          clientPhone: phone,
           clientAddress: client?.address || '',
           total: 0,
           debts: [],
           maxAgeDays: 0,
         };
+      } else if (!grouped[key].clientPhone && phone) {
+        // Completa con datos del cliente más "vivo" si la primera deuda no tenía
+        grouped[key].clientPhone = phone;
+        if (client?.address) grouped[key].clientAddress = client.address;
       }
-      grouped[debt.clientId].total += debt.amount || 0;
-      grouped[debt.clientId].debts.push(debt);
+      grouped[key].total += debt.amount || 0;
+      grouped[key].debts.push(debt);
       const age = getAgeDays(debt.createdAt);
-      if (age > grouped[debt.clientId].maxAgeDays) {
-        grouped[debt.clientId].maxAgeDays = age;
+      if (age > grouped[key].maxAgeDays) {
+        grouped[key].maxAgeDays = age;
       }
     });
 
@@ -133,8 +144,18 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     );
   }, [clientGroups, searchTerm]);
 
-  // Clients with existing debts (for "Debe" badge)
-  const debtClientIds = useMemo(() => new Set(debts.map((d) => d.clientId)), [debts]);
+  // Clientes con deuda (por matchKey) — el badge "Debe" aparece en cualquier
+  // instancia duplicada del mismo cliente humano, no solo en el clientId exacto del debt.
+  const debtMatchKeys = useMemo(() => {
+    const set = new Set<string>();
+    debts.forEach((d) => {
+      const c = clients.find((cl) => cl.id === d.clientId);
+      const name = d.clientName || c?.name || '';
+      const phone = c?.phone || '';
+      set.add(getClientMatchKey(name, phone, d.clientId));
+    });
+    return set;
+  }, [debts, clients]);
 
   // Filtered clients for add panel
   const addPanelClients = useMemo(() => {
@@ -178,7 +199,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   };
 
   const grandTotal = debts.reduce((sum, d) => sum + (d.amount || 0), 0);
-  const uniqueClients = new Set(debts.map((d) => d.clientId)).size;
+  // Cuenta clientes únicos por matchKey para no contar el mismo cliente dos veces cuando tiene instancias duplicadas
+  const uniqueClients = clientGroups.length;
 
   const formatDate = (timestamp: any): string => {
     if (!timestamp) return '';
@@ -589,7 +611,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                           <Text style={styles.addPanelAddress} numberOfLines={1}>{client.address}</Text>
                         ) : null}
                       </View>
-                      {debtClientIds.has(client.id) && (
+                      {debtMatchKeys.has(getClientMatchKey(client.name || '', client.phone || '', client.id)) && (
                         <Text style={styles.debtBadge}>{t('debtsSheet.owes')}</Text>
                       )}
                     </TouchableOpacity>

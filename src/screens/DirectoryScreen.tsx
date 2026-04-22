@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Client } from '../types';
-import { normalizePhone } from '../utils/helpers';
+import { normalizePhone, getClientMatchKey } from '../utils/helpers';
 import { PRODUCTS } from '../constants/products';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -69,13 +69,33 @@ const DirectoryScreen = () => {
     }, []),
   );
 
+  // Conjunto de matchKeys de clientes con deuda. Un cliente humano puede tener varias
+  // instancias (mismo nombre+teléfono, IDs distintos); si CUALQUIERA tiene deuda, todas
+  // sus instancias cuentan y se muestran en el filtro "con deuda".
+  const debtMatchKeys = useMemo(() => {
+    const set = new Set<string>();
+    debts.forEach((d) => {
+      if (!(d.amount > 0)) return;
+      const c = clients.find((cl) => cl.id === d.clientId);
+      const name = d.clientName || c?.name || '';
+      const phone = c?.phone || '';
+      set.add(getClientMatchKey(name, phone, d.clientId));
+    });
+    return set;
+  }, [clients, debts]);
+
+  const clientHasDebt = useCallback(
+    (c: Client) => debtMatchKeys.has(getClientMatchKey(c.name || '', c.phone || '', c.id)),
+    [debtMatchKeys],
+  );
+
   // Compute with_debt count (needs both clients and debts)
   const withDebtCount = useMemo(() => {
     return clients.filter((c) => {
       if (c.isNote) return false;
-      return debts.some((d) => d.clientId === c.id && d.amount > 0);
+      return clientHasDebt(c);
     }).length;
-  }, [clients, debts]);
+  }, [clients, clientHasDebt]);
 
   const counts: Record<string, number> = useMemo(() => ({
     ...directoryCounts,
@@ -151,7 +171,7 @@ const DirectoryScreen = () => {
     const base = getFilteredDirectory(search, isSpecialFilter ? 'all' : activeFilter);
 
     if (activeFilter === 'with_debt') {
-      return base.filter((c) => debts.some((d) => d.clientId === c.id && d.amount > 0));
+      return base.filter(clientHasDebt);
     }
 
     if (activeFilter === 'recurrencia') {
@@ -170,7 +190,7 @@ const DirectoryScreen = () => {
     }
 
     return base;
-  }, [search, activeFilter, getFilteredDirectory, debts, clients]);
+  }, [search, activeFilter, getFilteredDirectory, debts, clients, clientHasDebt]);
 
   const isRecurrenciaMode = activeFilter === 'recurrencia';
 
@@ -534,6 +554,7 @@ const DirectoryScreen = () => {
         visible={!!debtClient}
         client={debtClient}
         debts={debts}
+        allClients={clients}
         onClose={() => setDebtClient(null)}
         onAddDebt={addDebt}
         onMarkPaid={markDebtPaid}

@@ -471,6 +471,21 @@ export const normalizePhoneForComparison = (phone: string): string => {
   return digits;
 };
 
+// Clave para agrupar instancias duplicadas de un mismo cliente humano.
+// Usa nombre normalizado + teléfono normalizado cuando hay teléfono.
+// Sin teléfono, se cae al id del propio documento (no se fusiona con homónimos).
+// Mantiene el mismo criterio que findDuplicateClients en useClients.
+export const getClientMatchKey = (
+  name: string,
+  phone: string,
+  fallbackId: string,
+): string => {
+  const normName = (name || '').toLowerCase().trim();
+  if (!normName) return `__id_${fallbackId}`;
+  const normPhone = normalizePhoneForComparison(phone);
+  return normPhone ? `${normName}::${normPhone}` : `__id_${fallbackId}`;
+};
+
 export const isShortLink = (input: string): boolean => {
   return !!(input && (input.includes('goo.gl') || input.includes('maps.app.goo.gl') || input.includes('google.com/maps')));
 };

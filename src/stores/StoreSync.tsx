@@ -68,6 +68,9 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
     if (clientsHook.clients.length === 0) return;
     cleanupDoneRef.current = true;
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     // Delete notes that are completed or have a past date (keep today's active notes)
     const staleNotes = clientsHook.clients.filter((c) => {
       if (!c.isNote) return false;
@@ -80,9 +83,6 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
       staleNotes.forEach((c) => noteBatch.delete(db.collection('clients').doc(c.id)));
       noteBatch.commit().catch((err) => console.error('Note cleanup error:', err));
     }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     const expiredCompleted = clientsHook.clients.filter((c) =>
       c.isCompleted &&
@@ -126,7 +126,8 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   }, [clientsHook.clients, clientsHook.loading, dayCounts, canAddClient, clientCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Debts ---
-  const debtsHook = useDebts({ userId, groupId });
+  // Pasamos clients para que getClientDebtTotal agrupe duplicados (mismo cliente del directorio añadido varias veces)
+  const debtsHook = useDebts({ userId, groupId, clients: clientsHook.clients });
 
   useEffect(() => {
     useDebtsStore.setState({
@@ -141,7 +142,8 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   }, [debtsHook.debts, debtsHook.getClientDebts, debtsHook.getClientDebtTotal, debtsHook.addDebt, debtsHook.markDebtPaid, debtsHook.editDebt, debtsHook.markAllDebtsPaid]);
 
   // --- Transfers ---
-  const transfersHook = useTransfers({ userId, groupId });
+  // Pasamos clients para agrupar transferencias de instancias duplicadas del mismo cliente humano
+  const transfersHook = useTransfers({ userId, groupId, clients: clientsHook.clients });
 
   useEffect(() => {
     useTransfersStore.setState({

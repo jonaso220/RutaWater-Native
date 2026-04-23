@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone } from '../utils/helpers';
+import { normalizePhone, getClientMatchKey } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -23,6 +23,9 @@ interface DebtModalProps {
   visible: boolean;
   client: Client | null;
   debts: Debt[];
+  // Pasar la lista completa permite agrupar deudas de instancias duplicadas
+  // del mismo cliente humano (nombre+teléfono iguales, IDs distintos).
+  allClients?: Client[];
   debtTemplate?: string;
   reminderTemplate?: string;
   onClose: () => void;
@@ -36,6 +39,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   visible,
   client,
   debts,
+  allClients,
   debtTemplate,
   reminderTemplate,
   onClose,
@@ -54,7 +58,18 @@ const DebtModal: React.FC<DebtModalProps> = ({
 
   if (!client) return null;
 
-  const clientDebts = debts.filter((d) => d.clientId === client.id);
+  // Si tenemos la lista completa de clientes, expandimos el filtro a TODAS las
+  // instancias duplicadas del mismo cliente humano (nombre+teléfono normalizados).
+  // Sin allClients, comportamiento original: solo el clientId exacto.
+  const matchingIds: Set<string> = (() => {
+    if (!allClients || allClients.length === 0) return new Set([client.id]);
+    const key = getClientMatchKey(client.name || '', client.phone || '', client.id);
+    const ids = allClients
+      .filter((c) => !c.isNote && getClientMatchKey(c.name || '', c.phone || '', c.id) === key)
+      .map((c) => c.id);
+    return new Set(ids.length > 0 ? ids : [client.id]);
+  })();
+  const clientDebts = debts.filter((d) => matchingIds.has(d.clientId));
   const total = clientDebts.reduce((sum, d) => sum + (d.amount || 0), 0);
 
   const handleAdd = async () => {

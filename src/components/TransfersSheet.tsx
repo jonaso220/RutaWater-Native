@@ -22,7 +22,6 @@ import { ThemeColors } from '../theme/colors';
 interface TransfersSheetProps {
   visible: boolean;
   transfers: Transfer[];
-  isAdmin: boolean;
   onReview: (transfer: Transfer) => void;
   onClose: () => void;
 }
@@ -30,7 +29,6 @@ interface TransfersSheetProps {
 const TransfersSheet: React.FC<TransfersSheetProps> = ({
   visible,
   transfers,
-  isAdmin,
   onReview,
   onClose,
 }) => {
@@ -99,14 +97,12 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
             <Ionicons name="location-sharp" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
-        {isAdmin && (
-          <TouchableOpacity
-            onPress={() => handleReview(item)}
-            style={styles.reviewBtn}
-          >
-            <Text style={styles.reviewBtnText}>{t('transfers.reviewed')}</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          onPress={() => handleReview(item)}
+          style={styles.reviewBtn}
+        >
+          <Text style={styles.reviewBtnText}>{t('transfers.reviewed')}</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

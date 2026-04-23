@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
 import { useDebtsStore } from '../stores/debtsStore';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import ScheduleModal from '../components/ScheduleModal';
 import DebtModal from '../components/DebtModal';
@@ -54,6 +54,8 @@ const DirectoryScreen = () => {
   const markAllDebtsPaid = useDebtsStore((s) => s.markAllDebtsPaid);
   const editDebt = useDebtsStore((s) => s.editDebt);
   const getClientDebtTotal = useDebtsStore((s) => s.getClientDebtTotal);
+  const scrollRef = useRef<any>(null);
+  useScrollToTop(scrollRef);
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [scheduleClient, setScheduleClient] = useState<Client | null>(null);
@@ -368,27 +370,37 @@ const DirectoryScreen = () => {
 
           {/* ACTION BUTTONS */}
           <View style={styles.actionsRow}>
-            {item.phone ? (
-              <TouchableOpacity onPress={() => callClient(item)} style={styles.actionBtn}>
-                <Text style={{ fontSize: 18 }}>📞</Text>
+            <View style={styles.actionButtonsGroup}>
+              {item.phone ? (
+                <TouchableOpacity onPress={() => callClient(item)} style={styles.actionBtn}>
+                  <Ionicons name="call" size={18} color={colors.primary} />
+                </TouchableOpacity>
+              ) : null}
+              {item.phone ? (
+                <TouchableOpacity onPress={() => sendWhatsApp(item)} style={styles.actionBtn}>
+                  <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity onPress={() => setDebtClient(item)} style={styles.actionBtn}>
+                <Ionicons
+                  name="cash"
+                  size={18}
+                  color={debtTotal > 0 ? colors.danger : colors.textMuted}
+                />
               </TouchableOpacity>
-            ) : null}
-            {item.phone ? (
-              <TouchableOpacity onPress={() => sendWhatsApp(item)} style={styles.actionBtn}>
-                <Text style={{ fontSize: 18 }}>💬</Text>
+              <TouchableOpacity onPress={() => setRelationshipClient(item)} style={styles.actionBtn}>
+                <Ionicons
+                  name="people"
+                  size={18}
+                  color={hasRelationships ? colors.primary : colors.textMuted}
+                />
               </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity onPress={() => setDebtClient(item)} style={styles.actionBtn}>
-              <Text style={{ fontSize: 18 }}>{debtTotal > 0 ? '💰' : '💵'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setRelationshipClient(item)} style={styles.actionBtn}>
-              <Text style={{ fontSize: 18 }}>{hasRelationships ? '👨‍👩‍👧' : '👥'}</Text>
-            </TouchableOpacity>
-            {isAdmin && (
-              <TouchableOpacity onPress={() => setEditClient(item)} style={styles.actionBtn}>
-                <Text style={{ fontSize: 18 }}>✏️</Text>
-              </TouchableOpacity>
-            )}
+              {isAdmin && (
+                <TouchableOpacity onPress={() => setEditClient(item)} style={styles.actionBtn}>
+                  <Ionicons name="pencil" size={16} color={colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
             <View style={{ flex: 1 }} />
             <TouchableOpacity
               style={styles.scheduleButton}
@@ -497,12 +509,15 @@ const DirectoryScreen = () => {
         </ScrollView>
       </View>
 
-      <Text style={styles.countText}>
-        {t('directory.clientCount', { count: filteredClients.length })} {activeFilter !== 'all' ? t('directory.ofTotal', { total: counts.total }) : t('directory.inDirectory')}
-      </Text>
+      <View style={styles.countRow}>
+        <Text style={styles.countBadge}>
+          {t('directory.clientCount', { count: filteredClients.length })} {activeFilter !== 'all' ? t('directory.ofTotal', { total: counts.total }) : t('directory.inDirectory')}
+        </Text>
+      </View>
 
       {/* Client list */}
       <FlashList
+        ref={scrollRef}
         data={filteredClients}
         renderItem={renderClient}
         keyExtractor={(item) => item.id}
@@ -601,7 +616,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     flexGrow: 0,
   },
   filterBarContent: {
-    gap: 6,
+    gap: 8,
     paddingHorizontal: 2,
     justifyContent: 'center',
     flexGrow: 1,
@@ -609,10 +624,10 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
+    gap: 6,
+    paddingHorizontal: 12,
+    height: s(34),
+    borderRadius: s(17),
     backgroundColor: colors.sectionBackground,
   },
   filterChipActive: {
@@ -636,19 +651,37 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     color: colors.textWhite,
   },
   filterChipCount: {
-    fontSize: s(11),
-    fontWeight: '600',
-    color: colors.textHint,
+    fontSize: s(10),
+    fontWeight: '700',
+    color: colors.textMuted,
+    backgroundColor: colors.cardBorder,
+    minWidth: s(20),
+    height: s(20),
+    borderRadius: s(10),
+    paddingHorizontal: 6,
+    textAlign: 'center',
+    lineHeight: s(20),
+    overflow: 'hidden',
   },
   filterChipCountActive: {
-    color: 'rgba(255,255,255,0.8)',
+    color: colors.textWhite,
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
-  countText: {
-    textAlign: 'center',
-    color: colors.textHint,
-    fontSize: s(14),
-    fontWeight: '500',
+  countRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 12,
     marginTop: 8,
+  },
+  countBadge: {
+    fontSize: s(12),
+    fontWeight: '600',
+    color: colors.textMuted,
+    backgroundColor: colors.sectionBackground,
+    paddingHorizontal: s(10),
+    paddingVertical: s(4),
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   listContent: {
     padding: 12,
@@ -656,14 +689,14 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
     borderLeftWidth: 4,
     borderLeftColor: 'transparent',
     maxWidth: 800,
@@ -671,6 +704,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     alignSelf: 'center',
   },
   cardDebt: {
+    borderLeftWidth: 5,
     borderLeftColor: colors.danger,
   },
   cardContent: {
@@ -682,11 +716,18 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     gap: 10,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.cardBorder,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 2,
+    elevation: 2,
   },
   avatarText: {
     color: colors.textWhite,
@@ -704,20 +745,23 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     gap: 8,
   },
   clientName: {
-    fontSize: s(14),
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.textPrimary,
     flex: 1,
+    letterSpacing: 0.2,
   },
   clientPhone: {
     fontSize: s(11),
-    color: colors.textHint,
+    color: colors.textMuted,
     flexShrink: 0,
+    fontVariant: ['tabular-nums'],
   },
   clientAddress: {
     fontSize: s(12),
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 3,
+    opacity: 0.85,
   },
   clientAddressLink: {
     color: colors.primary,
@@ -806,9 +850,21 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     borderTopWidth: 1,
     borderTopColor: colors.sectionBackground,
   },
+  actionButtonsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: colors.sectionBackground,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
   actionBtn: {
-    padding: 6,
-    borderRadius: 6,
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
   },
   actionBtnText: {
     fontSize: s(18),

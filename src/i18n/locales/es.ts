@@ -175,8 +175,8 @@ export default {
   // Directory Screen
   directory: {
     searchPlaceholder: 'Buscar por nombre, direccion o telefono...',
-    clientCount: '{{count}} cliente',
-    clientCount_plural: '{{count}} clientes',
+    clientCount_one: '{{count}} cliente',
+    clientCount_other: '{{count}} clientes',
     ofTotal: 'de {{total}}',
     inDirectory: 'en el directorio',
     noClients: 'No se encontraron clientes',

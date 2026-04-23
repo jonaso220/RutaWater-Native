@@ -71,7 +71,19 @@ const TabNavigator = () => {
           name="Directorio"
           component={DirectoryScreen}
           options={{
-            headerTitle: t('nav.directory'),
+            headerTitle: () => (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MaterialCommunityIcons
+                  name="account-multiple"
+                  size={s(22)}
+                  color={colors.headerText}
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={{ color: colors.headerText, fontWeight: '700', fontSize: s(17) }}>
+                  {t('nav.directory')}
+                </Text>
+              </View>
+            ),
             tabBarLabel: t('nav.directory'),
             tabBarIcon: () => <Text style={{ fontSize: Math.round(22 * fontScale) }}>📋</Text>,
           }}

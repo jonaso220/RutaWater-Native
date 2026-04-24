@@ -393,31 +393,23 @@ const DirectoryScreen = () => {
             <View style={styles.actionButtonsGroup}>
               {item.phone ? (
                 <TouchableOpacity onPress={() => callClient(item)} style={styles.actionBtn}>
-                  <Ionicons name="call" size={18} color={colors.primary} />
+                  <Text style={styles.actionBtnEmoji}>📞</Text>
                 </TouchableOpacity>
               ) : null}
               {item.phone ? (
                 <TouchableOpacity onPress={() => sendWhatsApp(item)} style={styles.actionBtn}>
-                  <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
+                  <Text style={styles.actionBtnEmoji}>💬</Text>
                 </TouchableOpacity>
               ) : null}
               <TouchableOpacity onPress={() => setDebtClient(item)} style={styles.actionBtn}>
-                <Ionicons
-                  name="cash"
-                  size={18}
-                  color={debtTotal > 0 ? colors.danger : colors.textMuted}
-                />
+                <Text style={styles.actionBtnEmoji}>{debtTotal > 0 ? '💰' : '💵'}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setRelationshipClient(item)} style={styles.actionBtn}>
-                <Ionicons
-                  name="people"
-                  size={18}
-                  color={hasRelationships ? colors.primary : colors.textMuted}
-                />
+                <Text style={styles.actionBtnEmoji}>{hasRelationships ? '👨‍👩‍👧' : '👥'}</Text>
               </TouchableOpacity>
               {isAdmin && (
                 <TouchableOpacity onPress={() => setEditClient(item)} style={styles.actionBtn}>
-                  <Ionicons name="pencil" size={16} color={colors.textMuted} />
+                  <Text style={styles.actionBtnEmoji}>✏️</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -887,7 +879,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     justifyContent: 'center',
     borderRadius: 8,
   },
-  actionBtnText: {
+  actionBtnEmoji: {
     fontSize: s(18),
   },
   scheduleButton: {

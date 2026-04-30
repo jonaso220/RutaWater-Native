@@ -146,20 +146,31 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
       const d = new Date(startDate + 'T12:00:00');
       const newDay = dayNames[d.getDay()];
-      const oldDay = client.visitDay;
+
+      // Effective visit days: prefer the array, but fall back to legacy single visitDay
+      // so older clients (without visitDays) can also be moved to a new day.
+      const effectiveVisitDays = (client.visitDays && client.visitDays.length > 0)
+        ? client.visitDays
+        : (client.visitDay && client.visitDay !== 'Sin Asignar' ? [client.visitDay] : []);
+      const isSingleDay = effectiveVisitDays.length === 1;
+      // oldDay must be a real day name; fall back to the only entry in effectiveVisitDays
+      // when visitDay is missing/invalid so listOrders cleanup doesn't break.
+      const oldDay = (client.visitDay && client.visitDay !== 'Sin Asignar')
+        ? client.visitDay
+        : effectiveVisitDays[0];
 
       if (freq === 'once') {
         // For 'once' freq, update visitDay/visitDays to match the date
         data.visitDay = newDay;
         data.visitDays = [newDay];
-      } else if (client.visitDays && client.visitDays.length === 1 && newDay !== oldDay) {
+      } else if (isSingleDay && newDay !== oldDay) {
         // For periodic clients with a single visit day, move to the new day
         data.visitDay = newDay;
         data.visitDays = [newDay];
       }
 
       // When the day changes, update listOrders so the client has a valid position on the new day
-      if (newDay !== oldDay && (freq === 'once' || (client.visitDays && client.visitDays.length === 1))) {
+      if (oldDay && newDay !== oldDay && (freq === 'once' || isSingleDay)) {
         const oldOrders = client.listOrders || {};
         const oldPos = oldOrders[oldDay] ?? client.listOrder ?? 0;
         const newOrders = { ...oldOrders };

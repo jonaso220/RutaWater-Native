@@ -321,23 +321,30 @@ const DirectoryScreen = () => {
                 ) : null}
               </View>
               {item.address ? (
-                <TouchableOpacity
-                  onPress={() => hasLocation ? openMaps(item) : undefined}
-                  activeOpacity={hasLocation ? 0.6 : 1}
-                  disabled={!hasLocation}
-                >
-                  <Text
-                    style={[styles.clientAddress, hasLocation && styles.clientAddressLink]}
-                    numberOfLines={1}
+                hasLocation ? (
+                  <TouchableOpacity
+                    onPress={() => openMaps(item)}
+                    activeOpacity={0.6}
+                    style={styles.addressLinkBox}
+                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
                   >
+                    <Ionicons name="location-sharp" size={14} color={colors.primary} />
+                    <Text style={styles.addressLinkText} numberOfLines={1}>{item.address}</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.clientAddress} numberOfLines={1}>
                     <Ionicons name="location-sharp" size={13} /> {item.address}
                   </Text>
-                </TouchableOpacity>
+                )
               ) : hasLocation ? (
-                <TouchableOpacity onPress={() => openMaps(item)} activeOpacity={0.6}>
-                  <Text style={[styles.clientAddress, styles.clientAddressLink]} numberOfLines={1}>
-                    <Ionicons name="location-sharp" size={13} /> {t('directory.viewLocation')}
-                  </Text>
+                <TouchableOpacity
+                  onPress={() => openMaps(item)}
+                  activeOpacity={0.6}
+                  style={styles.addressLinkBox}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Ionicons name="location-sharp" size={14} color={colors.primary} />
+                  <Text style={styles.addressLinkText} numberOfLines={1}>{t('directory.viewLocation')}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -780,6 +787,26 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     color: colors.primary,
     textDecorationLine: 'underline',
   },
+  addressLinkBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  addressLinkText: {
+    fontSize: s(13),
+    fontWeight: '600',
+    color: colors.textPrimary,
+    flexShrink: 1,
+  },
   badgesRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -866,15 +893,15 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   actionButtonsGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 6,
     backgroundColor: colors.sectionBackground,
     borderRadius: 10,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
   },
   actionBtn: {
-    width: 34,
-    height: 34,
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,

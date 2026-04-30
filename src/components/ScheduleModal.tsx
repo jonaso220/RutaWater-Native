@@ -138,13 +138,18 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     Object.entries(localProducts).forEach(([key, val]) => {
       if (val > 0) cleanProducts[key] = val;
     });
+    let saveError: unknown = null;
     try {
       await onSave(client, localDays, localFreq, localDate, localNotes, cleanProducts);
-      onClose();
     } catch (e) {
-      Alert.alert(t('error'), t('scheduleModal.errorSave'));
+      saveError = e;
+      console.error('Schedule save error:', e);
     } finally {
       setSaving(false);
+      onClose();
+    }
+    if (saveError) {
+      Alert.alert(t('error'), t('scheduleModal.errorSave'));
     }
   };
 

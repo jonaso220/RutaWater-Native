@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, normalizeText, fuzzyMatch, getClientMatchKey } from '../utils/helpers';
+import { normalizePhone, fuzzyMatch, getClientMatchKey } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -88,18 +88,41 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   // no por clientId. Así si un cliente del directorio fue agregado varias veces
   // a la ruta (p.ej. semanal + una vez para otra ubicación), las deudas de
   // ambas instancias se muestran en una sola tarjeta.
+  // Si la deuda apunta a un clientId huérfano (cliente eliminado o re-agendado
+  // con otro ID), busca cualquier instancia activa con el mismo nombre para
+  // recuperar teléfono/dirección y un clientId válido.
+  const clientsByName: Record<string, Client[]> = useMemo(() => {
+    const map: Record<string, Client[]> = {};
+    clients.forEach((c) => {
+      if (!c || c.isNote) return;
+      const normName = (c.name || '').toLowerCase().trim();
+      if (!normName) return;
+      if (!map[normName]) map[normName] = [];
+      map[normName].push(c);
+    });
+    return map;
+  }, [clients]);
+
   const clientGroups: ClientDebtGroup[] = useMemo(() => {
     const grouped: Record<string, ClientDebtGroup> = {};
 
     debts.forEach((debt) => {
-      const client = clients.find((c) => c.id === debt.clientId);
+      let client = clients.find((c) => c.id === debt.clientId);
+      // Fallback: si el clientId está huérfano, intenta resolver por nombre.
+      if (!client && debt.clientName) {
+        const candidates = clientsByName[debt.clientName.toLowerCase().trim()] || [];
+        // Preferir una instancia con teléfono (mejor matching para getMatchingIds)
+        client = candidates.find((c) => c.phone) || candidates[0];
+      }
       const name = debt.clientName || client?.name || '';
       const phone = client?.phone || '';
       const key = getClientMatchKey(name, phone, debt.clientId);
 
       if (!grouped[key]) {
         grouped[key] = {
-          clientId: debt.clientId,
+          // Usar el id del cliente activo cuando exista, así operaciones como
+          // markAllDebtsPaid pueden actualizar hasDebt en el cliente correcto.
+          clientId: client?.id || debt.clientId,
           clientName: name,
           clientPhone: phone,
           clientAddress: client?.address || '',
@@ -107,10 +130,14 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           debts: [],
           maxAgeDays: 0,
         };
-      } else if (!grouped[key].clientPhone && phone) {
+      } else {
         // Completa con datos del cliente más "vivo" si la primera deuda no tenía
-        grouped[key].clientPhone = phone;
-        if (client?.address) grouped[key].clientAddress = client.address;
+        if (!grouped[key].clientPhone && phone) grouped[key].clientPhone = phone;
+        if (!grouped[key].clientAddress && client?.address) grouped[key].clientAddress = client.address;
+        // Promover el clientId a uno activo si el grupo arrancó con uno huérfano
+        if (client && !clients.some((c) => c.id === grouped[key].clientId)) {
+          grouped[key].clientId = client.id;
+        }
       }
       grouped[key].total += debt.amount || 0;
       grouped[key].debts.push(debt);
@@ -134,13 +161,13 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     }
 
     return groups;
-  }, [debts, clients, sortMode]);
+  }, [debts, clients, sortMode, clientsByName]);
 
   const filteredGroups = useMemo(() => {
     if (!searchTerm.trim()) return clientGroups;
-    const term = normalizeText(searchTerm);
+    const matcher = fuzzyMatch(searchTerm);
     return clientGroups.filter((g) =>
-      normalizeText(g.clientName).includes(term),
+      matcher(g.clientName || '', g.clientAddress || '', g.clientPhone || ''),
     );
   }, [clientGroups, searchTerm]);
 

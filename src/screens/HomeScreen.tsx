@@ -1045,6 +1045,7 @@ const HomeScreen = () => {
         client={editingClient}
         onSave={updateClient}
         onClose={() => setEditingClient(null)}
+        onRemoveFromDay={handleDelete}
       />
 
       {/* Debt Modal */}

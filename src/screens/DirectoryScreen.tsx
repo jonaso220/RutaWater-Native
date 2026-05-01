@@ -832,9 +832,10 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     overflow: 'hidden',
   },
   daysBadge: {
-    fontSize: s(10),
-    color: colors.textHint,
-    backgroundColor: colors.sectionBackground,
+    fontSize: s(11),
+    fontWeight: '700',
+    color: colors.primary,
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,

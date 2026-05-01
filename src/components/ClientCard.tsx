@@ -237,9 +237,6 @@ const ClientCard: React.FC<ClientCardProps> = ({
           <TouchableOpacity onPress={onEdit} style={styles.iconBtn}>
             <Text style={{ fontSize: s(16) }}>✏️</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={onDelete} style={styles.iconBtn}>
-            <Text style={{ fontSize: s(16) }}>🗑️</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Client info */}

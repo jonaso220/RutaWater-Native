@@ -30,6 +30,9 @@ interface EditClientModalProps {
   onSave: (clientId: string, data: Partial<Client>) => void;
   onClose: () => void;
   onDelete?: (clientId: string) => Promise<void>;
+  // Removes the client from the current day's list (keeps it in the directory).
+  // Used from the Inicio flow; not destructive.
+  onRemoveFromDay?: (client: Client) => void;
   showClientInfo?: boolean;
 }
 
@@ -39,6 +42,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   onSave,
   onClose,
   onDelete,
+  onRemoveFromDay,
   showClientInfo = false,
 }) => {
   const { colors, isDark } = useTheme();
@@ -497,6 +501,17 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
               <Text style={styles.saveBtnText}>{t('editModal.save')}</Text>
             </TouchableOpacity>
+            {onRemoveFromDay && (
+              <TouchableOpacity
+                style={styles.removeFromDayBtn}
+                onPress={() => {
+                  onRemoveFromDay(client);
+                  onClose();
+                }}
+              >
+                <Text style={styles.removeFromDayBtnText}>{t('home.removeFromList')}</Text>
+              </TouchableOpacity>
+            )}
             {onDelete && (
               <TouchableOpacity
                 style={[styles.deleteBtn, deleting && { opacity: 0.5 }]}
@@ -768,6 +783,18 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     color: colors.danger,
     fontSize: 16,
     fontWeight: '700',
+  },
+  removeFromDayBtn: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: colors.sectionBackground,
+  },
+  removeFromDayBtnText: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

@@ -42,6 +42,21 @@ const looksLikeAutoDescription = (text: string): boolean => {
   );
 };
 
+// El modelo a veces omite notes_mode aunque sea required. Cuando pasa eso,
+// inferimos del texto del usuario qué quería hacer con la nota.
+const inferNotesModeFromUserText = (userText: string): NotesMode | null => {
+  const t = (userText || '').toLowerCase();
+  const mentionsNotes = /\bnotas?\b/.test(t);
+  if (mentionsNotes) {
+    if (/\b(b[óo]rra|borr|saca|limpi|quit|elimin)/i.test(t)) return 'clear';
+    if (/\b(cambi|reempla)/i.test(t)) return 'replace';
+    if (/\b(agreg|sum|añad|anad|pon|anot|deja|agreg[áa])/i.test(t)) return 'append';
+  }
+  // Verbos que ya implican nota sin mencionar la palabra: "anotá que ...", "anota que ..."
+  if (/\banot[áa]\b/i.test(t)) return 'append';
+  return null;
+};
+
 const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) => {
   const { colors } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -60,16 +75,18 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   const updateClient = useClientsStore((s) => s.updateClient);
   const clients = useClientsStore((s) => s.clients);
 
-  // Calcula el valor final de la nota a guardar dado un modo y la nota actual.
+  // Calcula el valor final de la nota a guardar.
+  // Orden de prioridad para determinar el mode:
+  //   1. notes_mode explícito de la IA (cuando viene)
+  //   2. inferencia desde el texto del usuario (clear / append / replace)
+  //   3. fallback: 'append' si hay texto incoming, 'keep' si no
   // Devuelve undefined si no hay que tocar la nota.
-  // Si la IA no manda notes_mode (caso frecuente), inferimos un default seguro:
-  // - notes vacío o auto-descripción → 'keep'
-  // - notes con texto legítimo → 'append' (preserva lo viejo, agrega lo nuevo)
-  const resolveNotes = (current: string | undefined, incoming: string, mode: NotesMode | undefined): string | undefined => {
+  const resolveNotes = (current: string | undefined, incoming: string, mode: NotesMode | undefined, userText: string): string | undefined => {
     const cur = (current || '').trim();
     let inc = (incoming || '').trim();
     if (looksLikeAutoDescription(inc)) inc = '';
-    const m: NotesMode = mode || (inc ? 'append' : 'keep');
+    const inferred = inferNotesModeFromUserText(userText);
+    const m: NotesMode = mode || inferred || (inc ? 'append' : 'keep');
     if (m === 'keep') return undefined;
     if (m === 'clear') return '';
     if (m === 'replace') return inc;
@@ -146,7 +163,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           }
         });
         const updates: any = { products: merged, updatedAt: new Date() };
-        const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode);
+        const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
         if (nextNotes !== undefined) updates.notes = nextNotes;
         console.log('[merge] clientId:', client.id, 'name:', client.name, 'freq:', client.freq, 'visitDay:', client.visitDay);
         console.log('[merge] current products:', client.products);
@@ -178,7 +195,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         if (i.mapsLink) updates.mapsLink = i.mapsLink;
         if (i.address) updates.address = i.address;
         if (i.phone) updates.phone = i.phone;
-        const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode);
+        const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
         if (nextNotes !== undefined) updates.notes = nextNotes;
         if (Object.keys(updates).length === 0) {
           Alert.alert('Sin cambios', 'No detecté ningún dato para actualizar.');

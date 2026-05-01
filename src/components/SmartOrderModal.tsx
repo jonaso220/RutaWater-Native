@@ -217,6 +217,19 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
+        // Defensa contra cancelación silenciosa: si la IA pasa freq='on_demand' o vacía
+        // toda la agenda (sin visitDay y sin specificDate), bloqueamos. No hay tool de
+        // delete por IA — debe hacerse manualmente desde la UI para evitar accidentes.
+        const isCancellation = i.freq === 'on_demand'
+          || (!i.visitDay && !i.specificDate && i.freq !== 'keep');
+        if (isCancellation) {
+          Alert.alert(
+            'No se puede cancelar por IA',
+            'Para borrar o cancelar un pedido, usá los botones de la app (Eliminar / Completar / Quitar del día). La IA no tiene permitido eliminar.',
+          );
+          setSaving(false);
+          return;
+        }
         const days = i.visitDay ? [i.visitDay] : (client.visitDays && client.visitDays.length ? client.visitDays : (client.visitDay ? [client.visitDay] : []));
         const freq: Frequency = i.freq === 'keep' ? (client.freq as Frequency) : (i.freq as Frequency);
         // Resolve notes via shared resolver (supports notes_mode = clear/replace/append/keep).

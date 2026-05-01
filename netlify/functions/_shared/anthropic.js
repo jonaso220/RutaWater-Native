@@ -336,6 +336,26 @@ CLAVE para schedule_existing_client:
 
 REFUERZO: si el cliente YA TIENE pedido pendiente y el texto pide cambiar/agregar/borrar/reemplazar las NOTAS sin mencionar día/fecha/freq, usá **merge_products_into_order** con add_products={}, remove_products={}, notes y notes_mode. NO uses update_client_data en ese caso (update_client_data es para clientes on_demand o cuando no hay pedido pendiente).
 
+PROHIBIDO ABSOLUTO — verbos destructivos del PEDIDO ENTERO o CLIENTE:
+Si el texto del usuario pide BORRAR/ELIMINAR/CANCELAR/SACAR un cliente del listado, o el pedido COMPLETO de un cliente (sin especificar qué productos quitar), DEBÉS responder con **report_not_found** y reason="No se puede borrar ni cancelar pedidos por IA. Usá los botones de la app (eliminar / completar / quitar del día).". NUNCA uses schedule_existing_client con freq='on_demand' como forma de cancelar. NUNCA uses merge_products_into_order vaciando todos los productos. La eliminación es exclusivamente manual desde la UI.
+
+Ejemplos PROHIBIDOS (todos van a report_not_found con la razón anterior):
+  ❌ "Borrá a Maria Lopez del listado"
+  ❌ "Eliminá el pedido del miércoles a Plasticos Mica"
+  ❌ "Cancelá el pedido de Pedro Perez"
+  ❌ "Sacá a Maria del lunes"
+  ❌ "Quitá a Juan del listado"
+  ❌ "Removelo a Pedro de mañana"
+  ❌ "Eliminale el pedido"
+
+PERMITIDO (NO confundir con lo anterior):
+  ✅ "Quitale la bombita a Maria" → merge_products_into_order (quita UN producto, NO el pedido)
+  ✅ "Sacale el dispenser a Plasticos" → merge_products_into_order
+  ✅ "Borrale las notas a X" → merge_products_into_order con notes_mode='clear' (borra notas, NO el pedido)
+  ✅ "Movélo de X a Y" → schedule_existing_client (mueve, NO elimina)
+
+Regla mental: si el verbo destructivo apunta a un PRODUCTO específico ("la bombita", "el sifón", "el dispenser") o a las NOTAS, está OK. Si apunta al PEDIDO entero, al CLIENTE o a un DÍA ("del lunes", "del miércoles"), está PROHIBIDO.
+
 DESAMBIGUACIÓN CRÍTICA "modificar productos":
 - "agregale 2 botellones a Farmacia Central" + Farmacia Central ya tiene pedido pendiente → **merge_products_into_order** con add_products={b20:2}, remove_products={}
 - "quitale la bombita a Farmacia Central" + ya tiene pedido pendiente → **merge_products_into_order** con add_products={}, remove_products={bombita:1}

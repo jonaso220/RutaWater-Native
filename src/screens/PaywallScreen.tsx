@@ -75,7 +75,7 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
 
   if (isPremium) {
     return (
-      <View style={styles.container}>
+      <View style={styles.outer}>
         <View style={styles.premiumActive}>
           <Ionicons name="checkmark-circle" size={64} color={colors.success} />
           <Text style={styles.premiumActiveTitle}>{t('paywall.alreadyPremium')}</Text>
@@ -91,7 +91,8 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <View style={styles.outer}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
       {/* Header */}
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
         <Ionicons name="close" size={28} color={colors.textMuted} />
@@ -198,7 +199,8 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       <View style={{ height: 40 }} />
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -240,12 +242,19 @@ const FeatureRow: React.FC<{
 const getStyles = (colors: ThemeColors, scale: number = 1) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
-    container: {
+    outer: {
       flex: 1,
+      alignItems: 'center',
       backgroundColor: colors.background,
     },
-    content: {
-      padding: 20,
+    scrollView: {
+      width: '100%',
+      maxWidth: 540,
+    },
+    scrollContent: {
+      paddingHorizontal: 20,
+      paddingVertical: 20,
+      paddingBottom: 60,
     },
     backBtn: {
       alignSelf: 'flex-end',

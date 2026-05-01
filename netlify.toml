@@ -1,0 +1,22 @@
+# Configuración del site de Netlify para el backend de IA de la app RutaWater.
+# Este site es FUNCTIONS-ONLY: no sirve ningún sitio web, solo expone endpoints
+# en /.netlify/functions/* (con redirect amigable en /api/*).
+#
+# Site sugerido: rutawater-api (separado de rutawater-privacy, que solo hostea la
+# política de privacidad estática).
+
+[build]
+  # No hay sitio web que buildear — publish vacío evita que Netlify
+  # falle buscando un directorio de output.
+  publish = "public"
+  command = "echo 'Functions-only site, no static build required'"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# /api/parse-order → /.netlify/functions/parse-order
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200

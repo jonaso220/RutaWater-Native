@@ -569,6 +569,107 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, [groupId, userId]);
 
+  // Crear cliente desde el resultado de Claude (parseo de pedido en texto libre).
+  // A diferencia de addClient (que crea en directorio o en un día semanal),
+  // este maneja todas las frecuencias incluyendo 'once' con specificDate.
+  const aiCreateClient = useCallback(async (data: {
+    name: string;
+    phone: string;
+    address: string;
+    mapsLink: string;
+    notes: string;
+    products: Record<string, number>;
+    freq: Frequency;
+    visitDay: string;
+    specificDate: string;
+  }) => {
+    try {
+      const currentWeek = getWeekNumber(new Date());
+      const scope = groupId ? { groupId, userId } : { userId };
+
+      const cleanProducts: Record<string, number> = {};
+      Object.entries(data.products).forEach(([key, val]) => {
+        if (val > 0) cleanProducts[key] = val;
+      });
+
+      const isOnceWithDate = data.freq === 'once' && !!data.specificDate;
+      const isOnDemand = data.freq === 'on_demand' || (!data.visitDay && !isOnceWithDate);
+
+      let visitDay = isOnDemand ? 'Sin Asignar' : data.visitDay;
+      let visitDays: string[] = isOnDemand ? [] : (data.visitDay ? [data.visitDay] : []);
+      let specificDate = '';
+
+      if (isOnceWithDate) {
+        const d = new Date(data.specificDate + 'T12:00:00');
+        const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        visitDay = dayNames[d.getDay()];
+        visitDays = [visitDay];
+        specificDate = data.specificDate;
+      }
+
+      let listOrder = 0;
+      const listOrders: Record<string, number> = {};
+      if (!isOnDemand && visitDays.length > 0) {
+        visitDays.forEach((day) => {
+          const existingInDay = clientsRef.current.filter(
+            (c) =>
+              c.freq !== 'on_demand' &&
+              !c.isCompleted &&
+              ((c.visitDays && c.visitDays.includes(day)) || c.visitDay === day),
+          );
+          if (specificDate) {
+            const orders = existingInDay.map((c) => {
+              const order = c.listOrders?.[day] ?? c.listOrder ?? 0;
+              return order > 100000 ? 0 : order;
+            });
+            const minOrder = orders.length ? Math.min(...orders) : 0;
+            listOrders[day] = minOrder - 1;
+          } else {
+            const maxOrder =
+              existingInDay.length > 0
+                ? Math.max(
+                    ...existingInDay.map(
+                      (c) => c.listOrders?.[day] ?? c.listOrder ?? 0,
+                    ),
+                  )
+                : -1;
+            listOrders[day] = maxOrder + 1;
+          }
+        });
+        listOrder = listOrders[visitDays[0]] ?? 0;
+      }
+
+      await db.collection('clients').add({
+        ...scope,
+        userId,
+        name: data.name,
+        address: data.address,
+        phone: data.phone,
+        notes: data.notes,
+        lat: '',
+        lng: '',
+        mapsLink: data.mapsLink || '',
+        freq: isOnDemand ? 'on_demand' : data.freq,
+        visitDay,
+        visitDays,
+        specificDate,
+        products: cleanProducts,
+        listOrder,
+        listOrders,
+        isCompleted: false,
+        isStarred: false,
+        isPinned: false,
+        isNote: false,
+        alarm: '',
+        startWeek: currentWeek,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    } catch (e) {
+      console.error('Error in aiCreateClient:', e);
+    }
+  }, [groupId, userId]);
+
   // Get day clients from a specific source (para leer del ref sincrónico)
   const getDayClientsFromSource = useCallback((day: string, source: Client[]): Client[] => {
     if (!day) return [];
@@ -857,6 +958,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     saveAlarm,
     addNote,
     addClient,
+    aiCreateClient,
     changePosition,
     deleteClient,
     cloneClient,

@@ -39,6 +39,7 @@ import TransfersSheet from '../components/TransfersSheet';
 import DebtsSheet from '../components/DebtsSheet';
 import AddClientModal from '../components/AddClientModal';
 import PromptModal from '../components/PromptModal';
+import SmartOrderModal from '../components/SmartOrderModal';
 import RelationshipsModal from '../components/RelationshipsModal';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -286,6 +287,7 @@ const HomeScreen = () => {
   const [showDailyLoadModal, setShowDailyLoadModal] = useState(false);
   const [showTransfersSheet, setShowTransfersSheet] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
+  const [showSmartModal, setShowSmartModal] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
@@ -848,6 +850,12 @@ const HomeScreen = () => {
           <Text style={[styles.actionBtnText, styles.actionBtnAddText]}>+ {t('home.client')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnAi]}
+          onPress={() => setShowSmartModal(true)}
+        >
+          <Text style={[styles.actionBtnText, styles.actionBtnAiText]}>✨ Pedido IA</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.actionBtn, styles.actionBtnNote]}
           onPress={() => setShowNoteModal(true)}
         >
@@ -1087,6 +1095,12 @@ const HomeScreen = () => {
         onClose={() => setShowAddClientModal(false)}
       />
 
+      {/* Smart Order Modal (Claude) */}
+      <SmartOrderModal
+        visible={showSmartModal}
+        onClose={() => setShowSmartModal(false)}
+      />
+
       {/* Debts Sheet */}
       <DebtsSheet
         visible={showDebtsSheet}
@@ -1315,6 +1329,14 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   },
   actionBtnTransferText: {
     color: colors.successDark,
+  },
+  actionBtnAi: {
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  actionBtnAiText: {
+    color: colors.primaryDark,
   },
   searchSection: {
     backgroundColor: colors.card,

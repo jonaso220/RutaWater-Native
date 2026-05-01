@@ -1,0 +1,19 @@
+{
+  "name": "rutawater-local-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Servidor local de desarrollo para parsing de pedidos con Claude. NO se deploya — solo para pruebas en simulador.",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

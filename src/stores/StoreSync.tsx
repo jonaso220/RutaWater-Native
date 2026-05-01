@@ -6,6 +6,7 @@ import { useTransfers } from '../hooks/useTransfers';
 import { useDailyLoads } from '../hooks/useDailyLoads';
 import { useSubscription } from '../hooks/useSubscription';
 import { usePromoCode } from '../hooks/usePromoCode';
+import { useAiUsage } from '../hooks/useAiUsage';
 import { ALL_DAYS } from '../constants/products';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { db } from '../config/firebase';
@@ -31,6 +32,13 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
 
   const isPremium = subscription.isPremium || promo.hasPromo;
   const subLoading = subscription.loading || promo.promoLoading;
+
+  // --- AI usage (parseo de pedidos con Claude) ---
+  // Promo cuenta como plan anual (más generoso). Resto: lo que diga RevenueCat.
+  const aiPlan: 'free' | 'monthly' | 'annual' = promo.hasPromo
+    ? 'annual'
+    : (subscription.currentPlan as 'free' | 'monthly' | 'annual');
+  useAiUsage({ userId: user?.uid, plan: aiPlan });
 
   useEffect(() => {
     useSubscriptionStore.setState({

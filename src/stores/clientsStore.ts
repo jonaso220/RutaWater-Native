@@ -35,6 +35,17 @@ interface ClientsStore {
     notes: string,
     mapsLink?: string,
   ) => Promise<void>;
+  aiCreateClient: (data: {
+    name: string;
+    phone: string;
+    address: string;
+    mapsLink: string;
+    notes: string;
+    products: Record<string, number>;
+    freq: Frequency;
+    visitDay: string;
+    specificDate: string;
+  }) => Promise<void>;
   changePosition: (clientId: string, newPos: number, day: string) => Promise<void>;
   deleteClient: (clientId: string) => Promise<void>;
   cloneClient: (client: Client) => Promise<void>;
@@ -67,6 +78,7 @@ export const useClientsStore = create<ClientsStore>()(() => ({
   saveAlarm: noop,
   addNote: noop,
   addClient: noop as any,
+  aiCreateClient: noop as any,
   changePosition: noop,
   deleteClient: noop,
   cloneClient: noop,

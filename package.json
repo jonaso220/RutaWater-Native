@@ -9,6 +9,7 @@
     "clean": "cd ios && pod deintegrate && pod install && cd .."
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.92.0",
     "@invertase/react-native-apple-authentication": "^2.5.1",
     "@notifee/react-native": "^9.1.8",
     "@react-native-community/datetimepicker": "^8.6.0",

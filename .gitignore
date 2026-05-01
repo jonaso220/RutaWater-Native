@@ -34,6 +34,9 @@ android/app/rutawater-release.keystore
 .env
 .env.local
 
+# Netlify
+.netlify/
+
 # IDE
 .idea/
 .vscode/

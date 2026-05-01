@@ -223,10 +223,36 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         // If undefined → keep current; otherwise pass the resolved value.
         const resolvedNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
         const notesToPass = resolvedNotes !== undefined ? resolvedNotes : (client.notes || '');
-        // If the AI didn't supply products, keep the client's current ones (typical when only moving the date).
-        const productsToPass = (i.products && Object.keys(i.products).length > 0)
-          ? i.products
-          : ((client.products as Record<string, number>) || {});
+        // Products precedence:
+        //   1. If `products` is non-empty → absolute set replacement.
+        //   2. Else start from client's current products and apply add_products / remove_products.
+        //   3. Else (no signals) just keep client's current products.
+        const hasAbsoluteSet = i.products && typeof i.products === 'object' && Object.keys(i.products).length > 0;
+        const hasDelta = (i.add_products && Object.keys(i.add_products).length > 0)
+                      || (i.remove_products && Object.keys(i.remove_products).length > 0);
+        let productsToPass: Record<string, number>;
+        if (hasAbsoluteSet) {
+          productsToPass = i.products;
+        } else if (hasDelta) {
+          productsToPass = {};
+          const current = (client.products || {}) as Record<string, string | number>;
+          Object.entries(current).forEach(([k, v]) => {
+            const n = typeof v === 'number' ? v : parseInt(String(v), 10);
+            if (n > 0) productsToPass[k] = n;
+          });
+          Object.entries(i.add_products || {}).forEach(([k, v]) => {
+            if (v > 0) productsToPass[k] = (productsToPass[k] || 0) + v;
+          });
+          Object.entries(i.remove_products || {}).forEach(([k, v]) => {
+            if (v > 0 && productsToPass[k]) {
+              const next = productsToPass[k] - v;
+              if (next > 0) productsToPass[k] = next;
+              else delete productsToPass[k];
+            }
+          });
+        } else {
+          productsToPass = (client.products as Record<string, number>) || {};
+        }
         // Default to 'replace' (move) when the AI doesn't specify schedule_mode — the AI is
         // expected to set it explicitly, but this matches the most common intent ("movélo a X").
         // If the current client is on_demand the store already updates in place regardless.
@@ -465,7 +491,11 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
             <ProductsList products={i.remove_products} styles={styles} />
           </View>
         )}
-        {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
+        {i.notes_mode === 'clear' ? (
+          <Field label="Notas" value="(borrar)" styles={styles} />
+        ) : i.notes && !looksLikeAutoDescription(i.notes) ? (
+          <Field label="Notas" value={i.notes} styles={styles} />
+        ) : null}
       </View>
     );
   }
@@ -481,7 +511,11 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
         {i.mapsLink ? <Field label="Maps" value={i.mapsLink} styles={styles} /> : null}
         {i.address ? <Field label="Dirección" value={i.address} styles={styles} /> : null}
         {i.phone ? <Field label="Teléfono" value={i.phone} styles={styles} /> : null}
-        {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
+        {i.notes_mode === 'clear' ? (
+          <Field label="Notas" value="(borrar)" styles={styles} />
+        ) : i.notes && !looksLikeAutoDescription(i.notes) ? (
+          <Field label="Notas" value={i.notes} styles={styles} />
+        ) : null}
       </View>
     );
   }
@@ -509,6 +543,11 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
   // schedule_existing_client
   const i = result.input;
   const isExtra = i.schedule_mode === 'add';
+  const hasAbsolute = i.products && Object.keys(i.products).length > 0;
+  const addEntries = Object.entries(i.add_products || {}).filter(([_, v]) => v > 0);
+  const removeEntries = Object.entries(i.remove_products || {}).filter(([_, v]) => v > 0);
+  const showClearNotes = i.notes_mode === 'clear';
+  const showIncomingNotes = !showClearNotes && i.notes && !looksLikeAutoDescription(i.notes);
   return (
     <View style={[styles.resultBox, { borderColor: colors.primary }]}>
       <View style={styles.resultHeader}>
@@ -523,9 +562,21 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
       )}
       {i.visitDay ? <Field label="Día" value={i.visitDay} styles={styles} /> : null}
       {i.specificDate ? <Field label="Fecha" value={i.specificDate} styles={styles} /> : null}
-      <ProductsList products={i.products} styles={styles} />
-      {i.notes_mode === 'clear' ? <Field label="Notas" value="(borrar)" styles={styles} /> : null}
-      {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
+      {hasAbsolute && <ProductsList products={i.products} styles={styles} />}
+      {addEntries.length > 0 && (
+        <View style={{ marginTop: 4 }}>
+          <Text style={[styles.fieldLabel, { color: colors.success }]}>Sumar</Text>
+          <ProductsList products={i.add_products || {}} styles={styles} />
+        </View>
+      )}
+      {removeEntries.length > 0 && (
+        <View style={{ marginTop: 4 }}>
+          <Text style={[styles.fieldLabel, { color: colors.warning }]}>Quitar</Text>
+          <ProductsList products={i.remove_products || {}} styles={styles} />
+        </View>
+      )}
+      {showClearNotes && <Field label="Notas" value="(borrar)" styles={styles} />}
+      {showIncomingNotes && <Field label="Notas" value={i.notes} styles={styles} />}
     </View>
   );
 };

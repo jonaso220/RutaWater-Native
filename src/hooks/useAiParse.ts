@@ -22,6 +22,8 @@ export interface ScheduleExistingClientInput {
   matched_client_id: string;
   matched_client_name: string;
   products: Record<string, number>;
+  add_products?: Record<string, number>;
+  remove_products?: Record<string, number>;
   freq: 'weekly' | 'biweekly' | 'triweekly' | 'monthly' | 'once' | 'on_demand' | 'keep';
   visitDay: string;
   specificDate: string;

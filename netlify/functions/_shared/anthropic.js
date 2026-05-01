@@ -72,7 +72,17 @@ const TOOLS = [
         },
         products: {
           type: 'object',
-          description: `Productos del pedido. IDs válidos: ${PRODUCT_IDS.join(', ')}. Si el usuario NO menciona productos al mover/cambiar día, mandar objeto vacío {} y la app usa los productos actuales del cliente.`,
+          description: `SET ABSOLUTO de productos del pedido (reemplaza). IDs válidos: ${PRODUCT_IDS.join(', ')}. Solo usar cuando el usuario lista TODOS los productos del nuevo pedido explícitamente. Si el usuario NO menciona productos, mandar objeto vacío {} (la app usa los actuales). Si quiere AJUSTAR (agregar/quitar) sobre los actuales, NO uses este campo: usá add_products / remove_products en su lugar.`,
+          additionalProperties: { type: 'number' },
+        },
+        add_products: {
+          type: 'object',
+          description: `Productos a SUMAR a los actuales del cliente al mover/agendar. IDs válidos: ${PRODUCT_IDS.join(', ')}. Objeto vacío {} si no se agrega nada. Útil cuando el usuario dice "movélo al lunes y agregale 2 botellones".`,
+          additionalProperties: { type: 'number' },
+        },
+        remove_products: {
+          type: 'object',
+          description: `Productos a QUITAR de los actuales del cliente al mover/agendar. IDs válidos: ${PRODUCT_IDS.join(', ')}. Cantidad a restar. Objeto vacío {} si no se quita nada. Útil cuando el usuario dice "movélo al lunes y sacale el dispenser".`,
           additionalProperties: { type: 'number' },
         },
         freq: {
@@ -110,6 +120,8 @@ const TOOLS = [
         'matched_client_id',
         'matched_client_name',
         'products',
+        'add_products',
+        'remove_products',
         'freq',
         'visitDay',
         'specificDate',
@@ -311,7 +323,18 @@ Ejemplo: "movélo del 29-4 al 6 de mayo y borrale las notas"
   → schedule_existing_client con freq='once', specificDate='YYYY-05-06', schedule_mode='replace', products={} (mantiene actuales), notes='', notes_mode='clear'.
 
 Ejemplo: "agendá a Fabricia para el viernes extra, sumando 2 botellones"
-  → schedule_existing_client con freq='once', specificDate=fecha del próximo viernes, schedule_mode='add', products={b20:2}, notes='', notes_mode='keep'.
+  → schedule_existing_client con freq='once', specificDate=fecha del próximo viernes, schedule_mode='add', products={}, add_products={b20:2}, remove_products={}, notes='', notes_mode='keep'.
+
+Ejemplo: "movélo a Fabricia al lunes próximo y sacale el dispenser"
+  → schedule_existing_client con freq='once', specificDate=fecha del lunes, schedule_mode='replace', products={}, add_products={}, remove_products={disp_nat:1}, notes='', notes_mode='keep'.
+
+CLAVE para schedule_existing_client:
+- Si el texto NO menciona productos → products={}, add_products={}, remove_products={} (mantiene actuales del cliente).
+- Si el texto AGREGA productos al mover → products={}, add_products={...}, remove_products={}.
+- Si el texto QUITA productos al mover → products={}, add_products={}, remove_products={...}.
+- Si el texto LISTA EXACTAMENTE los productos del nuevo pedido → products={...}, add_products={}, remove_products={}.
+
+REFUERZO: si el cliente YA TIENE pedido pendiente y el texto pide cambiar/agregar/borrar/reemplazar las NOTAS sin mencionar día/fecha/freq, usá **merge_products_into_order** con add_products={}, remove_products={}, notes y notes_mode. NO uses update_client_data en ese caso (update_client_data es para clientes on_demand o cuando no hay pedido pendiente).
 
 DESAMBIGUACIÓN CRÍTICA "modificar productos":
 - "agregale 2 botellones a Farmacia Central" + Farmacia Central ya tiene pedido pendiente → **merge_products_into_order** con add_products={b20:2}, remove_products={}

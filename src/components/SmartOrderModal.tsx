@@ -73,6 +73,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   const aiCreateClient = useClientsStore((s) => s.aiCreateClient);
   const scheduleFromDirectory = useClientsStore((s) => s.scheduleFromDirectory);
   const updateClient = useClientsStore((s) => s.updateClient);
+  const addNote = useClientsStore((s) => s.addNote);
   const clients = useClientsStore((s) => s.clients);
 
   // Calcula el valor final de la nota a guardar.
@@ -245,13 +246,26 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         return;
       }
 
+      if (result.tool === 'add_standalone_note') {
+        const i = result.input;
+        if (!i.notes?.trim() || !i.specificDate) {
+          Alert.alert('Error', 'No se pudo crear la nota: falta texto o fecha.');
+          setSaving(false);
+          return;
+        }
+        await addNote(i.notes.trim(), i.specificDate);
+        Alert.alert('Listo', `Nota agregada para ${i.specificDate}.`);
+        handleClose();
+        return;
+      }
+
       // report_not_found nunca llega acá (no hay botón de confirmar)
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'No se pudo guardar el pedido.');
     } finally {
       setSaving(false);
     }
-  }, [result, aiCreateClient, scheduleFromDirectory, updateClient, clients, handleClose]);
+  }, [result, aiCreateClient, scheduleFromDirectory, updateClient, addNote, clients, handleClose, text]);
 
   const remainingUses = Math.max(0, usage.limit - usage.count);
 
@@ -394,6 +408,23 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
         <Text style={[styles.resultText, { marginTop: 6, color: colors.textMuted }]}>
           {result.input.reason}
         </Text>
+      </View>
+    );
+  }
+
+  if (result.tool === 'add_standalone_note') {
+    const i = result.input;
+    return (
+      <View style={[styles.resultBox, { borderColor: colors.primary }]}>
+        <View style={styles.resultHeader}>
+          <Ionicons name="document-text" size={20} color={colors.primary} />
+          <Text style={styles.resultTitle}>Nota suelta del día</Text>
+        </View>
+        <Text style={[styles.resultText, { color: colors.textMuted, marginBottom: 8 }]}>
+          Recordatorio sin cliente asociado.
+        </Text>
+        <Field label="Fecha" value={i.specificDate} styles={styles} />
+        <Field label="Nota" value={i.notes} styles={styles} />
       </View>
     );
   }

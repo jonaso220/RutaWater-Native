@@ -177,9 +177,28 @@ const TOOLS = [
     },
   },
   {
+    name: 'add_standalone_note',
+    description:
+      'Crear una NOTA SUELTA (recordatorio) para una fecha específica del día — NO está asociada a ningún cliente. Usar cuando el texto pide anotar/recordar/dejar una nota para un día/fecha y NO menciona un cliente del directorio. Ejemplos: "anotá para el lunes que tengo que ir al banco", "recordame el viernes que viene comprar bidones", "una nota para el sábado: cargar nafta", "agregá una nota el martes próximo: llamar al proveedor".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        notes: {
+          type: 'string',
+          description: 'Texto LITERAL de la nota (sin justificaciones, sin describir tu acción). Ej: "Entregar pos al correo", "Llamar al proveedor".',
+        },
+        specificDate: {
+          type: 'string',
+          description: 'Fecha de la nota en ISO YYYY-MM-DD. Calcular en base a la FECHA ACTUAL si el usuario dice "el lunes próximo", "este viernes", etc.',
+        },
+      },
+      required: ['notes', 'specificDate'],
+    },
+  },
+  {
     name: 'report_not_found',
     description:
-      'Usar cuando el texto pide agendar a un cliente específico (por nombre) que NO está en la LISTA DE CLIENTES y NO hay datos suficientes para crearlo (no hay dirección, productos, etc.).',
+      'Usar cuando el texto pide agendar a un cliente específico (por nombre) que NO está en la LISTA DE CLIENTES y NO hay datos suficientes para crearlo (no hay dirección, productos, etc.). NO usar si el texto pide una nota suelta sin cliente — para eso está add_standalone_note.',
     input_schema: {
       type: 'object',
       properties: {
@@ -275,7 +294,8 @@ QUÉ TOOL USAR:
 2. **merge_products_into_order**: el texto pide CAMBIAR los productos (agregar y/o quitar) de un pedido YA AGENDADO sin tocar día/fecha/frecuencia. Verbos clave de agregar: "agregale", "sumale", "añadile", "más", "también", "y de paso". Verbos clave de quitar: "quítale", "quitale", "sacale", "removeé", "borrale", "ya no lleva", "menos". Si el texto pide ambos a la vez (ej: "quitale la bombita y agregale 2 sifones"), usar este tool con add_products Y remove_products poblados a la vez. Solo aplica si el cliente tiene pedido pendiente Y el texto NO cambia día/fecha/freq.
 3. **schedule_existing_client**: única tool que toca día/fecha/frecuencia. Usar en estos casos: (a) el cliente está como on_demand y se le agenda un pedido por primera vez, (b) se mueve/cambia el día, fecha o frecuencia (verbos: "movélo", "pasalo a", "cambialo para", "agendalo el [día]", "para el [fecha]"), o (c) el usuario pide explícitamente un pedido aparte (verbos: "extra", "aparte", "además", "otro pedido"). Para distinguir entre mover (default) y pedido extra, usá `schedule_mode`: 'replace' por default, 'add' SOLO si el texto lo indica explícitamente. Esta tool ACEPTA notes + notes_mode, así que si el texto pide "movélo y borrale las notas", combiná todo acá en una sola llamada (no llames update_client_data ni merge aparte).
 4. **update_client_data**: actualizar SOLO datos del cliente (mapsLink, address, phone, notes) sin tocar agenda ni productos. PROHIBIDO usar si el texto menciona cambio de día/fecha/freq o de productos.
-5. **report_not_found**: el nombre no está en la LISTA y no hay datos para crearlo.
+5. **add_standalone_note**: crear una NOTA SUELTA (recordatorio del día) que NO pertenece a un cliente. Usar cuando el texto NO menciona ningún cliente y solo pide anotar algo para un día/fecha. Ejemplos disparadores: "anotá para el lunes", "recordame el viernes", "una nota el sábado", "añadí una nota para el martes". Si el texto menciona un cliente además de la nota, usar las tools 2/3/4 según corresponda — esta es solo para notas sin cliente.
+6. **report_not_found**: el nombre no está en la LISTA y no hay datos para crearlo (NO usar para notas sueltas — para eso está add_standalone_note).
 
 REGLA DE PRIORIDAD ABSOLUTA (leer 2 veces):
 Si el texto del usuario menciona cambio de día, fecha o frecuencia (verbos típicos: "movélo", "pasalo a", "cambialo para", "agendalo el [día/fecha]", "ya no es los lunes, ahora los martes", "ponelo para el [fecha]"), DEBÉS usar **schedule_existing_client**. NUNCA elijas update_client_data ni merge_products_into_order en ese caso, AUNQUE el texto también pida tocar notas o productos. Combiná TODO (fecha + notas + productos) en una sola llamada a schedule_existing_client. Ignorar esta regla rompe la agenda del usuario.

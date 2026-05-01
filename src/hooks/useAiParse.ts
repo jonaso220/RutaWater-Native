@@ -54,11 +54,17 @@ export interface ReportNotFoundInput {
   reason: string;
 }
 
+export interface AddStandaloneNoteInput {
+  notes: string;
+  specificDate: string;
+}
+
 export type ParseResult =
   | { tool: 'create_new_client'; input: CreateNewClientInput }
   | { tool: 'schedule_existing_client'; input: ScheduleExistingClientInput }
   | { tool: 'merge_products_into_order'; input: MergeProductsInput }
   | { tool: 'update_client_data'; input: UpdateClientDataInput }
+  | { tool: 'add_standalone_note'; input: AddStandaloneNoteInput }
   | { tool: 'report_not_found'; input: ReportNotFoundInput };
 
 interface UseAiParseReturn {

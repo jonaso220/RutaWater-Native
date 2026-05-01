@@ -494,3 +494,17 @@ export const getTodayDayName = (): string => {
   const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   return days[new Date().getDay()];
 };
+
+// Adaptive modal width for centered modals on tablet/Mac. Scales the cap
+// with available window width so big monitors (32" 2K vertical, iPad Pro
+// landscape) don't leave huge dark gutters, while iPad mini and small
+// windows still get a comfortable form width.
+export const getModalWidth = (windowWidth: number): number | undefined => {
+  if (windowWidth < 600) return undefined; // phone bottom-sheet path
+  let cap: number;
+  if (windowWidth >= 1300) cap = 1100;
+  else if (windowWidth >= 1000) cap = 950;
+  else if (windowWidth >= 800) cap = 800;
+  else cap = 720;
+  return Math.min(windowWidth - 48, cap);
+};

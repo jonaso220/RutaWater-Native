@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, fuzzyMatch, matchScore, getClientMatchKey } from '../utils/helpers';
+import { normalizePhone, fuzzyMatch, matchScore, getClientMatchKey, getModalWidth } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -64,7 +64,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 600;
-  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('date');

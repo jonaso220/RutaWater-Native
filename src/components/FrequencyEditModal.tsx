@@ -15,6 +15,7 @@ import { FREQUENCY_LABELS, Frequency } from '../constants/products';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
+import { getModalWidth } from '../utils/helpers';
 
 interface FrequencyEditModalProps {
   visible: boolean;
@@ -41,7 +42,7 @@ const FrequencyEditModal: React.FC<FrequencyEditModalProps> = ({
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 600;
-  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth);
 
   const [showAndroidPicker, setShowAndroidPicker] = React.useState(false);

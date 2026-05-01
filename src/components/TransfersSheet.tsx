@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Transfer } from '../types';
-import { normalizePhone } from '../utils/helpers';
+import { normalizePhone, getModalWidth } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -36,7 +36,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 600;
-  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth);
 
   const formatDate = (timestamp: any): string => {

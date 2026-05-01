@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, getClientMatchKey } from '../utils/helpers';
+import { normalizePhone, getClientMatchKey, getModalWidth } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -53,7 +53,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 600;
-  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth);
   const [newAmount, setNewAmount] = useState('');
   const [editingDebt, setEditingDebt] = useState<string | null>(null);

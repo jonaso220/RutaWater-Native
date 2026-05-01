@@ -18,6 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
+import { getModalWidth } from '../utils/helpers';
 
 interface AddClientModalProps {
   visible: boolean;
@@ -46,7 +47,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 600;
-  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth);
 
   const [name, setName] = useState('');

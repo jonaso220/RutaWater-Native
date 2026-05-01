@@ -16,6 +16,7 @@ import { DailyLoad } from '../hooks/useDailyLoads';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { getModalWidth } from '../utils/helpers';
 
 interface DailyLoadModalProps {
   visible: boolean;
@@ -43,7 +44,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
   const { colors } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 600;
-  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth);
   const [data, setData] = useState<DailyLoad>(initialData);
 

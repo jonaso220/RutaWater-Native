@@ -14,6 +14,7 @@ import ModalOverlay from './ModalOverlay';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
+import { getModalWidth } from '../utils/helpers';
 
 interface ClientInfoEditModalProps {
   visible: boolean;
@@ -44,7 +45,7 @@ const ClientInfoEditModal: React.FC<ClientInfoEditModalProps> = ({
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 600;
-  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth);
 
   return (

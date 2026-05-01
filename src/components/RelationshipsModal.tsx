@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, RELATIONSHIP_TYPES } from '../types';
-import { normalizePhone, fuzzyMatch, matchScore } from '../utils/helpers';
+import { normalizePhone, fuzzyMatch, matchScore, getModalWidth } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -41,7 +41,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 600;
-  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth);
   const [mode, setMode] = useState<'list' | 'add'>('list');
   const [searchTerm, setSearchTerm] = useState('');

@@ -49,6 +49,8 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = RutaWaterNative/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		DFFE95365FFFDF826EB1EFFB /* Pods_RutaWaterNative_RutaWaterNativeTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RutaWaterNative_RutaWaterNativeTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E5A1B2C300000003ESLPROJ /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = RutaWaterNative/es.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		E5A1B2C300000004ENLPROJ /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = RutaWaterNative/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		E5A1B2C300000005PTBRLPROJ /* pt-BR */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "pt-BR"; path = "RutaWaterNative/pt-BR.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F1A1B2C3D4E5F60700APPLE0 /* RutaWaterNative.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = RutaWaterNative.entitlements; path = RutaWaterNative/RutaWaterNative.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -229,6 +231,7 @@
 			knownRegions = (
 				en,
 				es,
+				"pt-BR",
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
@@ -459,6 +462,8 @@
 			isa = PBXVariantGroup;
 			children = (
 				E5A1B2C300000003ESLPROJ /* es */,
+				E5A1B2C300000004ENLPROJ /* en */,
+				E5A1B2C300000005PTBRLPROJ /* pt-BR */,
 			);
 			name = InfoPlist.strings;
 			sourceTree = "<group>";
@@ -526,7 +531,7 @@
 				CODE_SIGN_ENTITLEMENTS = RutaWaterNative/RutaWaterNative.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = MAFKA6L5JR;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = RutaWaterNative/Info.plist;
@@ -535,7 +540,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.20;
+				MARKETING_VERSION = 1.21;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",
@@ -561,7 +566,7 @@
 				CODE_SIGN_ENTITLEMENTS = RutaWaterNative/RutaWaterNative.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = MAFKA6L5JR;
 				INFOPLIST_FILE = RutaWaterNative/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -569,7 +574,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.20;
+				MARKETING_VERSION = 1.21;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-ObjC",

@@ -8,6 +8,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { useTranslation } from 'react-i18next';
@@ -40,7 +41,10 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const styles = getStyles(colors);
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 768;
+  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const styles = getStyles(colors, isTablet, modalWidth);
   const [data, setData] = useState<DailyLoad>(initialData);
 
   useEffect(() => {
@@ -139,22 +143,25 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
-    justifyContent: 'flex-end',
+    justifyContent: isTablet ? 'center' : 'flex-end',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: isTablet ? 24 : 8,
+    paddingVertical: isTablet ? 24 : 0,
   },
   modal: {
     backgroundColor: colors.modalBackground,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: Platform.OS === 'android' ? '100%' : '85%',
-    maxWidth: 600,
+    borderBottomLeftRadius: isTablet ? 20 : 0,
+    borderBottomRightRadius: isTablet ? 20 : 0,
+    maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '85%',
+    maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
-    width: '100%' as const,
+    width: isTablet ? modalWidth : ('100%' as const),
   },
   header: {
     flexDirection: 'row',

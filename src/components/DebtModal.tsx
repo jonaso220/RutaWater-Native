@@ -11,6 +11,7 @@ import {
   Linking,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
@@ -50,7 +51,10 @@ const DebtModal: React.FC<DebtModalProps> = ({
 }) => {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const styles = getStyles(colors);
+  const { width: windowWidth } = useWindowDimensions();
+  const isTablet = windowWidth >= 768;
+  const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
+  const styles = getStyles(colors, isTablet, modalWidth);
   const [newAmount, setNewAmount] = useState('');
   const [editingDebt, setEditingDebt] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
@@ -337,20 +341,21 @@ const DebtModal: React.FC<DebtModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: isTablet ? 24 : 16,
+    paddingVertical: isTablet ? 24 : 0,
   },
   modal: {
     backgroundColor: colors.modalBackground,
     borderRadius: 20,
-    maxHeight: Platform.OS === 'android' ? '100%' : '80%',
-    maxWidth: 500,
+    maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '80%',
+    maxWidth: isTablet ? undefined : 500,
     alignSelf: 'center' as const,
-    width: '100%' as const,
+    width: isTablet ? modalWidth : ('100%' as const),
   },
   header: {
     flexDirection: 'row',

@@ -63,7 +63,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
-  const isTablet = windowWidth >= 768;
+  const isTablet = windowWidth >= 600;
   const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
   const styles = getStyles(colors, isTablet, modalWidth);
   const [searchTerm, setSearchTerm] = useState('');

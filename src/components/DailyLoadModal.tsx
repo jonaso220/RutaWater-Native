@@ -42,7 +42,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
-  const isTablet = windowWidth >= 768;
+  const isTablet = windowWidth >= 600;
   const modalWidth = isTablet ? Math.min(windowWidth - 48, 720) : undefined;
   const styles = getStyles(colors, isTablet, modalWidth);
   const [data, setData] = useState<DailyLoad>(initialData);

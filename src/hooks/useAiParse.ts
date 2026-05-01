@@ -15,6 +15,9 @@ export interface CreateNewClientInput {
   specificDate: string;
 }
 
+export type NotesMode = 'append' | 'replace' | 'clear' | 'keep';
+export type ScheduleMode = 'replace' | 'add';
+
 export interface ScheduleExistingClientInput {
   matched_client_id: string;
   matched_client_name: string;
@@ -22,10 +25,10 @@ export interface ScheduleExistingClientInput {
   freq: 'weekly' | 'biweekly' | 'triweekly' | 'monthly' | 'once' | 'on_demand' | 'keep';
   visitDay: string;
   specificDate: string;
+  schedule_mode?: ScheduleMode;
   notes: string;
+  notes_mode?: NotesMode;
 }
-
-export type NotesMode = 'append' | 'replace' | 'clear' | 'keep';
 
 export interface MergeProductsInput {
   matched_client_id: string;

@@ -299,7 +299,11 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, []);
 
-  // Schedule a client from the directory to a specific day/frequency
+  // Schedule a client from the directory to a specific day/frequency.
+  // mode='add' (default, used by directory ScheduleModal): when client already has a
+  // pending order, create a NEW doc so both the existing and the new order coexist.
+  // mode='replace' (used by AI when moving/changing a date): update the client's
+  // current doc in place instead of duplicating.
   const scheduleFromDirectory = useCallback(async (
     clientData: Client,
     newDays: string[],
@@ -307,6 +311,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     newDate: string,
     newNotes: string,
     newProducts: Record<string, number>,
+    mode: 'add' | 'replace' = 'add',
   ) => {
     try {
       const currentWeek = getWeekNumber(new Date());
@@ -392,7 +397,12 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       if (clientData.freq === 'on_demand' || clientData.visitDay === 'Sin Asignar') {
         // Reactivate existing client
         await db.collection('clients').doc(clientData.id).update(newData);
+      } else if (mode === 'replace') {
+        // Move/replace: update the existing pending-order doc in place
+        // (e.g. user said "movélo del 29-4 al 6 de mayo")
+        await db.collection('clients').doc(clientData.id).update(newData);
       } else {
+        // Add: keep the existing order and add a new one
         // Check if there's an existing on_demand duplicate to reuse (match by name + phone)
         const schedNormName = (clientData.name || '').toLowerCase().trim();
         const schedNormPhone = normalizePhoneForComparison(clientData.phone);

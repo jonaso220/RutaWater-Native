@@ -22,6 +22,7 @@ interface ClientsStore {
     date: string,
     notes: string,
     products: Record<string, number>,
+    mode?: 'add' | 'replace',
   ) => Promise<void>;
   toggleStar: (clientId: string, currentValue: boolean) => Promise<void>;
   saveAlarm: (clientId: string, time: string) => Promise<void>;

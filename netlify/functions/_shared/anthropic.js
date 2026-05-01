@@ -58,7 +58,7 @@ const TOOLS = [
   {
     name: 'schedule_existing_client',
     description:
-      'Agendar un pedido (productos y/o día) para un cliente que YA EXISTE en la LISTA DE CLIENTES. Usar cuando hay un match claro con un cliente existente.',
+      'Agendar/mover/reemplazar un pedido (día, fecha, frecuencia y/o productos) para un cliente que YA EXISTE en la LISTA DE CLIENTES. Es la ÚNICA tool que toca día/fecha/frecuencia. Usar SIEMPRE que el texto pida cambiar día, fecha o frecuencia, AUNQUE TAMBIÉN haya cambios de notas o productos (combinar todo en una sola llamada). También permite gestionar las notas (notes + notes_mode) en la misma operación.',
     input_schema: {
       type: 'object',
       properties: {
@@ -72,7 +72,7 @@ const TOOLS = [
         },
         products: {
           type: 'object',
-          description: `Productos del pedido. IDs válidos: ${PRODUCT_IDS.join(', ')}.`,
+          description: `Productos del pedido. IDs válidos: ${PRODUCT_IDS.join(', ')}. Si el usuario NO menciona productos al mover/cambiar día, mandar objeto vacío {} y la app usa los productos actuales del cliente.`,
           additionalProperties: { type: 'number' },
         },
         freq: {
@@ -90,9 +90,20 @@ const TOOLS = [
           type: 'string',
           description: "ISO YYYY-MM-DD si freq='once', si no vacío.",
         },
+        schedule_mode: {
+          type: 'string',
+          enum: ['replace', 'add'],
+          description:
+            "'replace' (DEFAULT) → mover/reemplazar el pedido existente del cliente con el nuevo día/fecha. Usar cuando el usuario dice 'movélo', 'pasalo a', 'cambialo para', 'agendalo el [día]', o cualquier acción que reemplaza la fecha actual. 'add' → AGREGAR un pedido NUEVO sin borrar el actual. Usar SOLO si el usuario explícitamente dice 'extra', 'aparte', 'además', 'otro pedido', 'sumá otro', 'agendá un pedido adicional'. Si el cliente actualmente es on_demand (sin pedido pendiente), siempre 'replace'.",
+        },
         notes: {
           type: 'string',
-          description: 'Aclaraciones del texto. Vacío si no hay.',
+          description: 'Texto LITERAL de la nota del usuario (sin justificaciones, sin describir acciones). Vacío "" si el usuario no menciona notas.',
+        },
+        notes_mode: {
+          type: 'string',
+          enum: ['append', 'replace', 'clear', 'keep'],
+          description: 'Cómo combinar `notes` con la nota actual del cliente: "keep" (default cuando notes=""), "append" (cuando agrega), "replace" (cuando reemplaza), "clear" (cuando dice "borrale las notas").',
         },
       },
       required: [
@@ -102,7 +113,9 @@ const TOOLS = [
         'freq',
         'visitDay',
         'specificDate',
+        'schedule_mode',
         'notes',
+        'notes_mode',
       ],
     },
   },
@@ -259,10 +272,19 @@ DÓNDE PONER las notas (qué tool elegir):
 
 QUÉ TOOL USAR:
 1. **create_new_client**: el texto da datos de alta de alguien que NO está en la LISTA DE CLIENTES.
-2. **merge_products_into_order**: el texto pide CAMBIAR los productos (agregar y/o quitar) de un pedido YA AGENDADO de un cliente (que en la LISTA aparece con freq != on_demand). Verbos clave de agregar: "agregale", "sumale", "añadile", "más", "extra", "también", "y de paso". Verbos clave de quitar: "quítale", "quitale", "sacale", "removeé", "borrale", "ya no lleva", "menos". Si el texto pide ambos a la vez (ej: "quitale la bombita y agregale 2 sifones"), usar este tool con add_products Y remove_products poblados a la vez. Solo aplica si el cliente tiene pedido pendiente.
-3. **schedule_existing_client**: el texto AGENDA un pedido NUEVO o REEMPLAZA día/fecha/frecuencia para un cliente que SÍ está en la LISTA. Usar SOLO en estos casos: (a) el cliente está como on_demand y se le agenda un pedido por primera vez, (b) se cambia el día/fecha/frecuencia respecto a lo que ya tenía, o (c) el usuario explícitamente pide agendar un pedido aparte (ej: "agendá un pedido extra para el sábado"). NUNCA usar schedule_existing_client para solo cambiar productos de un cliente que ya tiene pedido pendiente del mismo día/freq, porque eso CREA UN DOC DUPLICADO en la base de datos. Para cambiar productos sin tocar agenda, SIEMPRE merge_products_into_order.
-4. **update_client_data**: actualizar SOLO datos del cliente (mapsLink, address, phone, notes) sin tocar agenda ni productos.
+2. **merge_products_into_order**: el texto pide CAMBIAR los productos (agregar y/o quitar) de un pedido YA AGENDADO sin tocar día/fecha/frecuencia. Verbos clave de agregar: "agregale", "sumale", "añadile", "más", "también", "y de paso". Verbos clave de quitar: "quítale", "quitale", "sacale", "removeé", "borrale", "ya no lleva", "menos". Si el texto pide ambos a la vez (ej: "quitale la bombita y agregale 2 sifones"), usar este tool con add_products Y remove_products poblados a la vez. Solo aplica si el cliente tiene pedido pendiente Y el texto NO cambia día/fecha/freq.
+3. **schedule_existing_client**: única tool que toca día/fecha/frecuencia. Usar en estos casos: (a) el cliente está como on_demand y se le agenda un pedido por primera vez, (b) se mueve/cambia el día, fecha o frecuencia (verbos: "movélo", "pasalo a", "cambialo para", "agendalo el [día]", "para el [fecha]"), o (c) el usuario pide explícitamente un pedido aparte (verbos: "extra", "aparte", "además", "otro pedido"). Para distinguir entre mover (default) y pedido extra, usá `schedule_mode`: 'replace' por default, 'add' SOLO si el texto lo indica explícitamente. Esta tool ACEPTA notes + notes_mode, así que si el texto pide "movélo y borrale las notas", combiná todo acá en una sola llamada (no llames update_client_data ni merge aparte).
+4. **update_client_data**: actualizar SOLO datos del cliente (mapsLink, address, phone, notes) sin tocar agenda ni productos. PROHIBIDO usar si el texto menciona cambio de día/fecha/freq o de productos.
 5. **report_not_found**: el nombre no está en la LISTA y no hay datos para crearlo.
+
+REGLA DE PRIORIDAD ABSOLUTA (leer 2 veces):
+Si el texto del usuario menciona cambio de día, fecha o frecuencia (verbos típicos: "movélo", "pasalo a", "cambialo para", "agendalo el [día/fecha]", "ya no es los lunes, ahora los martes", "ponelo para el [fecha]"), DEBÉS usar **schedule_existing_client**. NUNCA elijas update_client_data ni merge_products_into_order en ese caso, AUNQUE el texto también pida tocar notas o productos. Combiná TODO (fecha + notas + productos) en una sola llamada a schedule_existing_client. Ignorar esta regla rompe la agenda del usuario.
+
+Ejemplo: "movélo del 29-4 al 6 de mayo y borrale las notas"
+  → schedule_existing_client con freq='once', specificDate='YYYY-05-06', schedule_mode='replace', products={} (mantiene actuales), notes='', notes_mode='clear'.
+
+Ejemplo: "agendá a Fabricia para el viernes extra, sumando 2 botellones"
+  → schedule_existing_client con freq='once', specificDate=fecha del próximo viernes, schedule_mode='add', products={b20:2}, notes='', notes_mode='keep'.
 
 DESAMBIGUACIÓN CRÍTICA "modificar productos":
 - "agregale 2 botellones a Farmacia Central" + Farmacia Central ya tiene pedido pendiente → **merge_products_into_order** con add_products={b20:2}, remove_products={}

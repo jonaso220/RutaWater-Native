@@ -218,15 +218,29 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         }
         const days = i.visitDay ? [i.visitDay] : (client.visitDays && client.visitDays.length ? client.visitDays : (client.visitDay ? [client.visitDay] : []));
         const freq: Frequency = i.freq === 'keep' ? (client.freq as Frequency) : (i.freq as Frequency);
+        // Resolve notes via shared resolver (supports notes_mode = clear/replace/append/keep).
+        // If undefined → keep current; otherwise pass the resolved value.
+        const resolvedNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
+        const notesToPass = resolvedNotes !== undefined ? resolvedNotes : (client.notes || '');
+        // If the AI didn't supply products, keep the client's current ones (typical when only moving the date).
+        const productsToPass = (i.products && Object.keys(i.products).length > 0)
+          ? i.products
+          : ((client.products as Record<string, number>) || {});
+        // Default to 'replace' (move) when the AI doesn't specify schedule_mode — the AI is
+        // expected to set it explicitly, but this matches the most common intent ("movélo a X").
+        // If the current client is on_demand the store already updates in place regardless.
+        const scheduleMode: 'add' | 'replace' = i.schedule_mode === 'add' ? 'add' : 'replace';
         await scheduleFromDirectory(
           client,
           days,
           freq,
           i.specificDate || '',
-          i.notes || client.notes || '',
-          i.products || (client.products as Record<string, number>) || {},
+          notesToPass,
+          productsToPass,
+          scheduleMode,
         );
-        Alert.alert('Listo', `Pedido agendado para ${i.matched_client_name}.`);
+        const verb = scheduleMode === 'add' ? 'agendado (extra)' : 'actualizado';
+        Alert.alert('Listo', `Pedido de ${i.matched_client_name} ${verb}.`);
         handleClose();
         return;
       }
@@ -463,6 +477,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
 
   // schedule_existing_client
   const i = result.input;
+  const isExtra = i.schedule_mode === 'add';
   return (
     <View style={[styles.resultBox, { borderColor: colors.primary }]}>
       <View style={styles.resultHeader}>
@@ -470,7 +485,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
         <Text style={styles.resultTitle}>{i.matched_client_name}</Text>
       </View>
       <Text style={[styles.resultText, { color: colors.textMuted, marginBottom: 8 }]}>
-        Cliente del directorio
+        {isExtra ? 'Agendar pedido EXTRA (no reemplaza el actual)' : 'Mover/actualizar el pedido existente'}
       </Text>
       {i.freq && i.freq !== 'keep' && (
         <Field label="Frecuencia" value={FREQUENCY_LABELS[i.freq as Frequency] || i.freq} styles={styles} />
@@ -478,6 +493,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
       {i.visitDay ? <Field label="Día" value={i.visitDay} styles={styles} /> : null}
       {i.specificDate ? <Field label="Fecha" value={i.specificDate} styles={styles} /> : null}
       <ProductsList products={i.products} styles={styles} />
+      {i.notes_mode === 'clear' ? <Field label="Notas" value="(borrar)" styles={styles} /> : null}
       {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
     </View>
   );

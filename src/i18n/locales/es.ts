@@ -431,6 +431,9 @@ export default {
     saveError: 'No se pudo guardar los cambios.',
     errorSunday: 'No se puede agendar en Domingo',
     errorNoDays: 'Este cliente no tiene dias asignados. Usa el Directorio para agendarlo con dias especificos.',
+    editClientData: 'Editar datos del cliente',
+    editFrequency: 'Editar frecuencia',
+    noDate: 'Sin fecha',
   },
 
   // Add Client Modal

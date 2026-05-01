@@ -431,6 +431,9 @@ export default {
     saveError: 'Could not save changes.',
     errorSunday: 'Cannot schedule on Sunday',
     errorNoDays: 'This client has no assigned days. Use the Directory to schedule with specific days.',
+    editClientData: 'Edit client info',
+    editFrequency: 'Edit frequency',
+    noDate: 'No date',
   },
 
   // Add Client Modal

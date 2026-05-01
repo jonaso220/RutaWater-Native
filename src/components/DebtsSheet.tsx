@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, fuzzyMatch, getClientMatchKey } from '../utils/helpers';
+import { normalizePhone, fuzzyMatch, matchScore, getClientMatchKey } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -184,10 +184,17 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     return set;
   }, [debts, clients]);
 
-  // Filtered clients for add panel
+  // Filtered clients for add panel — rank by matchScore so the most
+  // relevant matches (exact name, prefix) appear first instead of being
+  // buried below generic fuzzy matches.
   const addPanelClients = useMemo(() => {
     const matcher = fuzzyMatch(addSearch);
-    return clients.filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
+    const filtered = clients.filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
+    if (!addSearch.trim()) return filtered;
+    return filtered
+      .map((c) => ({ c, score: matchScore(addSearch, c.name || '', c.address || '', c.phone || '') }))
+      .sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || ''))
+      .map((entry) => entry.c);
   }, [clients, addSearch]);
 
   const handleAddDebt = async () => {

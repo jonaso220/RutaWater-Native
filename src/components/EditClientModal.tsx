@@ -12,6 +12,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
+import ClientInfoEditModal from './ClientInfoEditModal';
+import FrequencyEditModal from './FrequencyEditModal';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
@@ -57,6 +59,8 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [freqModalVisible, setFreqModalVisible] = useState(false);
 
   useEffect(() => {
     if (client) {
@@ -85,8 +89,19 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
         setPickerDate(today);
       }
       setShowDatePicker(false);
+      setInfoModalVisible(false);
+      setFreqModalVisible(false);
     }
   }, [client?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset sub-modal state when the parent modal is hidden, so reopening
+  // with the same client doesn't flash a stale sub-modal.
+  useEffect(() => {
+    if (!visible) {
+      setInfoModalVisible(false);
+      setFreqModalVisible(false);
+    }
+  }, [visible]);
 
   if (!client) return null;
 
@@ -185,12 +200,13 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     } else if (!needsDate) {
       data.specificDate = '';
     }
-    if (showClientInfo) {
-      data.name = name.trim();
-      data.address = address.trim();
-      data.phone = phone.trim();
-      data.mapsLink = mapsLink.trim();
-    }
+    // Only persist client info fields if the user actually changed them.
+    // Avoids overwriting `undefined` legacy fields with empty strings on
+    // unrelated edits (e.g. just bumping product quantities from the list).
+    if (name.trim() !== (client.name || '').trim()) data.name = name.trim();
+    if (address.trim() !== (client.address || '').trim()) data.address = address.trim();
+    if (phone.trim() !== (client.phone || '').trim()) data.phone = phone.trim();
+    if (mapsLink.trim() !== (client.mapsLink || '').trim()) data.mapsLink = mapsLink.trim();
     try {
       await onSave(client.id, data);
       onClose();
@@ -252,6 +268,16 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={Platform.OS === 'android' ? { paddingBottom: 60 } : undefined}>
+            {!showClientInfo && (
+              <TouchableOpacity
+                style={styles.linkBtn}
+                onPress={() => setInfoModalVisible(true)}
+              >
+                <Ionicons name="person-outline" size={18} color={colors.primary} />
+                <Text style={styles.linkBtnText}>{t('editModal.editClientData')}</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
             {showClientInfo && (
               <>
                 <Text style={styles.sectionTitle}>{t('editModal.clientData')}</Text>
@@ -319,7 +345,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             )}
 
             {/* Products */}
-            <Text style={[styles.sectionTitle, showClientInfo && { marginTop: 20 }]}>{t('editModal.products')}</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('editModal.products')}</Text>
             {PRODUCTS.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
@@ -365,88 +391,103 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
               )}
             </View>
 
-            {/* Frequency */}
-            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
-              {t('editModal.frequency')}
-            </Text>
-            <View style={styles.freqGrid}>
-              {(Object.entries(FREQUENCY_LABELS) as [Frequency, string][]).map(
-                ([key, label]) => (
-                  <TouchableOpacity
-                    key={key}
-                    onPress={() => setFreq(key)}
-                    style={[
-                      styles.freqChip,
-                      freq === key && styles.freqChipSelected,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.freqChipText,
-                        freq === key && styles.freqChipTextSelected,
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ),
-              )}
-            </View>
-
-            {/* Date picker */}
-            {needsDate && (
-              <View style={{ marginTop: 16 }}>
-                <Text style={styles.sectionTitle}>
-                  {freq === 'once' ? t('editModal.date') : t('editModal.startDate')}
+            {/* Frequency: inline when editing client info, otherwise a link to sub-modal */}
+            {showClientInfo ? (
+              <>
+                <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
+                  {t('editModal.frequency')}
                 </Text>
-                {startDate ? (
-                  <View style={styles.selectedDateRow}>
-                    <Text style={styles.selectedDateText}>
-                      {formatDisplayDate(startDate)}
+                <View style={styles.freqGrid}>
+                  {(Object.entries(FREQUENCY_LABELS) as [Frequency, string][]).map(
+                    ([key, label]) => (
+                      <TouchableOpacity
+                        key={key}
+                        onPress={() => setFreq(key)}
+                        style={[
+                          styles.freqChip,
+                          freq === key && styles.freqChipSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.freqChipText,
+                            freq === key && styles.freqChipTextSelected,
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    ),
+                  )}
+                </View>
+
+                {needsDate && (
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={styles.sectionTitle}>
+                      {freq === 'once' ? t('editModal.date') : t('editModal.startDate')}
                     </Text>
-                    <TouchableOpacity onPress={() => { setStartDate(''); setShowDatePicker(false); }}>
-                      <Text style={styles.clearDateText}>{t('editModal.clearDate')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <Text style={styles.dateHint}>
-                    {t('editModal.dateHint')}
-                  </Text>
-                )}
-                {Platform.OS === 'ios' ? (
-                  <View style={styles.datePickerWrapper}>
-                    <DateTimePicker
-                      value={pickerDate}
-                      mode="date"
-                      display="inline"
-                      onChange={onDateChange}
-                      locale="es-ES"
-                      style={styles.datePicker}
-                      themeVariant={isDark ? 'dark' : 'light'}
-                    />
-                  </View>
-                ) : (
-                  <>
-                    <TouchableOpacity
-                      style={styles.dateBtn}
-                      onPress={() => setShowDatePicker(true)}
-                    >
-                      <Text style={styles.dateBtnText}>
-                        {startDate ? formatDisplayDate(startDate) : t('editModal.chooseDate')}
+                    {startDate ? (
+                      <View style={styles.selectedDateRow}>
+                        <Text style={styles.selectedDateText}>
+                          {formatDisplayDate(startDate)}
+                        </Text>
+                        <TouchableOpacity onPress={() => { setStartDate(''); setShowDatePicker(false); }}>
+                          <Text style={styles.clearDateText}>{t('editModal.clearDate')}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <Text style={styles.dateHint}>
+                        {t('editModal.dateHint')}
                       </Text>
-                    </TouchableOpacity>
-                    {showDatePicker && (
-                      <DateTimePicker
-                        value={pickerDate}
-                        mode="date"
-                        display="default"
-                        onChange={onDateChange}
-                        locale="es-ES"
-                      />
                     )}
-                  </>
+                    {Platform.OS === 'ios' ? (
+                      <View style={styles.datePickerWrapper}>
+                        <DateTimePicker
+                          value={pickerDate}
+                          mode="date"
+                          display="inline"
+                          onChange={onDateChange}
+                          locale="es-ES"
+                          style={styles.datePicker}
+                          themeVariant={isDark ? 'dark' : 'light'}
+                        />
+                      </View>
+                    ) : (
+                      <>
+                        <TouchableOpacity
+                          style={styles.dateBtn}
+                          onPress={() => setShowDatePicker(true)}
+                        >
+                          <Text style={styles.dateBtnText}>
+                            {startDate ? formatDisplayDate(startDate) : t('editModal.chooseDate')}
+                          </Text>
+                        </TouchableOpacity>
+                        {showDatePicker && (
+                          <DateTimePicker
+                            value={pickerDate}
+                            mode="date"
+                            display="default"
+                            onChange={onDateChange}
+                            locale="es-ES"
+                          />
+                        )}
+                      </>
+                    )}
+                  </View>
                 )}
-              </View>
+              </>
+            ) : (
+              <TouchableOpacity
+                style={[styles.linkBtn, { marginTop: 20 }]}
+                onPress={() => setFreqModalVisible(true)}
+              >
+                <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+                <Text style={styles.linkBtnText}>
+                  {FREQUENCY_LABELS[freq]}
+                  {needsDate && startDate ? ` · ${formatDisplayDate(startDate)}` : ''}
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </TouchableOpacity>
             )}
           </ScrollView>
 
@@ -467,6 +508,30 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <ClientInfoEditModal
+        visible={infoModalVisible}
+        onClose={() => setInfoModalVisible(false)}
+        name={name}
+        address={address}
+        phone={phone}
+        mapsLink={mapsLink}
+        setName={setName}
+        setAddress={setAddress}
+        setPhone={setPhone}
+        setMapsLink={setMapsLink}
+      />
+
+      <FrequencyEditModal
+        visible={freqModalVisible}
+        onClose={() => setFreqModalVisible(false)}
+        freq={freq}
+        setFreq={setFreq}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        pickerDate={pickerDate}
+        setPickerDate={setPickerDate}
+      />
     </ModalOverlay>
   );
 };
@@ -662,6 +727,21 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     paddingBottom: Platform.OS === 'android' ? 32 : 16,
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
+  },
+  linkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.sectionBackground,
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  linkBtnText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   saveBtn: {
     backgroundColor: colors.primary,

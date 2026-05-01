@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -193,6 +193,15 @@ const DirectoryScreen = () => {
 
     return base;
   }, [search, activeFilter, getFilteredDirectory, debts, clients, clientHasDebt]);
+
+  // Reset scroll to top when the search term or filter changes — otherwise
+  // FlashList keeps the previous offset and the user has to scroll up to
+  // find the matched client (especially noticeable with hundreds of clients).
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+    });
+  }, [search, activeFilter]);
 
   const isRecurrenciaMode = activeFilter === 'recurrencia';
 

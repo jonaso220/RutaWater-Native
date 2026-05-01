@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, RELATIONSHIP_TYPES } from '../types';
-import { normalizePhone, fuzzyMatch } from '../utils/helpers';
+import { normalizePhone, fuzzyMatch, matchScore } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -64,7 +64,9 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
       .filter(Boolean) as { client: Client; type: string }[];
   }, [client, allClients, relatedIds, relationships]);
 
-  // Search results for adding new relationship
+  // Search results for adding new relationship.
+  // Rank by matchScore (same as the directory) so exact prefix matches
+  // appear first instead of being lost among generic fuzzy matches.
   const searchResults = useMemo(() => {
     if (!client || !searchTerm.trim()) return [];
     const matcher = fuzzyMatch(searchTerm);
@@ -73,6 +75,9 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
       .filter((c) => c.id !== client.id)
       .filter((c) => !relatedIds.includes(c.id))
       .filter((c) => matcher(c.name || '', c.address || '', c.phone || ''))
+      .map((c) => ({ c, score: matchScore(searchTerm, c.name || '', c.address || '', c.phone || '') }))
+      .sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || ''))
+      .map((entry) => entry.c)
       .slice(0, 20);
   }, [searchTerm, allClients, client, relatedIds]);
 

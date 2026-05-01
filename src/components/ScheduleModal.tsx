@@ -61,9 +61,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       setSaving(false);
       // Reset notes and products so each new scheduling starts clean
       setLocalNotes('');
-      setLocalFreq(
-        client.freq === 'on_demand' ? 'once' : (client.freq || 'once'),
-      );
+      // Always default to 'once' when scheduling from the directory: the
+      // common case is adding a one-off visit on top of the client's existing
+      // frequency, not changing their recurring schedule.
+      setLocalFreq('once');
       const now = new Date();
       const yyyy = now.getFullYear();
       const mm = String(now.getMonth() + 1).padStart(2, '0');

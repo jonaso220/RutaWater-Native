@@ -102,7 +102,12 @@
       "Bash(netlify api *)",
       "Bash(netlify deploy *)",
       "Bash(mkdir -p /tmp/rwsnaps)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(kill 98308)",
+      "Bash(echo \"started PID=$!\")",
+      "Bash(pkill -f \"node.*local-server/index\")",
+      "Bash(echo \"PID=$!\")",
+      "Bash(grep -n '`notes' /Volumes/OLIVERA/RutaWaterNative/netlify/functions/_shared/anthropic.js)"
     ]
   }
 }

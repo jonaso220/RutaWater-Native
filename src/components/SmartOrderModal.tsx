@@ -18,7 +18,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { PRODUCTS, FREQUENCY_LABELS, Frequency } from '../constants/products';
 import { getModalWidth } from '../utils/helpers';
-import { useAiParse, ParseResult } from '../hooks/useAiParse';
+import { useAiParse, ParseResult, NotesMode } from '../hooks/useAiParse';
 import { useAiUsageStore } from '../stores/aiUsageStore';
 import { useClientsStore } from '../stores/clientsStore';
 
@@ -26,6 +26,21 @@ interface SmartOrderModalProps {
   visible: boolean;
   onClose: () => void;
 }
+
+// Detecta texto que el LLM generó describiendo sus acciones en vez de citar al usuario.
+// Esos textos se filtran tanto del preview como del valor que se guarda.
+const looksLikeAutoDescription = (text: string): boolean => {
+  const t = (text || '').trim().toLowerCase();
+  if (!t) return false;
+  return (
+    /^se (quit|agreg|añad|anad|cambi|modific|reempla|sum|añade|añadi|elimi)/i.test(t) ||
+    /^modificaci[oó]n de productos/i.test(t) ||
+    /^cliente nuevo agregado/i.test(t) ||
+    /^pedido (actualizado|modificado|del .* actualizado)/i.test(t) ||
+    /del pedido (pendiente|semanal|mensual|quincenal|del lunes|del martes|del mi[eé]rcoles|del jueves|del viernes|del s[aá]bado|del domingo)/i.test(t) ||
+    /^el usuario (también|tambi[eé]n) (menciona|pide|solicita)/i.test(t)
+  );
+};
 
 const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) => {
   const { colors } = useTheme();
@@ -44,6 +59,26 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   const scheduleFromDirectory = useClientsStore((s) => s.scheduleFromDirectory);
   const updateClient = useClientsStore((s) => s.updateClient);
   const clients = useClientsStore((s) => s.clients);
+
+  // Calcula el valor final de la nota a guardar dado un modo y la nota actual.
+  // Devuelve undefined si no hay que tocar la nota.
+  // Si la IA no manda notes_mode (caso frecuente), inferimos un default seguro:
+  // - notes vacío o auto-descripción → 'keep'
+  // - notes con texto legítimo → 'append' (preserva lo viejo, agrega lo nuevo)
+  const resolveNotes = (current: string | undefined, incoming: string, mode: NotesMode | undefined): string | undefined => {
+    const cur = (current || '').trim();
+    let inc = (incoming || '').trim();
+    if (looksLikeAutoDescription(inc)) inc = '';
+    const m: NotesMode = mode || (inc ? 'append' : 'keep');
+    if (m === 'keep') return undefined;
+    if (m === 'clear') return '';
+    if (m === 'replace') return inc;
+    // append
+    if (!inc) return undefined; // nada que agregar
+    if (!cur) return inc;
+    if (cur.toLowerCase().includes(inc.toLowerCase())) return undefined; // ya está
+    return `${cur}. ${inc}`;
+  };
 
   const handleClose = useCallback(() => {
     setText('');
@@ -93,7 +128,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        // Sumar productos nuevos a los existentes
+        // Partimos de los productos actuales, sumamos add_products y restamos remove_products.
         const merged: Record<string, number> = {};
         const current = (client.products || {}) as Record<string, string | number>;
         Object.entries(current).forEach(([k, v]) => {
@@ -103,14 +138,30 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         Object.entries(i.add_products || {}).forEach(([k, v]) => {
           if (v > 0) merged[k] = (merged[k] || 0) + v;
         });
+        Object.entries(i.remove_products || {}).forEach(([k, v]) => {
+          if (v > 0 && merged[k]) {
+            const next = merged[k] - v;
+            if (next > 0) merged[k] = next;
+            else delete merged[k];
+          }
+        });
         const updates: any = { products: merged, updatedAt: new Date() };
-        if (i.notes) updates.notes = i.notes;
+        const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode);
+        if (nextNotes !== undefined) updates.notes = nextNotes;
         console.log('[merge] clientId:', client.id, 'name:', client.name, 'freq:', client.freq, 'visitDay:', client.visitDay);
         console.log('[merge] current products:', client.products);
         console.log('[merge] add products:', i.add_products);
+        console.log('[merge] remove products:', i.remove_products);
         console.log('[merge] merged result:', merged);
+        console.log('[merge] notes_mode:', i.notes_mode, 'incoming:', i.notes, 'current:', client.notes, 'next:', nextNotes);
         await updateClient(client.id, updates);
-        Alert.alert('Listo', `Productos agregados al pedido de ${i.matched_client_name}.`);
+        const addCount = Object.keys(i.add_products || {}).length;
+        const removeCount = Object.keys(i.remove_products || {}).length;
+        const verb =
+          addCount && removeCount ? 'actualizado' :
+          removeCount ? 'recortado' :
+          'agregado';
+        Alert.alert('Listo', `Pedido de ${i.matched_client_name} ${verb}.`);
         handleClose();
         return;
       }
@@ -127,7 +178,8 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         if (i.mapsLink) updates.mapsLink = i.mapsLink;
         if (i.address) updates.address = i.address;
         if (i.phone) updates.phone = i.phone;
-        if (i.notes) updates.notes = i.notes;
+        const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode);
+        if (nextNotes !== undefined) updates.notes = nextNotes;
         if (Object.keys(updates).length === 0) {
           Alert.alert('Sin cambios', 'No detecté ningún dato para actualizar.');
           setSaving(false);
@@ -317,17 +369,41 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
 
   if (result.tool === 'merge_products_into_order') {
     const i = result.input;
+    const addEntries = Object.entries(i.add_products || {}).filter(([_, v]) => v > 0);
+    const removeEntries = Object.entries(i.remove_products || {}).filter(([_, v]) => v > 0);
+    const onlyRemoves = addEntries.length === 0 && removeEntries.length > 0;
+    const headerText = onlyRemoves
+      ? `Quitar del pedido: ${i.matched_client_name}`
+      : addEntries.length && removeEntries.length
+        ? `Modificar pedido: ${i.matched_client_name}`
+        : `Sumar al pedido: ${i.matched_client_name}`;
+    const subtitle = onlyRemoves
+      ? 'Se quitan estos productos del pedido pendiente (sin tocar día ni frecuencia).'
+      : addEntries.length && removeEntries.length
+        ? 'Se ajustan los productos del pedido pendiente (sin tocar día ni frecuencia).'
+        : 'Se agregan estos productos al pedido pendiente (sin tocar día ni frecuencia).';
     return (
       <View style={[styles.resultBox, { borderColor: colors.primary }]}>
         <View style={styles.resultHeader}>
-          <Ionicons name="add-circle" size={20} color={colors.primary} />
-          <Text style={styles.resultTitle}>Sumar al pedido: {i.matched_client_name}</Text>
+          <Ionicons name={onlyRemoves ? 'remove-circle' : 'add-circle'} size={20} color={colors.primary} />
+          <Text style={styles.resultTitle}>{headerText}</Text>
         </View>
         <Text style={[styles.resultText, { color: colors.textMuted, marginBottom: 8 }]}>
-          Se agregan estos productos al pedido pendiente (sin tocar día ni frecuencia).
+          {subtitle}
         </Text>
-        <ProductsList products={i.add_products} styles={styles} />
-        {i.notes ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
+        {addEntries.length > 0 && (
+          <View>
+            <Text style={[styles.fieldLabel, { color: colors.success }]}>Sumar</Text>
+            <ProductsList products={i.add_products} styles={styles} />
+          </View>
+        )}
+        {removeEntries.length > 0 && (
+          <View style={{ marginTop: addEntries.length ? 8 : 0 }}>
+            <Text style={[styles.fieldLabel, { color: colors.warning }]}>Quitar</Text>
+            <ProductsList products={i.remove_products} styles={styles} />
+          </View>
+        )}
+        {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
       </View>
     );
   }
@@ -343,7 +419,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
         {i.mapsLink ? <Field label="Maps" value={i.mapsLink} styles={styles} /> : null}
         {i.address ? <Field label="Dirección" value={i.address} styles={styles} /> : null}
         {i.phone ? <Field label="Teléfono" value={i.phone} styles={styles} /> : null}
-        {i.notes ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
+        {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
       </View>
     );
   }
@@ -363,7 +439,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
         {i.visitDay ? <Field label="Día" value={i.visitDay} styles={styles} /> : null}
         {i.specificDate ? <Field label="Fecha" value={i.specificDate} styles={styles} /> : null}
         <ProductsList products={i.products} styles={styles} />
-        {i.notes ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
+        {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
       </View>
     );
   }
@@ -385,7 +461,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
       {i.visitDay ? <Field label="Día" value={i.visitDay} styles={styles} /> : null}
       {i.specificDate ? <Field label="Fecha" value={i.specificDate} styles={styles} /> : null}
       <ProductsList products={i.products} styles={styles} />
-      {i.notes ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
+      {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
     </View>
   );
 };

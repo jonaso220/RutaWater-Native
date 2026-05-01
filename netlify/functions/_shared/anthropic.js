@@ -109,7 +109,7 @@ const TOOLS = [
   {
     name: 'merge_products_into_order',
     description:
-      'Agregar/sumar productos al pedido YA AGENDADO de un cliente, sin crear un pedido nuevo ni cambiar día/fecha/frecuencia. Usar cuando el texto dice "agregale/sumale/añadile X al pedido de [cliente]" Y el cliente YA tiene un pedido pendiente (visible en LISTA DE CLIENTES como freq != on_demand). NO usar si el cliente está como on_demand (ahí hay que agendar con schedule_existing_client). NO usar para reemplazar productos, esto SUMA cantidades a las existentes.',
+      'MODIFICAR los productos del pedido YA AGENDADO de un cliente, sin crear un pedido nuevo ni cambiar día/fecha/frecuencia. Soporta SUMAR (add_products), QUITAR (remove_products), o AMBAS a la vez. También permite gestionar las notas del pedido (notes + notes_mode). Usar SIEMPRE que el cliente YA tenga un pedido pendiente (en LISTA DE CLIENTES como freq != on_demand) y el texto pida cambiar productos o notas. NO usar si el cliente está como on_demand (ahí hay que agendar con schedule_existing_client). NO usar schedule_existing_client para cambiar productos de un cliente que ya tiene pedido pendiente, porque eso crea un pedido duplicado.',
     input_schema: {
       type: 'object',
       properties: {
@@ -117,18 +117,31 @@ const TOOLS = [
         matched_client_name: { type: 'string', description: 'Nombre para mostrar.' },
         add_products: {
           type: 'object',
-          description: `Productos a SUMAR al pedido existente. IDs válidos: ${PRODUCT_IDS.join(', ')}. Solo los que se agregan, no los que ya tenía.`,
+          description: `Productos a SUMAR al pedido existente. IDs válidos: ${PRODUCT_IDS.join(', ')}. Solo los que se agregan; objeto vacío {} si no se agrega nada.`,
           additionalProperties: { type: 'number' },
         },
-        notes: { type: 'string', description: 'Aclaración opcional. Vacío si no aplica.' },
+        remove_products: {
+          type: 'object',
+          description: `Productos a QUITAR del pedido existente. IDs válidos: ${PRODUCT_IDS.join(', ')}. Cantidad a restar (si la cantidad >= la actual, el producto se elimina por completo). Objeto vacío {} si no se quita nada. Solo incluir IDs que actualmente están en "productos actuales" del cliente; si no está, no agregarlo acá (avisalo en notes).`,
+          additionalProperties: { type: 'number' },
+        },
+        notes: {
+          type: 'string',
+          description: 'Texto LITERAL de la nota del usuario (sin justificaciones, sin descripciones de tus acciones). Vacío "" si el usuario no menciona notas.',
+        },
+        notes_mode: {
+          type: 'string',
+          enum: ['append', 'replace', 'clear', 'keep'],
+          description: 'Cómo combinar `notes` con la nota actual del cliente: "keep" → no tocar (default cuando notes=""). "append" → agregar al final de la nota actual (default cuando el usuario dice "agregale a las notas X"). "replace" → reemplazar la nota completa (cuando dice "cambia la nota a X" o "borrale la nota y poné Y"). "clear" → borrar la nota (cuando dice "borrale las notas").',
+        },
       },
-      required: ['matched_client_id', 'matched_client_name', 'add_products', 'notes'],
+      required: ['matched_client_id', 'matched_client_name', 'add_products', 'remove_products', 'notes', 'notes_mode'],
     },
   },
   {
     name: 'update_client_data',
     description:
-      'Actualizar SOLO datos del cliente (dirección, teléfono, link de Google Maps, notas) SIN tocar agenda, productos, frecuencia ni día. Usar cuando el texto pide "agregar/actualizar/cambiar X a un cliente que ya existe en la LISTA DE CLIENTES" — por ejemplo "agregá esta URL a Manuel", "actualizá el teléfono de Pedro", "cambia la dirección de Ana". Solo incluir los campos que se mencionan en el texto, los demás dejarlos vacío "".',
+      'Actualizar SOLO datos del cliente (dirección, teléfono, link de Google Maps, notas) SIN tocar agenda, productos, frecuencia ni día. Usar cuando el texto pide "agregar/actualizar/cambiar X a un cliente que ya existe en la LISTA DE CLIENTES" — por ejemplo "agregá esta URL a Manuel", "actualizá el teléfono de Pedro", "cambia la dirección de Ana". Solo incluir los campos que se mencionan en el texto, los demás dejarlos vacío "". Si el cliente YA tiene pedido pendiente y el texto solo afecta notas/productos, preferí merge_products_into_order en su lugar.',
     input_schema: {
       type: 'object',
       properties: {
@@ -137,9 +150,17 @@ const TOOLS = [
         mapsLink: { type: 'string', description: 'URL de Google Maps si se quiere actualizar. Vacío si no aplica.' },
         address: { type: 'string', description: 'Nueva dirección si se quiere actualizar. Vacío si no aplica.' },
         phone: { type: 'string', description: 'Nuevo teléfono si se quiere actualizar. Vacío si no aplica.' },
-        notes: { type: 'string', description: 'Nuevas notas si se quieren agregar. Vacío si no aplica.' },
+        notes: {
+          type: 'string',
+          description: 'Texto LITERAL de la nota del usuario (sin justificaciones, sin descripciones). Vacío "" si el usuario no menciona notas.',
+        },
+        notes_mode: {
+          type: 'string',
+          enum: ['append', 'replace', 'clear', 'keep'],
+          description: 'Cómo combinar `notes` con la nota actual: "keep" (default cuando notes=""), "append" (cuando el usuario agrega), "replace" (cuando reemplaza), "clear" (cuando borra).',
+        },
       },
-      required: ['matched_client_id', 'matched_client_name', 'mapsLink', 'address', 'phone', 'notes'],
+      required: ['matched_client_id', 'matched_client_name', 'mapsLink', 'address', 'phone', 'notes', 'notes_mode'],
     },
   },
   {
@@ -188,28 +209,77 @@ CRÍTICO — diferencia entre "los lunes" y "el lunes":
 - "El lunes" / "este lunes" / "el lunes que viene" → freq=once, specificDate=fecha calculada del próximo lunes
 
 EXTRACCIÓN DE DIRECCIÓN Y MAPS:
-- Si el texto separa la dirección en partes ("Dirección: X / Esquina: Y / Detalle: Z" o similares), combinalas en una sola dirección legible separadas por comas.
+- Si el texto separa la dirección en partes ("Dirección: X / Esquina: Y" o similares), combinalas en una sola dirección legible separadas por comas.
 - Si encuentras una URL de Google Maps en el texto (maps.app.goo.gl, goo.gl/maps, google.com/maps), poníla en mapsLink. NO inventes URLs.
 - Capitalizá nombres y direcciones correctamente (no devuelvas todo en MAYÚSCULAS aunque el texto lo esté).
 
+REGLAS PARA notes Y notes_mode (CRÍTICO — leer 2 veces):
+
+OBLIGATORIO: cada vez que llames a merge_products_into_order o update_client_data, DEBÉS incluir AMBOS campos notes y notes_mode. Nunca los omitas. Default seguro: notes="" + notes_mode="keep".
+
+
+CONTEXTO: en la LISTA DE CLIENTES, cada cliente puede mostrar "notas actuales: ...". La app las preserva por default — vos NO tenés que copiarlas al campo notes. Solo decidís si las modificás y cómo.
+
+REGLA #0 — Devolvés DOS campos coordinados:
+  • notes = el texto LITERAL nuevo que el usuario quiere anotar (sin justificaciones, sin describir acciones). "" si el usuario no menciona notas.
+  • notes_mode = qué hacer con ese texto en relación a la nota actual del cliente:
+    - "keep" → no toca la nota actual. USAR ESTE cuando el usuario NO menciona notas. (La IA puede dejar notes="" en ese caso.)
+    - "append" → agrega el texto de notes al final de la nota actual (con un punto y espacio en el medio). USAR cuando el usuario dice "agregale a las notas...", "anotá que...", "dejá una nota...", "ponele de nota...", "que diga en las notas...", "agregá a la nota...".
+    - "replace" → reemplaza la nota actual con el texto de notes. USAR cuando el usuario dice "cambia la nota a X", "reemplaza la nota por Y", "borrale la nota y poné Z".
+    - "clear" → borra la nota actual (notes puede ir vacío). USAR cuando dice "borrale las notas", "saca la nota", "limpia las notas".
+
+REGLA #1 — PROHIBIDO redactar texto descriptivo en notes. NUNCA escribas en notes oraciones como "Se agregó X", "Se añadió Y", "Se quita Z", "Modificación de productos", "Pedido actualizado", "Cliente nuevo", "El usuario menciona X pero...". Esa info ya está en add_products/remove_products/products/freq. Repetirla en notes ENSUCIA el doc.
+
+Ejemplos PROHIBIDOS (todos deberían ser notes="" + notes_mode="keep"):
+  ❌ "Se agregan 3 botellones al pedido existente"
+  ❌ "Se quita el dispensador eléctrico de cambio del pedido semanal"
+  ❌ "Se añadió dispensador eléctrico de cambio"
+  ❌ "El usuario también menciona X pero este producto no existe"
+
+REGLA #2 — Si el usuario menciona productos que NO están en PRODUCTOS DISPONIBLES (ej: "3 bebidas", "2 pomelos", "1 caja de galletitas"), NO los pongas en add_products. Van TAL CUAL en notes con notes_mode="append" (o "replace" si dice "cambia la nota a X").
+
+REGLA #3 — Si el usuario pide solo agregar/reemplazar nota sin tocar productos: add_products={}, remove_products={}, notes con el texto, notes_mode según corresponda. Si no menciona notas: notes="", notes_mode="keep".
+
+EJEMPLOS COMPLETOS:
+  Usuario: "quitale el dispenser electrico a Roberto"  (Roberto tiene nota "Necesita 3 bebidas")
+    → add_products={}, remove_products={disp_elec_chg:1}, notes="", notes_mode="keep"   (preserva "Necesita 3 bebidas")
+
+  Usuario: "agregale a las notas de Roberto que tambien llamar antes"  (Roberto tiene nota "Necesita 3 bebidas")
+    → add_products={}, remove_products={}, notes="Llamar antes", notes_mode="append"   (resultado: "Necesita 3 bebidas. Llamar antes")
+
+  Usuario: "borrale las notas a Roberto"
+    → add_products={}, remove_products={}, notes="", notes_mode="clear"   (resultado: nota vacía)
+
+  Usuario: "cambia la nota de Roberto a: prioritario"
+    → add_products={}, remove_products={}, notes="Prioritario", notes_mode="replace"
+
+DÓNDE PONER las notas (qué tool elegir):
+- Cliente con pedido pendiente + cualquier cosa de notas o productos → **merge_products_into_order**.
+- Cliente sin pedido pendiente (on_demand) + actualizar nota persistente → **update_client_data** con notes + notes_mode.
+
 QUÉ TOOL USAR:
 1. **create_new_client**: el texto da datos de alta de alguien que NO está en la LISTA DE CLIENTES.
-2. **merge_products_into_order**: el texto pide AGREGAR/SUMAR productos a un pedido YA AGENDADO de un cliente (que en la LISTA aparece con freq != on_demand). Verbos clave: "agregale", "sumale", "añadile", "más", "extra", "también", "y de paso". Solo aplica si el cliente tiene pedido pendiente.
-3. **schedule_existing_client**: el texto AGENDA un pedido nuevo o REEMPLAZA agenda (cambia día/fecha/frecuencia/productos completos) para un cliente que SÍ está en la LISTA. Usar cuando el cliente está on_demand o cuando se especifica un día/fecha distinto.
+2. **merge_products_into_order**: el texto pide CAMBIAR los productos (agregar y/o quitar) de un pedido YA AGENDADO de un cliente (que en la LISTA aparece con freq != on_demand). Verbos clave de agregar: "agregale", "sumale", "añadile", "más", "extra", "también", "y de paso". Verbos clave de quitar: "quítale", "quitale", "sacale", "removeé", "borrale", "ya no lleva", "menos". Si el texto pide ambos a la vez (ej: "quitale la bombita y agregale 2 sifones"), usar este tool con add_products Y remove_products poblados a la vez. Solo aplica si el cliente tiene pedido pendiente.
+3. **schedule_existing_client**: el texto AGENDA un pedido NUEVO o REEMPLAZA día/fecha/frecuencia para un cliente que SÍ está en la LISTA. Usar SOLO en estos casos: (a) el cliente está como on_demand y se le agenda un pedido por primera vez, (b) se cambia el día/fecha/frecuencia respecto a lo que ya tenía, o (c) el usuario explícitamente pide agendar un pedido aparte (ej: "agendá un pedido extra para el sábado"). NUNCA usar schedule_existing_client para solo cambiar productos de un cliente que ya tiene pedido pendiente del mismo día/freq, porque eso CREA UN DOC DUPLICADO en la base de datos. Para cambiar productos sin tocar agenda, SIEMPRE merge_products_into_order.
 4. **update_client_data**: actualizar SOLO datos del cliente (mapsLink, address, phone, notes) sin tocar agenda ni productos.
 5. **report_not_found**: el nombre no está en la LISTA y no hay datos para crearlo.
 
-DESAMBIGUACIÓN CRÍTICA "agregar productos":
-- "agregale 2 botellones a Farmacia Central" + Farmacia Central ya tiene pedido pendiente → **merge_products_into_order**
-- "agendá a Farmacia Central para el viernes con 2 botellones" → **schedule_existing_client**
-- "Farmacia Central" sin más datos + ya tiene pedido pendiente → schedule_existing_client con products vacío y freq=keep (no hace falta merge si no hay productos a sumar).
+DESAMBIGUACIÓN CRÍTICA "modificar productos":
+- "agregale 2 botellones a Farmacia Central" + Farmacia Central ya tiene pedido pendiente → **merge_products_into_order** con add_products={b20:2}, remove_products={}
+- "quitale la bombita a Farmacia Central" + ya tiene pedido pendiente → **merge_products_into_order** con add_products={}, remove_products={bombita:1}
+- "quitale la bombita y agregale 2 sifones a Farmacia Central" + ya tiene pedido pendiente → **merge_products_into_order** con add_products={soda:2}, remove_products={bombita:1}
+- "agendá a Farmacia Central para el viernes con 2 botellones" → **schedule_existing_client** (porque agenda día nuevo)
+- "Farmacia Central" sin más datos + ya tiene pedido pendiente → no hace nada útil, devolvé merge_products_into_order con ambos {} y notes explicando que falta info.
 
 CLIENTE CON MÚLTIPLES PEDIDOS PENDIENTES:
 Un mismo cliente puede aparecer VARIAS VECES en la LISTA, una por cada pedido activo (ej: "Farmacia Central" puede tener una fila weekly Lunes y otra fila once Sábado 2026-05-02). Cada fila tiene su propio ID y son DOCUMENTOS DIFERENTES.
 
-Cuando el usuario diga "agregale al pedido del [día/fecha] de X", DEBES elegir el id correspondiente al pedido de ese día/fecha exacto, no inventar y no elegir cualquiera. Si la solicitud no aclara cuál pedido, y hay múltiples, devolvé schedule_existing_client con notas pidiendo clarificación o elegí el más cercano explicándolo en notes.
+Cuando el usuario diga "modificale el pedido del [día/fecha] de X", DEBES elegir el id correspondiente al pedido de ese día/fecha exacto, no inventar y no elegir cualquiera. Si la solicitud no aclara cuál pedido y hay múltiples, elegí el de la frecuencia/día que mejor matchee con lo que dice el texto (ej: "como semanal hoy viernes" → elegir la fila weekly Viernes).
 
-CRÍTICO: en merge_products_into_order, add_products contiene SOLO los productos NUEVOS a sumar. La cantidad existente del cliente la maneja la app, no la incluyas vos.
+CRÍTICO en merge_products_into_order:
+- add_products contiene SOLO los productos NUEVOS a sumar. La cantidad existente la maneja la app, no la incluyas vos.
+- remove_products contiene SOLO los productos a restar de la cantidad actual. Si vas a remover más de lo que tiene, la app igual lo maneja (deja en 0 / elimina).
+- Solo incluí en remove_products productos que ESTÉN en "productos actuales" del cliente. Si el usuario pide quitar algo que el cliente no tiene, no lo metas en remove_products; explicalo en notes.
 
 Calculá fechas relativas en base a la FECHA ACTUAL que se te indica más adelante.`;
 
@@ -239,11 +309,14 @@ function buildClientsBlock(clients) {
     } else {
       status.push('solo en directorio (sin pedido agendado)');
     }
+    if (c.notes && c.notes.trim()) {
+      status.push(`notas actuales: "${c.notes.trim()}"`);
+    }
     parts.push(status.join(' | '));
 
     return `- ${parts.join(' | ')}`;
   });
-  return `LISTA DE CLIENTES (id | nombre | dirección | estado):\n${lines.join('\n')}`;
+  return `LISTA DE CLIENTES (id | nombre | dirección | estado | notas actuales):\n${lines.join('\n')}`;
 }
 
 function buildTodayBlock(todayIso) {

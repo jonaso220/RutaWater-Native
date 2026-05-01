@@ -25,11 +25,15 @@ export interface ScheduleExistingClientInput {
   notes: string;
 }
 
+export type NotesMode = 'append' | 'replace' | 'clear' | 'keep';
+
 export interface MergeProductsInput {
   matched_client_id: string;
   matched_client_name: string;
   add_products: Record<string, number>;
+  remove_products: Record<string, number>;
   notes: string;
+  notes_mode: NotesMode;
 }
 
 export interface UpdateClientDataInput {
@@ -39,6 +43,7 @@ export interface UpdateClientDataInput {
   address: string;
   phone: string;
   notes: string;
+  notes_mode: NotesMode;
 }
 
 export interface ReportNotFoundInput {
@@ -125,6 +130,7 @@ export const useAiParse = (): UseAiParseReturn => {
           visitDay: c.visitDay || '',
           specificDate: c.specificDate || '',
           products,
+          notes: c.notes || '',
         };
       });
       console.log('[useAiParse] clients sent:', clients.length, clients.map(c => `${c.name}(${c.id.slice(0, 6)}, ${c.freq}, ${c.visitDay}${c.specificDate ? ' ' + c.specificDate : ''})`));

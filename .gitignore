@@ -8,6 +8,7 @@ node_modules/
 ios/Pods/
 ios/build/
 ios/build-release/
+ios/build-mac/
 ios/*.xcworkspace
 ios/*.xcodeproj/xcuserdata/
 *.pbxuser
@@ -36,6 +37,9 @@ android/app/rutawater-release.keystore
 
 # Netlify
 .netlify/
+
+# Claude Code
+.claude/worktrees/
 
 # IDE
 .idea/

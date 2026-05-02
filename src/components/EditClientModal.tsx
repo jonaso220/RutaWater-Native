@@ -27,6 +27,10 @@ import { getModalWidth } from '../utils/helpers';
 interface EditClientModalProps {
   visible: boolean;
   client: Client | null;
+  // Used to compute the top order for the destination day when a 'once'
+  // client moves to a new day — without it we'd carry the source-day index
+  // (e.g. position 54) into a day with a totally different ordering.
+  allClients?: Client[];
   onSave: (clientId: string, data: Partial<Client>) => void;
   onClose: () => void;
   onDelete?: (clientId: string) => Promise<void>;
@@ -39,6 +43,7 @@ interface EditClientModalProps {
 const EditClientModal: React.FC<EditClientModalProps> = ({
   visible,
   client,
+  allClients,
   onSave,
   onClose,
   onDelete,
@@ -193,13 +198,41 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
         data.visitDays = [newDay];
       }
 
-      // When the day changes, update listOrders so the client has a valid position on the new day
+      // When the day changes, update listOrders so the client has a valid position on the new day.
       if (oldDay && newDay !== oldDay && (freq === 'once' || isSingleDay)) {
         const oldOrders = client.listOrders || {};
-        const oldPos = oldOrders[oldDay] ?? client.listOrder ?? 0;
         const newOrders = { ...oldOrders };
         delete newOrders[oldDay];
-        newOrders[newDay] = oldPos;
+
+        if (freq === 'once' && allClients && allClients.length > 0) {
+          // 'once' clients moving to another day go to the TOP of the
+          // destination day. Carrying the source-day index (e.g. position
+          // 54) into a day with a different ordering makes the card hard
+          // to find — placing it at the top makes it immediately visible.
+          const destClients = allClients.filter(
+            (c) =>
+              c.id !== client.id &&
+              c.freq !== 'on_demand' &&
+              !c.isCompleted &&
+              ((c.visitDays && c.visitDays.includes(newDay)) || c.visitDay === newDay),
+          );
+          let minOrder = 0;
+          if (destClients.length > 0) {
+            const orders = destClients.map((c) => {
+              const o = c.listOrders?.[newDay] ?? c.listOrder ?? 0;
+              // Ignore sentinel-like huge values that indicate "no order".
+              return typeof o === 'number' && isFinite(o) && o < 100000 ? o : 0;
+            });
+            minOrder = Math.min(...orders);
+          }
+          newOrders[newDay] = minOrder - 1;
+        } else {
+          // Periodic single-day clients: keep the previous numeric position.
+          // Their day mapping is stable across weeks, so the index is meaningful.
+          const oldPos = oldOrders[oldDay] ?? client.listOrder ?? 0;
+          newOrders[newDay] = oldPos;
+        }
+
         (data as any).listOrders = newOrders;
       }
     } else if (!needsDate) {

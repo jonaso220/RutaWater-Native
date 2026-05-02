@@ -144,6 +144,8 @@ export default {
     deleteAllConfirm: 'Delete all',
     removeFromList: 'Remove from list?',
     removeFromListMsg: 'Will be saved to the Directory.',
+    dragSameDayTitle: 'Move not allowed',
+    dragSameDayMsg: 'You can only reorder within the same day. To change days, edit the client.',
     remove: 'Remove',
     activeAlarm: 'Active alarm',
     alarmAt: 'Alarm at {{time}}',

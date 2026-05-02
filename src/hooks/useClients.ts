@@ -709,38 +709,87 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
   // Reorder client: sequential integer positions with displacement (matches webapp)
   // Supports manual position (targetPosition) for UI input
+  // Read the stored order for a client on a given day, falling back to the
+  // legacy single `listOrder` field. Returns Infinity for clients with no
+  // stored order so they sort to the bottom.
+  const readOrder = (c: Client, day: string): number => {
+    const o = c.listOrders && typeof c.listOrders[day] === 'number'
+      ? c.listOrders[day]
+      : (typeof c.listOrder === 'number' ? c.listOrder : undefined);
+    return typeof o === 'number' ? o : Infinity;
+  };
+
+  // Minimum gap between two adjacent fractional orders before we trigger a
+  // full rebalance for the day. With doubles this gap is reachable after
+  // ~50 consecutive midpoint inserts in the same spot, but in practice
+  // users don't insert in the same spot that often, so rebalances are rare.
+  const FRACTIONAL_MIN_GAP = 1e-9;
+
   const changePosition = useCallback(async (clientId: string, newPos: number, day: string) => {
-    // Leer del ref sincrónico para tener siempre las posiciones más recientes
+    // Read from the synchronous ref so we always see the latest positions.
     const allClients = [...getDayClientsFromSource(day, clientsRef.current)];
     const currentIndex = allClients.findIndex((c) => c.id === clientId);
     if (currentIndex === -1) return;
 
-    // Remover la tarjeta de su posición actual
+    // Move the client in the local array to compute neighbors at the target.
     const [movedClient] = allClients.splice(currentIndex, 1);
-
-    // Asignación manual de posición (1-indexed desde el usuario)
     const insertIndex = Math.max(0, Math.min(newPos - 1, allClients.length));
     allClients.splice(insertIndex, 0, movedClient);
 
-    // Si la tarjeta quedó en la misma posición, no hacer nada
     const newIndex = allClients.indexOf(movedClient);
     if (newIndex === currentIndex) return;
 
-    // Asignar posiciones enteras secuenciales a TODOS los clientes.
-    // Solo escribir actualizaciones para los que cambiaron.
+    const prevNeighbor = newIndex > 0 ? allClients[newIndex - 1] : null;
+    const nextNeighbor = newIndex < allClients.length - 1 ? allClients[newIndex + 1] : null;
+
+    // Treat non-finite stored orders (Infinity sentinel for "no order") as
+    // missing neighbors so we don't end up assigning Infinity ourselves.
+    const rawPrev = prevNeighbor ? readOrder(prevNeighbor, day) : null;
+    const rawNext = nextNeighbor ? readOrder(nextNeighbor, day) : null;
+    const prevOrder = rawPrev !== null && isFinite(rawPrev) ? rawPrev : null;
+    const nextOrder = rawNext !== null && isFinite(rawNext) ? rawNext : null;
+
+    // Decide the new fractional order for the moved client. Falls through to
+    // a full rebalance only if the gap between neighbors is exhausted.
+    let newOrder: number;
+    let needsRebalance = false;
+
+    if (prevOrder === null && nextOrder === null) {
+      newOrder = 1;
+    } else if (prevOrder === null) {
+      // Moving to the top: place before the current first.
+      newOrder = (nextOrder as number) - 1;
+    } else if (nextOrder === null) {
+      // Moving to the bottom: place after the current last.
+      newOrder = prevOrder + 1;
+    } else if (nextOrder - prevOrder <= FRACTIONAL_MIN_GAP) {
+      // Gap between neighbors is too small for another midpoint — rebalance.
+      needsRebalance = true;
+      newOrder = 0; // will be overwritten by the rebalance pass below
+    } else {
+      newOrder = (prevOrder + nextOrder) / 2;
+    }
+
+    // Build the updates list. In the common path, only one write.
     const updates: { id: string; position: number }[] = [];
-    allClients.forEach((client, newPosIdx) => {
-      const storedPos = client.listOrders && typeof client.listOrders[day] === 'number'
-        ? client.listOrders[day]
-        : undefined;
-      if (storedPos !== newPosIdx) {
-        updates.push({ id: client.id, position: newPosIdx });
-      }
-    });
+    if (needsRebalance) {
+      // Reassign integer positions to the entire day list. This costs N
+      // writes, but only happens after roughly 50+ midpoint inserts at the
+      // same position — extremely rare in practice.
+      allClients.forEach((c, idx) => {
+        const stored = readOrder(c, day);
+        const target = idx + 1;
+        if (stored !== target) {
+          updates.push({ id: c.id, position: target });
+        }
+      });
+    } else {
+      updates.push({ id: clientId, position: newOrder });
+    }
 
     if (updates.length === 0) return;
 
-    // Optimista: actualizar ref SINCRÓNICAMENTE + estado React
+    // Optimistic local update so the UI reflects the new order immediately.
     const updateMap: Record<string, number> = {};
     updates.forEach((u) => { updateMap[u.id] = u.position; });
     const applyUpdate = (list: Client[]): Client[] =>

@@ -144,6 +144,8 @@ export default {
     deleteAllConfirm: 'Eliminar todo',
     removeFromList: 'Quitar de la lista?',
     removeFromListMsg: 'Se guardara en el Directorio.',
+    dragSameDayTitle: 'Movimiento no permitido',
+    dragSameDayMsg: 'Solo podes reordenar dentro del mismo dia. Para cambiar a otro dia, edita el cliente.',
     remove: 'Quitar',
     activeAlarm: 'Alarma activa',
     alarmAt: 'Alarma a las {{time}}',

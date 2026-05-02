@@ -590,6 +590,7 @@ const DirectoryScreen = () => {
         <EditClientModal
           visible={!!editClient}
           client={editClient}
+          allClients={clients}
           onSave={updateClient}
           onClose={() => setEditClient(null)}
           onDelete={deleteClient}

@@ -296,11 +296,18 @@ const HomeScreen = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [appSettings, setAppSettings] = useState<Record<string, string> | null>(null);
-  const [undoInfo, setUndoInfo] = useState<{
+  // Queue of undo entries: each "Listo" tap pushes one. Banner shows the
+  // newest; tapping Undo pops the newest. Each entry self-expires after 5s.
+  // This avoids losing undo capability when the user marks several clients
+  // in quick succession (the previous single-slot version overwrote the
+  // earlier entry, leaving its timer cancelled and undo unavailable).
+  type UndoEntry = {
     client: Client;
     previousData: Record<string, any>;
     timer: ReturnType<typeof setTimeout>;
-  } | null>(null);
+    sectionDay: string;
+  };
+  const [undoQueue, setUndoQueue] = useState<UndoEntry[]>([]);
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
   // Clear search when leaving this tab
@@ -311,8 +318,8 @@ const HomeScreen = () => {
   );
 
   // Refs to access state without adding as dependencies (stabilizes callbacks)
-  const undoInfoRef = useRef(undoInfo);
-  undoInfoRef.current = undoInfo;
+  const undoQueueRef = useRef(undoQueue);
+  undoQueueRef.current = undoQueue;
   const selectedDayRef = useRef(selectedDay);
   selectedDayRef.current = selectedDay;
 
@@ -342,12 +349,12 @@ const HomeScreen = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Fix 5: Clean up undo banner timer on unmount
+  // Cancel all pending undo timers on unmount.
   useEffect(() => {
     return () => {
-      if (undoInfo?.timer) clearTimeout(undoInfo.timer);
+      undoQueueRef.current.forEach((entry) => clearTimeout(entry.timer));
     };
-  }, [undoInfo]);
+  }, []);
 
   // Load WhatsApp templates (real-time listener)
   useEffect(() => {
@@ -505,46 +512,57 @@ const HomeScreen = () => {
 
   const handleMarkDone = useCallback(
     (client: Client) => {
-      // Clear any existing undo timer (via ref to avoid dependency)
-      if (undoInfoRef.current?.timer) clearTimeout(undoInfoRef.current.timer);
+      // Capture ALL fields markAsDone may modify, regardless of current
+      // freq, so undo restores correctly even if freq changed concurrently.
+      const toDate = (v: any) => (v && v.toDate ? v.toDate() : v ?? null);
+      const previousData: Record<string, any> = {
+        isCompleted: client.isCompleted ?? false,
+        completedAt: toDate(client.completedAt),
+        lastVisited: toDate(client.lastVisited),
+        specificDate: client.specificDate ?? '',
+        alarm: client.alarm ?? '',
+        isStarred: client.isStarred ?? false,
+      };
 
-      // Save previous state for undo
-      const previousData: Record<string, any> = {};
-      if (client.freq === 'once') {
-        previousData.isCompleted = client.isCompleted;
-        previousData.completedAt = client.completedAt ? (client.completedAt.toDate ? client.completedAt.toDate() : client.completedAt) : null;
-        previousData.alarm = client.alarm;
-        previousData.isStarred = client.isStarred;
-      } else {
-        previousData.lastVisited = client.lastVisited ? (client.lastVisited.toDate ? client.lastVisited.toDate() : client.lastVisited) : null;
-        previousData.specificDate = client.specificDate;
-        previousData.alarm = client.alarm;
-        previousData.isStarred = client.isStarred;
-      }
-
-      // Execute mark as done
+      // Execute mark as done.
       markAsDone(client.id, client);
 
-      // Show undo banner with 5 second timer
+      const entryClientId = client.id;
       const timer = setTimeout(() => {
-        setUndoInfo(null);
+        setUndoQueue((prev) => prev.filter((e) => e.client.id !== entryClientId));
       }, 5000);
 
-      setUndoInfo({ client, previousData, timer });
+      const newEntry: UndoEntry = {
+        client,
+        previousData,
+        timer,
+        sectionDay: selectedDayRef.current,
+      };
+
+      setUndoQueue((prev) => {
+        // If the same client is already in the queue (unlikely but possible
+        // if user re-marks after server-side echo), replace its entry and
+        // cancel the old timer to avoid two timers writing to the queue.
+        const existing = prev.find((e) => e.client.id === entryClientId);
+        if (existing) clearTimeout(existing.timer);
+        const filtered = prev.filter((e) => e.client.id !== entryClientId);
+        return [...filtered, newEntry];
+      });
     },
     [markAsDone],
   );
 
   const handleUndoMarkDone = useCallback(() => {
-    if (!undoInfo) return;
-    clearTimeout(undoInfo.timer);
+    const queue = undoQueueRef.current;
+    if (queue.length === 0) return;
+    const entry = queue[queue.length - 1];
+    clearTimeout(entry.timer);
 
-    const { client, previousData } = undoInfo;
+    const { client, previousData } = entry;
 
     if (client.freq === 'once') {
       undoComplete(client.id);
     } else {
-      // Revert the periodic client
       updateClient(client.id, {
         lastVisited: previousData.lastVisited,
         specificDate: previousData.specificDate,
@@ -553,8 +571,8 @@ const HomeScreen = () => {
       } as any);
     }
 
-    setUndoInfo(null);
-  }, [undoInfo, undoComplete, updateClient]);
+    setUndoQueue((prev) => prev.filter((e) => e.client.id !== client.id));
+  }, [undoComplete, updateClient]);
 
   const handleDelete = useCallback(
     (client: Client) => {
@@ -676,21 +694,49 @@ const HomeScreen = () => {
   const handleDebtCb = useCallback((client: Client) => setDebtClient(client), []);
   const handleRelationshipsCb = useCallback((client: Client) => setRelationshipClient(client), []);
 
-  // Use refs for data that changes frequently but shouldn't recreate renderItem
-  const globalPositionMapRef = useRef(globalPositionMap);
-  globalPositionMapRef.current = globalPositionMap;
-  const debtMapRef = useRef(debtMap);
-  debtMapRef.current = debtMap;
-  const transferMapRef = useRef(transferMap);
-  transferMapRef.current = transferMap;
-  const relationshipMapRef = useRef(relationshipMap);
-  relationshipMapRef.current = relationshipMap;
-  const isDragEnabledRef = useRef(isDragEnabled);
-  isDragEnabledRef.current = isDragEnabled;
-  const selectedDayForRenderRef = useRef(selectedDay);
-  selectedDayForRenderRef.current = selectedDay;
-  const appSettingsRef = useRef(appSettings);
-  appSettingsRef.current = appSettings;
+  // Stable handler wrappers — read from a ref so renderDraggableItem
+  // doesn't have to depend on individual handler identities. Without this,
+  // any change to addTransfer / saveAlarm / hasPendingTransfer (which the
+  // handlers depend on) recreates handleTransfer/handleAlarm and triggers
+  // a re-render of every visible card.
+  const handlersRef = useRef({
+    handleMarkDone,
+    handleEditCb,
+    handleDelete,
+    handleDebtCb,
+    handleToggleStar,
+    handleTransfer,
+    handleAlarm,
+    handleRelationshipsCb,
+    changePosition,
+  });
+  handlersRef.current = {
+    handleMarkDone,
+    handleEditCb,
+    handleDelete,
+    handleDebtCb,
+    handleToggleStar,
+    handleTransfer,
+    handleAlarm,
+    handleRelationshipsCb,
+    changePosition,
+  };
+
+  const stableHandlers = useMemo(
+    () => ({
+      onMarkDone: (c: Client) => handlersRef.current.handleMarkDone(c),
+      onEdit: (c: Client) => handlersRef.current.handleEditCb(c),
+      onDelete: (c: Client) => handlersRef.current.handleDelete(c),
+      onDebt: (c: Client) => handlersRef.current.handleDebtCb(c),
+      onToggleStar: (c: Client) => handlersRef.current.handleToggleStar(c),
+      onTransfer: (c: Client) => handlersRef.current.handleTransfer(c),
+      onAlarm: (c: Client) => handlersRef.current.handleAlarm(c),
+      onRelationships: (c: Client) => handlersRef.current.handleRelationshipsCb(c),
+      onChangePosition: (id: string, pos: number, day: string) =>
+        handlersRef.current.changePosition(id, pos, day),
+    }),
+    [],
+  );
 
   const renderDraggableItem = useCallback(
     ({ item, drag }: RenderItemParams<ListItem>) => {
@@ -707,34 +753,46 @@ const HomeScreen = () => {
       }
 
       const client = item.client;
-      const globalIndex = globalPositionMapRef.current[client.id] ?? 0;
+      const globalIndex = globalPositionMap[client.id] ?? 0;
 
       return (
         <ClientItem
           client={client}
           globalIndex={globalIndex}
           isAdmin={isAdmin}
-          hasDebt={debtMapRef.current[client.id] ?? false}
-          hasPendingTransfer={transferMapRef.current[client.id] ?? false}
-          hasRelationships={relationshipMapRef.current[client.id] ?? false}
-          isDragEnabled={isDragEnabledRef.current}
-          enCaminoMessage={appSettingsRef.current?.whatsappEnCamino}
+          hasDebt={debtMap[client.id] ?? false}
+          hasPendingTransfer={transferMap[client.id] ?? false}
+          hasRelationships={relationshipMap[client.id] ?? false}
+          isDragEnabled={isDragEnabled}
+          enCaminoMessage={appSettings?.whatsappEnCamino}
           fontScale={fontScale}
-          selectedDay={selectedDayForRenderRef.current}
-          onMarkDone={handleMarkDone}
-          onEdit={handleEditCb}
-          onDelete={handleDelete}
-          onDebt={handleDebtCb}
-          onToggleStar={handleToggleStar}
-          onTransfer={handleTransfer}
-          onAlarm={handleAlarm}
-          onRelationships={handleRelationshipsCb}
-          onChangePosition={changePosition}
+          selectedDay={selectedDay}
+          onMarkDone={stableHandlers.onMarkDone}
+          onEdit={stableHandlers.onEdit}
+          onDelete={stableHandlers.onDelete}
+          onDebt={stableHandlers.onDebt}
+          onToggleStar={stableHandlers.onToggleStar}
+          onTransfer={stableHandlers.onTransfer}
+          onAlarm={stableHandlers.onAlarm}
+          onRelationships={stableHandlers.onRelationships}
+          onChangePosition={stableHandlers.onChangePosition}
           drag={drag}
         />
       );
     },
-    [isAdmin, handleMarkDone, handleDelete, handleToggleStar, handleTransfer, handleAlarm, changePosition, colors, fontScale, handleEditCb, handleDebtCb, handleRelationshipsCb],
+    [
+      stableHandlers,
+      colors,
+      fontScale,
+      isAdmin,
+      isDragEnabled,
+      selectedDay,
+      appSettings,
+      globalPositionMap,
+      debtMap,
+      transferMap,
+      relationshipMap,
+    ],
   );
 
   const flatListDataRef = useRef(flatListData);
@@ -756,8 +814,16 @@ const HomeScreen = () => {
         }
       }
 
-      // Reject cross-section drag
-      if (landedSectionKey !== movedItem.sectionDateKey) return;
+      // Reject cross-section drag with feedback (UI animated the move
+      // optimistically; without feedback the item would silently snap
+      // back to its origin and the user wouldn't understand why).
+      if (landedSectionKey !== movedItem.sectionDateKey) {
+        Alert.alert(
+          t('home.dragSameDayTitle'),
+          t('home.dragSameDayMsg'),
+        );
+        return;
+      }
 
       // Find neighbor clients at the drop position in the reordered array
       let prevClientId: string | null = null;
@@ -795,7 +861,7 @@ const HomeScreen = () => {
 
       changePosition(movedItem.client.id, targetPos, day);
     },
-    [changePosition, getAllDayClients],
+    [changePosition, getAllDayClients, t],
   );
 
   if (loading) {
@@ -831,6 +897,12 @@ const HomeScreen = () => {
         contentContainerStyle={styles.actionBarContent}
       >
         <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnAi]}
+          onPress={() => setShowSmartModal(true)}
+        >
+          <Text style={[styles.actionBtnText, styles.actionBtnAiText]}>✨ Pedido IA</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.actionBtn, styles.actionBtnAdd]}
           onPress={() => {
             if (!canAddClient) {
@@ -848,12 +920,6 @@ const HomeScreen = () => {
           }}
         >
           <Text style={[styles.actionBtnText, styles.actionBtnAddText]}>+ {t('home.client')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnAi]}
-          onPress={() => setShowSmartModal(true)}
-        >
-          <Text style={[styles.actionBtnText, styles.actionBtnAiText]}>✨ Pedido IA</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBtn, styles.actionBtnNote]}
@@ -1035,22 +1101,29 @@ const HomeScreen = () => {
       />
       </View>
 
-      {/* Undo Banner */}
-      {undoInfo && (
-        <View style={styles.undoBanner}>
-          <Text style={styles.undoBannerText} numberOfLines={1}>
-            {t('home.clientCompleted', { name: undoInfo.client.name })}
-          </Text>
-          <TouchableOpacity onPress={handleUndoMarkDone} style={styles.undoButton}>
-            <Text style={styles.undoButtonText}>{t('home.undo')}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* Undo Banner — shows the most recent mark-done; queued entries
+          preserve their own timers so each can still be undone in turn. */}
+      {undoQueue.length > 0 && (() => {
+        const top = undoQueue[undoQueue.length - 1];
+        const otherDay = top.sectionDay !== selectedDay ? ` (${top.sectionDay})` : '';
+        const extra = undoQueue.length > 1 ? ` +${undoQueue.length - 1}` : '';
+        return (
+          <View style={styles.undoBanner}>
+            <Text style={styles.undoBannerText} numberOfLines={1}>
+              {t('home.clientCompleted', { name: top.client.name })}{otherDay}{extra}
+            </Text>
+            <TouchableOpacity onPress={handleUndoMarkDone} style={styles.undoButton}>
+              <Text style={styles.undoButtonText}>{t('home.undo')}</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      })()}
 
       {/* Edit Client Modal */}
       <EditClientModal
         visible={!!editingClient}
         client={editingClient}
+        allClients={clients}
         onSave={updateClient}
         onClose={() => setEditingClient(null)}
         onRemoveFromDay={handleDelete}
@@ -1331,12 +1404,12 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     color: colors.successDark,
   },
   actionBtnAi: {
-    backgroundColor: colors.primaryLight,
+    backgroundColor: colors.primary,
     borderWidth: 1,
     borderColor: colors.primary,
   },
   actionBtnAiText: {
-    color: colors.primaryDark,
+    color: colors.textWhite,
   },
   searchSection: {
     backgroundColor: colors.card,

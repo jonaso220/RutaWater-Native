@@ -128,7 +128,8 @@
       "Bash(/usr/libexec/PlistBuddy -c \"Print :ApplicationProperties:CFBundleShortVersionString\" build-release/RutaWaterNative.xcarchive/Info.plist)",
       "Bash(/usr/libexec/PlistBuddy -c \"Print :ApplicationProperties:CFBundleVersion\" build-release/RutaWaterNative.xcarchive/Info.plist)",
       "Bash(git -C /Volumes/OLIVERA/RutaWaterNative log --oneline -20)",
-      "Bash(node test-directory-lookup.js)"
+      "Bash(node test-directory-lookup.js)",
+      "Bash(kill 95139)"
     ]
   }
 }

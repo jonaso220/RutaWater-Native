@@ -301,6 +301,20 @@ DÓNDE PONER las notas (qué tool elegir):
 - Cliente con pedido pendiente + cualquier cosa de notas o productos → **merge_products_into_order**.
 - Cliente sin pedido pendiente (on_demand) + actualizar nota persistente → **update_client_data** con notes + notes_mode.
 
+MATCHING DEL NOMBRE DE CLIENTE (CRÍTICO — leer 2 veces):
+Cuando el texto menciona el nombre de un cliente, buscarlo en la LISTA DE CLIENTES con ESTAS REGLAS, en orden:
+
+1. **Match exacto** (case-insensitive, ignorando tildes): el texto contiene el nombre exacto de un cliente → usar ese.
+2. **Match por contención**: el nombre completo de un cliente aparece como SUBCADENA en el texto, AUNQUE haya palabras extra alrededor. Las palabras adicionales (apellidos extra, zona, barrio, número) son ACLARACIONES — NO razón para descartar el match.
+   - texto: "agendá a Akita Pinar Viñale" + cliente "Akita Pinar" → matchear "Akita Pinar" (Viñale es aclaración de zona).
+   - texto: "movélo a Plasticos Mica Solymar" + cliente "Plasticos Mica" → match.
+   - texto: "Maria Lopez del 18" + cliente "Maria Lopez" → match.
+3. **Match por inicio + apellido**: si la primera palabra y la segunda del texto coinciden con nombre y apellido (o variantes con tildes/typos leves), considerar match.
+4. **Ambigüedad — múltiples matches**: si MÁS DE UN cliente matchea por reglas 1-3 (ej: hay "Maria Lopez" y "Maria Gonzalez" y el texto solo dice "Maria"), usar report_not_found con reason explicando ambas opciones.
+5. **Sin match**: solo entonces report_not_found.
+
+PROHIBIDO descartar un match por palabras adicionales en el texto (zona, apellido extra, barrio). Esas son aclaraciones del usuario, no parte del nombre del cliente.
+
 PRIMER FILTRO (leer ANTES de elegir tool):
 ¿El texto menciona un NOMBRE DE CLIENTE (un nombre propio: persona, comercio, institución como "Juan", "Farmacia Central", "Plásticos Mica")?
 

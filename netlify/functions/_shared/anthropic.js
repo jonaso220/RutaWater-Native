@@ -14,7 +14,7 @@ const TOOLS = [
   {
     name: 'create_new_client',
     description:
-      'Crear un cliente nuevo en el directorio. Usar SOLO cuando el texto contiene datos suficientes para dar de alta un cliente que NO existe en la LISTA DE CLIENTES (al menos nombre, idealmente también dirección o productos).',
+      'Crear un cliente NUEVO en el directorio. Usar SOLO cuando el nombre del texto NO matchea con NINGÚN cliente de la LISTA DE CLIENTES según las reglas de MATCHING DEL NOMBRE. ANTES de elegir esta tool ES OBLIGATORIO recorrer la LISTA buscando el nombre — un texto con formato de ficha completa (NOMBRE + DIRECCIÓN + ESQUINA + URL de Google Maps) NO exime del chequeo: muchas veces el usuario te pasa la ficha del directorio existente para que la agendes, no para crear un duplicado. Si el nombre matchea (exacto o por substring), usar schedule_existing_client / merge_products_into_order / update_client_data según el caso. Si dudás entre crear nuevo o matchear con uno existente, preferí matchear.',
     input_schema: {
       type: 'object',
       properties: {
@@ -314,6 +314,21 @@ Cuando el texto menciona el nombre de un cliente, buscarlo en la LISTA DE CLIENT
 5. **Sin match**: solo entonces report_not_found.
 
 PROHIBIDO descartar un match por palabras adicionales en el texto (zona, apellido extra, barrio). Esas son aclaraciones del usuario, no parte del nombre del cliente.
+
+PASO 0 — BÚSQUEDA OBLIGATORIA EN EL DIRECTORIO (leer ANTES que cualquier otra cosa):
+Si el texto menciona un nombre de cliente, ANTES DE TODO recorré la LISTA DE CLIENTES y comparalo contra cada nombre usando las reglas de MATCHING DEL NOMBRE (exacto, substring, inicio+apellido). Esto es OBLIGATORIO incluso si el texto tiene formato de "ficha de alta" con muchos datos (NOMBRE + DIRECCIÓN + ESQUINA + URL de Google Maps): el usuario suele copiar la ficha del directorio existente para pedirte que la agendes, NO para crear un duplicado.
+
+Si encontrás match → usar la tool del cliente existente (schedule_existing_client / merge_products_into_order / update_client_data según corresponda), AUNQUE la dirección, teléfono o mapsLink del texto sean distintos a los de la LISTA — esos son datos a actualizar, no razón para crear duplicado.
+
+Solo si el nombre NO matchea con NINGÚN cliente de la LISTA, recién considerar create_new_client.
+
+PROHIBIDO: elegir create_new_client sin haber recorrido antes la LISTA buscando el nombre.
+
+Ejemplo del bug que esto previene:
+  Texto: "BARBARA SILVEIRA - MEDANOS DE SOLYMAR EDEN ROK M22 S35  Esquina: ENTRE JAGUEL E INDIANA - https://maps.app.goo.gl/..."
+  LISTA contiene "Barbara Silveira" con misma dirección.
+  ❌ MAL: create_new_client (duplicaría el cliente).
+  ✅ BIEN: si el texto pide agendar (con día/fecha/freq) → schedule_existing_client con el id de "Barbara Silveira". Si el texto solo trae datos sin pedido → no hay nada que hacer (el cliente ya existe); devolvé update_client_data SOLO si hay un dato nuevo a actualizar (mapsLink, teléfono, dirección distinta), si no, report_not_found con reason="El cliente ya existe en el directorio".
 
 PRIMER FILTRO (leer ANTES de elegir tool):
 ¿El texto menciona un NOMBRE DE CLIENTE (un nombre propio: persona, comercio, institución como "Juan", "Farmacia Central", "Plásticos Mica")?

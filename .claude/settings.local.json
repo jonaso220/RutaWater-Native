@@ -107,7 +107,28 @@
       "Bash(echo \"started PID=$!\")",
       "Bash(pkill -f \"node.*local-server/index\")",
       "Bash(echo \"PID=$!\")",
-      "Bash(grep -n '`notes' /Volumes/OLIVERA/RutaWaterNative/netlify/functions/_shared/anthropic.js)"
+      "Bash(grep -n '`notes' /Volumes/OLIVERA/RutaWaterNative/netlify/functions/_shared/anthropic.js)",
+      "Bash(node -c /Volumes/OLIVERA/RutaWaterNative/netlify/functions/_shared/anthropic.js)",
+      "Bash(grep -n '`' /Volumes/OLIVERA/RutaWaterNative/netlify/functions/_shared/anthropic.js)",
+      "Bash(kill 1542)",
+      "Bash(chmod +x /tmp/ai-tests.sh)",
+      "Bash(/tmp/ai-tests.sh)",
+      "Bash(pkill -f \"node index.js\")",
+      "Bash(jq -c)",
+      "Bash(chmod +x /tmp/ai-tests-full.sh)",
+      "Bash(/tmp/ai-tests-full.sh)",
+      "Bash(jq)",
+      "Bash(rm -rf /Volumes/OLIVERA/RutaWaterNative/ios/build-release)",
+      "Bash(mkdir -p /Volumes/OLIVERA/RutaWaterNative/ios/build-release)",
+      "Bash(/usr/libexec/PlistBuddy -c \"Print :ApplicationProperties:CFBundleShortVersionString\" /Volumes/OLIVERA/RutaWaterNative/ios/build-release/RutaWaterNative.xcarchive/Info.plist)",
+      "Bash(/usr/libexec/PlistBuddy -c \"Print :ApplicationProperties:CFBundleVersion\" /Volumes/OLIVERA/RutaWaterNative/ios/build-release/RutaWaterNative.xcarchive/Info.plist)",
+      "Bash(chmod +x /tmp/match-tests.sh)",
+      "Bash(/tmp/match-tests.sh)",
+      "Bash(git -C /Volumes/OLIVERA/RutaWaterNative add netlify/functions/_shared/anthropic.js)",
+      "Bash(/usr/libexec/PlistBuddy -c \"Print :ApplicationProperties:CFBundleShortVersionString\" build-release/RutaWaterNative.xcarchive/Info.plist)",
+      "Bash(/usr/libexec/PlistBuddy -c \"Print :ApplicationProperties:CFBundleVersion\" build-release/RutaWaterNative.xcarchive/Info.plist)",
+      "Bash(git -C /Volumes/OLIVERA/RutaWaterNative log --oneline -20)",
+      "Bash(node test-directory-lookup.js)"
     ]
   }
 }

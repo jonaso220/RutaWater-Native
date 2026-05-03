@@ -1,8 +1,13 @@
 const { parseOrder } = require('./_shared/anthropic');
+const { authenticateEvent } = require('./_shared/firebaseAuth');
+
+const MAX_TEXT_LENGTH = 8000;
+const MAX_CLIENTS = 1200;
+const REQUIRE_FIREBASE_AUTH = process.env.REQUIRE_FIREBASE_AUTH_FOR_AI === 'true';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -23,6 +28,15 @@ exports.handler = async (event) => {
     return json(500, { error: 'Servidor mal configurado: falta ANTHROPIC_API_KEY' });
   }
 
+  const authHeader = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
+  if (REQUIRE_FIREBASE_AUTH || authHeader) {
+    try {
+      await authenticateEvent(event);
+    } catch (err) {
+      return json(401, { error: 'No autorizado.' });
+    }
+  }
+
   let payload;
   try {
     payload = JSON.parse(event.body || '{}');
@@ -35,8 +49,14 @@ exports.handler = async (event) => {
   if (typeof text !== 'string' || !text.trim()) {
     return json(400, { error: 'Falta `text` (string no vacío).' });
   }
+  if (text.length > MAX_TEXT_LENGTH) {
+    return json(413, { error: `El texto supera el máximo de ${MAX_TEXT_LENGTH} caracteres.` });
+  }
   if (!Array.isArray(clients)) {
     return json(400, { error: '`clients` debe ser un array.' });
+  }
+  if (clients.length > MAX_CLIENTS) {
+    return json(413, { error: `La lista de clientes supera el máximo de ${MAX_CLIENTS}.` });
   }
   if (!todayIso || !/^\d{4}-\d{2}-\d{2}$/.test(todayIso)) {
     return json(400, { error: '`todayIso` debe ser YYYY-MM-DD.' });

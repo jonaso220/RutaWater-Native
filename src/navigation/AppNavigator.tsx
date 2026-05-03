@@ -12,7 +12,6 @@ import DirectoryScreen from '../screens/DirectoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import AlarmBanner from '../components/AlarmBanner';
-import { useAutoMergeDuplicates } from '../hooks/useAutoMergeDuplicates';
 import { useAlarmChecker } from '../hooks/useAlarmChecker';
 
 const Tab = createBottomTabNavigator();
@@ -22,7 +21,6 @@ const TabNavigator = () => {
   const { colors } = useTheme();
   const { fontScale } = useLayout();
   const { t } = useTranslation();
-  useAutoMergeDuplicates();
   const { activeAlarm, dismissAlarm } = useAlarmChecker();
 
   const s = (v: number) => Math.round(v * fontScale);

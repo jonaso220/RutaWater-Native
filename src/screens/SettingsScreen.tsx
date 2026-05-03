@@ -146,6 +146,14 @@ const SettingsScreen = () => {
     return code;
   };
 
+  const commitBatchUpdates = async (updates: { ref: any; data: any }[]) => {
+    for (let i = 0; i < updates.length; i += 450) {
+      const batch = db.batch();
+      updates.slice(i, i + 450).forEach(({ ref, data }) => batch.update(ref, data));
+      await batch.commit();
+    }
+  };
+
   const handleCreateGroup = async () => {
     setLoading(true);
     try {
@@ -169,39 +177,16 @@ const SettingsScreen = () => {
       });
 
       // Migrate existing data
-      const clientsSnap = await db
-        .collection('clients')
-        .where('userId', '==', user.uid)
-        .get();
-      const batch = db.batch();
-      let count = 0;
-      for (const doc of clientsSnap.docs) {
-        batch.update(doc.ref, { groupId });
-        count++;
-        if (count >= 450) break;
+      const updates: { ref: any; data: any }[] = [];
+      const collections = ['clients', 'debts', 'transfers'];
+      for (const collectionName of collections) {
+        const snap = await db
+          .collection(collectionName)
+          .where('userId', '==', user.uid)
+          .get();
+        snap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId } }));
       }
-
-      const debtsSnap = await db
-        .collection('debts')
-        .where('userId', '==', user.uid)
-        .get();
-      for (const doc of debtsSnap.docs) {
-        if (count >= 450) break;
-        batch.update(doc.ref, { groupId });
-        count++;
-      }
-
-      const transfersSnap = await db
-        .collection('transfers')
-        .where('userId', '==', user.uid)
-        .get();
-      for (const doc of transfersSnap.docs) {
-        if (count >= 450) break;
-        batch.update(doc.ref, { groupId });
-        count++;
-      }
-
-      await batch.commit();
+      await commitBatchUpdates(updates);
 
       onGroupUpdate({ groupId, role: 'admin', code });
     } catch (e) {
@@ -322,12 +307,7 @@ const SettingsScreen = () => {
               const transfersSnap = await db.collection('transfers').where('groupId', '==', gid).get();
               transfersSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null } }));
 
-              // Execute in batches of 450
-              for (let i = 0; i < updates.length; i += 450) {
-                const batch = db.batch();
-                updates.slice(i, i + 450).forEach(({ ref, data }) => batch.update(ref, data));
-                await batch.commit();
-              }
+              await commitBatchUpdates(updates);
 
               // Delete group doc
               await db.collection('groups').doc(gid).delete();

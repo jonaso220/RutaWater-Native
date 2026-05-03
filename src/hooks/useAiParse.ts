@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useClientsStore } from '../stores/clientsStore';
 import { useAiUsageStore } from '../stores/aiUsageStore';
 import { API_ENDPOINTS } from '../config/api';
+import { fbAuth } from '../config/firebase';
 
 export interface CreateNewClientInput {
   name: string;
@@ -144,14 +145,16 @@ export const useAiParse = (): UseAiParseReturn => {
           notes: c.notes || '',
         };
       });
-      console.log('[useAiParse] clients sent:', clients.length, clients.map(c => `${c.name}(${c.id.slice(0, 6)}, ${c.freq}, ${c.visitDay}${c.specificDate ? ' ' + c.specificDate : ''})`));
-
       const todayIso = new Date().toISOString().slice(0, 10);
 
-      // 3) Llamar al servidor local
+      const idToken = await fbAuth.currentUser?.getIdToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+      // 3) Llamar al servidor local / Netlify
       const res = await fetch(API_ENDPOINTS.parseOrder, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ text, clients, todayIso }),
       });
 

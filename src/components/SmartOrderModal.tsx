@@ -166,12 +166,6 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         const updates: any = { products: merged, updatedAt: new Date() };
         const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
         if (nextNotes !== undefined) updates.notes = nextNotes;
-        console.log('[merge] clientId:', client.id, 'name:', client.name, 'freq:', client.freq, 'visitDay:', client.visitDay);
-        console.log('[merge] current products:', client.products);
-        console.log('[merge] add products:', i.add_products);
-        console.log('[merge] remove products:', i.remove_products);
-        console.log('[merge] merged result:', merged);
-        console.log('[merge] notes_mode:', i.notes_mode, 'incoming:', i.notes, 'current:', client.notes, 'next:', nextNotes);
         await updateClient(client.id, updates);
         const addCount = Object.keys(i.add_products || {}).length;
         const removeCount = Object.keys(i.remove_products || {}).length;

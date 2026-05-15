@@ -129,7 +129,10 @@
       "Bash(/usr/libexec/PlistBuddy -c \"Print :ApplicationProperties:CFBundleVersion\" build-release/RutaWaterNative.xcarchive/Info.plist)",
       "Bash(git -C /Volumes/OLIVERA/RutaWaterNative log --oneline -20)",
       "Bash(node test-directory-lookup.js)",
-      "Bash(kill 95139)"
+      "Bash(kill 95139)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(awk '/-- iOS/{rt=$0} /BB016A02-7048-439B-892E-EE5F3D4F0C91/{print rt; exit}')",
+      "Bash(xcrun simctl *)"
     ]
   }
 }

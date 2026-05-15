@@ -146,7 +146,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     });
     let saveError: unknown = null;
     try {
-      await onSave(client, localDays, localFreq, localDate, localNotes, cleanProducts);
+      const dateArg = localFreq === 'once' ? localDate : '';
+      await onSave(client, localDays, localFreq, dateArg, localNotes, cleanProducts);
     } catch (e) {
       saveError = e;
       console.error('Schedule save error:', e);

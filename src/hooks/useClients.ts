@@ -437,13 +437,28 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   }, []);
 
   // Save alarm time for a client
-  const saveAlarm = useCallback(async (clientId: string, time: string) => {
+  const saveAlarm = useCallback(async (clientId: string, time: string, targetDay?: string) => {
     try {
       await db.collection('clients').doc(clientId).update({ alarm: time });
       if (time) {
         await requestNotificationPermission();
         const client = clientsRef.current.find((c) => c.id === clientId);
-        await scheduleClientAlarm(clientId, client?.name || '', client?.address || '', time);
+        // Prefer the day the user is currently viewing; fall back to the client's
+        // configured visit day(s) so the alarm fires on the right delivery day.
+        const resolvedDay =
+          targetDay ||
+          (client?.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined) ||
+          client?.visitDay;
+        await scheduleClientAlarm(
+          clientId,
+          client?.name || '',
+          client?.address || '',
+          time,
+          {
+            targetDay: resolvedDay,
+            specificDate: client?.freq === 'once' ? client?.specificDate : undefined,
+          },
+        );
       } else {
         await cancelClientAlarm(clientId);
       }

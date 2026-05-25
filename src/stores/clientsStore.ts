@@ -25,7 +25,7 @@ interface ClientsStore {
     mode?: 'add' | 'replace',
   ) => Promise<void>;
   toggleStar: (clientId: string, currentValue: boolean) => Promise<void>;
-  saveAlarm: (clientId: string, time: string) => Promise<void>;
+  saveAlarm: (clientId: string, time: string, targetDay?: string) => Promise<void>;
   addNote: (notesText: string, date: string) => Promise<void>;
   addClient: (
     name: string,

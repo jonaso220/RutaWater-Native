@@ -1225,7 +1225,7 @@ const HomeScreen = () => {
             if (event.type === 'set' && date && alarmPromptClient) {
               const hours = date.getHours().toString().padStart(2, '0');
               const minutes = date.getMinutes().toString().padStart(2, '0');
-              saveAlarm(alarmPromptClient.id, `${hours}:${minutes}`);
+              saveAlarm(alarmPromptClient.id, `${hours}:${minutes}`, selectedDay);
             }
             setAlarmPromptClient(null);
           }}
@@ -1260,7 +1260,7 @@ const HomeScreen = () => {
                     if (alarmPromptClient) {
                       const hours = alarmTime.getHours().toString().padStart(2, '0');
                       const minutes = alarmTime.getMinutes().toString().padStart(2, '0');
-                      saveAlarm(alarmPromptClient.id, `${hours}:${minutes}`);
+                      saveAlarm(alarmPromptClient.id, `${hours}:${minutes}`, selectedDay);
                     }
                     setAlarmPromptClient(null);
                   }}

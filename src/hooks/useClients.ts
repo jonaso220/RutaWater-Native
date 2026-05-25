@@ -394,15 +394,23 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         newData.listOrder = listOrders[newDays[0]];
       }
 
+      // Editing a recurring schedule (no specific date, periodic freq) is always
+      // an update of the client's agenda — never a "new pending order on top".
+      // The 'add' mode is meant for one-time extras (freq='once' with a date),
+      // not for changing visitDays of an already-active recurring client.
+      const isRecurringScheduleEdit = !newDate && newFreq !== 'once' && newFreq !== 'on_demand';
+
       if (clientData.freq === 'on_demand' || clientData.visitDay === 'Sin Asignar') {
         // Reactivate existing client
         await db.collection('clients').doc(clientData.id).update(newData);
-      } else if (mode === 'replace') {
+      } else if (mode === 'replace' || isRecurringScheduleEdit) {
         // Move/replace: update the existing pending-order doc in place
-        // (e.g. user said "movélo del 29-4 al 6 de mayo")
+        // (e.g. user said "movélo del 29-4 al 6 de mayo"), or the user is
+        // editing the recurring schedule of an already-active client.
         await db.collection('clients').doc(clientData.id).update(newData);
       } else {
-        // Add: keep the existing order and add a new one
+        // Add: keep the existing order and add a new one (only reached for
+        // freq='once' with a date — a one-time extra pedido).
         // Check if there's an existing on_demand duplicate to reuse (match by name + phone)
         const schedNormName = (clientData.name || '').toLowerCase().trim();
         const schedNormPhone = normalizePhoneForComparison(clientData.phone);

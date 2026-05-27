@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useCallback, useRef, useMemo } from 'react';
 import { db } from '../config/firebase';
 import { Debt, Client } from '../types';
 import { getClientMatchKey } from '../utils/helpers';
+import { useDebtsQuery } from './queries/useDebtsQuery';
 
 interface UseDebtsProps {
   userId: string;
@@ -10,7 +11,10 @@ interface UseDebtsProps {
 }
 
 export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
-  const [debts, setDebts] = useState<Debt[]>([]);
+  // Data source: TanStack Query holds the live debts array, fed by a
+  // perpetual Firestore listener. See useDebtsQuery for details.
+  const debtsQuery = useDebtsQuery({ userId, groupId });
+  const debts = useMemo<Debt[]>(() => debtsQuery.data ?? [], [debtsQuery.data]);
   // Ref sincrónico para evitar closures stale en operaciones rápidas
   const debtsRef = useRef<Debt[]>(debts);
   debtsRef.current = debts;
@@ -54,37 +58,6 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
     },
     [getMatchingIds],
   );
-
-  // Real-time listener on debts collection
-  useEffect(() => {
-    if (!userId) return;
-
-    const scopeField = groupId ? 'groupId' : 'userId';
-    const scopeValue = groupId || userId;
-
-    const unsubscribe = db
-      .collection('debts')
-      .where(scopeField, '==', scopeValue)
-      .onSnapshot(
-        (snapshot) => {
-          const loaded: Debt[] = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })) as Debt[];
-          loaded.sort((a, b) => {
-            const dateA = (a.createdAt as any)?.seconds || 0;
-            const dateB = (b.createdAt as any)?.seconds || 0;
-            return dateB - dateA;
-          });
-          setDebts(loaded);
-        },
-        (error) => {
-          console.error('Error loading debts:', error);
-        },
-      );
-
-    return () => unsubscribe();
-  }, [userId, groupId]);
 
   // Get debts for a specific client (agrega duplicados por nombre+teléfono)
   const getClientDebts = useCallback(

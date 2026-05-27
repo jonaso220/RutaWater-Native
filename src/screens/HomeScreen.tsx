@@ -33,6 +33,8 @@ import { useLayout } from '../hooks/useLayout';
 import ClientCard from '../components/ClientCard';
 import SkeletonCard from '../components/SkeletonCard';
 import AlarmPicker from '../components/AlarmPicker';
+import UndoBanner from '../components/UndoBanner';
+import { useUndoQueue } from '../hooks/useUndoQueue';
 import EditClientModal from '../components/EditClientModal';
 import DebtModal from '../components/DebtModal';
 import ProductCounter from '../components/ProductCounter';
@@ -255,15 +257,7 @@ const HomeScreen = () => {
   // Queue of undo entries: each "Listo" tap pushes one. Banner shows the
   // newest; tapping Undo pops the newest. Each entry self-expires after 5s.
   // This avoids losing undo capability when the user marks several clients
-  // in quick succession (the previous single-slot version overwrote the
-  // earlier entry, leaving its timer cancelled and undo unavailable).
-  type UndoEntry = {
-    client: Client;
-    previousData: Record<string, any>;
-    timer: ReturnType<typeof setTimeout>;
-    sectionDay: string;
-  };
-  const [undoQueue, setUndoQueue] = useState<UndoEntry[]>([]);
+  const { queue: undoQueue, push: pushUndo, undoMostRecent: handleUndoMarkDone } = useUndoQueue();
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
   // Clear search when leaving this tab
@@ -274,8 +268,6 @@ const HomeScreen = () => {
   );
 
   // Refs to access state without adding as dependencies (stabilizes callbacks)
-  const undoQueueRef = useRef(undoQueue);
-  undoQueueRef.current = undoQueue;
   const selectedDayRef = useRef(selectedDay);
   selectedDayRef.current = selectedDay;
 
@@ -304,13 +296,6 @@ const HomeScreen = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
-
-  // Cancel all pending undo timers on unmount.
-  useEffect(() => {
-    return () => {
-      undoQueueRef.current.forEach((entry) => clearTimeout(entry.timer));
-    };
-  }, []);
 
   // Load WhatsApp templates (real-time listener)
   useEffect(() => {
@@ -481,55 +466,15 @@ const HomeScreen = () => {
       };
 
       hapticLight();
-      // Execute mark as done.
       markAsDone(client.id, client);
-
-      const entryClientId = client.id;
-      const timer = setTimeout(() => {
-        setUndoQueue((prev) => prev.filter((e) => e.client.id !== entryClientId));
-      }, 5000);
-
-      const newEntry: UndoEntry = {
+      pushUndo({
         client,
         previousData,
-        timer,
         sectionDay: selectedDayRef.current,
-      };
-
-      setUndoQueue((prev) => {
-        // If the same client is already in the queue (unlikely but possible
-        // if user re-marks after server-side echo), replace its entry and
-        // cancel the old timer to avoid two timers writing to the queue.
-        const existing = prev.find((e) => e.client.id === entryClientId);
-        if (existing) clearTimeout(existing.timer);
-        const filtered = prev.filter((e) => e.client.id !== entryClientId);
-        return [...filtered, newEntry];
       });
     },
-    [markAsDone],
+    [markAsDone, pushUndo],
   );
-
-  const handleUndoMarkDone = useCallback(() => {
-    const queue = undoQueueRef.current;
-    if (queue.length === 0) return;
-    const entry = queue[queue.length - 1];
-    clearTimeout(entry.timer);
-
-    const { client, previousData } = entry;
-
-    if (client.freq === 'once') {
-      undoComplete(client.id);
-    } else {
-      updateClient(client.id, {
-        lastVisited: previousData.lastVisited,
-        specificDate: previousData.specificDate,
-        alarm: previousData.alarm,
-        isStarred: previousData.isStarred,
-      } as any);
-    }
-
-    setUndoQueue((prev) => prev.filter((e) => e.client.id !== client.id));
-  }, [undoComplete, updateClient]);
 
   const handleDelete = useCallback(
     (client: Client) => {
@@ -1068,23 +1013,7 @@ const HomeScreen = () => {
       />
       </View>
 
-      {/* Undo Banner — shows the most recent mark-done; queued entries
-          preserve their own timers so each can still be undone in turn. */}
-      {undoQueue.length > 0 && (() => {
-        const top = undoQueue[undoQueue.length - 1];
-        const otherDay = top.sectionDay !== selectedDay ? ` (${top.sectionDay})` : '';
-        const extra = undoQueue.length > 1 ? ` +${undoQueue.length - 1}` : '';
-        return (
-          <View style={styles.undoBanner}>
-            <Text style={styles.undoBannerText} numberOfLines={1}>
-              {t('home.clientCompleted', { name: top.client.name })}{otherDay}{extra}
-            </Text>
-            <TouchableOpacity onPress={handleUndoMarkDone} style={styles.undoButton}>
-              <Text style={styles.undoButtonText}>{t('home.undo')}</Text>
-            </TouchableOpacity>
-          </View>
-        );
-      })()}
+      <UndoBanner queue={undoQueue} selectedDay={selectedDay} onUndo={handleUndoMarkDone} />
 
       {/* Edit Client Modal */}
       <EditClientModal
@@ -1477,43 +1406,6 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontSize: s(15),
     fontWeight: '700',
     color: colors.danger,
-  },
-  undoBanner: {
-    position: 'absolute',
-    bottom: 20,
-    left: 16,
-    right: 16,
-    backgroundColor: colors.textPrimary,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    zIndex: 999,
-  },
-  undoBannerText: {
-    color: colors.background,
-    fontSize: s(15),
-    fontWeight: '600',
-    flex: 1,
-    marginRight: 12,
-  },
-  undoButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  undoButtonText: {
-    color: colors.textWhite,
-    fontSize: s(14),
-    fontWeight: '700',
   },
 });
 };

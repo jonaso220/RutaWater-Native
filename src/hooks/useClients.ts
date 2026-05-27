@@ -444,8 +444,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, []);
 
-  // Save alarm time for a client
-  const saveAlarm = useCallback(async (clientId: string, time: string, targetDay?: string) => {
+  // Save alarm time for a client. Returns the scheduled fire date (or null
+  // if the alarm was cleared / failed) so the UI can confirm to the user.
+  const saveAlarm = useCallback(async (clientId: string, time: string, targetDay?: string): Promise<Date | null> => {
     try {
       await db.collection('clients').doc(clientId).update({ alarm: time });
       if (time) {
@@ -457,7 +458,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           targetDay ||
           (client?.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined) ||
           client?.visitDay;
-        await scheduleClientAlarm(
+        return await scheduleClientAlarm(
           clientId,
           client?.name || '',
           client?.address || '',
@@ -469,9 +470,11 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         );
       } else {
         await cancelClientAlarm(clientId);
+        return null;
       }
     } catch (e) {
       console.error('Error saving alarm:', e);
+      return null;
     }
   }, []);
 

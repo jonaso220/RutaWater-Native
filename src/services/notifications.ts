@@ -1,4 +1,5 @@
 import notifee, {
+  AlarmType,
   AndroidImportance,
   AuthorizationStatus,
   TriggerType,
@@ -18,6 +19,7 @@ const ensureAndroidChannel = async (): Promise<string> => {
       name: 'Alarmas de visita',
       importance: AndroidImportance.HIGH,
       vibration: true,
+      sound: 'default',
     });
   }
   return channelPromise;
@@ -94,9 +96,9 @@ export const scheduleClientAlarm = async (
   address: string,
   time: string,
   options?: { targetDay?: string; specificDate?: string },
-): Promise<boolean> => {
+): Promise<Date | null> => {
   const parsed = parseTime(time);
-  if (!parsed) return false;
+  if (!parsed) return null;
 
   const channelId = await ensureAndroidChannel();
   const id = notificationIdFor(clientId);
@@ -116,7 +118,7 @@ export const scheduleClientAlarm = async (
     type: TriggerType.TIMESTAMP,
     timestamp: fireAt.getTime(),
     alarmManager: {
-      allowWhileIdle: true,
+      type: AlarmType.SET_EXACT_AND_ALLOW_WHILE_IDLE,
     },
   };
 
@@ -135,6 +137,7 @@ export const scheduleClientAlarm = async (
           importance: AndroidImportance.HIGH,
           pressAction: { id: 'default' },
           smallIcon: 'ic_launcher',
+          sound: 'default',
         },
         ios: {
           sound: 'default',
@@ -143,10 +146,10 @@ export const scheduleClientAlarm = async (
       },
       trigger,
     );
-    return true;
+    return fireAt;
   } catch (e) {
     console.error('scheduleClientAlarm error', e);
-    return false;
+    return null;
   }
 };
 

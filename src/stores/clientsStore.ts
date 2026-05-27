@@ -25,7 +25,7 @@ interface ClientsStore {
     mode?: 'add' | 'replace',
   ) => Promise<void>;
   toggleStar: (clientId: string, currentValue: boolean) => Promise<void>;
-  saveAlarm: (clientId: string, time: string, targetDay?: string) => Promise<void>;
+  saveAlarm: (clientId: string, time: string, targetDay?: string) => Promise<Date | null>;
   addNote: (notesText: string, date: string) => Promise<void>;
   addClient: (
     name: string,
@@ -76,7 +76,7 @@ export const useClientsStore = create<ClientsStore>()(() => ({
   updateClient: noop,
   scheduleFromDirectory: noop as any,
   toggleStar: noop,
-  saveAlarm: noop,
+  saveAlarm: async () => null,
   addNote: noop,
   addClient: noop as any,
   aiCreateClient: noop as any,

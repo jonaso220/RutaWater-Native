@@ -631,6 +631,22 @@ const HomeScreen = () => {
     [saveAlarm],
   );
 
+  const showAlarmConfirm = useCallback((d: Date) => {
+    const dayNames = [t('days.domingo'), t('days.lunes'), t('days.martes'), t('days.miercoles'), t('days.jueves'), t('days.viernes'), t('days.sabado')];
+    const monthNames = [t('months.ene'), t('months.feb'), t('months.mar'), t('months.abr'), t('months.may'), t('months.jun'), t('months.jul'), t('months.ago'), t('months.sep'), t('months.oct'), t('months.nov'), t('months.dic')];
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const targetStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffDays = Math.round((targetStart.getTime() - todayStart.getTime()) / 86400000);
+    const base = `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
+    let when: string;
+    if (diffDays === 0) when = `${t('home.today')} (${base})`;
+    else if (diffDays === 1) when = `${t('home.tomorrow')} (${base})`;
+    else when = base;
+    const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    Alert.alert(t('home.alarmScheduled'), t('home.alarmScheduledMsg', { when, time }));
+  }, [t]);
+
   const handleTransfer = useCallback(
     (client: Client) => {
       if (hasPendingTransfer(client.id)) {
@@ -1222,12 +1238,15 @@ const HomeScreen = () => {
           mode="time"
           display="default"
           onChange={(event: DateTimePickerEvent, date?: Date) => {
-            if (event.type === 'set' && date && alarmPromptClient) {
+            const client = alarmPromptClient;
+            setAlarmPromptClient(null);
+            if (event.type === 'set' && date && client) {
               const hours = date.getHours().toString().padStart(2, '0');
               const minutes = date.getMinutes().toString().padStart(2, '0');
-              saveAlarm(alarmPromptClient.id, `${hours}:${minutes}`, selectedDay);
+              saveAlarm(client.id, `${hours}:${minutes}`, selectedDay).then((fireAt) => {
+                if (fireAt) showAlarmConfirm(fireAt);
+              });
             }
-            setAlarmPromptClient(null);
           }}
         />
       )}
@@ -1257,12 +1276,15 @@ const HomeScreen = () => {
                 <TouchableOpacity
                   style={styles.alarmSaveBtn}
                   onPress={() => {
-                    if (alarmPromptClient) {
+                    const client = alarmPromptClient;
+                    setAlarmPromptClient(null);
+                    if (client) {
                       const hours = alarmTime.getHours().toString().padStart(2, '0');
                       const minutes = alarmTime.getMinutes().toString().padStart(2, '0');
-                      saveAlarm(alarmPromptClient.id, `${hours}:${minutes}`, selectedDay);
+                      saveAlarm(client.id, `${hours}:${minutes}`, selectedDay).then((fireAt) => {
+                        if (fireAt) showAlarmConfirm(fireAt);
+                      });
                     }
-                    setAlarmPromptClient(null);
                   }}
                 >
                   <Text style={styles.alarmSaveText}>{t('save')}</Text>

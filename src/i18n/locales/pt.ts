@@ -150,6 +150,8 @@ export default {
     activeAlarm: 'Alarme ativo',
     alarmAt: 'Alarme as {{time}}',
     removeAlarm: 'Remover alarme',
+    alarmScheduled: 'Alarme programado',
+    alarmScheduledMsg: 'Tocara em {{when}} as {{time}}',
     addTransfer: 'Adicionar transferencia?',
     addTransferMsg: 'Confirmar transferencia pendente de {{name}}',
     limitReached: 'Limite atingido',

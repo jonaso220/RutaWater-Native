@@ -41,6 +41,11 @@ export const useTransfersQuery = ({ userId, groupId }: UseTransfersQueryArgs) =>
         },
         (error) => {
           console.error('Error loading transfers:', error);
+          // Parity: surface empty state on first-error so consumers don't
+          // hang in isPending. See useClientsQuery for the rationale.
+          if (queryClient.getQueryData<Transfer[]>(queryKey) === undefined) {
+            queryClient.setQueryData<Transfer[]>(queryKey, []);
+          }
         },
       );
     return () => unsubscribe();

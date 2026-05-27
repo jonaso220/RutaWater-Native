@@ -40,6 +40,13 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
         },
         (error) => {
           console.error('Error loading clients:', error);
+          // Parity with the legacy hook: on a Firestore error before any
+          // data has loaded, surface an empty array so consumers exit the
+          // `isPending` state (the old code did setLoading(false)+empty).
+          // If real data already arrived, leave the existing cache intact.
+          if (queryClient.getQueryData<Client[]>(queryKey) === undefined) {
+            queryClient.setQueryData<Client[]>(queryKey, []);
+          }
         },
       );
     return () => unsubscribe();

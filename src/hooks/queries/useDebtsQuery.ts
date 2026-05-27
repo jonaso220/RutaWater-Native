@@ -47,6 +47,11 @@ export const useDebtsQuery = ({ userId, groupId }: UseDebtsQueryArgs) => {
         },
         (error) => {
           console.error('Error loading debts:', error);
+          // Parity: surface empty state on first-error so consumers don't
+          // hang in isPending. See useClientsQuery for the rationale.
+          if (queryClient.getQueryData<Debt[]>(queryKey) === undefined) {
+            queryClient.setQueryData<Debt[]>(queryKey, []);
+          }
         },
       );
     return () => unsubscribe();

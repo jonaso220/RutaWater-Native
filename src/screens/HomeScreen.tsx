@@ -19,7 +19,7 @@ import DraggableFlatList, {
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
-import { ALL_DAYS, PRODUCTS } from '../constants/products';
+import { PRODUCTS } from '../constants/products';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate } from '../utils/helpers';
 import { hapticLight, hapticMedium, hapticSelection, hapticError } from '../utils/haptics';
 import { db } from '../config/firebase';
@@ -78,75 +78,7 @@ const SectionHeader = React.memo<SectionHeaderProps>(({ title, count, isToday, c
 // Stable keyExtractor — defined outside component to avoid re-creation
 const keyExtractor = (item: ListItem) => item.key;
 
-// --- Memoized DaySelector to avoid re-renders when client list changes ---
-// Use gesture-handler components to avoid touch conflicts in horizontal ScrollView on Android
-import { ScrollView as GHScrollView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
-
-interface DaySelectorProps {
-  selectedDay: string;
-  dayCounts: Record<string, number>;
-  isWide: boolean;
-  colors: ThemeColors;
-  fontScale: number;
-  onSelectDay: (day: string) => void;
-}
-
-const DaySelector = React.memo<DaySelectorProps>(({
-  selectedDay,
-  dayCounts,
-  isWide,
-  colors,
-  fontScale,
-  onSelectDay,
-}) => {
-  const styles = getStyles(colors, fontScale);
-  const todayName = useMemo(() => getTodayDayName(), []);
-
-  return (
-    <GHScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.daySelector}
-      contentContainerStyle={styles.daySelectorContent}
-    >
-      {ALL_DAYS.map((day) => {
-        const isToday = day === todayName;
-        const isSelected = day === selectedDay;
-        const count = dayCounts[day] || 0;
-
-        return (
-          <GHTouchableOpacity
-            key={day}
-            onPress={() => onSelectDay(day)}
-            style={[
-              styles.dayChip,
-              isSelected && styles.dayChipSelected,
-              isToday && !isSelected && styles.dayChipToday,
-            ]}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={[
-                styles.dayChipText,
-                isSelected && styles.dayChipTextSelected,
-              ]}
-            >
-              {isWide ? day : day.slice(0, 3)}
-            </Text>
-            <Text
-              style={[
-                styles.dayCount,
-                isSelected && styles.dayCountSelected,
-              ]}
-            >
-              {count}
-            </Text>
-          </GHTouchableOpacity>
-        );
-      })}
-    </GHScrollView>
-  );
-});
+import DaySelector from '../components/DaySelector';
 
 // --- Memoized wrapper to prevent ClientCard re-renders on every day switch ---
 interface ClientItemProps {
@@ -1355,59 +1287,6 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     marginTop: 12,
     color: colors.textMuted,
     fontSize: s(16),
-  },
-  daySelector: {
-    flexGrow: 0,
-    flexShrink: 0,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-  },
-  daySelectorContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexGrow: 1,
-  },
-  dayChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.sectionBackground,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginRight: 8,
-  },
-  dayChipSelected: {
-    backgroundColor: colors.primary,
-  },
-  dayChipToday: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-  },
-  dayChipText: {
-    fontSize: s(16),
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  dayChipTextSelected: {
-    color: colors.textWhite,
-  },
-  dayCount: {
-    fontSize: s(13),
-    fontWeight: '700',
-    color: colors.textMuted,
-    backgroundColor: colors.cardBorder,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  dayCountSelected: {
-    color: colors.primary,
-    backgroundColor: colors.primaryLight,
   },
   actionBar: {
     flexGrow: 0,

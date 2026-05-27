@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useCallback, useRef, useMemo } from 'react';
 import firestore from '@react-native-firebase/firestore';
+import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
 import { Client, RELATIONSHIP_INVERSE } from '../types';
 import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, getWeekNumber, normalizePhoneForComparison } from '../utils/helpers';
 import { ALL_DAYS, Frequency } from '../constants/products';
 import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
-import { withDefaults } from '../utils/clientDefaults';
+import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
 
 interface UseClientsProps {
   userId: string;
@@ -13,39 +14,34 @@ interface UseClientsProps {
 }
 
 export const useClients = ({ userId, groupId }: UseClientsProps) => {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Data source: TanStack Query holds the live array fed by a perpetual
+  // Firestore listener (see useClientsQuery). isPending stays true until
+  // the first snapshot arrives, mirroring the old `loading` boolean.
+  const clientsQuery = useClientsQuery({ userId, groupId });
+  // useMemo to keep the reference stable while data is still undefined:
+  // a bare `?? []` would create a new array each render, causing downstream
+  // effects (StoreSync, getAllDayClients, etc.) to fire spuriously.
+  const clients = useMemo<Client[]>(() => clientsQuery.data ?? [], [clientsQuery.data]);
+  const loading = clientsQuery.isPending;
+
+  const queryClient = useQueryClient();
+  const cacheKey = useMemo(() => clientsQueryKey(groupId || userId), [userId, groupId]);
+  // Optimistic-update helper: writes directly into the React Query cache so
+  // consumers see the change immediately. The Firestore listener will
+  // overwrite this with the authoritative server state on its next snapshot.
+  const setClientsCache = useCallback(
+    (updater: (prev: Client[]) => Client[]) => {
+      queryClient.setQueryData<Client[]>(cacheKey, (prev) => updater(prev ?? []));
+    },
+    [queryClient, cacheKey],
+  );
+
   // Ref sincrónico: siempre tiene los datos más recientes de clients
   // Evita race condition cuando se asignan posiciones rápidamente
   const clientsRef = useRef<Client[]>(clients);
   clientsRef.current = clients;
   // Guard against double-tap on markAsDone
   const markingDoneRef = useRef<Set<string>>(new Set());
-
-  // Real-time listener on clients collection
-  useEffect(() => {
-    if (!userId) return;
-
-    const scopeField = groupId ? 'groupId' : 'userId';
-    const scopeValue = groupId || userId;
-
-    const unsubscribe = db
-      .collection('clients')
-      .where(scopeField, '==', scopeValue)
-      .onSnapshot(
-        (snapshot) => {
-          const loadedClients: Client[] = snapshot.docs.map((doc) => withDefaults(doc.id, doc.data()));
-          setClients(loadedClients);
-          setLoading(false);
-        },
-        (error) => {
-          console.error('Error loading clients:', error);
-          setLoading(false);
-        },
-      );
-
-    return () => unsubscribe();
-  }, [userId, groupId]);
 
   // Get ALL clients assigned to a day (including not-due), sorted by position
   // Normalization matches webapp: listOrders[day] is preferred, timestamps pushed to end
@@ -800,7 +796,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
     const prevClients = clientsRef.current;
     clientsRef.current = applyUpdate(clientsRef.current);
-    setClients((prev) => applyUpdate(prev));
+    setClientsCache(applyUpdate);
 
     try {
       const batch = db.batch();
@@ -813,9 +809,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     } catch (e) {
       console.error('Error changing position:', e);
       clientsRef.current = prevClients;
-      setClients(prevClients);
+      setClientsCache(() => prevClients);
     }
-  }, [getDayClientsFromSource]);
+  }, [getDayClientsFromSource, setClientsCache]);
 
   // Find duplicate clients: groups by normalized name + phone, identifies stale copies
   const findDuplicateClients = useCallback((): { staleIds: string[], details: Array<{ name: string, activeId: string, staleId: string }> } => {

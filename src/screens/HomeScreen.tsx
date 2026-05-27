@@ -9,6 +9,7 @@ import {
   ScrollView,
   Alert,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import ModalOverlay from '../components/ModalOverlay';
 import DraggableFlatList, {
@@ -31,6 +32,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import ClientCard from '../components/ClientCard';
+import SkeletonCard from '../components/SkeletonCard';
 import EditClientModal from '../components/EditClientModal';
 import DebtModal from '../components/DebtModal';
 import ProductCounter from '../components/ProductCounter';
@@ -293,6 +295,28 @@ const HomeScreen = () => {
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
   const [alarmTime, setAlarmTime] = useState(new Date());
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Pull-to-refresh: force a server-side read of clients so the user can
+  // get a fresh copy even if the realtime listener is temporarily quiet
+  // (e.g. after coming back from background or in poor network).
+  const onRefresh = useCallback(async () => {
+    if (!user?.uid) return;
+    setRefreshing(true);
+    hapticSelection();
+    try {
+      const scopeField = groupData?.groupId ? 'groupId' : 'userId';
+      const scopeValue = groupData?.groupId || user.uid;
+      await db
+        .collection('clients')
+        .where(scopeField, '==', scopeValue)
+        .get({ source: 'server' });
+    } catch (e) {
+      console.error('Refresh error:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user?.uid, groupData?.groupId]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
@@ -889,9 +913,10 @@ const HomeScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>{t('home.loadingClients')}</Text>
+      <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: 12 }}>
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <SkeletonCard key={i} />
+        ))}
       </View>
     );
   }
@@ -1056,6 +1081,14 @@ const HomeScreen = () => {
         maxToRenderPerBatch={10}
         windowSize={5}
         updateCellsBatchingPeriod={30}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={{ fontSize: 40, marginBottom: 8 }}>{searchTerm || activeFilters.size > 0 ? '🔍' : '📋'}</Text>

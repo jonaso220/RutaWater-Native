@@ -8,7 +8,6 @@ import {
   Linking,
   Alert,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import { Client } from '../types';
 import { normalizePhone, getClientMatchKey } from '../utils/helpers';
@@ -25,6 +24,7 @@ import DebtModal from '../components/DebtModal';
 import EditClientModal from '../components/EditClientModal';
 import AddClientModal from '../components/AddClientModal';
 import RelationshipsModal from '../components/RelationshipsModal';
+import SkeletonCard from '../components/SkeletonCard';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -570,8 +570,10 @@ const DirectoryScreen = () => {
           pipeline gets stuck on []→populated transitions, causing the list
           to look empty until the user types. */}
       {clientsLoading && clients.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <ActivityIndicator size="large" color={colors.tabActive} />
+        <View>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
         </View>
       ) : (
         <FlashList

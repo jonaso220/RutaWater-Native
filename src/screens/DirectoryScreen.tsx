@@ -58,6 +58,10 @@ const DirectoryScreen = () => {
   const getClientDebtTotal = useDebtsStore((s) => s.getClientDebtTotal);
   const scrollRef = useRef<any>(null);
   useScrollToTop(scrollRef);
+  // Two states: searchInput drives the TextInput (immediate), search drives
+  // the actual filter (debounced). With 600+ clients fuzzyMatch on every
+  // keystroke is noticeable; debouncing keeps the UI responsive.
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [scheduleClient, setScheduleClient] = useState<Client | null>(null);
@@ -66,10 +70,23 @@ const DirectoryScreen = () => {
   const [showNewClient, setShowNewClient] = useState(false);
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
 
+  useEffect(() => {
+    // Empty search applies instantly (clearing should feel snappy).
+    if (!searchInput) {
+      setSearch('');
+      return;
+    }
+    const id = setTimeout(() => setSearch(searchInput), 180);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+
   // Clear search when leaving this tab
   useFocusEffect(
     useCallback(() => {
-      return () => setSearch('');
+      return () => {
+        setSearchInput('');
+        setSearch('');
+      };
     }, []),
   );
 
@@ -455,16 +472,19 @@ const DirectoryScreen = () => {
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
             <TextInput
-              style={[styles.searchInput, { flex: 1, paddingRight: search ? 36 : 12 }]}
+              style={[styles.searchInput, { flex: 1, paddingRight: searchInput ? 36 : 12 }]}
               placeholder={t('directory.searchPlaceholder')}
               placeholderTextColor={colors.textHint}
-              value={search}
-              onChangeText={setSearch}
+              value={searchInput}
+              onChangeText={setSearchInput}
               autoCorrect={false}
             />
-            {search.length > 0 && (
+            {searchInput.length > 0 && (
               <TouchableOpacity
-                onPress={() => setSearch('')}
+                onPress={() => {
+                  setSearchInput('');
+                  setSearch('');
+                }}
                 style={{ position: 'absolute', right: 4, padding: 10 }}
               >
                 <Ionicons name="close" size={16} color={colors.textHint} />

@@ -31,11 +31,13 @@ import { ThemeColors } from '../theme/colors';
 import { FlashList } from '@shopify/flash-list';
 import { useLayout } from '../hooks/useLayout';
 
+const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
+
 const DirectoryScreen = () => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const { fontScale } = useLayout();
-  const styles = getStyles(colors, fontScale);
+  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
   const navigation = useNavigation<any>();
   const { isAdmin } = useAuthContext();
   const getFilteredDirectory = useClientsStore((s) => s.getFilteredDirectory);
@@ -297,8 +299,6 @@ const DirectoryScreen = () => {
     });
   };
 
-  const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
-
   const getFreqStyle = (freq: string, themeColors: ThemeColors) => {
     switch (freq) {
       case 'weekly': return { bg: themeColors.primaryLight, text: themeColors.primaryDark };
@@ -311,7 +311,7 @@ const DirectoryScreen = () => {
     }
   };
 
-  const renderClient = ({ item }: { item: Client }) => {
+  const renderClient = useCallback(({ item }: { item: Client }) => {
     const debtTotal = getClientDebtTotal(item.id);
     const hasRelationships = !!(item.relationships && Object.keys(item.relationships).length > 0);
     const isOnDemand = item.freq === 'on_demand' || !item.visitDays?.length;
@@ -462,7 +462,7 @@ const DirectoryScreen = () => {
         </View>
       </View>
     );
-  };
+  }, [colors, styles, t, isAdmin, isRecurrenciaMode, getClientDebtTotal, isDark]);
 
   return (
     <View style={styles.container}>

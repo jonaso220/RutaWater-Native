@@ -16,7 +16,6 @@ import DraggableFlatList, {
   ScaleDecorator,
   RenderItemParams,
 } from 'react-native-draggable-flatlist';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
 import { PRODUCTS } from '../constants/products';
@@ -33,6 +32,7 @@ import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import ClientCard from '../components/ClientCard';
 import SkeletonCard from '../components/SkeletonCard';
+import AlarmPicker from '../components/AlarmPicker';
 import EditClientModal from '../components/EditClientModal';
 import DebtModal from '../components/DebtModal';
 import ProductCounter from '../components/ProductCounter';
@@ -226,7 +226,6 @@ const HomeScreen = () => {
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
-  const [alarmTime, setAlarmTime] = useState(new Date());
   const [refreshing, setRefreshing] = useState(false);
 
   // Pull-to-refresh: force a server-side read of clients so the user can
@@ -567,6 +566,7 @@ const HomeScreen = () => {
   const handleAlarm = useCallback(
     (client: Client) => {
       if (client.alarm) {
+        // Active alarm: confirm removal. The new-alarm flow lives in AlarmPicker.
         Alert.alert(
           t('home.activeAlarm'),
           `Alarma: ${client.alarm}`,
@@ -580,32 +580,11 @@ const HomeScreen = () => {
           ],
         );
       } else {
-        // Set default time to current hour rounded to next 30 min
-        const now = new Date();
-        now.setMinutes(Math.ceil(now.getMinutes() / 30) * 30, 0, 0);
-        setAlarmTime(now);
         setAlarmPromptClient(client);
       }
     },
-    [saveAlarm],
+    [saveAlarm, t],
   );
-
-  const showAlarmConfirm = useCallback((d: Date) => {
-    const dayNames = [t('days.domingo'), t('days.lunes'), t('days.martes'), t('days.miercoles'), t('days.jueves'), t('days.viernes'), t('days.sabado')];
-    const monthNames = [t('months.ene'), t('months.feb'), t('months.mar'), t('months.abr'), t('months.may'), t('months.jun'), t('months.jul'), t('months.ago'), t('months.sep'), t('months.oct'), t('months.nov'), t('months.dic')];
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const targetStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const diffDays = Math.round((targetStart.getTime() - todayStart.getTime()) / 86400000);
-    const base = `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
-    let when: string;
-    if (diffDays === 0) when = `${t('home.today')} (${base})`;
-    else if (diffDays === 1) when = `${t('home.tomorrow')} (${base})`;
-    else when = base;
-    const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-    hapticLight();
-    Alert.alert(t('home.alarmScheduled'), t('home.alarmScheduledMsg', { when, time }));
-  }, [t]);
 
   const handleTransfer = useCallback(
     (client: Client) => {
@@ -1203,69 +1182,11 @@ const HomeScreen = () => {
         onRemoveRelationship={removeRelationship}
       />
 
-      {/* Alarm Time Picker */}
-      {Platform.OS === 'android' && !!alarmPromptClient && (
-        <DateTimePicker
-          value={alarmTime}
-          mode="time"
-          display="default"
-          onChange={(event: DateTimePickerEvent, date?: Date) => {
-            const client = alarmPromptClient;
-            setAlarmPromptClient(null);
-            if (event.type === 'set' && date && client) {
-              const hours = date.getHours().toString().padStart(2, '0');
-              const minutes = date.getMinutes().toString().padStart(2, '0');
-              saveAlarm(client.id, `${hours}:${minutes}`, selectedDay).then((fireAt) => {
-                if (fireAt) showAlarmConfirm(fireAt);
-              });
-            }
-          }}
-        />
-      )}
-      {Platform.OS === 'ios' && (
-        <ModalOverlay visible={!!alarmPromptClient} onClose={() => setAlarmPromptClient(null)} animationType="fade">
-          <View style={styles.alarmOverlay}>
-            <View style={styles.alarmModal}>
-              <Text style={styles.alarmTitle}>{t('home.selectTime')}</Text>
-              <DateTimePicker
-                value={alarmTime}
-                mode="time"
-                display="spinner"
-                onChange={(_event: DateTimePickerEvent, date?: Date) => {
-                  if (date) setAlarmTime(date);
-                }}
-                locale="es-ES"
-                themeVariant={isDark ? 'dark' : 'light'}
-                style={{ height: 150 }}
-              />
-              <View style={styles.alarmActions}>
-                <TouchableOpacity
-                  style={styles.alarmCancelBtn}
-                  onPress={() => setAlarmPromptClient(null)}
-                >
-                  <Text style={styles.alarmCancelText}>{t('cancel')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.alarmSaveBtn}
-                  onPress={() => {
-                    const client = alarmPromptClient;
-                    setAlarmPromptClient(null);
-                    if (client) {
-                      const hours = alarmTime.getHours().toString().padStart(2, '0');
-                      const minutes = alarmTime.getMinutes().toString().padStart(2, '0');
-                      saveAlarm(client.id, `${hours}:${minutes}`, selectedDay).then((fireAt) => {
-                        if (fireAt) showAlarmConfirm(fireAt);
-                      });
-                    }
-                  }}
-                >
-                  <Text style={styles.alarmSaveText}>{t('save')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </ModalOverlay>
-      )}
+      <AlarmPicker
+        client={alarmPromptClient}
+        selectedDay={selectedDay}
+        onClose={() => setAlarmPromptClient(null)}
+      />
     </View>
   );
 };
@@ -1556,55 +1477,6 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontSize: s(15),
     fontWeight: '700',
     color: colors.danger,
-  },
-  alarmOverlay: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  alarmModal: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    maxWidth: 400,
-    alignSelf: 'center' as const,
-    width: '100%' as const,
-  },
-  alarmTitle: {
-    fontSize: s(20),
-    fontWeight: '700',
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  alarmActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 12,
-  },
-  alarmCancelBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: colors.sectionBackground,
-  },
-  alarmCancelText: {
-    fontSize: s(17),
-    fontWeight: '600',
-    color: colors.textMuted,
-  },
-  alarmSaveBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: colors.primary,
-  },
-  alarmSaveText: {
-    fontSize: s(17),
-    fontWeight: '700',
-    color: colors.textWhite,
   },
   undoBanner: {
     position: 'absolute',

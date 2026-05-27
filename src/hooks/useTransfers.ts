@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { db } from '../config/firebase';
 import { Transfer, Client } from '../types';
 import { getClientMatchKey } from '../utils/helpers';
+import { useTransfersQuery } from './queries/useTransfersQuery';
 
 interface UseTransfersProps {
   userId: string;
@@ -10,7 +11,10 @@ interface UseTransfersProps {
 }
 
 export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProps) => {
-  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  // Data source: TanStack Query holds the live transfers array via
+  // useTransfersQuery's Firestore listener.
+  const transfersQuery = useTransfersQuery({ userId, groupId });
+  const transfers = useMemo<Transfer[]>(() => transfersQuery.data ?? [], [transfersQuery.data]);
   const transfersRef = useRef<Transfer[]>(transfers);
   transfersRef.current = transfers;
   const clientsRef = useRef<Client[]>(clients);
@@ -49,36 +53,6 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
     },
     [getMatchingIds],
   );
-
-  useEffect(() => {
-    if (!userId) return;
-
-    const scopeField = groupId ? 'groupId' : 'userId';
-    const scopeValue = groupId || userId;
-
-    const unsubscribe = db
-      .collection('transfers')
-      .where(scopeField, '==', scopeValue)
-      .onSnapshot(
-        (snapshot) => {
-          const loaded: Transfer[] = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })) as Transfer[];
-          loaded.sort((a, b) => {
-            const dateA = (a.createdAt as any)?.seconds || 0;
-            const dateB = (b.createdAt as any)?.seconds || 0;
-            return dateB - dateA;
-          });
-          setTransfers(loaded);
-        },
-        (error) => {
-          console.error('Error loading transfers:', error);
-        },
-      );
-
-    return () => unsubscribe();
-  }, [userId, groupId]);
 
   // Agrega transferencias de todas las instancias duplicadas del mismo cliente humano
   const getClientTransfers = useCallback(

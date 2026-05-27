@@ -5,35 +5,7 @@ import { Client, RELATIONSHIP_INVERSE } from '../types';
 import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, getWeekNumber, normalizePhoneForComparison } from '../utils/helpers';
 import { ALL_DAYS, Frequency } from '../constants/products';
 import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
-
-const withDefaults = (id: string, data: any): Client => ({
-  id,
-  name: '',
-  phone: '',
-  address: '',
-  notes: '',
-  lat: '',
-  lng: '',
-  mapsLink: '',
-  freq: 'on_demand',
-  visitDay: 'Sin Asignar',
-  visitDays: [],
-  specificDate: '',
-  products: {},
-  listOrder: 0,
-  listOrders: {},
-  isCompleted: false,
-  isStarred: false,
-  isPinned: false,
-  isNote: false,
-  alarm: '',
-  lastVisited: null,
-  completedAt: null,
-  updatedAt: null,
-  startWeek: 0,
-  userId: '',
-  ...data,
-});
+import { withDefaults } from '../utils/clientDefaults';
 
 interface UseClientsProps {
   userId: string;

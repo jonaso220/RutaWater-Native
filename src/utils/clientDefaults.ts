@@ -1,0 +1,33 @@
+import { Client } from '../types';
+
+// Applies safe defaults when reading a client document from Firestore.
+// Centralized so both the legacy useClients hook and the new TanStack
+// Query path read the same shape.
+export const withDefaults = (id: string, data: any): Client => ({
+  id,
+  name: '',
+  phone: '',
+  address: '',
+  notes: '',
+  lat: '',
+  lng: '',
+  mapsLink: '',
+  freq: 'on_demand',
+  visitDay: 'Sin Asignar',
+  visitDays: [],
+  specificDate: '',
+  products: {},
+  listOrder: 0,
+  listOrders: {},
+  isCompleted: false,
+  isStarred: false,
+  isPinned: false,
+  isNote: false,
+  alarm: '',
+  lastVisited: null,
+  completedAt: null,
+  updatedAt: null,
+  startWeek: 0,
+  userId: '',
+  ...data,
+});

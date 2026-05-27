@@ -20,6 +20,7 @@ import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
 import { ALL_DAYS, PRODUCTS } from '../constants/products';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate } from '../utils/helpers';
+import { hapticLight, hapticMedium, hapticSelection, hapticError } from '../utils/haptics';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
@@ -524,6 +525,7 @@ const HomeScreen = () => {
         isStarred: client.isStarred ?? false,
       };
 
+      hapticLight();
       // Execute mark as done.
       markAsDone(client.id, client);
 
@@ -600,6 +602,7 @@ const HomeScreen = () => {
 
   const handleToggleStar = useCallback(
     (client: Client) => {
+      hapticSelection();
       toggleStar(client.id, client.isStarred);
     },
     [toggleStar],
@@ -644,6 +647,7 @@ const HomeScreen = () => {
     else if (diffDays === 1) when = `${t('home.tomorrow')} (${base})`;
     else when = base;
     const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    hapticLight();
     Alert.alert(t('home.alarmScheduled'), t('home.alarmScheduledMsg', { when, time }));
   }, [t]);
 
@@ -834,12 +838,15 @@ const HomeScreen = () => {
       // optimistically; without feedback the item would silently snap
       // back to its origin and the user wouldn't understand why).
       if (landedSectionKey !== movedItem.sectionDateKey) {
+        hapticError();
         Alert.alert(
           t('home.dragSameDayTitle'),
           t('home.dragSameDayMsg'),
         );
         return;
       }
+
+      hapticMedium();
 
       // Find neighbor clients at the drop position in the reordered array
       let prevClientId: string | null = null;

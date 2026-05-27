@@ -30,6 +30,7 @@
     "react-native-draggable-flatlist": "^4.0.1",
     "react-native-fs": "^2.20.0",
     "react-native-gesture-handler": "^2.21.2",
+    "react-native-haptic-feedback": "^3.0.0",
     "react-native-localize": "^3.7.0",
     "react-native-purchases": "^9.12.0",
     "react-native-reanimated": "^3.16.7",

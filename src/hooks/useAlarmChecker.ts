@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Vibration } from 'react-native';
 import notifee, { EventType } from '@notifee/react-native';
 import { useClientsStore } from '../stores/clientsStore';
+import { hapticWarning } from '../utils/haptics';
 
 export interface AlarmData {
   clientId: string;
@@ -32,6 +33,7 @@ export const useAlarmChecker = () => {
         address: data.clientAddress || '',
         time: data.alarmTime || '',
       });
+      hapticWarning();
       Vibration.vibrate([0, 500, 200, 500, 200, 500]);
     });
     return unsubscribe;

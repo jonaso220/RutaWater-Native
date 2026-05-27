@@ -8,6 +8,7 @@ import {
   Linking,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Client } from '../types';
 import { normalizePhone, getClientMatchKey } from '../utils/helpers';
@@ -43,6 +44,7 @@ const DirectoryScreen = () => {
   const updateClient = useClientsStore((s) => s.updateClient);
   const deleteClient = useClientsStore((s) => s.deleteClient);
   const clients = useClientsStore((s) => s.clients);
+  const clientsLoading = useClientsStore((s) => s.loading);
   const cloneClient = useClientsStore((s) => s.cloneClient);
   const addClient = useClientsStore((s) => s.addClient);
   const canAddClient = useClientsStore((s) => s.canAddClient);
@@ -543,25 +545,34 @@ const DirectoryScreen = () => {
         </Text>
       </View>
 
-      {/* Client list */}
-      <FlashList
-        ref={scrollRef}
-        data={filteredClients}
-        renderItem={renderClient}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={{ fontSize: 40, marginBottom: 8 }}>{search ? '🔍' : '📋'}</Text>
-            <Text style={styles.emptyText}>
-              {search ? t('home.noSearchResults') : t('directory.noClients')}
-            </Text>
-            {search && (
-              <Text style={styles.emptySubtext}>{t('home.noSearchResultsSubtitle')}</Text>
-            )}
-          </View>
-        }
-      />
+      {/* Client list — avoid mounting FlashList with empty data while
+          Firestore is still loading: FlashList v2's progressive-render
+          pipeline gets stuck on []→populated transitions, causing the list
+          to look empty until the user types. */}
+      {clientsLoading && clients.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={colors.tabActive} />
+        </View>
+      ) : (
+        <FlashList
+          ref={scrollRef}
+          data={filteredClients}
+          renderItem={renderClient}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={{ fontSize: 40, marginBottom: 8 }}>{search ? '🔍' : '📋'}</Text>
+              <Text style={styles.emptyText}>
+                {search ? t('home.noSearchResults') : t('directory.noClients')}
+              </Text>
+              {search && (
+                <Text style={styles.emptySubtext}>{t('home.noSearchResultsSubtitle')}</Text>
+              )}
+            </View>
+          }
+        />
+      )}
       </View>
 
       {/* Schedule Modal */}

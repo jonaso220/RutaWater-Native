@@ -15,6 +15,7 @@ import { useDebtsStore } from './debtsStore';
 import { useTransfersStore } from './transfersStore';
 import { useDailyLoadsStore } from './dailyLoadsStore';
 import { useSubscriptionStore } from './subscriptionStore';
+import { queryClient } from '../lib/queryClient';
 
 /**
  * StoreSync bridges the existing React hooks (which manage Firebase listeners)
@@ -174,7 +175,10 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
     });
   }, [dailyLoadsHook.dailyLoad, dailyLoadsHook.loadForDay, dailyLoadsHook.saveDailyLoad]);
 
-  // Reset all stores on unmount (sign out) to prevent stale references
+  // Reset all stores on unmount (sign out) to prevent stale references.
+  // Also clear the TanStack Query cache so a different user signing in
+  // during the same app session can't see the previous user's clients,
+  // debts, or transfers leftover under the prior scope key.
   useEffect(() => {
     return () => {
       useClientsStore.setState(useClientsStore.getInitialState());
@@ -182,6 +186,7 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
       useTransfersStore.setState(useTransfersStore.getInitialState());
       useDailyLoadsStore.setState(useDailyLoadsStore.getInitialState());
       useSubscriptionStore.setState(useSubscriptionStore.getInitialState());
+      queryClient.clear();
     };
   }, []);
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 import { Client } from '../types';
 
@@ -40,7 +41,7 @@ export const useClientsAutoCleanup = (clients: Client[]) => {
     if (staleNotes.length > 0) {
       const noteBatch = db.batch();
       staleNotes.forEach((c) => noteBatch.delete(db.collection('clients').doc(c.id)));
-      noteBatch.commit().catch((err) => console.error('Note cleanup error:', err));
+      noteBatch.commit().catch((err) => reportError(err, 'Note cleanup error'));
     }
 
     const expiredCompleted = clients.filter((c) =>
@@ -70,7 +71,7 @@ export const useClientsAutoCleanup = (clients: Client[]) => {
           });
         }
       });
-      batch.commit().catch((err) => console.error('Auto-cleanup error:', err));
+      batch.commit().catch((err) => reportError(err, 'Auto-cleanup error'));
     }
   }, [clients]);
 };

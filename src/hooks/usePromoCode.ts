@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 import { PROMO_CODES } from '../constants/subscription';
 
@@ -72,7 +73,7 @@ export const usePromoCode = ({ userId }: { userId: string | undefined }): PromoS
 
         return { success: true, message: 'Premium activado!' };
       } catch (error) {
-        console.error('Promo redeem error:', error);
+        reportError(error, 'Promo redeem error');
         return { success: false, message: 'Error al activar el codigo.' };
       }
     },
@@ -84,7 +85,7 @@ export const usePromoCode = ({ userId }: { userId: string | undefined }): PromoS
     try {
       await db.collection('premiumOverrides').doc(userId).update({ active: false });
     } catch (error) {
-      console.error('Remove promo error:', error);
+      reportError(error, 'Remove promo error');
     }
   }, [userId]);
 

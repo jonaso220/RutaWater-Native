@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { reportError } from '../lib/crashReporting';
 import {
   View,
   Text,
@@ -150,7 +151,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       await onSave(client, localDays, localFreq, dateArg, localNotes, cleanProducts);
     } catch (e) {
       saveError = e;
-      console.error('Schedule save error:', e);
+      reportError(e, 'Schedule save error');
     } finally {
       setSaving(false);
       onClose();

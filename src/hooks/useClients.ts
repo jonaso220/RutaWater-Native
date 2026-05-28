@@ -7,6 +7,7 @@ import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, getWeekNumber,
 import { ALL_DAYS, Frequency } from '../constants/products';
 import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
+import { reportError } from '../lib/crashReporting';
 
 interface UseClientsProps {
   userId: string;
@@ -169,7 +170,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         await db.collection('clients').doc(clientId).update(updates);
       }
     } catch (e) {
-      console.error('Error marking as done:', e);
+      reportError(e, 'Error marking as done');
     } finally {
       markingDoneRef.current.delete(clientId);
     }
@@ -184,7 +185,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         updatedAt: new Date(),
       });
     } catch (e) {
-      console.error('Error undoing complete:', e);
+      reportError(e, 'Error undoing complete');
     }
   }, []);
 
@@ -223,7 +224,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         await batch.commit();
       }
     } catch (e) {
-      console.error('Error clearing completed:', e);
+      reportError(e, 'Error clearing completed');
     }
   }, [getCompletedClients]);
 
@@ -254,7 +255,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         });
       }
     } catch (e) {
-      console.error('Error deleting from day:', e);
+      reportError(e, 'Error deleting from day');
     }
   }, []);
 
@@ -263,7 +264,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     try {
       await db.collection('clients').doc(clientId).update(data);
     } catch (e) {
-      console.error('Error updating client:', e);
+      reportError(e, 'Error updating client');
     }
   }, []);
 
@@ -398,7 +399,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         }
       }
     } catch (e) {
-      console.error('Error scheduling client:', e);
+      reportError(e, 'Error scheduling client');
     }
   }, [groupId, userId]);
 
@@ -408,7 +409,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     try {
       await db.collection('clients').doc(clientId).update({ isStarred: newVal });
     } catch (e) {
-      console.error('Error toggling star:', e);
+      reportError(e, 'Error toggling star');
     }
   }, []);
 
@@ -441,7 +442,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         return null;
       }
     } catch (e) {
-      console.error('Error saving alarm:', e);
+      reportError(e, 'Error saving alarm');
       return null;
     }
   }, []);
@@ -495,7 +496,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         updatedAt: new Date(),
       });
     } catch (e) {
-      console.error('Error adding note:', e);
+      reportError(e, 'Error adding note');
     }
   }, [groupId, userId]);
 
@@ -569,7 +570,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         updatedAt: new Date(),
       });
     } catch (e) {
-      console.error('Error adding client:', e);
+      reportError(e, 'Error adding client');
     }
   }, [groupId, userId]);
 
@@ -670,7 +671,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         updatedAt: new Date(),
       });
     } catch (e) {
-      console.error('Error in aiCreateClient:', e);
+      reportError(e, 'Error in aiCreateClient');
     }
   }, [groupId, userId]);
 
@@ -807,7 +808,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       });
       await batch.commit();
     } catch (e) {
-      console.error('Error changing position:', e);
+      reportError(e, 'Error changing position');
       clientsRef.current = prevClients;
       setClientsCache(() => prevClients);
     }
@@ -908,7 +909,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       });
       await batch.commit();
     } catch (e) {
-      console.error('Error adding relationship:', e);
+      reportError(e, 'Error adding relationship');
     }
   }, []);
 
@@ -925,7 +926,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       });
       await batch.commit();
     } catch (e) {
-      console.error('Error removing relationship:', e);
+      reportError(e, 'Error removing relationship');
     }
   }, []);
 
@@ -953,7 +954,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         await db.collection('clients').doc(clientId).delete();
       }
     } catch (e) {
-      console.error('Error deleting client:', e);
+      reportError(e, 'Error deleting client');
     }
   }, []);
 
@@ -989,7 +990,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       };
       await db.collection('clients').add(newData);
     } catch (e) {
-      console.error('Error cloning client:', e);
+      reportError(e, 'Error cloning client');
     }
   }, [groupId, userId]);
 

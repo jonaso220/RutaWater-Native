@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { reportError } from '../lib/crashReporting';
 import {
   View,
   Text,
@@ -120,7 +121,7 @@ const SettingsScreen = () => {
       await db.collection('settings').doc(settingsDocId).set(settings, { merge: true });
       Alert.alert(t('settings.templatesSaved'), t('settings.templatesSavedMsg'));
     } catch (e) {
-      console.error('Error saving templates:', e);
+      reportError(e, 'Error saving templates');
       Alert.alert(t('error'), t('settings.templatesSaveError'));
     }
   };
@@ -133,7 +134,7 @@ const SettingsScreen = () => {
     db.collection('settings').doc(settingsDocId).set(
       { whatsappEnCamino: null, whatsappDeuda: null, whatsappRecordatorio: null },
       { merge: true },
-    ).catch((e) => console.error('Error resetting templates:', e));
+    ).catch((e) => reportError(e, 'Error resetting templates'));
     Alert.alert(t('settings.templatesReset'), t('settings.templatesResetMsg'));
   };
 
@@ -190,7 +191,7 @@ const SettingsScreen = () => {
 
       onGroupUpdate({ groupId, role: 'admin', code });
     } catch (e) {
-      console.error('Error creating group:', e);
+      reportError(e, 'Error creating group');
       Alert.alert(t('error'), t('settings.createGroupError'));
     }
     setLoading(false);
@@ -226,7 +227,7 @@ const SettingsScreen = () => {
       });
       setJoinCode('');
     } catch (e) {
-      console.error('Error joining group:', e);
+      reportError(e, 'Error joining group');
       Alert.alert(t('error'), t('settings.joinGroupError'));
     }
     setLoading(false);
@@ -387,7 +388,7 @@ const SettingsScreen = () => {
 
       Alert.alert(t('settings.csvExported', { count: allClients.length }), '');
     } catch (e) {
-      console.error('Error exporting CSV:', e);
+      reportError(e, 'Error exporting CSV');
       Alert.alert(t('error'), t('settings.exportError'));
     }
   };
@@ -438,7 +439,7 @@ const SettingsScreen = () => {
       if (backup.transfers.length > 0) counts.push(t('settings.backupTransfers', { count: backup.transfers.length }));
       Alert.alert(t('settings.backupReady'), counts.join(', '));
     } catch (e) {
-      console.error('Error exporting JSON:', e);
+      reportError(e, 'Error exporting JSON');
       Alert.alert(t('error'), t('settings.exportError'));
     }
   };
@@ -462,7 +463,7 @@ const SettingsScreen = () => {
               const count = await cleanupDuplicates();
               Alert.alert(t('done'), t('settings.duplicatesCleaned', { count }));
             } catch (e) {
-              console.error('Error cleaning duplicates:', e);
+              reportError(e, 'Error cleaning duplicates');
               Alert.alert(t('error'), t('settings.duplicatesCleanError'));
             }
           },

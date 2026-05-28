@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 
 export interface DailyLoad {
@@ -46,7 +47,7 @@ export const useDailyLoads = ({ userId }: UseDailyLoadsProps) => {
           setDailyLoad(EMPTY_LOAD);
         }
       } catch (e) {
-        console.error('Error loading daily load:', e);
+        reportError(e, 'Error loading daily load');
         setDailyLoad(EMPTY_LOAD);
       }
     },
@@ -60,7 +61,7 @@ export const useDailyLoads = ({ userId }: UseDailyLoadsProps) => {
       await db.collection('daily_loads').doc(docId).set(data);
       setDailyLoad(data);
     } catch (e) {
-      console.error('Error saving daily load:', e);
+      reportError(e, 'Error saving daily load');
     }
   };
 

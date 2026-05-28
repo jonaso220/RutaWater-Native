@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { reportError } from '../../lib/crashReporting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Debt } from '../../types';
@@ -46,7 +47,7 @@ export const useDebtsQuery = ({ userId, groupId }: UseDebtsQueryArgs) => {
           queryClient.setQueryData<Debt[]>(queryKey, loaded);
         },
         (error) => {
-          console.error('Error loading debts:', error);
+          reportError(error, 'Error loading debts');
           // Parity: surface empty state on first-error so consumers don't
           // hang in isPending. See useClientsQuery for the rationale.
           if (queryClient.getQueryData<Debt[]>(queryKey) === undefined) {

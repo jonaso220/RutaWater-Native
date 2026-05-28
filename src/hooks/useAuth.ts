@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { reportError } from '../lib/crashReporting';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { appleAuth } from '@invertase/react-native-apple-authentication';
@@ -51,7 +52,7 @@ export const useAuth = () => {
       }
       setGroupData(null);
     } catch (e) {
-      console.error('Error loading group data:', e);
+      reportError(e, 'Error loading group data');
       setGroupData(null);
     }
   };
@@ -64,7 +65,7 @@ export const useAuth = () => {
       if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential') {
         throw error;
       }
-      console.error('Email Sign-In Error:', error);
+      reportError(error, 'Email Sign-In Error');
       throw error;
     }
   };
@@ -73,7 +74,7 @@ export const useAuth = () => {
     try {
       await auth().createUserWithEmailAndPassword(email, password);
     } catch (error) {
-      console.error('Email Sign-Up Error:', error);
+      reportError(error, 'Email Sign-Up Error');
       throw error;
     }
   };
@@ -87,7 +88,7 @@ export const useAuth = () => {
       const googleCredential = auth.GoogleAuthProvider.credential(idToken);
       await auth().signInWithCredential(googleCredential);
     } catch (error) {
-      console.error('Google Sign-In Error:', error);
+      reportError(error, 'Google Sign-In Error');
       throw error;
     }
   };
@@ -118,7 +119,7 @@ export const useAuth = () => {
         // User cancelled, don't throw
         return;
       }
-      console.error('Apple Sign-In Error:', error);
+      reportError(error, 'Apple Sign-In Error');
       throw error;
     }
   };
@@ -134,7 +135,7 @@ export const useAuth = () => {
       await GoogleSignin.signOut().catch(() => {});
       await auth().signOut();
     } catch (error) {
-      console.error('Sign-Out Error:', error);
+      reportError(error, 'Sign-Out Error');
     }
   };
 

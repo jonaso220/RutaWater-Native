@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { reportError } from '../../lib/crashReporting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Transfer } from '../../types';
@@ -40,7 +41,7 @@ export const useTransfersQuery = ({ userId, groupId }: UseTransfersQueryArgs) =>
           queryClient.setQueryData<Transfer[]>(queryKey, loaded);
         },
         (error) => {
-          console.error('Error loading transfers:', error);
+          reportError(error, 'Error loading transfers');
           // Parity: surface empty state on first-error so consumers don't
           // hang in isPending. See useClientsQuery for the rationale.
           if (queryClient.getQueryData<Transfer[]>(queryKey) === undefined) {

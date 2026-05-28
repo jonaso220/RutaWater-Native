@@ -1,4 +1,5 @@
 import { useCallback, useRef, useMemo } from 'react';
+import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 import { Debt, Client } from '../types';
 import { getClientMatchKey } from '../utils/helpers';
@@ -107,7 +108,7 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
         });
         await batch.commit();
       } catch (e) {
-        console.error('Error adding debt:', e);
+        reportError(e, 'Error adding debt');
       } finally {
         busyRef.current.delete(key);
       }
@@ -137,7 +138,7 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
         }
         await batch.commit();
       } catch (e) {
-        console.error('Error marking debt paid:', e);
+        reportError(e, 'Error marking debt paid');
       } finally {
         busyRef.current.delete(key);
       }
@@ -154,7 +155,7 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
     try {
       await db.collection('debts').doc(debtId).update({ amount: newAmount });
     } catch (e) {
-      console.error('Error editing debt:', e);
+      reportError(e, 'Error editing debt');
     } finally {
       busyRef.current.delete(key);
     }
@@ -175,7 +176,7 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
         });
         await batch.commit();
       } catch (e) {
-        console.error('Error marking all debts paid:', e);
+        reportError(e, 'Error marking all debts paid');
       } finally {
         busyRef.current.delete(key);
       }

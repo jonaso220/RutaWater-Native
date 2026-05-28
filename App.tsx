@@ -13,6 +13,7 @@ import { StoreSync } from './src/stores/StoreSync';
 import LoginScreen from './src/screens/LoginScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import { queryClient } from './src/lib/queryClient';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 const AppContent = () => {
   const { user, loading: authLoading, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple } = useAuthContext();
@@ -39,13 +40,15 @@ const AppContent = () => {
 
 const App = () => (
   <GestureHandlerRootView style={{ flex: 1 }}>
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </GestureHandlerRootView>
 );
 

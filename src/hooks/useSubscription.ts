@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { reportError } from '../lib/crashReporting';
 import Purchases, {
   CustomerInfo,
   PurchasesPackage,
@@ -110,7 +111,7 @@ export const useSubscription = ({ userId }: { userId: string | undefined }): Sub
       return !!customerInfo.entitlements.active[ENTITLEMENT_ID];
     } catch (error: any) {
       if (error.userCancelled) return false;
-      console.error('Purchase error:', error);
+      reportError(error, 'Purchase error');
       throw error;
     }
   }, [processCustomerInfo]);
@@ -121,7 +122,7 @@ export const useSubscription = ({ userId }: { userId: string | undefined }): Sub
       processCustomerInfo(info);
       return !!info.entitlements.active[ENTITLEMENT_ID];
     } catch (error) {
-      console.error('Restore error:', error);
+      reportError(error, 'Restore error');
       throw error;
     }
   }, [processCustomerInfo]);

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef } from 'react';
+import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 import { Transfer, Client } from '../types';
 import { getClientMatchKey } from '../utils/helpers';
@@ -104,7 +105,7 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
         await batch.commit();
         return true;
       } catch (e) {
-        console.error('Error adding transfer:', e);
+        reportError(e, 'Error adding transfer');
         return false;
       } finally {
         busyRef.current.delete(key);
@@ -133,7 +134,7 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
         }
         await batch.commit();
       } catch (e) {
-        console.error('Error reviewing transfer:', e);
+        reportError(e, 'Error reviewing transfer');
       } finally {
         busyRef.current.delete(key);
       }

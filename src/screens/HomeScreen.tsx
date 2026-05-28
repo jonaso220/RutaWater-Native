@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef, useDeferredValue, useTransition } from 'react';
+import { reportError } from '../lib/crashReporting';
 import {
   View,
   Text,
@@ -245,7 +246,7 @@ const HomeScreen = () => {
         .where(scopeField, '==', scopeValue)
         .get({ source: 'server' });
     } catch (e) {
-      console.error('Refresh error:', e);
+      reportError(e, 'Refresh error');
     } finally {
       setRefreshing(false);
     }

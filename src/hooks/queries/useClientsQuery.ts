@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { reportError } from '../../lib/crashReporting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Client } from '../../types';
@@ -39,7 +40,7 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
           queryClient.setQueryData<Client[]>(queryKey, clients);
         },
         (error) => {
-          console.error('Error loading clients:', error);
+          reportError(error, 'Error loading clients');
           // Parity with the legacy hook: on a Firestore error before any
           // data has loaded, surface an empty array so consumers exit the
           // `isPending` state (the old code did setLoading(false)+empty).

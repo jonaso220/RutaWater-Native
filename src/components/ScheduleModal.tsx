@@ -15,7 +15,8 @@ import {
 import ModalOverlay from './ModalOverlay';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
-import { PRODUCTS, ALL_DAYS, FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { ALL_DAYS, FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { useProducts } from '../stores/productCatalogStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -57,6 +58,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const [localNotes, setLocalNotes] = useState('');
   const [localProducts, setLocalProducts] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
+  const catalogProducts = useProducts();
 
   useEffect(() => {
     if (client) {
@@ -75,7 +77,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       setShowPicker(false);
       setPickerDate(now);
       const prods: Record<string, number> = {};
-      PRODUCTS.forEach((p) => {
+      catalogProducts.forEach((p) => {
         prods[p.id] = 0;
       });
       setLocalProducts(prods);
@@ -303,7 +305,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
               {t('scheduleModal.products')}
             </Text>
-            {PRODUCTS.map((p) => (
+            {catalogProducts.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
                   {p.emoji} {p.label}

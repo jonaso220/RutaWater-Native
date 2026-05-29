@@ -16,7 +16,7 @@ import ClientInfoEditModal from './ClientInfoEditModal';
 import FrequencyEditModal from './FrequencyEditModal';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
-import { PRODUCTS } from '../constants/products';
+import { useProducts } from '../stores/productCatalogStore';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
@@ -71,6 +71,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const [deleting, setDeleting] = useState(false);
   const [infoModalVisible, setInfoModalVisible] = useState(false);
   const [freqModalVisible, setFreqModalVisible] = useState(false);
+  const catalogProducts = useProducts();
 
   useEffect(() => {
     if (client) {
@@ -79,10 +80,15 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       setAddress(client.address || '');
       setPhone(client.phone || '');
       setMapsLink(client.mapsLink || '');
-      // Initialize products from client data
+      // Initialize products from client data. Start from whatever the client
+      // already has (so quantities for hidden/removed products survive an edit)
+      // then make sure every product in the current catalog has an entry.
       const prods: Record<string, number> = {};
-      PRODUCTS.forEach((p) => {
-        prods[p.id] = parseInt(String(client.products?.[p.id] || 0), 10);
+      Object.keys(client.products || {}).forEach((k) => {
+        prods[k] = parseInt(String(client.products?.[k] || 0), 10) || 0;
+      });
+      catalogProducts.forEach((p) => {
+        if (prods[p.id] === undefined) prods[p.id] = 0;
       });
       setProducts(prods);
       setNotes(client.notes || '');
@@ -384,7 +390,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
             {/* Products */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('editModal.products')}</Text>
-            {PRODUCTS.map((p) => (
+            {catalogProducts.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
                   {p.emoji} {p.label}

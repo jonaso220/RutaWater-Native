@@ -19,7 +19,7 @@ import DraggableFlatList, {
 } from 'react-native-draggable-flatlist';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
-import { PRODUCTS } from '../constants/products';
+import { useProducts } from '../stores/productCatalogStore';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate } from '../utils/helpers';
 import { hapticLight, hapticMedium, hapticSelection, hapticError } from '../utils/haptics';
 import { db } from '../config/firebase';
@@ -176,6 +176,7 @@ const HomeScreen = () => {
 
   const navigation = useNavigation<any>();
   const { isAdmin, user, groupData } = useAuthContext();
+  const catalogProducts = useProducts();
   const clients = useClientsStore((s) => s.clients);
   const loading = useClientsStore((s) => s.loading);
   const getAllDayClients = useClientsStore((s) => s.getAllDayClients);
@@ -905,7 +906,7 @@ const HomeScreen = () => {
             </View>
             <Text style={[styles.filterSectionTitle, { marginTop: 10 }]}>{t('home.filterProducts')}</Text>
             <View style={styles.filterChipsRow}>
-              {PRODUCTS.map((p) => (
+              {catalogProducts.map((p) => (
                 <TouchableOpacity
                   key={p.id}
                   style={[styles.filterChip, activeFilters.has(p.id) && styles.filterChipActive]}

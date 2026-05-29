@@ -13,7 +13,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
-import { PRODUCTS, ALL_DAYS } from '../constants/products';
+import { ALL_DAYS } from '../constants/products';
+import { useProducts } from '../stores/productCatalogStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -61,6 +62,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteText, setPasteText] = useState('');
+  const catalogProducts = useProducts();
 
   const isDirectoryMode = !day;
 
@@ -469,7 +471,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
 
             {/* Products */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('addModal.products')}</Text>
-            {PRODUCTS.map((p) => (
+            {catalogProducts.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <Text style={styles.productLabel}>
                   {p.emoji} {p.label}

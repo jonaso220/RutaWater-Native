@@ -8,6 +8,7 @@ import { useSubscription } from '../hooks/useSubscription';
 import { usePromoCode } from '../hooks/usePromoCode';
 import { useAiUsage } from '../hooks/useAiUsage';
 import { useClientsAutoCleanup } from '../hooks/useClientsAutoCleanup';
+import { useProductCatalog } from '../hooks/useProductCatalog';
 import { ALL_DAYS } from '../constants/products';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { useClientsStore } from './clientsStore';
@@ -15,6 +16,7 @@ import { useDebtsStore } from './debtsStore';
 import { useTransfersStore } from './transfersStore';
 import { useDailyLoadsStore } from './dailyLoadsStore';
 import { useSubscriptionStore } from './subscriptionStore';
+import { useProductCatalogStore } from './productCatalogStore';
 import { queryClient } from '../lib/queryClient';
 
 /**
@@ -122,6 +124,26 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
     });
   }, [dailyLoadsHook.dailyLoad, dailyLoadsHook.loadForDay, dailyLoadsHook.saveDailyLoad]);
 
+  // --- Product catalog (editable: rename / hide / add) ---
+  const catalog = useProductCatalog(userId, groupId);
+
+  useEffect(() => {
+    useProductCatalogStore.setState({
+      products: catalog.products,
+      allProducts: catalog.allProducts,
+      customProducts: catalog.customProducts,
+      hidden: catalog.hidden,
+      productNames: catalog.productNames,
+      loaded: catalog.loaded,
+      renameProduct: catalog.renameProduct,
+      setProductEmoji: catalog.setProductEmoji,
+      setProductHidden: catalog.setProductHidden,
+      addProduct: catalog.addProduct,
+      removeCustomProduct: catalog.removeCustomProduct,
+      moveProduct: catalog.moveProduct,
+    });
+  }, [catalog.products, catalog.allProducts, catalog.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Reset all stores on unmount (sign out) to prevent stale references.
   // Also clear the TanStack Query cache so a different user signing in
   // during the same app session can't see the previous user's clients,
@@ -133,6 +155,7 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
       useTransfersStore.setState(useTransfersStore.getInitialState());
       useDailyLoadsStore.setState(useDailyLoadsStore.getInitialState());
       useSubscriptionStore.setState(useSubscriptionStore.getInitialState());
+      useProductCatalogStore.setState(useProductCatalogStore.getInitialState());
       queryClient.clear();
     };
   }, []);

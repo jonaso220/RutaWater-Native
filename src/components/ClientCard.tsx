@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Client } from '../types';
-import { PRODUCTS } from '../constants/products';
+import { useAllProducts } from '../stores/productCatalogStore';
 import { normalizePhone } from '../utils/helpers';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -76,13 +76,14 @@ const ClientCard: React.FC<ClientCardProps> = ({
   const s = (v: number) => Math.round(v * fontScale);
   const styles = getStyles(colors, fontScale);
   const [showPositionPrompt, setShowPositionPrompt] = useState(false);
+  const allProducts = useAllProducts();
 
   const productList = React.useMemo(() => {
     if (!client.products) return [] as { id: string; qty: number; emoji: string; short: string }[];
     return Object.keys(client.products)
       .filter((k) => parseInt(String(client.products[k] || 0), 10) > 0)
       .map((k) => {
-        const p = PRODUCTS.find((prod) => prod.id === k);
+        const p = allProducts.find((prod) => prod.id === k);
         return {
           id: k,
           qty: parseInt(String(client.products[k]), 10),
@@ -90,7 +91,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
           short: p?.short || k,
         };
       });
-  }, [client.products]);
+  }, [client.products, allProducts]);
 
   const handleOrderTap = () => {
     if (!onChangePosition) return;

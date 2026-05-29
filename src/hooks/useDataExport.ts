@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { useClientsStore } from '../stores/clientsStore';
 import { useDebtsStore } from '../stores/debtsStore';
 import { useTransfersStore } from '../stores/transfersStore';
-import { PRODUCTS, FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { useProductCatalogStore } from '../stores/productCatalogStore';
+import { FREQUENCY_LABELS, Frequency } from '../constants/products';
 
 interface ExportUser {
   uid: string;
@@ -48,11 +49,12 @@ export const useDataExport = (user: ExportUser) => {
 
       const headers = ['Nombre', 'Teléfono', 'Dirección', 'Día', 'Frecuencia', 'Productos', 'Notas', 'Tiene Deuda', 'Favorito', 'Link Maps'];
 
+      const products = useProductCatalogStore.getState().allProducts;
       const rows = allClients.map((c) => {
         // Build product summary with labels (matching webapp)
         const prodParts: string[] = [];
         if (c.products) {
-          PRODUCTS.forEach((p) => {
+          products.forEach((p) => {
             const qty = parseInt(String(c.products[p.id] || 0), 10);
             if (qty > 0) prodParts.push(`${p.label}: ${qty}`);
           });

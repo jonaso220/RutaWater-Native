@@ -27,6 +27,7 @@ import {
   DEFAULT_RECORDATORIO,
 } from '../hooks/useWhatsAppTemplates';
 import { useDataExport } from '../hooks/useDataExport';
+import ProductCatalogModal from '../components/ProductCatalogModal';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -50,6 +51,7 @@ const SettingsScreen = () => {
   const removePromo = useSubscriptionStore((s) => s.removePromo);
   const [promoCode, setPromoCode] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
+  const [productsModalVisible, setProductsModalVisible] = useState(false);
   // ALL hooks must be called before any early return (Rules of Hooks)
   const [loading, setLoading] = useState(false);
 
@@ -194,6 +196,7 @@ const SettingsScreen = () => {
   };
 
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       {/* User info */}
       <View style={styles.section}>
@@ -446,6 +449,21 @@ const SettingsScreen = () => {
         )}
       </View>
 
+      {/* Products catalog */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="cube-outline" size={20} color={colors.primary} />
+          <Text style={styles.sectionTitle}>{t('settings.productsTitle')}</Text>
+        </View>
+        <Text style={styles.sectionSubtitle}>{t('settings.productsSubtitle')}</Text>
+        <View style={styles.sectionCard}>
+          <TouchableOpacity onPress={() => setProductsModalVisible(true)} style={styles.exportBtn}>
+            <Ionicons name="create-outline" size={18} color={colors.primary} />
+            <Text style={styles.exportBtnText}>{t('settings.manageProducts')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* WhatsApp Templates */}
       {waLoaded && (
         <View style={styles.section}>
@@ -586,6 +604,11 @@ const SettingsScreen = () => {
 
       <View style={{ height: 60 }} />
     </ScrollView>
+    <ProductCatalogModal
+      visible={productsModalVisible}
+      onClose={() => setProductsModalVisible(false)}
+    />
+    </>
   );
 };
 

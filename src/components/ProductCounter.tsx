@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Client } from '../types';
-import { PRODUCTS } from '../constants/products';
+import { useProducts } from '../stores/productCatalogStore';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
@@ -14,21 +14,22 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const styles = getStyles(colors);
+  const products = useProducts();
 
   const totals = React.useMemo(() => {
     const result: Record<string, number> = {};
-    PRODUCTS.forEach((p) => {
+    products.forEach((p) => {
       result[p.id] = 0;
     });
     clients.forEach((c) => {
       if (!c.products) return;
-      PRODUCTS.forEach((p) => {
+      products.forEach((p) => {
         const qty = parseInt(String(c.products[p.id] || 0), 10);
         if (qty > 0) result[p.id] += qty;
       });
     });
     return result;
-  }, [clients]);
+  }, [clients, products]);
 
   const hasAny = Object.values(totals).some((v) => v > 0);
   if (!hasAny) return null;
@@ -40,7 +41,7 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
       style={styles.container}
       contentContainerStyle={styles.content}
     >
-      {PRODUCTS.map((p) => {
+      {products.map((p) => {
         if (totals[p.id] <= 0) return null;
         const isSoda = p.id === 'soda';
         // Soda is delivered by the crate (6 sifones), so the crate count is the

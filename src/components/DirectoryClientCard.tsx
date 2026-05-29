@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Client } from '../types';
 import { normalizePhone } from '../utils/helpers';
-import { PRODUCTS } from '../constants/products';
+import { useAllProducts } from '../stores/productCatalogStore';
 import { getLastActivityDate, getDaysSince } from '../utils/recency';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -48,6 +48,7 @@ const DirectoryClientCard = ({
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const { fontScale } = useLayout();
+  const allProducts = useAllProducts();
   const styles = React.useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
 
   const sendWhatsApp = (client: Client) => {
@@ -138,7 +139,7 @@ const DirectoryClientCard = ({
     ? Object.keys(item.products)
         .filter((k) => parseInt(String(item.products[k] || 0), 10) > 0)
         .map((k) => {
-          const p = PRODUCTS.find((prod) => prod.id === k);
+          const p = allProducts.find((prod) => prod.id === k);
           return { qty: item.products[k], emoji: p ? p.emoji : '📦', label: p ? p.short : k };
         })
     : [];

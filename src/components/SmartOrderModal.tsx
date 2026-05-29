@@ -16,7 +16,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import ModalOverlay from './ModalOverlay';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
-import { PRODUCTS, FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { useAllProducts } from '../stores/productCatalogStore';
 import { getModalWidth } from '../utils/helpers';
 import { useAiParse, ParseResult, NotesMode } from '../hooks/useAiParse';
 import { useAiUsageStore } from '../stores/aiUsageStore';
@@ -596,13 +597,14 @@ const Field: React.FC<{ label: string; value: string; styles: ReturnType<typeof 
 );
 
 const ProductsList: React.FC<{ products: Record<string, number>; styles: ReturnType<typeof getStyles> }> = ({ products, styles }) => {
+  const allProducts = useAllProducts();
   const entries = Object.entries(products || {}).filter(([_, v]) => v > 0);
   if (entries.length === 0) return null;
   return (
     <View style={{ marginTop: 6 }}>
       <Text style={styles.fieldLabel}>Productos</Text>
       {entries.map(([id, qty]) => {
-        const p = PRODUCTS.find((x) => x.id === id);
+        const p = allProducts.find((x) => x.id === id);
         return (
           <View key={id} style={styles.productLine}>
             <Text style={styles.productLineText}>

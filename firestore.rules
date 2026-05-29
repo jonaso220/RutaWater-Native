@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function myUid() {
+      return request.auth.uid;
+    }
+    // Lee el doc del usuario (rol y grupo). Null-safe: si no existe, devuelve null.
+    function userField(field) {
+      return exists(/databases/$(database)/documents/users/$(myUid()))
+        ? get(/databases/$(database)/documents/users/$(myUid())).data[field]
+        : null;
+    }
+
+    // PASO 1 (conservador): todo lo que ya funcionaba sigue igual — cualquier
+    // usuario autenticado puede leer/crear/actualizar (mismo comportamiento que
+    // las reglas anteriores). Lo ÚNICO que cambia es el borrado, que se controla
+    // por colección abajo. El cierre fino de lecturas se hará junto con los
+    // perfiles (multi-reparto), porque ahí cambia el modelo de scope.
+    match /{document=**} {
+      allow read, create, update: if isSignedIn();
+    }
+
+    // Clientes: solo puede BORRAR el dueño (cuando trabaja solo, sin grupo) o el
+    // admin del grupo. Un miembro (rol 'member', ej. una persona que trabaja
+    // contigo) NO puede borrar clientes agendados del directorio.
+    match /clients/{id} {
+      allow delete: if isSignedIn()
+        && (userField('groupId') == null || userField('role') == 'admin');
+    }
+
+    // Resto de colecciones: el borrado queda disponible para cualquier usuario
+    // autenticado (igual que hasta ahora; la app ya controla estos flujos).
+    match /debts/{id}            { allow delete: if isSignedIn(); }
+    match /transfers/{id}        { allow delete: if isSignedIn(); }
+    match /groups/{id}           { allow delete: if isSignedIn(); }
+    match /daily_loads/{id}      { allow delete: if isSignedIn(); }
+    match /settings/{id}         { allow delete: if isSignedIn(); }
+    match /aiUsage/{id}          { allow delete: if isSignedIn(); }
+    match /premiumOverrides/{id} { allow delete: if isSignedIn(); }
+    match /users/{id}            { allow delete: if isSignedIn(); }
+  }
+}

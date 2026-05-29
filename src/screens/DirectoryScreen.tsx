@@ -5,15 +5,13 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Linking,
   Alert,
   ScrollView,
 } from 'react-native';
 import { Client } from '../types';
-import { normalizePhone, getClientMatchKey } from '../utils/helpers';
-import { PRODUCTS } from '../constants/products';
+import { getClientMatchKey } from '../utils/helpers';
+import { getLastActivityDate } from '../utils/recency';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
 import { useDebtsStore } from '../stores/debtsStore';
@@ -25,16 +23,15 @@ import EditClientModal from '../components/EditClientModal';
 import AddClientModal from '../components/AddClientModal';
 import RelationshipsModal from '../components/RelationshipsModal';
 import SkeletonCard from '../components/SkeletonCard';
+import DirectoryClientCard from '../components/DirectoryClientCard';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { FlashList } from '@shopify/flash-list';
 import { useLayout } from '../hooks/useLayout';
 
-const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
-
 const DirectoryScreen = () => {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const { fontScale } = useLayout();
   const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
@@ -125,69 +122,6 @@ const DirectoryScreen = () => {
     with_debt: withDebtCount,
   }), [directoryCounts, withDebtCount]);
 
-  // Helper: get last activity date from a client (returns Date or null)
-  const getLastActivityDate = (client: Client): Date | null => {
-    const toDate = (val: any): Date | null => {
-      if (!val) return null;
-      if (typeof val.toDate === 'function') return val.toDate();
-      if (val instanceof Date) return val;
-      return null;
-    };
-    return toDate(client.completedAt) || toDate(client.lastVisited) || toDate(client.updatedAt);
-  };
-
-  // Helper: calculate days since a date (returns number or null if no date)
-  const getDaysSince = (date: Date | null): number | null => {
-    if (!date) return null;
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    return Math.floor(diff / (1000 * 60 * 60 * 24));
-  };
-
-  // Helper: get recency badge info (label, colors)
-  const getRecencyBadge = (client: Client): { label: string; bgColor: string; textColor: string } => {
-    const lastDate = getLastActivityDate(client);
-    const days = getDaysSince(lastDate);
-
-    if (days === null) {
-      return {
-        label: t('directory.noHistory'),
-        bgColor: isDark ? '#374151' : '#E5E7EB',
-        textColor: colors.textMuted,
-      };
-    }
-
-    if (days <= 7) {
-      return {
-        label: days === 0 ? t('directory.today') : t('directory.daysAgo', { count: days }),
-        bgColor: isDark ? '#064E3B' : '#ECFDF5',
-        textColor: isDark ? '#6EE7B7' : '#059669',
-      };
-    }
-
-    if (days <= 21) {
-      return {
-        label: t('directory.daysAgo', { count: days }),
-        bgColor: isDark ? '#451A03' : '#FFFBEB',
-        textColor: isDark ? '#F59E0B' : '#D97706',
-      };
-    }
-
-    if (days <= 45) {
-      return {
-        label: t('directory.daysAgo', { count: days }),
-        bgColor: isDark ? '#431407' : '#FFF7ED',
-        textColor: isDark ? '#FB923C' : '#EA580C',
-      };
-    }
-
-    return {
-      label: `Hace ${days} dias`,
-      bgColor: isDark ? '#450A0A' : '#FEF2F2',
-      textColor: isDark ? '#F87171' : '#DC2626',
-    };
-  };
-
   // Apply with_debt and recurrencia filters at screen level
   const filteredClients = useMemo(() => {
     const isSpecialFilter = activeFilter === 'with_debt' || activeFilter === 'recurrencia';
@@ -238,43 +172,6 @@ const DirectoryScreen = () => {
     { key: 'with_debt', label: t('directory.filterDebt') },
   ];
 
-  const sendWhatsApp = (client: Client) => {
-    if (!client.phone) return;
-    const cleanPhone = normalizePhone(client.phone);
-    Linking.openURL(`whatsapp://send?phone=${cleanPhone}`).catch(() => {
-      Alert.alert(t('error'), t('directory.errorWhatsApp'));
-    });
-  };
-
-  const openMaps = (client: Client) => {
-    if (client.lat && client.lng) {
-      Linking.openURL(
-        `https://www.google.com/maps/dir/?api=1&destination=${client.lat},${client.lng}`,
-      ).catch(() => {
-        Alert.alert(t('error'), t('directory.errorMaps'));
-      });
-    } else if (client.mapsLink) {
-      Linking.openURL(client.mapsLink).catch(() => {
-        Alert.alert(t('error'), t('directory.errorMapsLink'));
-      });
-    }
-  };
-
-  const getProductSummary = (client: Client): string => {
-    if (!client.products) return '';
-    return Object.keys(client.products)
-      .filter((k) => parseInt(String(client.products[k] || 0), 10) > 0)
-      .map((k) => {
-        const p = PRODUCTS.find((prod) => prod.id === k);
-        return `${client.products[k]}x ${p ? p.short : k}`;
-      })
-      .join(', ');
-  };
-
-  const getFreqLabel = (freq: string): string => {
-    return t('freq.' + freq, { defaultValue: freq || '' });
-  };
-
   const handleClone = (client: Client) => {
     Alert.alert(
       t('directory.cloneClient'),
@@ -292,177 +189,25 @@ const DirectoryScreen = () => {
     );
   };
 
-  const callClient = (client: Client) => {
-    if (!client.phone) return;
-    Linking.openURL(`tel:${client.phone}`).catch(() => {
-      Alert.alert(t('error'), t('directory.errorCall'));
-    });
-  };
+  const renderClient = useCallback(({ item }: { item: Client }) => (
+    <DirectoryClientCard
+      client={item}
+      debtTotal={getClientDebtTotal(item.id)}
+      showRecency={isRecurrenciaMode}
+      isAdmin={isAdmin}
+      onSchedule={setScheduleClient}
+      onDebt={setDebtClient}
+      onRelationship={setRelationshipClient}
+      onEdit={setEditClient}
+    />
+  ), [isAdmin, isRecurrenciaMode, getClientDebtTotal]);
 
-  const getFreqStyle = (freq: string, themeColors: ThemeColors) => {
-    switch (freq) {
-      case 'weekly': return { bg: themeColors.primaryLight, text: themeColors.primaryDark };
-      case 'biweekly': return { bg: themeColors.successLighter, text: themeColors.successDark };
-      case 'triweekly': return { bg: themeColors.warningAmberBg, text: themeColors.warningDarker };
-      case 'monthly': return { bg: themeColors.dangerLight, text: themeColors.danger };
-      case 'once': return { bg: themeColors.warningLightBg, text: themeColors.warningOrangeText };
-      case 'on_demand': return { bg: themeColors.sectionBackground, text: themeColors.textMuted };
-      default: return { bg: themeColors.sectionBackground, text: themeColors.textMuted };
-    }
-  };
-
-  const renderClient = useCallback(({ item }: { item: Client }) => {
-    const debtTotal = getClientDebtTotal(item.id);
-    const hasRelationships = !!(item.relationships && Object.keys(item.relationships).length > 0);
-    const isOnDemand = item.freq === 'on_demand' || !item.visitDays?.length;
-    const hasLocation = !!(item.lat && item.lng) || !!item.mapsLink;
-    const avatarColor = AVATAR_COLORS[(item.name || '').charCodeAt(0) % AVATAR_COLORS.length];
-    const initial = (item.name || '?').charAt(0).toUpperCase();
-    const freqStyle = getFreqStyle(item.freq, colors);
-    const recencyBadge = isRecurrenciaMode ? getRecencyBadge(item) : null;
-
-    // Build product chips
-    const prodChips = item.products
-      ? Object.keys(item.products)
-          .filter((k) => parseInt(String(item.products[k] || 0), 10) > 0)
-          .map((k) => {
-            const p = PRODUCTS.find((prod) => prod.id === k);
-            return { qty: item.products[k], emoji: p ? p.emoji : '📦', label: p ? p.short : k };
-          })
-      : [];
-
-    return (
-      <View style={[styles.card, debtTotal > 0 && styles.cardDebt]}>
-        <View style={styles.cardContent}>
-          {/* HEADER: Avatar + Name + Phone */}
-          <View style={styles.headerRow}>
-            <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-              <Text style={styles.avatarText}>{initial}</Text>
-            </View>
-            <View style={styles.headerInfo}>
-              <View style={styles.nameRow}>
-                <Text style={styles.clientName} numberOfLines={1}>
-                  {(item.name || '').toUpperCase()}
-                </Text>
-                {item.phone ? (
-                  <Text style={styles.clientPhone}>{item.phone}</Text>
-                ) : null}
-              </View>
-              {item.address ? (
-                hasLocation ? (
-                  <TouchableOpacity
-                    onPress={() => openMaps(item)}
-                    activeOpacity={0.6}
-                    style={styles.addressLinkBox}
-                    hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                  >
-                    <Ionicons name="location-sharp" size={14} color={colors.primary} />
-                    <Text style={styles.addressLinkText} numberOfLines={1}>{item.address}</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <Text style={styles.clientAddress} numberOfLines={1}>
-                    <Ionicons name="location-sharp" size={13} /> {item.address}
-                  </Text>
-                )
-              ) : hasLocation ? (
-                <TouchableOpacity
-                  onPress={() => openMaps(item)}
-                  activeOpacity={0.6}
-                  style={styles.addressLinkBox}
-                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                >
-                  <Ionicons name="location-sharp" size={14} color={colors.primary} />
-                  <Text style={styles.addressLinkText} numberOfLines={1}>{t('directory.viewLocation')}</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          </View>
-
-          {/* RECENCY BADGE (only in Recurrencia mode) */}
-          {recencyBadge && (
-            <View style={styles.recencyRow}>
-              <Text style={[
-                styles.recencyBadge,
-                { backgroundColor: recencyBadge.bgColor, color: recencyBadge.textColor },
-              ]}>
-                {recencyBadge.label}
-              </Text>
-            </View>
-          )}
-
-          {/* BADGES: Freq + Days + Debt */}
-          <View style={styles.badgesRow}>
-            <Text style={[styles.freqBadge, { backgroundColor: freqStyle.bg, color: freqStyle.text }]}>
-              {getFreqLabel(item.freq)}
-            </Text>
-            {item.visitDays && item.visitDays.length > 0 && (
-              <Text style={styles.daysBadge}>
-                {item.visitDays.map((d) => d.slice(0, 3)).join(', ')}
-              </Text>
-            )}
-            {debtTotal > 0 && (
-              <TouchableOpacity onPress={() => setDebtClient(item)}>
-                <Text style={styles.debtBadge}><Ionicons name="cash" size={12} /> ${debtTotal.toLocaleString()}</Text>
-              </TouchableOpacity>
-            )}
-            {hasRelationships && (
-              <TouchableOpacity onPress={() => setRelationshipClient(item)}>
-                <Text style={styles.familyBadge}><Ionicons name="people" size={12} /> {t('relationships.badge')}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* PRODUCT CHIPS */}
-          {prodChips.length > 0 && (
-            <View style={styles.prodChipsRow}>
-              {prodChips.map((p, i) => (
-                <Text key={i} style={styles.prodChip}>
-                  {p.emoji} {p.qty}x {p.label}
-                </Text>
-              ))}
-            </View>
-          )}
-
-          {/* ACTION BUTTONS */}
-          <View style={styles.actionsRow}>
-            <View style={styles.actionButtonsGroup}>
-              {item.phone ? (
-                <TouchableOpacity onPress={() => callClient(item)} style={styles.actionBtn}>
-                  <Text style={styles.actionBtnEmoji}>📞</Text>
-                </TouchableOpacity>
-              ) : null}
-              {item.phone ? (
-                <TouchableOpacity onPress={() => sendWhatsApp(item)} style={styles.actionBtn}>
-                  <Text style={styles.actionBtnEmoji}>💬</Text>
-                </TouchableOpacity>
-              ) : null}
-              <TouchableOpacity onPress={() => setDebtClient(item)} style={styles.actionBtn}>
-                <Text style={styles.actionBtnEmoji}>{debtTotal > 0 ? '💰' : '💵'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setRelationshipClient(item)} style={styles.actionBtn}>
-                <Text style={styles.actionBtnEmoji}>{hasRelationships ? '👨‍👩‍👧' : '👥'}</Text>
-              </TouchableOpacity>
-              {isAdmin && (
-                <TouchableOpacity onPress={() => setEditClient(item)} style={styles.actionBtn}>
-                  <Text style={styles.actionBtnEmoji}>✏️</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <View style={{ flex: 1 }} />
-            <TouchableOpacity
-              style={styles.scheduleButton}
-              onPress={() => setScheduleClient(item)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.scheduleButtonText}>
-                {isOnDemand ? t('directory.schedule') : t('directory.addVisit')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  }, [colors, styles, t, isAdmin, isRecurrenciaMode, getClientDebtTotal, isDark]);
+  // FlashList v2 can stall on data-update transitions (empty→populated, or the
+  // big grow when clearing the search), painting nothing until the user
+  // scrolls. Remount it on those boundaries — filter change, search toggling
+  // on/off, and first data arrival — so it always starts from a clean render.
+  // Keyed on the search *toggle* (not its text) to avoid remounting per keystroke.
+  const listKey = `${activeFilter}|${search.length > 0}|${clients.length > 0}`;
 
   return (
     <View style={styles.container}>
@@ -577,6 +322,7 @@ const DirectoryScreen = () => {
         </View>
       ) : (
         <FlashList
+          key={listKey}
           ref={scrollRef}
           data={filteredClients}
           renderItem={renderClient}
@@ -749,220 +495,6 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   listContent: {
     padding: 12,
     paddingBottom: 100,
-  },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-    borderLeftWidth: 4,
-    borderLeftColor: 'transparent',
-    maxWidth: 800,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  cardDebt: {
-    borderLeftWidth: 5,
-    borderLeftColor: colors.danger,
-  },
-  cardContent: {
-    gap: 6,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.cardBorder,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  avatarText: {
-    color: colors.textWhite,
-    fontWeight: '700',
-    fontSize: s(16),
-  },
-  headerInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-  },
-  clientName: {
-    fontSize: s(15),
-    fontWeight: '700',
-    color: colors.textPrimary,
-    flex: 1,
-    letterSpacing: 0.2,
-  },
-  clientPhone: {
-    fontSize: s(11),
-    color: colors.textMuted,
-    flexShrink: 0,
-    fontVariant: ['tabular-nums'],
-  },
-  clientAddress: {
-    fontSize: s(12),
-    color: colors.textMuted,
-    marginTop: 3,
-    opacity: 0.85,
-  },
-  clientAddressLink: {
-    color: colors.primary,
-    textDecorationLine: 'underline',
-  },
-  addressLinkBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.primaryLight,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    marginTop: 4,
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-  },
-  addressLinkText: {
-    fontSize: s(13),
-    fontWeight: '600',
-    color: colors.textPrimary,
-    flexShrink: 1,
-  },
-  badgesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 2,
-  },
-  freqBadge: {
-    fontSize: s(10),
-    fontWeight: '700',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  daysBadge: {
-    fontSize: s(11),
-    fontWeight: '700',
-    color: colors.primary,
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  debtBadge: {
-    fontSize: s(10),
-    fontWeight: '700',
-    color: colors.danger,
-    backgroundColor: colors.dangerLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  familyBadge: {
-    fontSize: s(10),
-    fontWeight: '700',
-    color: colors.primary,
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  recencyRow: {
-    flexDirection: 'row',
-    marginTop: 2,
-  },
-  recencyBadge: {
-    fontSize: s(11),
-    fontWeight: '700',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  prodChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 2,
-  },
-  prodChip: {
-    fontSize: s(11),
-    fontWeight: '500',
-    color: colors.textSecondary,
-    backgroundColor: colors.sectionBackground,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.sectionBackground,
-  },
-  actionButtonsGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-  },
-  actionBtn: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-  },
-  actionBtnEmoji: {
-    fontSize: s(18),
-  },
-  scheduleButton: {
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  scheduleButtonText: {
-    fontSize: s(14),
-    fontWeight: '700',
-    color: colors.primaryText,
   },
   importBtn: {
     backgroundColor: colors.primary,

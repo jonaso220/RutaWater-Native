@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { reportError } from '../lib/crashReporting';
 import {
   View,
@@ -9,22 +9,24 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  Share,
   Linking,
   Platform,
 } from 'react-native';
-import RNFS from 'react-native-fs';
-import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
-import { useDebtsStore } from '../stores/debtsStore';
-import { useTransfersStore } from '../stores/transfersStore';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
-import { PRODUCTS, FREQUENCY_LABELS, Frequency } from '../constants/products';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { useSubscriptionStore } from '../stores/subscriptionStore';
+import { useGroupManagement } from '../hooks/useGroupManagement';
+import {
+  useWhatsAppTemplates,
+  DEFAULT_EN_CAMINO,
+  DEFAULT_DEUDA,
+  DEFAULT_RECORDATORIO,
+} from '../hooks/useWhatsAppTemplates';
+import { useDataExport } from '../hooks/useDataExport';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -36,7 +38,6 @@ const SettingsScreen = () => {
   const { fontScale } = useLayout();
   const styles = getStyles(colors, fontScale);
   const { user: firebaseUser, groupData, isAdmin, signOut, deleteAccount, setGroupData } = useAuthContext();
-  const clients = useClientsStore((s) => s.clients);
   const clientCount = useClientsStore((s) => s.clientCount);
   const findDuplicateClients = useClientsStore((s) => s.findDuplicateClients);
   const cleanupDuplicates = useClientsStore((s) => s.cleanupDuplicates);
@@ -49,54 +50,42 @@ const SettingsScreen = () => {
   const removePromo = useSubscriptionStore((s) => s.removePromo);
   const [promoCode, setPromoCode] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
-  const debts = useDebtsStore((s) => s.debts);
-  const transfers = useTransfersStore((s) => s.transfers);
   // ALL hooks must be called before any early return (Rules of Hooks)
-  const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [members, setMembers] = useState<any[]>([]);
-  const [waEnCamino, setWaEnCamino] = useState('');
-  const [waDeuda, setWaDeuda] = useState('');
-  const [waRecordatorio, setWaRecordatorio] = useState('');
-  const [waLoaded, setWaLoaded] = useState(false);
 
   const uid = firebaseUser?.uid || '';
   const userEmail = firebaseUser?.email || '';
   const userDisplayName = firebaseUser?.displayName || '';
 
-  // Load WhatsApp templates from settings
-  useEffect(() => {
-    if (!uid) return;
-    const settingsDocId = groupData?.groupId || uid;
-    db.collection('settings').doc(settingsDocId).get().then((doc) => {
-      if (doc.exists) {
-        const data = doc.data();
-        if (data?.whatsappEnCamino) setWaEnCamino(data.whatsappEnCamino);
-        if (data?.whatsappDeuda) setWaDeuda(data.whatsappDeuda);
-        if (data?.whatsappRecordatorio) setWaRecordatorio(data.whatsappRecordatorio);
-      }
-      setWaLoaded(true);
-    }).catch(() => setWaLoaded(true));
-  }, [uid, groupData?.groupId]);
+  const {
+    members,
+    joinCode,
+    setJoinCode,
+    handleCreateGroup,
+    handleJoinGroup,
+    handleLeaveGroup,
+    handleRemoveMember,
+    handleDissolveGroup,
+  } = useGroupManagement(
+    { uid, email: userEmail, displayName: userDisplayName },
+    groupData,
+    setGroupData,
+    setLoading,
+  );
 
-  // Load group members
-  useEffect(() => {
-    if (!groupData?.groupId) {
-      setMembers([]);
-      return;
-    }
-    const unsubscribe = db
-      .collection('users')
-      .where('groupId', '==', groupData.groupId)
-      .onSnapshot((snapshot) => {
-        const loaded = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setMembers(loaded);
-      });
-    return () => unsubscribe();
-  }, [groupData?.groupId]);
+  const {
+    waEnCamino,
+    setWaEnCamino,
+    waDeuda,
+    setWaDeuda,
+    waRecordatorio,
+    setWaRecordatorio,
+    waLoaded,
+    handleSaveTemplates,
+    handleResetTemplates,
+  } = useWhatsAppTemplates(uid, groupData?.groupId);
+
+  const { handleExportCSV, handleExportJSON } = useDataExport({ uid, email: userEmail });
 
   if (!firebaseUser) return null;
   const user = {
@@ -105,344 +94,6 @@ const SettingsScreen = () => {
     displayName: userDisplayName,
   };
   const onSignOut = signOut;
-  const onGroupUpdate = setGroupData;
-  // WhatsApp templates
-  const DEFAULT_EN_CAMINO = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
-  const DEFAULT_DEUDA = 'La deuda es de ${total}. Saludos';
-  const DEFAULT_RECORDATORIO = 'Hola, buenas \nEste es un mensaje automatico para informarle que, segun nuestros registros, quedo pendiente un saldo por regularizar.\nCuando pueda, le agradecemos que nos indique en que fecha podriamos saldarlo. Si necesita nuevamente los datos de la cuenta, con gusto se los enviamos.\nMuchas gracias.';
-
-  const handleSaveTemplates = async () => {
-    try {
-      const settingsDocId = groupData?.groupId || user.uid;
-      const settings: Record<string, string> = {};
-      if (waEnCamino.trim()) settings.whatsappEnCamino = waEnCamino.trim();
-      if (waDeuda.trim()) settings.whatsappDeuda = waDeuda.trim();
-      if (waRecordatorio.trim()) settings.whatsappRecordatorio = waRecordatorio.trim();
-      await db.collection('settings').doc(settingsDocId).set(settings, { merge: true });
-      Alert.alert(t('settings.templatesSaved'), t('settings.templatesSavedMsg'));
-    } catch (e) {
-      reportError(e, 'Error saving templates');
-      Alert.alert(t('error'), t('settings.templatesSaveError'));
-    }
-  };
-
-  const handleResetTemplates = () => {
-    setWaEnCamino('');
-    setWaDeuda('');
-    setWaRecordatorio('');
-    const settingsDocId = groupData?.groupId || user.uid;
-    db.collection('settings').doc(settingsDocId).set(
-      { whatsappEnCamino: null, whatsappDeuda: null, whatsappRecordatorio: null },
-      { merge: true },
-    ).catch((e) => reportError(e, 'Error resetting templates'));
-    Alert.alert(t('settings.templatesReset'), t('settings.templatesResetMsg'));
-  };
-
-  const generateCode = (): string => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let code = '';
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
-  };
-
-  const commitBatchUpdates = async (updates: { ref: any; data: any }[]) => {
-    for (let i = 0; i < updates.length; i += 450) {
-      const batch = db.batch();
-      updates.slice(i, i + 450).forEach(({ ref, data }) => batch.update(ref, data));
-      await batch.commit();
-    }
-  };
-
-  const handleCreateGroup = async () => {
-    setLoading(true);
-    try {
-      const groupId = `group_${user.uid}_${Date.now()}`;
-      const code = generateCode();
-
-      await db
-        .collection('groups')
-        .doc(groupId)
-        .set({
-          code,
-          adminId: user.uid,
-          adminEmail: user.email,
-          adminName: user.displayName,
-          createdAt: new Date(),
-        });
-
-      await db.collection('users').doc(user.uid).update({
-        groupId,
-        role: 'admin',
-      });
-
-      // Migrate existing data
-      const updates: { ref: any; data: any }[] = [];
-      const collections = ['clients', 'debts', 'transfers'];
-      for (const collectionName of collections) {
-        const snap = await db
-          .collection(collectionName)
-          .where('userId', '==', user.uid)
-          .get();
-        snap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId } }));
-      }
-      await commitBatchUpdates(updates);
-
-      onGroupUpdate({ groupId, role: 'admin', code });
-    } catch (e) {
-      reportError(e, 'Error creating group');
-      Alert.alert(t('error'), t('settings.createGroupError'));
-    }
-    setLoading(false);
-  };
-
-  const handleJoinGroup = async () => {
-    if (!joinCode.trim()) return;
-    setLoading(true);
-    try {
-      const snap = await db
-        .collection('groups')
-        .where('code', '==', joinCode.trim().toUpperCase())
-        .get();
-
-      if (snap.empty) {
-        Alert.alert(t('error'), t('settings.joinError'));
-        setLoading(false);
-        return;
-      }
-
-      const groupDoc = snap.docs[0];
-      const groupId = groupDoc.id;
-
-      await db.collection('users').doc(user.uid).update({
-        groupId,
-        role: 'member',
-      });
-
-      onGroupUpdate({
-        groupId,
-        role: 'member',
-        code: groupDoc.data().code,
-      });
-      setJoinCode('');
-    } catch (e) {
-      reportError(e, 'Error joining group');
-      Alert.alert(t('error'), t('settings.joinGroupError'));
-    }
-    setLoading(false);
-  };
-
-  const handleLeaveGroup = () => {
-    Alert.alert(t('settings.leaveGroupTitle'), t('settings.leaveGroupMsg'), [
-      { text: t('cancel'), style: 'cancel' },
-      {
-        text: t('settings.leave'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await db
-              .collection('users')
-              .doc(user.uid)
-              .update({ groupId: null, role: null });
-            onGroupUpdate(null);
-          } catch (e) {
-            Alert.alert(t('error'), t('settings.leaveError'));
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleRemoveMember = (memberId: string, memberName: string) => {
-    Alert.alert(
-      t('settings.removeMemberTitle'),
-      t('settings.removeMemberMsg', { name: memberName }),
-      [
-        { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('settings.removeMember'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await db
-                .collection('users')
-                .doc(memberId)
-                .update({ groupId: null, role: null });
-            } catch (e) {
-              Alert.alert(t('error'), t('settings.removeMemberError'));
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleDissolveGroup = () => {
-    Alert.alert(
-      t('settings.dissolveTitle'),
-      t('settings.dissolveMsg'),
-      [
-        { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('settings.dissolve'),
-          style: 'destructive',
-          onPress: async () => {
-            if (!groupData?.groupId) return;
-            setLoading(true);
-            try {
-              const gid = groupData.groupId;
-
-              // Collect all docs to update
-              const updates: { ref: any; data: any }[] = [];
-
-              const membersSnap = await db.collection('users').where('groupId', '==', gid).get();
-              membersSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null, role: null } }));
-
-              const clientsSnap = await db.collection('clients').where('groupId', '==', gid).get();
-              clientsSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null } }));
-
-              const debtsSnap = await db.collection('debts').where('groupId', '==', gid).get();
-              debtsSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null } }));
-
-              const transfersSnap = await db.collection('transfers').where('groupId', '==', gid).get();
-              transfersSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null } }));
-
-              await commitBatchUpdates(updates);
-
-              // Delete group doc
-              await db.collection('groups').doc(gid).delete();
-
-              onGroupUpdate(null);
-            } catch (e) {
-              Alert.alert(t('error'), t('settings.dissolveError'));
-            }
-            setLoading(false);
-          },
-        },
-      ],
-    );
-  };
-
-  // --- EXPORT ---
-  const escapeCsv = (val: string | number | boolean | undefined | null): string => {
-    const str = String(val ?? '');
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-      return '"' + str.replace(/"/g, '""') + '"';
-    }
-    return str;
-  };
-
-  const shareFile = async (content: string, filename: string) => {
-    const dir = Platform.OS === 'ios' ? RNFS.TemporaryDirectoryPath : RNFS.CachesDirectoryPath;
-    const filePath = `${dir}/${filename}`;
-    await RNFS.writeFile(filePath, content, 'utf8');
-    const fileUrl = Platform.OS === 'ios' ? filePath : `file://${filePath}`;
-    await Share.share(
-      Platform.OS === 'ios'
-        ? { url: fileUrl }
-        : { title: filename, message: content },
-    );
-  };
-
-  const handleExportCSV = async () => {
-    try {
-      const allClients = clients.filter((c) => c.name);
-      if (allClients.length === 0) {
-        Alert.alert(t('settings.noDataCSV'), t('settings.noClientsToExport'));
-        return;
-      }
-
-      const headers = ['Nombre', 'Teléfono', 'Dirección', 'Día', 'Frecuencia', 'Productos', 'Notas', 'Tiene Deuda', 'Favorito', 'Link Maps'];
-
-      const rows = allClients.map((c) => {
-        // Build product summary with labels (matching webapp)
-        const prodParts: string[] = [];
-        if (c.products) {
-          PRODUCTS.forEach((p) => {
-            const qty = parseInt(String(c.products[p.id] || 0), 10);
-            if (qty > 0) prodParts.push(`${p.label}: ${qty}`);
-          });
-        }
-
-        return [
-          escapeCsv(c.name),
-          escapeCsv(c.phone),
-          escapeCsv(c.address),
-          escapeCsv(c.visitDay || (c.visitDays || []).join(', ')),
-          escapeCsv(FREQUENCY_LABELS[c.freq as Frequency] || c.freq || ''),
-          escapeCsv(prodParts.join(', ')),
-          escapeCsv(c.notes || ''),
-          c.hasDebt ? 'Sí' : 'No',
-          c.isStarred ? 'Sí' : 'No',
-          escapeCsv(c.mapsLink || ''),
-        ].join(',');
-      });
-
-      // BOM for Excel/Sheets UTF-8 recognition
-      const bom = '\uFEFF';
-      const csvContent = bom + headers.map(escapeCsv).join(',') + '\n' + rows.join('\n');
-
-      const date = new Date().toISOString().split('T')[0];
-      await shareFile(csvContent, `RutaWater_Clientes_${date}.csv`);
-
-      Alert.alert(t('settings.csvExported', { count: allClients.length }), '');
-    } catch (e) {
-      reportError(e, 'Error exporting CSV');
-      Alert.alert(t('error'), t('settings.exportError'));
-    }
-  };
-
-  const handleExportJSON = async () => {
-    try {
-      const allClients = clients.filter((c) => c.name);
-      if (allClients.length === 0 && debts.length === 0 && transfers.length === 0) {
-        Alert.alert(t('settings.noDataCSV'), t('settings.noDataToExport'));
-        return;
-      }
-
-      const backup = {
-        exportDate: new Date().toISOString().split('T')[0],
-        exportedBy: user.email || user.uid,
-        clients: allClients.map((c) => ({
-          id: c.id, name: c.name, phone: c.phone || '', address: c.address || '',
-          lat: c.lat || '', lng: c.lng || '', freq: c.freq || '',
-          visitDay: c.visitDay || '', visitDays: c.visitDays || [],
-          specificDate: c.specificDate || '', notes: c.notes || '',
-          products: c.products || {}, isStarred: c.isStarred || false,
-          alarm: c.alarm || '', mapsLink: c.mapsLink || '', isNote: c.isNote || false,
-          hasDebt: c.hasDebt || false,
-        })),
-        debts: debts.map((d) => ({
-          id: d.id, clientId: d.clientId, clientName: d.clientName || '',
-          clientAddress: (d as any).clientAddress || '', amount: d.amount || 0,
-          createdAt: (d.createdAt as any)?.seconds
-            ? new Date((d.createdAt as any).seconds * 1000).toISOString()
-            : '',
-        })),
-        transfers: transfers.map((t) => ({
-          id: t.id, clientId: t.clientId, clientName: t.clientName || '',
-          clientAddress: (t as any).clientAddress || '',
-          createdAt: (t.createdAt as any)?.seconds
-            ? new Date((t.createdAt as any).seconds * 1000).toISOString()
-            : '',
-        })),
-      };
-
-      const jsonContent = JSON.stringify(backup, null, 2);
-      const date = new Date().toISOString().split('T')[0];
-      await shareFile(jsonContent, `RutaWater_Backup_${date}.json`);
-
-      const counts: string[] = [];
-      if (backup.clients.length > 0) counts.push(t('settings.backupClients', { count: backup.clients.length }));
-      if (backup.debts.length > 0) counts.push(t('settings.backupDebts', { count: backup.debts.length }));
-      if (backup.transfers.length > 0) counts.push(t('settings.backupTransfers', { count: backup.transfers.length }));
-      Alert.alert(t('settings.backupReady'), counts.join(', '));
-    } catch (e) {
-      reportError(e, 'Error exporting JSON');
-      Alert.alert(t('error'), t('settings.exportError'));
-    }
-  };
 
   const handleCleanupDuplicates = () => {
     const { staleIds } = findDuplicateClients();

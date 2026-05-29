@@ -125,33 +125,46 @@ export const levenshtein = (a: string, b: string): number => {
   return matrix[b.length][a.length];
 };
 
-// Check if search chars appear in order within text (like WhatsApp/Sublime)
-const subsequenceMatch = (text: string, search: string): boolean => {
-  let si = 0;
-  for (let ti = 0; ti < text.length && si < search.length; ti++) {
-    if (text[ti] === search[si]) si++;
-  }
-  return si === search.length;
-};
-
-// Levenshtein on a sliding window: find best distance of `search` within `text`
-// Limited to short search terms to avoid performance issues with large texts
-const substringLevenshtein = (text: string, search: string): number => {
-  const sLen = search.length;
-  if (sLen === 0) return 0;
-  if (text.length === 0) return sLen;
-  if (sLen > 12 || text.length > 100) return sLen; // skip for long inputs
-  let best = sLen;
-  const minWin = Math.max(1, sLen - 1);
-  const maxWin = sLen + 1;
-  for (let win = minWin; win <= maxWin; win++) {
-    for (let start = 0; start <= text.length - win; start++) {
-      const d = levenshtein(text.substring(start, start + win), search);
-      if (d < best) best = d;
-      if (best === 0) return 0;
+// Damerau-Levenshtein (optimal string alignment): like Levenshtein but counts
+// an adjacent transposition (e.g. "jaun" vs "juan") as a single edit, which is
+// one of the most common typing mistakes.
+export const damerau = (a: string, b: string): number => {
+  const al = a.length, bl = b.length;
+  if (al === 0) return bl;
+  if (bl === 0) return al;
+  const d: number[][] = [];
+  for (let i = 0; i <= al; i++) d[i] = [i];
+  for (let j = 0; j <= bl; j++) d[0][j] = j;
+  for (let i = 1; i <= al; i++) {
+    for (let j = 1; j <= bl; j++) {
+      const cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a.charAt(i - 1) === b.charAt(j - 2) && a.charAt(i - 2) === b.charAt(j - 1)) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
     }
   }
-  return best;
+  return d[al][bl];
+};
+
+// Typo tolerance scaled to word length (longer words allow more edits).
+const wordTolerance = (len: number): number =>
+  len <= 4 ? 1 : len <= 7 ? 1 : len <= 11 ? 2 : 3;
+
+// Does search word `w` match any token in `textWords`? Matches on substring
+// (covers prefix typing like "mar"→"maria"), or a typo within tolerance. The
+// typo check also compares against the token's leading slice of len(w) so a
+// mistake while typing the start of a long name still matches.
+const wordMatches = (textWords: string[], w: string): boolean => {
+  for (const tw of textWords) {
+    if (tw.includes(w)) return true;
+    if (w.length >= 3) {
+      const md = wordTolerance(w.length);
+      if (damerau(tw, w) <= md) return true;
+      if (tw.length > w.length && damerau(tw.slice(0, w.length), w) <= md) return true;
+    }
+  }
+  return false;
 };
 
 export const matchScore = (searchTerm: string, name: string, address: string, phone: string): number => {
@@ -159,9 +172,8 @@ export const matchScore = (searchTerm: string, name: string, address: string, ph
   if (!term) return 0;
   const n = normalizeText(name);
   const a = normalizeText(address);
-  const p = normalizeText(phone);
   const wordStartsWith = (text: string, q: string): boolean =>
-    text.split(/\s+/).some((w) => w.startsWith(q));
+    text.split(/\s+/).filter(Boolean).some((w) => w.startsWith(q));
 
   if (n === term) return 1000;
   if (n.startsWith(term)) return 800;
@@ -170,7 +182,19 @@ export const matchScore = (searchTerm: string, name: string, address: string, ph
   if (a.startsWith(term)) return 400;
   if (wordStartsWith(a, term)) return 350;
   if (a.includes(term)) return 300;
-  if (p.includes(term)) return 200;
+
+  // Phone (and address numbers): compare normalized digits so formatting,
+  // country code and a leading zero don't block the match.
+  const qd = normalizePhoneForComparison(searchTerm);
+  if (qd.length >= 3) {
+    const pd = normalizePhoneForComparison(phone);
+    if (pd) {
+      if (pd.startsWith(qd)) return 250;
+      if (pd.includes(qd)) return 200;
+    }
+    const ad = normalizePhoneForComparison(address);
+    if (ad && ad.includes(qd)) return 150;
+  }
   return 100;
 };
 
@@ -178,40 +202,33 @@ export const fuzzyMatch = (searchTerm: string): ((...fields: string[]) => boolea
   if (!searchTerm) return () => true;
   const cleaned = normalizeText(searchTerm).trim().replace(/\s+/g, ' ');
   if (!cleaned) return () => true;
-  const words = cleaned.split(' ');
+  const words = cleaned.split(' ').filter(Boolean);
+
+  // Phone/number search: when the query is digit-based, match on normalized
+  // phone digits (ignoring spaces, dashes, +, country code 598 and leading 0).
+  const queryDigits = normalizePhoneForComparison(searchTerm);
+  const hasDigitQuery = queryDigits.length >= 3;
+  const isPureDigits = /^[\d\s+().-]+$/.test(searchTerm.trim());
 
   return (...fields: string[]) => {
-    const combined = fields.map((f) => normalizeText(f)).join(' ');
+    if (hasDigitQuery) {
+      for (const f of fields) {
+        const fd = normalizePhoneForComparison(f || '');
+        if (fd && fd.includes(queryDigits)) return true;
+      }
+      // A pure-number query only makes sense against phone/address numbers.
+      if (isPureDigits) return false;
+    }
 
-    // Fast path: direct full-term substring
+    const combined = fields.map((f) => normalizeText(f || '')).join(' ');
+
+    // Fast path: the whole query appears verbatim.
     if (combined.includes(cleaned)) return true;
 
-    // Each search word must match at least one field
-    return words.every((w) => {
-      if (combined.includes(w)) return true;
-
-      const textWords = combined.split(/\s+/);
-
-      // Tolerance: 1 error for 3-4 chars, 2 for 5-7, 3 for 8+
-      const maxDist = w.length <= 2 ? 0 : w.length <= 4 ? 1 : w.length <= 7 ? 2 : 3;
-
-      // 1) Prefix match: any text word starts with search word or vice versa
-      if (textWords.some((tw) => tw.startsWith(w) || w.startsWith(tw))) return true;
-
-      // 2) Subsequence match: chars appear in order (e.g. "mria" in "maria")
-      if (w.length >= 3 && textWords.some((tw) => subsequenceMatch(tw, w))) return true;
-
-      if (maxDist === 0) return false;
-
-      // 3) Word-level Levenshtein (typos like "maris" for "maria")
-      if (textWords.some((tw) => levenshtein(tw, w) <= maxDist)) return true;
-
-      // 4) Substring Levenshtein: find approximate match anywhere in the combined text
-      //    (handles cases where word boundaries don't align)
-      if (w.length >= 3 && substringLevenshtein(combined, w) <= maxDist) return true;
-
-      return false;
-    });
+    // Every search word must match some token. Empty tokens are filtered out so
+    // a missing field (e.g. no phone) can't accidentally match every query.
+    const textWords = combined.split(/\s+/).filter(Boolean);
+    return words.every((w) => wordMatches(textWords, w));
   };
 };
 

@@ -9,6 +9,7 @@ import { usePromoCode } from '../hooks/usePromoCode';
 import { useAiUsage } from '../hooks/useAiUsage';
 import { useClientsAutoCleanup } from '../hooks/useClientsAutoCleanup';
 import { useProductCatalog } from '../hooks/useProductCatalog';
+import { useProfiles } from '../hooks/useProfiles';
 import { ALL_DAYS } from '../constants/products';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { useClientsStore } from './clientsStore';
@@ -17,6 +18,7 @@ import { useTransfersStore } from './transfersStore';
 import { useDailyLoadsStore } from './dailyLoadsStore';
 import { useSubscriptionStore } from './subscriptionStore';
 import { useProductCatalogStore } from './productCatalogStore';
+import { useProfileStore } from './profileStore';
 import { queryClient } from '../lib/queryClient';
 
 /**
@@ -28,6 +30,13 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   const { user, groupData } = useAuthContext();
   const userId = user?.uid || '';
   const groupId = groupData?.groupId;
+
+  // --- Profiles / Repartos ---
+  // The active profile decides the scope value used for clients/debts/transfers.
+  // Reparto 1 (primary) resolves to the user's real group (or userId) → no change.
+  // A custom profile resolves to its own id, isolating its data.
+  const profilesHook = useProfiles(userId, groupId);
+  const effectiveGroupId = profilesHook.activeProfile.scopeGroupId;
 
   // --- Subscription ---
   const subscription = useSubscription({ userId: user?.uid });
@@ -56,7 +65,7 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   }, [subscription.isPremium, subscription.loading, subscription.packages, subscription.currentPlan, subscription.expirationDate, subscription.isTrialActive, promo.hasPromo, promo.promoLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Clients ---
-  const clientsHook = useClients({ userId, groupId });
+  const clientsHook = useClients({ userId, groupId: effectiveGroupId });
 
   const dayCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -85,7 +94,7 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
 
   // --- Debts ---
   // Pasamos clients para que getClientDebtTotal agrupe duplicados (mismo cliente del directorio añadido varias veces)
-  const debtsHook = useDebts({ userId, groupId, clients: clientsHook.clients });
+  const debtsHook = useDebts({ userId, groupId: effectiveGroupId, clients: clientsHook.clients });
 
   useEffect(() => {
     useDebtsStore.setState({
@@ -101,7 +110,7 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
 
   // --- Transfers ---
   // Pasamos clients para agrupar transferencias de instancias duplicadas del mismo cliente humano
-  const transfersHook = useTransfers({ userId, groupId, clients: clientsHook.clients });
+  const transfersHook = useTransfers({ userId, groupId: effectiveGroupId, clients: clientsHook.clients });
 
   useEffect(() => {
     useTransfersStore.setState({
@@ -144,6 +153,20 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
     });
   }, [catalog.products, catalog.allProducts, catalog.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // --- Profiles store bridge ---
+  useEffect(() => {
+    useProfileStore.setState({
+      profiles: profilesHook.profiles,
+      activeProfileId: profilesHook.activeProfileId,
+      activeProfile: profilesHook.activeProfile,
+      loaded: profilesHook.loaded,
+      setActiveProfile: profilesHook.setActiveProfile,
+      createProfile: profilesHook.createProfile,
+      renameProfile: profilesHook.renameProfile,
+      deleteProfile: profilesHook.deleteProfile,
+    });
+  }, [profilesHook.profiles, profilesHook.activeProfileId, profilesHook.activeProfile, profilesHook.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Reset all stores on unmount (sign out) to prevent stale references.
   // Also clear the TanStack Query cache so a different user signing in
   // during the same app session can't see the previous user's clients,
@@ -156,6 +179,7 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
       useDailyLoadsStore.setState(useDailyLoadsStore.getInitialState());
       useSubscriptionStore.setState(useSubscriptionStore.getInitialState());
       useProductCatalogStore.setState(useProductCatalogStore.getInitialState());
+      useProfileStore.setState(useProfileStore.getInitialState());
       queryClient.clear();
     };
   }, []);

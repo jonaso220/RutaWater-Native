@@ -28,6 +28,8 @@ import {
 } from '../hooks/useWhatsAppTemplates';
 import { useDataExport } from '../hooks/useDataExport';
 import ProductCatalogModal from '../components/ProductCatalogModal';
+import ProfilesModal from '../components/ProfilesModal';
+import { useProfileStore } from '../stores/profileStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -52,6 +54,8 @@ const SettingsScreen = () => {
   const [promoCode, setPromoCode] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
   const [productsModalVisible, setProductsModalVisible] = useState(false);
+  const [profilesModalVisible, setProfilesModalVisible] = useState(false);
+  const activeProfile = useProfileStore((s) => s.activeProfile);
   // ALL hooks must be called before any early return (Rules of Hooks)
   const [loading, setLoading] = useState(false);
 
@@ -449,6 +453,24 @@ const SettingsScreen = () => {
         )}
       </View>
 
+      {/* Profiles / Repartos */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="git-branch-outline" size={20} color={colors.primary} />
+          <Text style={styles.sectionTitle}>{t('settings.profilesTitle')}</Text>
+        </View>
+        <Text style={styles.sectionSubtitle}>{t('settings.profilesSubtitle')}</Text>
+        <View style={styles.sectionCard}>
+          <TouchableOpacity onPress={() => setProfilesModalVisible(true)} style={styles.exportBtn}>
+            <Ionicons name="git-branch-outline" size={18} color={colors.primary} />
+            <Text style={styles.exportBtnText}>
+              {t('settings.manageProfiles')}
+              {activeProfile ? `  ·  ${activeProfile.name}` : ''}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Products catalog */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -607,6 +629,10 @@ const SettingsScreen = () => {
     <ProductCatalogModal
       visible={productsModalVisible}
       onClose={() => setProductsModalVisible(false)}
+    />
+    <ProfilesModal
+      visible={profilesModalVisible}
+      onClose={() => setProfilesModalVisible(false)}
     />
     </>
   );

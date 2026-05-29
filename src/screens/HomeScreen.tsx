@@ -47,6 +47,8 @@ import AddClientModal from '../components/AddClientModal';
 import PromptModal from '../components/PromptModal';
 import SmartOrderModal from '../components/SmartOrderModal';
 import RelationshipsModal from '../components/RelationshipsModal';
+import ProfilesModal from '../components/ProfilesModal';
+import { useProfileStore } from '../stores/profileStore';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
@@ -177,6 +179,8 @@ const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const { isAdmin, user, groupData } = useAuthContext();
   const catalogProducts = useProducts();
+  const profileSwitcherVisible = useProfileStore((s) => s.switcherVisible);
+  const setProfileSwitcherVisible = useProfileStore((s) => s.setSwitcherVisible);
   const clients = useClientsStore((s) => s.clients);
   const loading = useClientsStore((s) => s.loading);
   const getAllDayClients = useClientsStore((s) => s.getAllDayClients);
@@ -1117,6 +1121,12 @@ const HomeScreen = () => {
         client={alarmPromptClient}
         selectedDay={selectedDay}
         onClose={() => setAlarmPromptClient(null)}
+      />
+
+      {/* Profiles / Repartos switcher (abierto desde el chip del header) */}
+      <ProfilesModal
+        visible={profileSwitcherVisible}
+        onClose={() => setProfileSwitcherVisible(false)}
       />
     </View>
   );

@@ -12,6 +12,7 @@ import DirectoryScreen from '../screens/DirectoryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import AlarmBanner from '../components/AlarmBanner';
+import ProfileSwitcherButton from '../components/ProfileSwitcherButton';
 import { useAlarmChecker } from '../hooks/useAlarmChecker';
 
 const Tab = createBottomTabNavigator();
@@ -61,6 +62,7 @@ const TabNavigator = () => {
                 </Text>
               </View>
             ),
+            headerRight: () => <ProfileSwitcherButton />,
             tabBarLabel: t('nav.home'),
             tabBarIcon: () => <Text style={{ fontSize: Math.round(22 * fontScale) }}>🏠</Text>,
           }}

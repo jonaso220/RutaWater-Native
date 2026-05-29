@@ -29,13 +29,16 @@ interface ProfileStore {
   createProfile: (name: string) => Promise<void>;
   renameProfile: (id: string, name: string) => Promise<void>;
   deleteProfile: (id: string) => Promise<void>;
+  // UI: visibilidad del gestor de repartos (abierto desde el header del Inicio).
+  switcherVisible: boolean;
+  setSwitcherVisible: (v: boolean) => void;
 }
 
 const noop = async () => {};
 
 export const PRIMARY_PROFILE_ID = '__primary__';
 
-export const useProfileStore = create<ProfileStore>()(() => ({
+export const useProfileStore = create<ProfileStore>()((set) => ({
   profiles: [],
   activeProfileId: PRIMARY_PROFILE_ID,
   activeProfile: null,
@@ -44,6 +47,8 @@ export const useProfileStore = create<ProfileStore>()(() => ({
   createProfile: noop,
   renameProfile: noop,
   deleteProfile: noop,
+  switcherVisible: false,
+  setSwitcherVisible: (v: boolean) => set({ switcherVisible: v }),
 }));
 
 /** Perfiles a los que el usuario tiene acceso (Reparto 1 + los suyos). */

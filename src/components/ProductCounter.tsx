@@ -40,17 +40,23 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
       style={styles.container}
       contentContainerStyle={styles.content}
     >
-      {PRODUCTS.map((p) =>
-        totals[p.id] > 0 ? (
+      {PRODUCTS.map((p) => {
+        if (totals[p.id] <= 0) return null;
+        const isSoda = p.id === 'soda';
+        // Soda is delivered by the crate (6 sifones), so the crate count is the
+        // number actually loaded onto the truck — show it big, sifones in parens.
+        const bigValue = isSoda ? Math.ceil(totals[p.id] / 6) : totals[p.id];
+        const bigLabel = isSoda ? t('productCounter.crate') : p.short;
+        return (
           <View key={p.id} style={styles.item}>
-            <Text style={styles.qty}>{totals[p.id]}</Text>
-            <Text style={styles.label}>{p.short}</Text>
-            {p.id === 'soda' && (
-              <Text style={styles.crateLabel}>({Math.ceil(totals[p.id] / 6)} {t('productCounter.crate')})</Text>
+            <Text style={styles.qty}>{bigValue}</Text>
+            <Text style={styles.label}>{bigLabel}</Text>
+            {isSoda && (
+              <Text style={styles.crateLabel}>({totals[p.id]} {p.short})</Text>
             )}
           </View>
-        ) : null,
-      )}
+        );
+      })}
     </ScrollView>
   );
 };

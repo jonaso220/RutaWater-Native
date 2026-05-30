@@ -18,6 +18,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { getModalWidth } from '../utils/helpers';
 import { useProfileStore } from '../stores/profileStore';
+import ProfileShareModal from './ProfileShareModal';
 
 interface ProfilesModalProps {
   visible: boolean;
@@ -38,8 +39,11 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
   const createProfile = useProfileStore((s) => s.createProfile);
   const renameProfile = useProfileStore((s) => s.renameProfile);
   const deleteProfile = useProfileStore((s) => s.deleteProfile);
+  const joinProfile = useProfileStore((s) => s.joinProfile);
 
   const [newName, setNewName] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [shareProfileId, setShareProfileId] = useState<string | null>(null);
 
   const handleCreate = () => {
     if (!newName.trim()) return;
@@ -59,7 +63,23 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
     ]);
   };
 
+  const handleJoin = async () => {
+    if (!joinCode.trim()) return;
+    const res = await joinProfile(joinCode);
+    setJoinCode('');
+    const msgKey =
+      res === 'ok'
+        ? 'settings.joinOk'
+        : res === 'not_found'
+        ? 'settings.joinNotFound'
+        : res === 'already'
+        ? 'settings.joinAlready'
+        : 'settings.joinProfileError';
+    Alert.alert(res === 'ok' ? t('done') : t('error'), t(msgKey));
+  };
+
   return (
+    <>
     <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -93,14 +113,24 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
                   </TouchableOpacity>
                   <TextInput
                     key={`${p.id}-${p.name}`}
-                    style={styles.nameInput}
+                    style={[styles.nameInput, !(p.isPrimary || p.isOwner) && styles.nameInputLocked]}
                     defaultValue={p.name}
+                    editable={p.isPrimary || !!p.isOwner}
                     placeholder={t('settings.newProfilePlaceholder')}
                     placeholderTextColor={colors.textHint}
                     onEndEditing={(e) => renameProfile(p.id, e.nativeEvent.text)}
                     returnKeyType="done"
                   />
                   {!p.isPrimary && (
+                    <TouchableOpacity
+                      onPress={() => setShareProfileId(p.id)}
+                      style={styles.iconBtn}
+                      accessibilityLabel={t('settings.shareProfileTitle')}
+                    >
+                      <Ionicons name="people-outline" size={20} color={colors.primary} />
+                    </TouchableOpacity>
+                  )}
+                  {!p.isPrimary && p.isOwner && (
                     <TouchableOpacity
                       onPress={() => handleDelete(p.id, p.name)}
                       style={styles.iconBtn}
@@ -132,6 +162,28 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
               </TouchableOpacity>
             </View>
             <Text style={styles.hint}>{t('settings.profilesHint')}</Text>
+
+            {/* Join a shared route by code */}
+            <Text style={styles.addTitle}>{t('settings.joinProfileTitle')}</Text>
+            <View style={styles.addRow}>
+              <TextInput
+                style={styles.addNameInput}
+                value={joinCode}
+                onChangeText={setJoinCode}
+                placeholder={t('settings.joinProfilePlaceholder')}
+                placeholderTextColor={colors.textHint}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                onPress={handleJoin}
+                style={[styles.addBtn, !joinCode.trim() && styles.addBtnDisabled]}
+                disabled={!joinCode.trim()}
+              >
+                <Ionicons name="enter-outline" size={18} color={colors.textWhite} />
+                <Text style={styles.addBtnText}>{t('settings.joinProfileBtn')}</Text>
+              </TouchableOpacity>
+            </View>
           </ScrollView>
 
           <View style={styles.footer}>
@@ -142,6 +194,12 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
         </View>
       </KeyboardAvoidingView>
     </ModalOverlay>
+    <ProfileShareModal
+      visible={shareProfileId !== null}
+      profileId={shareProfileId}
+      onClose={() => setShareProfileId(null)}
+    />
+    </>
   );
 };
 
@@ -207,6 +265,7 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
       borderWidth: 1,
       borderColor: colors.inputBorder,
     },
+    nameInputLocked: { opacity: 0.6 },
     iconBtn: { padding: 6 },
     addTitle: {
       fontSize: 15,

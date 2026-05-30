@@ -11,6 +11,12 @@ import { create } from 'zustand';
  *   - Perfiles nuevos: `scopeGroupId = id del perfil`; sus datos se guardan con
  *     ese groupId y quedan aislados.
  */
+export interface ProfileMember {
+  role: 'admin' | 'member';
+  name?: string;
+  email?: string;
+}
+
 export interface Profile {
   id: string; // PRIMARY_PROFILE_ID para Reparto 1, o el id del doc en `profiles`
   name: string;
@@ -18,6 +24,11 @@ export interface Profile {
   // Valor a usar como groupId para el scope. undefined => scope por userId
   // (caso usuario solo, sin grupo, en Reparto 1).
   scopeGroupId?: string;
+  // Sharing (solo perfiles nuevos, no primary):
+  ownerId?: string;
+  code?: string;
+  members?: Record<string, ProfileMember>;
+  isOwner?: boolean; // true si el usuario actual es dueño/admin del perfil
 }
 
 interface ProfileStore {
@@ -29,6 +40,10 @@ interface ProfileStore {
   createProfile: (name: string) => Promise<void>;
   renameProfile: (id: string, name: string) => Promise<void>;
   deleteProfile: (id: string) => Promise<void>;
+  // Sharing
+  joinProfile: (code: string) => Promise<'ok' | 'not_found' | 'already' | 'error'>;
+  leaveProfile: (id: string) => Promise<void>;
+  removeMember: (profileId: string, uid: string) => Promise<void>;
   // UI: visibilidad del gestor de repartos (abierto desde el header del Inicio).
   switcherVisible: boolean;
   setSwitcherVisible: (v: boolean) => void;
@@ -47,6 +62,9 @@ export const useProfileStore = create<ProfileStore>()((set) => ({
   createProfile: noop,
   renameProfile: noop,
   deleteProfile: noop,
+  joinProfile: async () => 'error' as const,
+  leaveProfile: noop,
+  removeMember: noop,
   switcherVisible: false,
   setSwitcherVisible: (v: boolean) => set({ switcherVisible: v }),
 }));

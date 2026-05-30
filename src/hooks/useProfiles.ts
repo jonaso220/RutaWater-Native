@@ -1,7 +1,17 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import firestore from '@react-native-firebase/firestore';
 import { db } from '../config/firebase';
 import { reportError } from '../lib/crashReporting';
-import { Profile, PRIMARY_PROFILE_ID } from '../stores/profileStore';
+import { Profile, ProfileMember, PRIMARY_PROFILE_ID } from '../stores/profileStore';
+
+const generateCode = (): string => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+};
 
 /**
  * Maneja la lista de perfiles del usuario, el perfil activo, y el ABM.
@@ -14,7 +24,12 @@ import { Profile, PRIMARY_PROFILE_ID } from '../stores/profileStore';
  *   scope para sus datos.
  * - El perfil activo se guarda en `users/{uid}.activeProfileId`.
  */
-export const useProfiles = (userId: string, groupId: string | undefined) => {
+export const useProfiles = (
+  userId: string,
+  groupId: string | undefined,
+  displayName?: string | null,
+  email?: string | null,
+) => {
   const [customProfiles, setCustomProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string>(PRIMARY_PROFILE_ID);
   const [primaryName, setPrimaryName] = useState<string>('Reparto 1');
@@ -28,15 +43,19 @@ export const useProfiles = (userId: string, groupId: string | undefined) => {
       .where('memberUids', 'array-contains', userId)
       .onSnapshot(
         (snap) => {
-          const list = snap.docs.map(
-            (d) =>
-              ({
-                id: d.id,
-                name: d.data().name || 'Reparto',
-                isPrimary: false,
-                scopeGroupId: d.id,
-              } as Profile),
-          );
+          const list = snap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              name: data.name || 'Reparto',
+              isPrimary: false,
+              scopeGroupId: d.id,
+              ownerId: data.ownerId,
+              code: data.code,
+              members: (data.members || {}) as Record<string, ProfileMember>,
+              isOwner: data.ownerId === userId,
+            } as Profile;
+          });
           setCustomProfiles(list);
         },
         (e) => reportError(e, 'Error loading profiles'),
@@ -68,6 +87,7 @@ export const useProfiles = (userId: string, groupId: string | undefined) => {
       name: primaryName,
       isPrimary: true,
       scopeGroupId: groupId, // undefined => scope por userId (sin cambios)
+      isOwner: true, // Reparto 1 se comparte vía Grupo familiar (en Ajustes), no acá
     }),
     [primaryName, groupId],
   );
@@ -100,11 +120,81 @@ export const useProfiles = (userId: string, groupId: string | undefined) => {
         await db.collection('profiles').add({
           name: n,
           ownerId: userId,
+          code: generateCode(),
           memberUids: [userId],
+          members: {
+            [userId]: { role: 'admin', name: displayName || '', email: email || '' },
+          },
           createdAt: new Date(),
         });
       } catch (e) {
         reportError(e, 'Error creating profile');
+      }
+    },
+    [userId, displayName, email],
+  );
+
+  const joinProfile = useCallback(
+    async (code: string): Promise<'ok' | 'not_found' | 'already' | 'error'> => {
+      const c = code.trim().toUpperCase();
+      if (!c || !userId) return 'error';
+      try {
+        const snap = await db.collection('profiles').where('code', '==', c).limit(1).get();
+        if (snap.empty) return 'not_found';
+        const doc = snap.docs[0];
+        const data = doc.data();
+        if ((data.memberUids || []).includes(userId)) return 'already';
+        await doc.ref.update({
+          memberUids: firestore.FieldValue.arrayUnion(userId),
+          [`members.${userId}`]: { role: 'member', name: displayName || '', email: email || '' },
+        });
+        return 'ok';
+      } catch (e) {
+        reportError(e, 'Error joining profile');
+        return 'error';
+      }
+    },
+    [userId, displayName, email],
+  );
+
+  const leaveProfile = useCallback(
+    async (id: string) => {
+      if (!userId || id === PRIMARY_PROFILE_ID) return;
+      try {
+        await db
+          .collection('profiles')
+          .doc(id)
+          .update({
+            memberUids: firestore.FieldValue.arrayRemove(userId),
+            [`members.${userId}`]: firestore.FieldValue.delete(),
+          });
+        if (activeProfileId === id) {
+          await db
+            .collection('users')
+            .doc(userId)
+            .set({ activeProfileId: PRIMARY_PROFILE_ID }, { merge: true });
+          setActiveProfileId(PRIMARY_PROFILE_ID);
+        }
+      } catch (e) {
+        reportError(e, 'Error leaving profile');
+      }
+    },
+    [userId, activeProfileId],
+  );
+
+  const removeMember = useCallback(
+    async (profileId: string, memberUid: string) => {
+      if (!userId || !profileId || memberUid === userId) return;
+      try {
+        await db
+          .collection('profiles')
+          .doc(profileId)
+          .update({
+            memberUids: firestore.FieldValue.arrayRemove(memberUid),
+            [`members.${memberUid}`]: firestore.FieldValue.delete(),
+          });
+      } catch (e) {
+        reportError(e, 'Error removing member');
       }
     },
     [userId],
@@ -155,5 +245,8 @@ export const useProfiles = (userId: string, groupId: string | undefined) => {
     createProfile,
     renameProfile,
     deleteProfile,
+    joinProfile,
+    leaveProfile,
+    removeMember,
   };
 };

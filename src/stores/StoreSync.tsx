@@ -35,7 +35,7 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   // The active profile decides the scope value used for clients/debts/transfers.
   // Reparto 1 (primary) resolves to the user's real group (or userId) → no change.
   // A custom profile resolves to its own id, isolating its data.
-  const profilesHook = useProfiles(userId, groupId);
+  const profilesHook = useProfiles(userId, groupId, user?.displayName, user?.email);
   const effectiveGroupId = profilesHook.activeProfile.scopeGroupId;
 
   // --- Subscription ---
@@ -164,6 +164,9 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
       createProfile: profilesHook.createProfile,
       renameProfile: profilesHook.renameProfile,
       deleteProfile: profilesHook.deleteProfile,
+      joinProfile: profilesHook.joinProfile,
+      leaveProfile: profilesHook.leaveProfile,
+      removeMember: profilesHook.removeMember,
     });
   }, [profilesHook.profiles, profilesHook.activeProfileId, profilesHook.activeProfile, profilesHook.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 

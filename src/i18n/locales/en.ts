@@ -267,6 +267,7 @@ export default {
     removePremiumMsg: 'Your premium access via promo code will be deactivated.',
     premiumDeactivated: 'Premium deactivated.',
     redeemError: 'Could not redeem the code.',
+    managementGroup: 'Management',
     familyGroup: 'Family Group',
     familyGroupSubtitle: 'Share your account with another person so you both work the same data.',
     manageGroup: 'Manage Family Group',

@@ -313,6 +313,9 @@ const SettingsScreen = () => {
         )}
       </View>
 
+      {/* Management group heading */}
+      <Text style={styles.groupHeading}>{t('settings.managementGroup')}</Text>
+
       {/* Family group */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -679,6 +682,16 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isTablet: boolean = f
     fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
+  },
+  groupHeading: {
+    fontSize: s(12),
+    fontWeight: '700',
+    color: colors.textHint,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginTop: s(24),
+    marginBottom: s(-8),
+    marginHorizontal: s(16),
   },
   sectionSubtitle: {
     fontSize: s(13),

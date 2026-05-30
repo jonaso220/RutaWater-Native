@@ -267,6 +267,7 @@ export default {
     removePremiumMsg: 'Se desactivara tu acceso premium por codigo promocional.',
     premiumDeactivated: 'Premium desactivado.',
     redeemError: 'No se pudo canjear el codigo.',
+    managementGroup: 'Gestión',
     familyGroup: 'Grupo Familiar',
     familyGroupSubtitle: 'Compartí tu cuenta con otra persona para que trabajen los mismos datos.',
     manageGroup: 'Gestionar Grupo Familiar',

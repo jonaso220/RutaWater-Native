@@ -20,15 +20,10 @@ import { useLayout } from '../hooks/useLayout';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { useSubscriptionStore } from '../stores/subscriptionStore';
 import { useGroupManagement } from '../hooks/useGroupManagement';
-import {
-  useWhatsAppTemplates,
-  DEFAULT_EN_CAMINO,
-  DEFAULT_DEUDA,
-  DEFAULT_RECORDATORIO,
-} from '../hooks/useWhatsAppTemplates';
 import { useDataExport } from '../hooks/useDataExport';
 import ProductCatalogModal from '../components/ProductCatalogModal';
 import ProfilesModal from '../components/ProfilesModal';
+import WhatsAppTemplatesModal from '../components/WhatsAppTemplatesModal';
 import { useProfileStore } from '../stores/profileStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -55,6 +50,7 @@ const SettingsScreen = () => {
   const [promoLoading, setPromoLoading] = useState(false);
   const [productsModalVisible, setProductsModalVisible] = useState(false);
   const [profilesModalVisible, setProfilesModalVisible] = useState(false);
+  const [whatsappModalVisible, setWhatsappModalVisible] = useState(false);
   const activeProfile = useProfileStore((s) => s.activeProfile);
   // ALL hooks must be called before any early return (Rules of Hooks)
   const [loading, setLoading] = useState(false);
@@ -78,18 +74,6 @@ const SettingsScreen = () => {
     setGroupData,
     setLoading,
   );
-
-  const {
-    waEnCamino,
-    setWaEnCamino,
-    waDeuda,
-    setWaDeuda,
-    waRecordatorio,
-    setWaRecordatorio,
-    waLoaded,
-    handleSaveTemplates,
-    handleResetTemplates,
-  } = useWhatsAppTemplates(uid, groupData?.groupId);
 
   const { handleExportCSV, handleExportJSON } = useDataExport({ uid, email: userEmail });
 
@@ -487,64 +471,19 @@ const SettingsScreen = () => {
       </View>
 
       {/* WhatsApp Templates */}
-      {waLoaded && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="logo-whatsapp" size={20} color={colors.successDark} />
-            <Text style={styles.sectionTitle}>{t('settings.whatsappMessages')}</Text>
-          </View>
-          <Text style={styles.sectionSubtitle}>{t('settings.whatsappSubtitle')}</Text>
-          <View style={styles.sectionCard}>
-            <Text style={styles.templateLabel}>{t('settings.enCaminoLabel')}</Text>
-            <TextInput
-              style={styles.templateInput}
-              value={waEnCamino}
-              onChangeText={setWaEnCamino}
-              placeholder={DEFAULT_EN_CAMINO}
-              placeholderTextColor={colors.textDisabled}
-              multiline
-              numberOfLines={3}
-            />
-
-            <View style={styles.templateDivider} />
-
-            <Text style={styles.templateLabel}>{t('settings.debtLabel')}</Text>
-            <TextInput
-              style={styles.templateInput}
-              value={waDeuda}
-              onChangeText={setWaDeuda}
-              placeholder={DEFAULT_DEUDA}
-              placeholderTextColor={colors.textDisabled}
-              multiline
-              numberOfLines={2}
-            />
-            <Text style={styles.templateHint}>{t('settings.debtHint')}</Text>
-
-            <View style={styles.templateDivider} />
-
-            <Text style={styles.templateLabel}>{t('settings.reminderLabel')}</Text>
-            <TextInput
-              style={styles.templateInput}
-              value={waRecordatorio}
-              onChangeText={setWaRecordatorio}
-              placeholder={DEFAULT_RECORDATORIO}
-              placeholderTextColor={colors.textDisabled}
-              multiline
-              numberOfLines={4}
-            />
-          </View>
-          <View style={styles.templateActions}>
-            <TouchableOpacity onPress={handleSaveTemplates} style={styles.templateSaveBtn}>
-              <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-              <Text style={styles.templateSaveBtnText}>{t('settings.saveTemplates')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleResetTemplates} style={styles.templateResetBtn}>
-              <Ionicons name="refresh" size={16} color={colors.textMuted} />
-              <Text style={styles.templateResetBtnText}>{t('settings.resetTemplates')}</Text>
-            </TouchableOpacity>
-          </View>
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="logo-whatsapp" size={20} color={colors.successDark} />
+          <Text style={styles.sectionTitle}>{t('settings.whatsappMessages')}</Text>
         </View>
-      )}
+        <Text style={styles.sectionSubtitle}>{t('settings.whatsappSubtitle')}</Text>
+        <View style={styles.sectionCard}>
+          <TouchableOpacity onPress={() => setWhatsappModalVisible(true)} style={styles.exportBtn}>
+            <Ionicons name="logo-whatsapp" size={18} color={colors.primary} />
+            <Text style={styles.exportBtnText}>{t('settings.manageWhatsapp')}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* Export & Maintenance */}
       <View style={styles.section}>
@@ -633,6 +572,12 @@ const SettingsScreen = () => {
     <ProfilesModal
       visible={profilesModalVisible}
       onClose={() => setProfilesModalVisible(false)}
+    />
+    <WhatsAppTemplatesModal
+      visible={whatsappModalVisible}
+      onClose={() => setWhatsappModalVisible(false)}
+      uid={uid}
+      groupId={groupData?.groupId}
     />
     </>
   );

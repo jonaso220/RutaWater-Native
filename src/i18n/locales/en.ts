@@ -308,6 +308,7 @@ export default {
     productsTitle: 'Products',
     productsSubtitle: 'Rename, hide or add products. Changes apply to all clients.',
     manageProducts: 'Manage products',
+    manageWhatsapp: 'Manage WhatsApp messages',
     addProductTitle: 'Add product',
     productNamePlaceholder: 'Name (e.g. Ice 5kg)',
     productShortPlaceholder: 'Abbr.',

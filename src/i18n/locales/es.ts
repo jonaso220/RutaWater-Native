@@ -308,6 +308,7 @@ export default {
     productsTitle: 'Productos',
     productsSubtitle: 'Renombra, oculta o agrega productos. Los cambios se aplican a todos los clientes.',
     manageProducts: 'Gestionar productos',
+    manageWhatsapp: 'Gestionar Mensajes WhatsApp',
     addProductTitle: 'Agregar producto',
     productNamePlaceholder: 'Nombre (ej. Hielo 5kg)',
     productShortPlaceholder: 'Abrev.',

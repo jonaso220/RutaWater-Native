@@ -20,11 +20,15 @@ const Stack = createNativeStackNavigator();
 
 const TabNavigator = () => {
   const { colors } = useTheme();
-  const { fontScale } = useLayout();
+  const { fontScale, width } = useLayout();
   const { t } = useTranslation();
   const { activeAlarm, dismissAlarm } = useAlarmChecker();
 
-  const s = (v: number) => Math.round(v * fontScale);
+  // On wide screens (iPad/Mac) scale the header + tab bar up like the rest of
+  // the chrome, so the title and tabs don't look tiny on a large display.
+  // Phones keep the global fontScale. Mirrors chromeScale in HomeScreen.
+  const chromeScale = width >= 900 ? Math.min(1.6, Math.max(1.3, width / 950)) : fontScale;
+  const s = (v: number) => Math.round(v * chromeScale);
 
   return (
     <>
@@ -64,7 +68,7 @@ const TabNavigator = () => {
             ),
             headerRight: () => <ProfileSwitcherButton />,
             tabBarLabel: t('nav.home'),
-            tabBarIcon: () => <Text style={{ fontSize: Math.round(22 * fontScale) }}>🏠</Text>,
+            tabBarIcon: () => <Text style={{ fontSize: s(22) }}>🏠</Text>,
           }}
         />
         <Tab.Screen
@@ -85,7 +89,7 @@ const TabNavigator = () => {
               </View>
             ),
             tabBarLabel: t('nav.directory'),
-            tabBarIcon: () => <Text style={{ fontSize: Math.round(22 * fontScale) }}>📋</Text>,
+            tabBarIcon: () => <Text style={{ fontSize: s(22) }}>📋</Text>,
           }}
         />
         <Tab.Screen
@@ -94,7 +98,7 @@ const TabNavigator = () => {
           options={{
             headerTitle: t('nav.settings'),
             tabBarLabel: t('nav.settings'),
-            tabBarIcon: () => <Text style={{ fontSize: Math.round(22 * fontScale) }}>⚙️</Text>,
+            tabBarIcon: () => <Text style={{ fontSize: s(22) }}>⚙️</Text>,
           }}
         />
       </Tab.Navigator>

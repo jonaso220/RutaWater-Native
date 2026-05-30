@@ -8,12 +8,13 @@ import { ThemeColors } from '../theme/colors';
 
 interface ProductCounterProps {
   clients: Client[];
+  fontScale?: number;
 }
 
-const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
+const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
-  const styles = getStyles(colors);
+  const styles = React.useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
   const products = useProducts();
 
   const totals = React.useMemo(() => {
@@ -62,7 +63,9 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients }) => {
   );
 };
 
-const getStyles = (colors: ThemeColors) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   container: {
     flexGrow: 0,
     flexShrink: 0,
@@ -71,9 +74,9 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomColor: colors.primaryLight,
   },
   content: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 10,
+    paddingHorizontal: s(14),
+    paddingVertical: s(10),
+    gap: s(10),
     alignItems: 'center',
     justifyContent: 'center',
     flexGrow: 1,
@@ -83,27 +86,28 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     gap: 5,
     backgroundColor: colors.card,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: s(12),
+    paddingVertical: s(6),
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.primaryLight,
   },
   qty: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '800',
     color: colors.primary,
   },
   label: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '600',
     color: colors.textMuted,
   },
   crateLabel: {
-    fontSize: 12,
+    fontSize: s(12),
     fontWeight: '500',
     color: colors.textHint,
   },
-});
+  });
+};
 
 export default React.memo(ProductCounter);

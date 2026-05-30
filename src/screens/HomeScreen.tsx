@@ -11,6 +11,7 @@ import {
   Alert,
   Platform,
   RefreshControl,
+  FlatList,
 } from 'react-native';
 import ModalOverlay from '../components/ModalOverlay';
 import DraggableFlatList, {
@@ -55,7 +56,8 @@ import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 
 type ListItem =
   | { type: 'header'; key: string; title: string; count: number; isToday: boolean }
-  | { type: 'client'; key: string; client: Client; sectionDateKey: string };
+  | { type: 'client'; key: string; client: Client; sectionDateKey: string }
+  | { type: 'gridrow'; key: string; clients: Client[]; sectionDateKey: string };
 
 // --- Memoized SectionHeader to avoid re-renders ---
 interface SectionHeaderProps {
@@ -107,6 +109,7 @@ interface ClientItemProps {
   onRelationships: (client: Client) => void;
   onChangePosition: (clientId: string, newPos: number, day: string) => void;
   drag?: () => void;
+  draggable?: boolean;
 }
 
 const ClientItem = React.memo<ClientItemProps>(({
@@ -130,6 +133,7 @@ const ClientItem = React.memo<ClientItemProps>(({
   onRelationships,
   onChangePosition,
   drag,
+  draggable = true,
 }) => {
   const handleMarkDone = useCallback(() => onMarkDone(client), [onMarkDone, client]);
   const handleEdit = useCallback(() => onEdit(client), [onEdit, client]);
@@ -144,37 +148,53 @@ const ClientItem = React.memo<ClientItemProps>(({
     [onChangePosition, client.id, selectedDay],
   );
 
-  return (
-    <ScaleDecorator activeScale={1.03}>
-      <ClientCard
-        client={client}
-        index={globalIndex}
-        isAdmin={isAdmin}
-        hasDebt={hasDebt}
-        hasPendingTransfer={hasPendingTransfer}
-        hasRelationships={hasRelationships}
-        onMarkDone={handleMarkDone}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onDebt={handleDebt}
-        onToggleStar={handleToggleStar}
-        onTransfer={handleTransfer}
-        onAlarm={handleAlarm}
-        onRelationships={handleRelationships}
-        onChangePosition={handleChangePosition}
-        onDrag={isDragEnabled ? drag : undefined}
-        enCaminoMessage={enCaminoMessage}
-        fontScale={fontScale}
-      />
-    </ScaleDecorator>
+  const card = (
+    <ClientCard
+      client={client}
+      index={globalIndex}
+      isAdmin={isAdmin}
+      hasDebt={hasDebt}
+      hasPendingTransfer={hasPendingTransfer}
+      hasRelationships={hasRelationships}
+      onMarkDone={handleMarkDone}
+      onEdit={handleEdit}
+      onDelete={handleDelete}
+      onDebt={handleDebt}
+      onToggleStar={handleToggleStar}
+      onTransfer={handleTransfer}
+      onAlarm={handleAlarm}
+      onRelationships={handleRelationships}
+      onChangePosition={handleChangePosition}
+      onDrag={draggable && isDragEnabled ? drag : undefined}
+      enCaminoMessage={enCaminoMessage}
+      fontScale={fontScale}
+    />
   );
+
+  // On wide screens the cards live in a grid (no drag), so we skip the
+  // ScaleDecorator wrapper which only makes sense inside a DraggableFlatList.
+  if (!draggable) return card;
+  return <ScaleDecorator activeScale={1.03}>{card}</ScaleDecorator>;
 });
 
 const HomeScreen = () => {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
-  const { fontScale, isWide } = useLayout();
-  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
+  const { fontScale, isWide, width: screenWidth } = useLayout();
+  // Wide-screen column count (also gates the grid layout further down).
+  const numColumns = useMemo(() => {
+    if (screenWidth >= 1500) return 3;
+    if (screenWidth >= 900) return 2;
+    return 1;
+  }, [screenWidth]);
+  // On wide screens the top chrome (day tabs, product counter, action bar,
+  // search) scales up with the screen too — otherwise it looks tiny next to
+  // the bigger cards on an iPad/Mac. Phones keep the global fontScale.
+  const chromeScale = useMemo(() => {
+    if (numColumns <= 1) return fontScale;
+    return Math.min(1.6, Math.max(1.3, screenWidth / 950));
+  }, [numColumns, screenWidth, fontScale]);
+  const styles = useMemo(() => getStyles(colors, chromeScale), [colors, chromeScale]);
 
   const navigation = useNavigation<any>();
   const { isAdmin, user, groupData } = useAuthContext();
@@ -657,6 +677,8 @@ const HomeScreen = () => {
           />
         );
       }
+      // gridrow items only appear in the wide-screen FlatList, never here.
+      if (item.type !== 'client') return null;
 
       const client = item.client;
       const globalIndex = globalPositionMap[client.id] ?? 0;
@@ -773,6 +795,112 @@ const HomeScreen = () => {
     [changePosition, getAllDayClients, t],
   );
 
+  // --- Wide-screen grid (Mac / iPad landscape) ---
+  // On narrow screens numColumns === 1 (computed near the top) and we keep the
+  // single-column DraggableFlatList untouched (the daily phone path). On wide
+  // screens we lay the cards out in 2-3 columns to fill the width; reordering
+  // there is done by tapping the position number (drag stays on the phone).
+  //
+  // Font scale tuned to the column width rather than the whole screen, so a
+  // 2-column card isn't sized as if it owned the full window. A wide column
+  // (~665px on a landscape iPad) scales up to 1.5x so the text fills the card
+  // instead of looking tiny; a near-phone-width column floors at 1.15x.
+  const gridFontScale = useMemo(() => {
+    if (numColumns <= 1) return fontScale;
+    const columnWidth = screenWidth / numColumns;
+    return Math.min(1.5, Math.max(1.15, columnWidth / 400));
+  }, [numColumns, screenWidth, fontScale]);
+
+  // Section headers stay full-width; clients are chunked into rows of N.
+  const gridData = useMemo<ListItem[]>(() => {
+    if (numColumns <= 1) return [];
+    const items: ListItem[] = [];
+    clientSections.forEach((section) => {
+      items.push({
+        type: 'header',
+        key: `header-${section.dateKey}`,
+        title: section.title,
+        count: section.data.length,
+        isToday: section.isToday,
+      });
+      for (let i = 0; i < section.data.length; i += numColumns) {
+        items.push({
+          type: 'gridrow',
+          key: `gridrow-${section.dateKey}-${i}`,
+          clients: section.data.slice(i, i + numColumns),
+          sectionDateKey: section.dateKey,
+        });
+      }
+    });
+    return items;
+  }, [clientSections, numColumns]);
+
+  const renderGridItem = useCallback(
+    ({ item }: { item: ListItem }) => {
+      if (item.type === 'header') {
+        return (
+          <SectionHeader
+            title={item.title}
+            count={item.count}
+            isToday={item.isToday}
+            colors={colors}
+            fontScale={fontScale}
+          />
+        );
+      }
+      if (item.type !== 'gridrow') return null;
+      return (
+        <View style={styles.gridRow}>
+          {item.clients.map((client) => (
+            <View key={client.id} style={styles.gridCell}>
+              <ClientItem
+                client={client}
+                globalIndex={globalPositionMap[client.id] ?? 0}
+                isAdmin={isAdmin}
+                hasDebt={debtMap[client.id] ?? false}
+                hasPendingTransfer={transferMap[client.id] ?? false}
+                hasRelationships={relationshipMap[client.id] ?? false}
+                isDragEnabled={false}
+                draggable={false}
+                enCaminoMessage={appSettings?.whatsappEnCamino}
+                fontScale={gridFontScale}
+                selectedDay={selectedDay}
+                onMarkDone={stableHandlers.onMarkDone}
+                onEdit={stableHandlers.onEdit}
+                onDelete={stableHandlers.onDelete}
+                onDebt={stableHandlers.onDebt}
+                onToggleStar={stableHandlers.onToggleStar}
+                onTransfer={stableHandlers.onTransfer}
+                onAlarm={stableHandlers.onAlarm}
+                onRelationships={stableHandlers.onRelationships}
+                onChangePosition={stableHandlers.onChangePosition}
+              />
+            </View>
+          ))}
+          {item.clients.length < numColumns &&
+            Array.from({ length: numColumns - item.clients.length }).map((_, i) => (
+              <View key={`spacer-${i}`} style={styles.gridCell} />
+            ))}
+        </View>
+      );
+    },
+    [
+      colors,
+      fontScale,
+      gridFontScale,
+      isAdmin,
+      selectedDay,
+      appSettings,
+      globalPositionMap,
+      debtMap,
+      transferMap,
+      relationshipMap,
+      stableHandlers,
+      numColumns,
+      styles,
+    ],
+  );
+
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: 12 }}>
@@ -783,6 +911,73 @@ const HomeScreen = () => {
     );
   }
 
+  // Shared between the phone (DraggableFlatList) and wide-screen (FlatList grid) lists.
+  const listEmptyComponent = (
+    <View style={styles.emptyContainer}>
+      <Text style={{ fontSize: 40, marginBottom: 8 }}>{searchTerm || activeFilters.size > 0 ? '🔍' : '📋'}</Text>
+      <Text style={styles.emptyText}>
+        {searchTerm || activeFilters.size > 0
+          ? t('home.noSearchResults')
+          : t('home.noClients', { day: selectedDay })}
+      </Text>
+      {searchTerm || activeFilters.size > 0 ? (
+        <Text style={styles.emptySubtext}>{t('home.noSearchResultsSubtitle')}</Text>
+      ) : (
+        <Text style={styles.emptySubtext}>{t('home.noClientsSubtitle')}</Text>
+      )}
+    </View>
+  );
+
+  const listFooterComponent =
+    completedClients.length > 0 ? (
+      <View style={styles.completedSection}>
+        <TouchableOpacity
+          onPress={() => setShowCompleted(!showCompleted)}
+          style={styles.completedHeader}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.completedTitle}>
+            {showCompleted ? '▼' : '▶'} {t('home.completed')} ({completedClients.length})
+          </Text>
+        </TouchableOpacity>
+        {showCompleted && (
+          <>
+            {completedClients.map((client) => (
+              <TouchableOpacity
+                key={client.id}
+                style={styles.completedCard}
+                onPress={() => handleUndoComplete(client)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.completedName}>{(client.name || '').toUpperCase()}</Text>
+                <Text style={styles.completedHint}>{t('home.tapToUndo')}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={styles.deleteAllBtn}
+              onPress={() => {
+                Alert.alert(
+                  t('home.deleteAllTitle'),
+                  t('home.deleteAllMessage', { count: completedClients.length, day: selectedDay }),
+                  [
+                    { text: t('cancel'), style: 'cancel' },
+                    {
+                      text: t('home.deleteAllConfirm'),
+                      style: 'destructive',
+                      onPress: () => deleteAllCompleted(selectedDay),
+                    },
+                  ],
+                );
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.deleteAllBtnText}>🗑️ {t('home.deleteAll')}</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    ) : null;
+
   return (
     <View style={styles.container}>
       <View style={{ flex: 1 }}>
@@ -792,12 +987,12 @@ const HomeScreen = () => {
         dayCounts={dayCounts}
         isWide={isWide}
         colors={colors}
-        fontScale={fontScale}
+        fontScale={chromeScale}
         onSelectDay={handleSelectDay}
       />
 
       {/* Product counter — only nearest date */}
-      <ProductCounter clients={nearestDateClients} />
+      <ProductCounter clients={nearestDateClients} fontScale={chromeScale} />
 
       {/* Action bar */}
       <ScrollView
@@ -925,7 +1120,30 @@ const HomeScreen = () => {
           </View>
         )}
       </View>
-      {/* Client list */}
+      {/* Client list — single-column draggable on phones, multi-column grid on wide screens */}
+      {numColumns > 1 ? (
+        <FlatList
+          ref={scrollRef}
+          data={gridData}
+          extraData={`${debts.length}-${transfers.length}-${numColumns}`}
+          keyExtractor={keyExtractor}
+          renderItem={renderGridItem}
+          contentContainerStyle={styles.listContent}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={11}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+          ListEmptyComponent={listEmptyComponent}
+          ListFooterComponent={listFooterComponent}
+        />
+      ) : (
       <DraggableFlatList
         ref={scrollRef}
         data={flatListData}
@@ -954,72 +1172,10 @@ const HomeScreen = () => {
             colors={[colors.primary]}
           />
         }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={{ fontSize: 40, marginBottom: 8 }}>{searchTerm || activeFilters.size > 0 ? '🔍' : '📋'}</Text>
-            <Text style={styles.emptyText}>
-              {searchTerm || activeFilters.size > 0
-                ? t('home.noSearchResults')
-                : t('home.noClients', { day: selectedDay })}
-            </Text>
-            {searchTerm || activeFilters.size > 0 ? (
-              <Text style={styles.emptySubtext}>{t('home.noSearchResultsSubtitle')}</Text>
-            ) : (
-              <Text style={styles.emptySubtext}>{t('home.noClientsSubtitle')}</Text>
-            )}
-          </View>
-        }
-        ListFooterComponent={completedClients.length > 0 ? (
-          <View style={styles.completedSection}>
-            <TouchableOpacity
-              onPress={() => setShowCompleted(!showCompleted)}
-              style={styles.completedHeader}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.completedTitle}>
-                {showCompleted ? '▼' : '▶'} {t('home.completed')} ({completedClients.length})
-              </Text>
-            </TouchableOpacity>
-            {showCompleted && (
-              <>
-                {completedClients.map((client) => (
-                  <TouchableOpacity
-                    key={client.id}
-                    style={styles.completedCard}
-                    onPress={() => handleUndoComplete(client)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.completedName}>
-                      {(client.name || '').toUpperCase()}
-                    </Text>
-                    <Text style={styles.completedHint}>{t('home.tapToUndo')}</Text>
-                  </TouchableOpacity>
-                ))}
-                <TouchableOpacity
-                  style={styles.deleteAllBtn}
-                  onPress={() => {
-                    Alert.alert(
-                      t('home.deleteAllTitle'),
-                      t('home.deleteAllMessage', { count: completedClients.length, day: selectedDay }),
-                      [
-                        { text: t('cancel'), style: 'cancel' },
-                        {
-                          text: t('home.deleteAllConfirm'),
-                          style: 'destructive',
-                          onPress: () => deleteAllCompleted(selectedDay),
-                        },
-                      ],
-                    );
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.deleteAllBtnText}>🗑️ {t('home.deleteAll')}</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        ) : null}
+        ListEmptyComponent={listEmptyComponent}
+        ListFooterComponent={listFooterComponent}
       />
+      )}
       </View>
 
       <UndoBanner queue={undoQueue} selectedDay={selectedDay} onUndo={handleUndoMarkDone} />
@@ -1316,6 +1472,14 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   listContent: {
     padding: 12,
     paddingBottom: 100,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  gridCell: {
+    flex: 1,
   },
   sectionHeader: {
     flexDirection: 'row',

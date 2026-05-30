@@ -188,7 +188,7 @@ const HomeScreen = () => {
   }, [screenWidth]);
   // Chrome (day tabs, product counter, action bar, search) scales with the
   // global fontScale, which now ramps up on wide screens (see useLayout).
-  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
+  const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
 
   const navigation = useNavigation<any>();
   const { isAdmin, user, groupData } = useAuthContext();
@@ -1288,7 +1288,7 @@ const HomeScreen = () => {
   );
 };
 
-const getStyles = (colors: ThemeColors, scale: number = 1) => {
+const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = false) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
   container: {
@@ -1314,19 +1314,20 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     borderBottomColor: colors.cardBorder,
   },
   actionBarContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 8,
+    paddingHorizontal: s(12),
+    paddingVertical: s(6),
+    gap: s(8),
     alignItems: 'center',
   },
   actionBtn: {
     backgroundColor: colors.sectionBackground,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: s(12),
+    paddingVertical: isWide ? s(8) : s(6),
+    borderRadius: s(8),
   },
   actionBtnText: {
-    fontSize: s(14),
+    // Slightly larger on wide screens so the action buttons don't look small.
+    fontSize: isWide ? s(15) : s(14),
     fontWeight: '700',
     color: colors.textSecondary,
   },

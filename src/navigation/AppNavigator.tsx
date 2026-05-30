@@ -47,15 +47,23 @@ const TabNavigator = () => {
           tabBarStyle: {
             backgroundColor: colors.tabBarBackground,
             borderTopColor: colors.tabBarBorder,
-            // Symmetric padding on wide screens so the icon+label stack stays
-            // centered in the taller bar (asymmetric padding pushed it up).
-            paddingTop: isWideNav ? s(10) : s(6),
-            paddingBottom: isWideNav ? s(10) : s(8),
-            height: isWideNav ? s(70) : s(60),
+            // Wide screens: symmetric padding (keeps the stack centered) + a
+            // taller bar. Phone keeps its original values untouched.
+            paddingTop: isWideNav ? s(10) : 0,
+            paddingBottom: isWideNav ? s(10) : 4,
+            height: isWideNav ? s(74) : s(56),
           },
           tabBarActiveTintColor: colors.tabActive,
           tabBarInactiveTintColor: colors.tabInactive,
-          tabBarLabelStyle: { fontSize: s(13), fontWeight: '600' },
+          // On wide screens add a gap below the icon and a roomier lineHeight
+          // so the label isn't glued to the icon nor clipped at the descenders
+          // (e.g. the "j" in "Ajustes"). Phone unchanged.
+          tabBarLabelStyle: {
+            fontSize: s(13),
+            fontWeight: '600',
+            marginTop: isWideNav ? s(6) : 0,
+            lineHeight: isWideNav ? s(18) : undefined,
+          },
         }}
       >
         <Tab.Screen

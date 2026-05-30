@@ -335,6 +335,7 @@ export default {
     createProfileTitle: 'Criar rota',
     createProfileBtn: 'Criar',
     profilesHint: 'A rota ativa define quais clientes voce ve. "Reparto 1" e a sua rota atual.',
+    manageInSettingsHint: 'Para renomear, excluir ou compartilhar rotas, va em Ajustes → Rotas.',
     deleteProfileTitle: 'Excluir rota?',
     deleteProfileMsg: '"{{name}}" sera removida. Os dados salvos nessa rota nao sao excluidos, mas deixam de aparecer.',
     shareProfileTitle: 'Compartilhar rota',

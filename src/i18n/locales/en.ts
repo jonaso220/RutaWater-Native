@@ -335,6 +335,7 @@ export default {
     createProfileTitle: 'Create route',
     createProfileBtn: 'Create',
     profilesHint: 'The active route decides which clients you see. "Reparto 1" is your existing route.',
+    manageInSettingsHint: 'To rename, delete or share routes, go to Settings → Routes.',
     deleteProfileTitle: 'Delete route?',
     deleteProfileMsg: '"{{name}}" will be removed. Data saved in that route is not deleted, but stops showing.',
     shareProfileTitle: 'Share route',

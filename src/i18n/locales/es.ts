@@ -335,6 +335,7 @@ export default {
     createProfileTitle: 'Crear reparto',
     createProfileBtn: 'Crear',
     profilesHint: 'El reparto activo define que clientes ves. "Reparto 1" es tu reparto de siempre.',
+    manageInSettingsHint: 'Para renombrar, borrar o compartir repartos, entrá a Ajustes → Repartos.',
     deleteProfileTitle: 'Borrar reparto?',
     deleteProfileMsg: 'Se quitara "{{name}}". Los datos cargados en ese reparto no se eliminan, pero dejan de mostrarse.',
     shareProfileTitle: 'Compartir reparto',

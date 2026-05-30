@@ -23,9 +23,12 @@ import { useAuthContext } from '../context/AuthContext';
 interface ProfilesModalProps {
   visible: boolean;
   onClose: () => void;
+  // 'manage' (Ajustes): renombrar / borrar / compartir.
+  // 'quick' (chip del Inicio): solo cambiar de reparto + crear + unirme.
+  mode?: 'manage' | 'quick';
 }
 
-const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
+const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 'manage' }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { user } = useAuthContext();
@@ -135,6 +138,26 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
 
             {profiles.map((p) => {
               const isActive = p.id === activeProfileId;
+              // Quick mode (chip del Inicio): cada reparto es un botón para cambiar.
+              if (mode === 'quick') {
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    onPress={() => handleSwitch(p.id)}
+                    style={[styles.quickRow, isActive && styles.quickRowActive]}
+                  >
+                    <Ionicons
+                      name={isActive ? 'radio-button-on' : 'radio-button-off'}
+                      size={22}
+                      color={isActive ? colors.primary : colors.textHint}
+                    />
+                    <Text style={[styles.quickName, isActive && styles.quickNameActive]} numberOfLines={1}>
+                      {p.name}
+                    </Text>
+                    {isActive && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              }
               return (
                 <View key={p.id} style={[styles.row, isActive && styles.rowActive]}>
                   <TouchableOpacity
@@ -221,6 +244,10 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
                 <Text style={styles.addBtnText}>{t('settings.joinProfileBtn')}</Text>
               </TouchableOpacity>
             </View>
+
+            {mode === 'quick' && (
+              <Text style={styles.hint}>{t('settings.manageInSettingsHint')}</Text>
+            )}
           </ScrollView>
 
           <View style={styles.footer}>
@@ -345,6 +372,24 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     },
     rowActive: {},
     radio: { padding: 4 },
+    quickRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      backgroundColor: colors.sectionBackground,
+      marginBottom: 8,
+    },
+    quickRowActive: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primaryLighter,
+    },
+    quickName: { flex: 1, fontSize: 17, fontWeight: '600', color: colors.textPrimary },
+    quickNameActive: { color: colors.primaryDark },
     nameInput: {
       flex: 1,
       fontSize: 16,

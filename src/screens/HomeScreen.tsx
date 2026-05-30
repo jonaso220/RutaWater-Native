@@ -1123,8 +1123,9 @@ const HomeScreen = () => {
         onClose={() => setAlarmPromptClient(null)}
       />
 
-      {/* Profiles / Repartos switcher (abierto desde el chip del header) */}
+      {/* Profiles / Repartos switcher rápido (abierto desde el chip del header) */}
       <ProfilesModal
+        mode="quick"
         visible={profileSwitcherVisible}
         onClose={() => setProfileSwitcherVisible(false)}
       />

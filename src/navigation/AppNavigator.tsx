@@ -20,15 +20,13 @@ const Stack = createNativeStackNavigator();
 
 const TabNavigator = () => {
   const { colors } = useTheme();
-  const { fontScale, width } = useLayout();
+  const { fontScale } = useLayout();
   const { t } = useTranslation();
   const { activeAlarm, dismissAlarm } = useAlarmChecker();
 
-  // On wide screens (iPad/Mac) scale the header + tab bar up like the rest of
-  // the chrome, so the title and tabs don't look tiny on a large display.
-  // Phones keep the global fontScale. Mirrors chromeScale in HomeScreen.
-  const chromeScale = width >= 900 ? Math.min(1.6, Math.max(1.3, width / 950)) : fontScale;
-  const s = (v: number) => Math.round(v * chromeScale);
+  // Header + tab bar scale with the global fontScale, which ramps up on wide
+  // screens (see useLayout) so they don't look tiny on an iPad/Mac.
+  const s = (v: number) => Math.round(v * fontScale);
 
   return (
     <>

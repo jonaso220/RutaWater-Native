@@ -17,6 +17,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { getModalWidth } from '../utils/helpers';
+import { useLayout } from '../hooks/useLayout';
 
 interface DailyLoadModalProps {
   visible: boolean;
@@ -43,9 +44,10 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth);
+  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
   const [data, setData] = useState<DailyLoad>(initialData);
 
   useEffect(() => {
@@ -144,7 +146,9 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -155,10 +159,10 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   modal: {
     backgroundColor: colors.modalBackground,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: isTablet ? 20 : 0,
-    borderBottomRightRadius: isTablet ? 20 : 0,
+    borderTopLeftRadius: s(20),
+    borderTopRightRadius: s(20),
+    borderBottomLeftRadius: isTablet ? s(20) : 0,
+    borderBottomRightRadius: isTablet ? s(20) : 0,
     maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '85%',
     maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
@@ -168,86 +172,87 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: s(16),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 18, color: colors.textMuted },
-  body: { padding: 16 },
+  closeBtnText: { fontSize: s(18), color: colors.textMuted },
+  body: { padding: s(16) },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
-    marginBottom: 10,
+    marginBottom: s(10),
   },
-  grid: { gap: 8 },
+  grid: { gap: s(8) },
   fieldRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: s(6),
     borderBottomWidth: 1,
     borderBottomColor: colors.sectionBackground,
   },
   fieldLabel: {
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textSecondary,
     fontWeight: '500',
   },
   fieldInput: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    fontSize: 18,
+    borderRadius: s(8),
+    paddingHorizontal: s(16),
+    paddingVertical: s(8),
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    width: 80,
+    width: s(80),
     textAlign: 'center',
   },
   notesInput: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(16),
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
     textAlignVertical: 'top',
-    minHeight: 80,
+    minHeight: s(80),
   },
   footer: {
-    padding: 16,
+    padding: s(16),
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
   saveBtn: {
     backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: s(14),
+    borderRadius: s(12),
     alignItems: 'center',
   },
   saveBtnText: {
     color: colors.textWhite,
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
   },
-});
+  });
+};
 
 export default DailyLoadModal;

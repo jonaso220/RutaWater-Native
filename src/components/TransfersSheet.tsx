@@ -18,6 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useLayout } from '../hooks/useLayout';
 
 interface TransfersSheetProps {
   visible: boolean;
@@ -35,9 +36,10 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth);
+  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
 
   const formatDate = (timestamp: any): string => {
     if (!timestamp) return '';
@@ -143,7 +145,9 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -154,10 +158,10 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   modal: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: isTablet ? 20 : 0,
-    borderBottomRightRadius: isTablet ? 20 : 0,
+    borderTopLeftRadius: s(20),
+    borderTopRightRadius: s(20),
+    borderBottomLeftRadius: isTablet ? s(20) : 0,
+    borderBottomRightRadius: isTablet ? s(20) : 0,
     maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '85%' : '80%',
     maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
@@ -168,83 +172,84 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: s(16),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   headerCount: {
-    fontSize: 14,
+    fontSize: s(14),
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: s(2),
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 18, color: colors.textMuted },
-  list: { padding: 12 },
+  closeBtnText: { fontSize: s(18), color: colors.textMuted },
+  list: { padding: s(12) },
   card: {
     backgroundColor: colors.successBg,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
+    borderRadius: s(12),
+    padding: s(14),
+    marginBottom: s(8),
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderLeftWidth: 4,
     borderLeftColor: colors.success,
   },
-  cardContent: { flex: 1, marginRight: 12 },
+  cardContent: { flex: 1, marginRight: s(12) },
   clientName: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   clientAddress: {
-    fontSize: 14,
+    fontSize: s(14),
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: s(2),
   },
   date: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.textHint,
-    marginTop: 4,
+    marginTop: s(4),
   },
   cardActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: s(8),
     alignItems: 'center',
   },
-  actionBtn: { padding: 6 },
+  actionBtn: { padding: s(6) },
   reviewBtn: {
     backgroundColor: colors.success,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: s(14),
+    paddingVertical: s(8),
+    borderRadius: s(8),
   },
   reviewBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: s(15),
   },
   empty: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: s(40),
   },
-  emptyEmoji: { fontSize: 40, marginBottom: 8 },
+  emptyEmoji: { fontSize: s(40), marginBottom: s(8) },
   emptyText: {
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textHint,
   },
-});
+  });
+};
 
 export default TransfersSheet;

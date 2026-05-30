@@ -186,14 +186,9 @@ const HomeScreen = () => {
     // Máximo 2 columnas: 3 marea en una pantalla ancha (Mac).
     return screenWidth >= 900 ? 2 : 1;
   }, [screenWidth]);
-  // On wide screens the top chrome (day tabs, product counter, action bar,
-  // search) scales up with the screen too — otherwise it looks tiny next to
-  // the bigger cards on an iPad/Mac. Phones keep the global fontScale.
-  const chromeScale = useMemo(() => {
-    if (numColumns <= 1) return fontScale;
-    return Math.min(1.6, Math.max(1.3, screenWidth / 950));
-  }, [numColumns, screenWidth, fontScale]);
-  const styles = useMemo(() => getStyles(colors, chromeScale), [colors, chromeScale]);
+  // Chrome (day tabs, product counter, action bar, search) scales with the
+  // global fontScale, which now ramps up on wide screens (see useLayout).
+  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
 
   const navigation = useNavigation<any>();
   const { isAdmin, user, groupData } = useAuthContext();
@@ -986,12 +981,12 @@ const HomeScreen = () => {
         dayCounts={dayCounts}
         isWide={isWide}
         colors={colors}
-        fontScale={chromeScale}
+        fontScale={fontScale}
         onSelectDay={handleSelectDay}
       />
 
       {/* Product counter — only nearest date */}
-      <ProductCounter clients={nearestDateClients} fontScale={chromeScale} />
+      <ProductCounter clients={nearestDateClients} fontScale={fontScale} />
 
       {/* Action bar */}
       <ScrollView

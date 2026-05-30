@@ -19,6 +19,7 @@ import { normalizePhone, fuzzyMatch, matchScore, getModalWidth } from '../utils/
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useLayout } from '../hooks/useLayout';
 
 interface RelationshipsModalProps {
   visible: boolean;
@@ -40,9 +41,10 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth);
+  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
   const [mode, setMode] = useState<'list' | 'add'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTarget, setSelectedTarget] = useState<Client | null>(null);
@@ -306,7 +308,9 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -316,7 +320,7 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   modal: {
     backgroundColor: colors.modalBackground,
-    borderRadius: 20,
+    borderRadius: s(20),
     maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '80%',
     maxWidth: isTablet ? undefined : 500,
     alignSelf: 'center' as const,
@@ -326,143 +330,143 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: s(16),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '600',
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: s(2),
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   body: {
-    padding: 16,
+    padding: s(16),
   },
   relCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: colors.sectionBackground,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: s(12),
+    padding: s(12),
+    marginBottom: s(8),
   },
   relInfo: {
     flex: 1,
   },
   relName: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   relType: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.primary,
     fontWeight: '600',
-    marginTop: 2,
+    marginTop: s(2),
   },
   relActions: {
     flexDirection: 'row',
-    gap: 4,
+    gap: s(4),
   },
   actionIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: s(36),
+    height: s(36),
+    borderRadius: s(18),
     backgroundColor: colors.card,
     justifyContent: 'center',
     alignItems: 'center',
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: s(32),
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textHint,
   },
   searchInput: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(16),
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    marginBottom: 12,
+    marginBottom: s(12),
   },
   searchResultItem: {
     backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 6,
+    borderRadius: s(10),
+    padding: s(12),
+    marginBottom: s(6),
   },
   searchResultName: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '600',
     color: colors.textPrimary,
   },
   searchResultAddress: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: s(2),
   },
   noResults: {
     textAlign: 'center',
     color: colors.textHint,
-    marginTop: 16,
-    fontSize: 15,
+    marginTop: s(16),
+    fontSize: s(15),
   },
   selectedClientBanner: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: colors.primaryLight,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
+    borderRadius: s(10),
+    padding: s(12),
+    marginBottom: s(16),
   },
   selectedClientName: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '700',
     color: colors.primary,
   },
   sectionLabel: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '600',
     color: colors.textSecondary,
-    marginBottom: 10,
+    marginBottom: s(10),
   },
   typeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: s(8),
   },
   typeChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: s(14),
+    paddingVertical: s(8),
+    borderRadius: s(20),
     backgroundColor: colors.sectionBackground,
   },
   typeChipSelected: {
     backgroundColor: colors.primary,
   },
   typeChipText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -470,7 +474,7 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     color: colors.textWhite,
   },
   footer: {
-    padding: 16,
+    padding: s(16),
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
@@ -479,37 +483,38 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 10,
+    gap: s(6),
+    paddingVertical: s(12),
+    borderRadius: s(10),
   },
   addBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
   confirmBtn: {
     backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: s(12),
+    borderRadius: s(10),
     alignItems: 'center',
   },
   confirmBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
   cancelBtn: {
     backgroundColor: colors.sectionBackground,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: s(12),
+    borderRadius: s(10),
     alignItems: 'center',
   },
   cancelBtnText: {
     color: colors.textSecondary,
     fontWeight: '600',
-    fontSize: 16,
+    fontSize: s(16),
   },
-});
+  });
+};
 
 export default RelationshipsModal;

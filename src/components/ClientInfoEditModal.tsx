@@ -15,6 +15,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
 import { getModalWidth } from '../utils/helpers';
+import { useLayout } from '../hooks/useLayout';
 
 interface ClientInfoEditModalProps {
   visible: boolean;
@@ -44,9 +45,10 @@ const ClientInfoEditModal: React.FC<ClientInfoEditModalProps> = ({
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth);
+  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
 
   return (
     <ModalOverlay visible={visible} onClose={onClose}>
@@ -136,7 +138,9 @@ const ClientInfoEditModal: React.FC<ClientInfoEditModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -147,10 +151,10 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   modal: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: isTablet ? 20 : 0,
-    borderBottomRightRadius: isTablet ? 20 : 0,
+    borderTopLeftRadius: s(20),
+    borderTopRightRadius: s(20),
+    borderBottomLeftRadius: isTablet ? s(20) : 0,
+    borderBottomRightRadius: isTablet ? s(20) : 0,
     maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '85%',
     maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
@@ -160,58 +164,59 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: s(16),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     flex: 1,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 18,
+    fontSize: s(18),
     color: colors.textMuted,
   },
   body: {
-    padding: 16,
+    padding: s(16),
   },
   fieldInput: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(16),
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    marginBottom: 10,
+    marginBottom: s(10),
   },
   footer: {
-    padding: 16,
-    paddingBottom: Platform.OS === 'android' ? 32 : 16,
+    padding: s(16),
+    paddingBottom: Platform.OS === 'android' ? s(32) : s(16),
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
   doneBtn: {
     backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: s(14),
+    borderRadius: s(12),
     alignItems: 'center',
   },
   doneBtnText: {
     color: colors.textWhite,
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
   },
-});
+  });
+};
 
 export default ClientInfoEditModal;

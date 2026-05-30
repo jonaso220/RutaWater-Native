@@ -19,6 +19,7 @@ import { ThemeColors } from '../theme/colors';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
 import { useAllProducts } from '../stores/productCatalogStore';
 import { getModalWidth } from '../utils/helpers';
+import { useLayout } from '../hooks/useLayout';
 import { useAiParse, ParseResult, NotesMode } from '../hooks/useAiParse';
 import { useAiUsageStore } from '../stores/aiUsageStore';
 import { useClientsStore } from '../stores/clientsStore';
@@ -61,9 +62,10 @@ const inferNotesModeFromUserText = (userText: string): NotesMode | null => {
 const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) => {
   const { colors } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = useMemo(() => getStyles(colors, isTablet, modalWidth), [colors, isTablet, modalWidth]);
+  const styles = useMemo(() => getStyles(colors, isTablet, modalWidth, fontScale), [colors, isTablet, modalWidth, fontScale]);
 
   const [text, setText] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
@@ -618,8 +620,9 @@ const ProductsList: React.FC<{ products: Record<string, number>; styles: ReturnT
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) =>
-  StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
     overlay: {
       flex: 1,
       backgroundColor: colors.overlay,
@@ -630,10 +633,10 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     },
     modal: {
       backgroundColor: colors.card,
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      borderBottomLeftRadius: isTablet ? 20 : 0,
-      borderBottomRightRadius: isTablet ? 20 : 0,
+      borderTopLeftRadius: s(20),
+      borderTopRightRadius: s(20),
+      borderBottomLeftRadius: isTablet ? s(20) : 0,
+      borderBottomRightRadius: isTablet ? s(20) : 0,
       maxHeight: Platform.OS === 'android' ? '100%' : '90%',
       maxWidth: isTablet ? undefined : 600,
       alignSelf: 'center' as const,
@@ -644,63 +647,63 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: 16,
+      padding: s(16),
       borderBottomWidth: 1,
       borderBottomColor: colors.cardBorder,
     },
     headerTitle: {
-      fontSize: 20,
+      fontSize: s(20),
       fontWeight: '700',
       color: colors.textPrimary,
     },
     closeBtn: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+      width: s(32),
+      height: s(32),
+      borderRadius: s(16),
       backgroundColor: colors.sectionBackground,
       justifyContent: 'center',
       alignItems: 'center',
     },
     closeBtnText: {
-      fontSize: 18,
+      fontSize: s(18),
       color: colors.textMuted,
     },
     body: {
-      padding: 16,
+      padding: s(16),
     },
     usageBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      gap: s(6),
+      paddingHorizontal: s(10),
+      paddingVertical: s(6),
       backgroundColor: colors.sectionBackground,
-      borderRadius: 8,
+      borderRadius: s(8),
       alignSelf: 'flex-start',
-      marginBottom: 14,
+      marginBottom: s(14),
     },
     usageText: {
-      fontSize: 12,
+      fontSize: s(12),
       color: colors.textMuted,
       fontWeight: '600',
     },
     sectionTitle: {
-      fontSize: 13,
+      fontSize: s(13),
       fontWeight: '700',
       color: colors.textMuted,
       textTransform: 'uppercase',
-      marginBottom: 8,
+      marginBottom: s(8),
     },
     inputBox: {
       backgroundColor: colors.inputBackground,
-      borderRadius: 10,
+      borderRadius: s(10),
       borderWidth: 1,
       borderColor: colors.inputBorder,
-      padding: 12,
+      padding: s(12),
       minHeight: 110,
     },
     input: {
-      fontSize: 16,
+      fontSize: s(16),
       color: colors.textPrimary,
       padding: 0,
       minHeight: 100,
@@ -709,114 +712,114 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
+      gap: s(8),
       backgroundColor: colors.primary,
-      paddingVertical: 14,
-      borderRadius: 10,
-      marginTop: 14,
+      paddingVertical: s(14),
+      borderRadius: s(10),
+      marginTop: s(14),
     },
     primaryBtnDisabled: {
       opacity: 0.5,
     },
     primaryBtnText: {
       color: colors.textWhite,
-      fontSize: 16,
+      fontSize: s(16),
       fontWeight: '700',
     },
     errorBox: {
-      marginTop: 16,
-      padding: 12,
-      borderRadius: 10,
+      marginTop: s(16),
+      padding: s(12),
+      borderRadius: s(10),
       backgroundColor: colors.warningLightBg || '#FEF3C7',
       borderWidth: 1,
       borderColor: colors.warning || '#F59E0B',
     },
     errorTitle: {
-      fontSize: 14,
+      fontSize: s(14),
       fontWeight: '700',
       color: colors.warningOrangeText || '#92400E',
-      marginBottom: 4,
+      marginBottom: s(4),
     },
     errorMsg: {
-      fontSize: 13,
+      fontSize: s(13),
       color: colors.textSecondary,
     },
     errorHint: {
-      fontSize: 12,
+      fontSize: s(12),
       color: colors.textMuted,
-      marginTop: 6,
+      marginTop: s(6),
       fontStyle: 'italic',
     },
     resultBox: {
-      marginTop: 16,
-      padding: 14,
-      borderRadius: 12,
+      marginTop: s(16),
+      padding: s(14),
+      borderRadius: s(12),
       backgroundColor: colors.sectionBackground,
       borderWidth: 1.5,
     },
     resultHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      marginBottom: 10,
+      gap: s(8),
+      marginBottom: s(10),
     },
     resultTitle: {
-      fontSize: 17,
+      fontSize: s(17),
       fontWeight: '700',
       color: colors.textPrimary,
       flex: 1,
     },
     resultText: {
-      fontSize: 14,
+      fontSize: s(14),
       color: colors.textSecondary,
     },
     fieldRow: {
       flexDirection: 'row',
-      paddingVertical: 4,
-      gap: 8,
+      paddingVertical: s(4),
+      gap: s(8),
     },
     fieldLabel: {
-      fontSize: 13,
+      fontSize: s(13),
       fontWeight: '600',
       color: colors.textMuted,
       width: 90,
     },
     fieldValue: {
       flex: 1,
-      fontSize: 14,
+      fontSize: s(14),
       color: colors.textPrimary,
     },
     productLine: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      paddingVertical: 4,
-      paddingLeft: 4,
+      paddingVertical: s(4),
+      paddingLeft: s(4),
     },
     productLineText: {
-      fontSize: 14,
+      fontSize: s(14),
       color: colors.textPrimary,
     },
     productQty: {
-      fontSize: 14,
+      fontSize: s(14),
       fontWeight: '700',
       color: colors.primary,
     },
     footer: {
       flexDirection: 'row',
-      gap: 8,
-      padding: 16,
+      gap: s(8),
+      padding: s(16),
       borderTopWidth: 1,
       borderTopColor: colors.cardBorder,
     },
     secondaryBtn: {
-      paddingHorizontal: 18,
-      paddingVertical: 14,
-      borderRadius: 10,
+      paddingHorizontal: s(18),
+      paddingVertical: s(14),
+      borderRadius: s(10),
       backgroundColor: colors.sectionBackground,
       justifyContent: 'center',
     },
     secondaryBtnText: {
-      fontSize: 15,
+      fontSize: s(15),
       fontWeight: '600',
       color: colors.textSecondary,
     },
@@ -825,16 +828,17 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 8,
+      gap: s(8),
       backgroundColor: colors.primary,
-      paddingVertical: 14,
-      borderRadius: 10,
+      paddingVertical: s(14),
+      borderRadius: s(10),
     },
     confirmBtnText: {
       color: colors.textWhite,
-      fontSize: 16,
+      fontSize: s(16),
       fontWeight: '700',
     },
   });
+};
 
 export default SmartOrderModal;

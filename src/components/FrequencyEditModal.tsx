@@ -16,6 +16,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
 import { getModalWidth } from '../utils/helpers';
+import { useLayout } from '../hooks/useLayout';
 
 interface FrequencyEditModalProps {
   visible: boolean;
@@ -41,9 +42,10 @@ const FrequencyEditModal: React.FC<FrequencyEditModalProps> = ({
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth);
+  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
 
   const [showAndroidPicker, setShowAndroidPicker] = React.useState(false);
 
@@ -177,7 +179,9 @@ const FrequencyEditModal: React.FC<FrequencyEditModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -188,10 +192,10 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   modal: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: isTablet ? 20 : 0,
-    borderBottomRightRadius: isTablet ? 20 : 0,
+    borderTopLeftRadius: s(20),
+    borderTopRightRadius: s(20),
+    borderBottomLeftRadius: isTablet ? s(20) : 0,
+    borderBottomRightRadius: isTablet ? s(20) : 0,
     maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '85%',
     maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
@@ -201,54 +205,54 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: s(16),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     flex: 1,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 18,
+    fontSize: s(18),
     color: colors.textMuted,
   },
   body: {
-    padding: 16,
+    padding: s(16),
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
-    marginBottom: 12,
+    marginBottom: s(12),
   },
   freqGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: s(8),
   },
   freqChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: s(14),
+    paddingVertical: s(8),
+    borderRadius: s(20),
     backgroundColor: colors.sectionBackground,
   },
   freqChipSelected: {
     backgroundColor: colors.primary,
   },
   freqChipText: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -260,24 +264,24 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: s(10),
+    padding: s(12),
+    marginBottom: s(8),
   },
   selectedDateText: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '600',
     color: colors.textPrimary,
   },
   clearDateText: {
-    fontSize: 15,
+    fontSize: s(15),
     color: colors.danger,
     fontWeight: '600',
   },
   dateHint: {
-    fontSize: 15,
+    fontSize: s(15),
     color: colors.textMuted,
-    marginBottom: 8,
+    marginBottom: s(8),
   },
   datePicker: {
     height: 350,
@@ -286,36 +290,37 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     alignSelf: 'center' as const,
     width: 330,
     overflow: 'hidden' as const,
-    marginTop: 4,
+    marginTop: s(4),
   },
   dateBtn: {
     backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: s(10),
+    padding: s(14),
     alignItems: 'center',
   },
   dateBtnText: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '600',
     color: colors.primary,
   },
   footer: {
-    padding: 16,
-    paddingBottom: Platform.OS === 'android' ? 32 : 16,
+    padding: s(16),
+    paddingBottom: Platform.OS === 'android' ? s(32) : s(16),
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
   doneBtn: {
     backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: s(14),
+    borderRadius: s(12),
     alignItems: 'center',
   },
   doneBtnText: {
     color: colors.textWhite,
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
   },
-});
+  });
+};
 
 export default FrequencyEditModal;

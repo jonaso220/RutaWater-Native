@@ -20,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { getModalWidth } from '../utils/helpers';
+import { useLayout } from '../hooks/useLayout';
 
 interface NoteModalProps {
   visible: boolean;
@@ -31,9 +32,10 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth);
+  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
 
   const [notes, setNotes] = useState('');
   const [pickerDate, setPickerDate] = useState(new Date());
@@ -199,7 +201,9 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -210,10 +214,10 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   modal: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: isTablet ? 20 : 0,
-    borderBottomRightRadius: isTablet ? 20 : 0,
+    borderTopLeftRadius: s(20),
+    borderTopRightRadius: s(20),
+    borderBottomLeftRadius: isTablet ? s(20) : 0,
+    borderBottomRightRadius: isTablet ? s(20) : 0,
     maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '92%',
     maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
@@ -224,59 +228,59 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: s(16),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 18, color: colors.textMuted },
+  closeBtnText: { fontSize: s(18), color: colors.textMuted },
   scrollBody: {
     flexGrow: 0,
   },
   bodyContent: {
-    padding: 16,
-    paddingBottom: 8,
+    padding: s(16),
+    paddingBottom: s(8),
   },
   label: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: s(8),
   },
   notesInput: {
     backgroundColor: colors.warningAmberBg,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(16),
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.warningAmberBorder,
     textAlignVertical: 'top',
-    minHeight: 80,
+    minHeight: s(80),
   },
   selectedDateRow: {
     backgroundColor: colors.primaryLighter,
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 8,
+    borderRadius: s(10),
+    padding: s(10),
+    marginBottom: s(8),
     borderWidth: 1,
     borderColor: colors.primaryInactiveBorder,
   },
   selectedDateText: {
-    fontSize: 17,
+    fontSize: s(17),
     fontWeight: '700',
     color: colors.primaryDark,
     textAlign: 'center',
@@ -290,39 +294,40 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     overflow: 'hidden' as const,
   },
   selectedDateHint: {
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: s(13),
+    marginTop: s(2),
     textAlign: 'center',
   },
   datePickerBtn: {
     backgroundColor: colors.primaryLighter,
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: s(10),
+    padding: s(14),
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.primaryInactiveBorder,
   },
   datePickerBtnText: {
-    fontSize: 17,
+    fontSize: s(17),
     fontWeight: '600',
     color: colors.primaryDark,
   },
   footer: {
-    padding: 16,
+    padding: s(16),
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
   saveBtn: {
     backgroundColor: colors.warningAmber,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: s(14),
+    borderRadius: s(12),
     alignItems: 'center',
   },
   saveBtnText: {
     color: colors.textWhite,
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
   },
-});
+  });
+};
 
 export default NoteModal;

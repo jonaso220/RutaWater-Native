@@ -13,6 +13,7 @@ import ModalOverlay from './ModalOverlay';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useLayout } from '../hooks/useLayout';
 
 interface PromptModalProps {
   visible: boolean;
@@ -37,7 +38,8 @@ const PromptModal: React.FC<PromptModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const styles = getStyles(colors);
+  const { fontScale } = useLayout();
+  const styles = getStyles(colors, fontScale);
   const [value, setValue] = useState(defaultValue);
 
   useEffect(() => {
@@ -89,18 +91,20 @@ const PromptModal: React.FC<PromptModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: s(32),
   },
   dialog: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: s(16),
+    padding: s(20),
     width: '100%',
     maxWidth: 340,
     shadowColor: '#000',
@@ -110,49 +114,49 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     elevation: 8,
   },
   title: {
-    fontSize: 19,
+    fontSize: s(19),
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
   },
   message: {
-    fontSize: 15,
+    fontSize: s(15),
     color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 6,
+    marginTop: s(6),
   },
   input: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 17,
+    borderRadius: s(10),
+    paddingHorizontal: s(14),
+    paddingVertical: s(12),
+    fontSize: s(17),
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    marginTop: 16,
+    marginTop: s(16),
   },
   buttons: {
     flexDirection: 'row',
-    marginTop: 16,
-    gap: 10,
+    marginTop: s(16),
+    gap: s(10),
   },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: s(12),
+    borderRadius: s(10),
     alignItems: 'center',
     backgroundColor: colors.sectionBackground,
   },
   cancelText: {
-    fontSize: 17,
+    fontSize: s(17),
     fontWeight: '600',
     color: colors.textMuted,
   },
   submitBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: s(12),
+    borderRadius: s(10),
     alignItems: 'center',
     backgroundColor: colors.primary,
   },
@@ -160,10 +164,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     opacity: 0.5,
   },
   submitText: {
-    fontSize: 17,
+    fontSize: s(17),
     fontWeight: '700',
     color: colors.textWhite,
   },
-});
+  });
+};
 
 export default PromptModal;

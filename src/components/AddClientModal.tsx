@@ -20,6 +20,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
 import { getModalWidth } from '../utils/helpers';
+import { useLayout } from '../hooks/useLayout';
 
 interface AddClientModalProps {
   visible: boolean;
@@ -47,9 +48,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth);
+  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -582,21 +584,23 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
     justifyContent: isTablet ? 'center' : 'flex-end',
     alignItems: 'center',
-    paddingHorizontal: isTablet ? 24 : 8,
-    paddingVertical: isTablet ? 24 : 0,
+    paddingHorizontal: isTablet ? s(24) : s(8),
+    paddingVertical: isTablet ? s(24) : 0,
   },
   modal: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: isTablet ? 20 : 0,
-    borderBottomRightRadius: isTablet ? 20 : 0,
+    borderTopLeftRadius: s(20),
+    borderTopRightRadius: s(20),
+    borderBottomLeftRadius: isTablet ? s(20) : 0,
+    borderBottomRightRadius: isTablet ? s(20) : 0,
     maxHeight: Platform.OS === 'android' ? '100%' : '90%',
     maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
@@ -607,45 +611,45 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: s(16),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 18,
+    fontSize: s(18),
     color: colors.textMuted,
   },
   body: {
-    padding: 16,
+    padding: s(16),
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
-    marginBottom: 8,
+    marginBottom: s(8),
   },
   destRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: s(8),
   },
   destChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: s(16),
+    paddingVertical: s(10),
+    borderRadius: s(10),
     backgroundColor: colors.sectionBackground,
     borderWidth: 1,
     borderColor: 'transparent',
@@ -659,7 +663,7 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     borderColor: colors.warning,
   },
   destChipText: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -672,20 +676,20 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   dayChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
+    gap: s(8),
+    marginTop: s(10),
   },
   dayChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: s(16),
+    paddingVertical: s(10),
+    borderRadius: s(20),
     backgroundColor: colors.sectionBackground,
   },
   dayChipSelected: {
     backgroundColor: colors.primary,
   },
   dayChipText: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -694,9 +698,9 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   textInput: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 17,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(17),
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
@@ -705,23 +709,23 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: s(8),
     borderBottomWidth: 1,
     borderBottomColor: colors.sectionBackground,
   },
   productLabel: {
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textSecondary,
   },
   qtyControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: s(12),
   },
   qtyBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(8),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
@@ -730,7 +734,7 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     backgroundColor: colors.primary,
   },
   qtyBtnText: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -738,32 +742,32 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     color: colors.textWhite,
   },
   qtyValue: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
-    minWidth: 24,
+    minWidth: s(24),
     textAlign: 'center',
   },
   notesInput: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(16),
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
     textAlignVertical: 'top',
-    minHeight: 80,
+    minHeight: s(80),
   },
   footer: {
-    padding: 16,
+    padding: s(16),
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
   saveBtn: {
     backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: s(14),
+    borderRadius: s(12),
     alignItems: 'center',
   },
   saveBtnDisabled: {
@@ -771,20 +775,20 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   saveBtnText: {
     color: colors.textWhite,
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
   },
   pasteBtn: {
     backgroundColor: colors.successBg,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginRight: 8,
+    paddingHorizontal: s(12),
+    paddingVertical: s(8),
+    borderRadius: s(8),
+    marginRight: s(8),
     borderWidth: 1,
     borderColor: colors.successBorder,
   },
   pasteBtnText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '700',
     color: colors.successMedium,
   },
@@ -792,34 +796,34 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flex: 1,
     backgroundColor: colors.overlay,
     justifyContent: 'center',
-    padding: 20,
+    padding: s(20),
   },
   pasteDialog: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: s(16),
+    padding: s(20),
     maxWidth: 500,
     alignSelf: 'center' as const,
     width: '100%' as const,
   },
   pasteModalTitle: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: s(6),
   },
   pasteModalHint: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.textMuted,
     textAlign: 'center',
-    marginBottom: 14,
+    marginBottom: s(14),
   },
   pasteInput: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 14,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(14),
     color: colors.textPrimary,
     minHeight: 150,
     borderWidth: 1,
@@ -827,33 +831,34 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   pasteButtons: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 14,
+    gap: s(10),
+    marginTop: s(14),
   },
   pasteCancelBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: s(12),
+    borderRadius: s(10),
     backgroundColor: colors.sectionBackground,
     alignItems: 'center',
   },
   pasteCancelText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '600',
     color: colors.textMuted,
   },
   pasteConfirmBtn: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: s(12),
+    borderRadius: s(10),
     backgroundColor: colors.primary,
     alignItems: 'center',
   },
   pasteConfirmText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '700',
     color: colors.textWhite,
   },
-});
+  });
+};
 
 export default AddClientModal;

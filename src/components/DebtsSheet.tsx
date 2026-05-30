@@ -20,6 +20,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useTheme } from '../theme/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { ThemeColors } from '../theme/colors';
+import { useLayout } from '../hooks/useLayout';
 
 interface DebtsSheetProps {
   visible: boolean;
@@ -63,9 +64,10 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth);
+  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('date');
   const [showAddPanel, setShowAddPanel] = useState(false);
@@ -665,7 +667,9 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -676,10 +680,10 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   modal: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: isTablet ? 20 : 0,
-    borderBottomRightRadius: isTablet ? 20 : 0,
+    borderTopLeftRadius: s(20),
+    borderTopRightRadius: s(20),
+    borderBottomLeftRadius: isTablet ? s(20) : 0,
+    borderBottomRightRadius: isTablet ? s(20) : 0,
     maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '85%',
     maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
@@ -690,92 +694,92 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: s(16),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: s(10),
   },
   addDebtBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: s(4),
     backgroundColor: colors.danger,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+    paddingHorizontal: s(12),
+    paddingVertical: s(7),
+    borderRadius: s(10),
   },
   addDebtBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: s(14),
   },
   addPanelTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: s(8),
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  closeBtnText: { fontSize: 18, color: colors.textMuted },
+  closeBtnText: { fontSize: s(18), color: colors.textMuted },
   // Summary
   summaryRow: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: s(8),
+    paddingHorizontal: s(12),
+    paddingVertical: s(10),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   summaryBox: {
     flex: 1,
     backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    paddingVertical: 8,
+    borderRadius: s(10),
+    paddingVertical: s(8),
     alignItems: 'center',
   },
   summaryBoxDanger: {
     backgroundColor: colors.dangerLight,
   },
   summaryValueDanger: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '900',
     color: colors.danger,
   },
   summaryLabelDanger: {
-    fontSize: 10,
+    fontSize: s(10),
     color: colors.danger,
     opacity: 0.7,
     fontWeight: '600',
   },
   summaryValue: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '900',
     color: colors.textPrimary,
   },
   summaryLabel: {
-    fontSize: 10,
+    fontSize: s(10),
     color: colors.textHint,
     fontWeight: '600',
   },
   // Search
   searchSection: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: s(12),
+    paddingVertical: s(8),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
@@ -783,45 +787,45 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    height: 38,
+    borderRadius: s(10),
+    paddingHorizontal: s(10),
+    height: s(38),
   },
   searchIcon: {
-    fontSize: 16,
-    marginRight: 6,
+    fontSize: s(16),
+    marginRight: s(6),
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textPrimary,
     padding: 0,
   },
   clearBtn: {
-    padding: 10,
+    padding: s(10),
   },
   clearBtnText: {
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textHint,
   },
   searchResultCount: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.textHint,
-    marginTop: 4,
+    marginTop: s(4),
   },
   // Sort
   sortRow: {
     flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: s(8),
+    paddingHorizontal: s(12),
+    paddingVertical: s(8),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   sortBtn: {
     flex: 1,
-    paddingVertical: 7,
-    borderRadius: 8,
+    paddingVertical: s(7),
+    borderRadius: s(8),
     backgroundColor: colors.sectionBackground,
     alignItems: 'center',
   },
@@ -829,7 +833,7 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     backgroundColor: colors.danger,
   },
   sortBtnText: {
-    fontSize: 13,
+    fontSize: s(13),
     fontWeight: '700',
     color: colors.textHint,
   },
@@ -837,12 +841,12 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     color: colors.textWhite,
   },
   // List
-  list: { padding: 12 },
+  list: { padding: s(12) },
   card: {
     backgroundColor: colors.dangerLight,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
+    borderRadius: s(12),
+    padding: s(14),
+    marginBottom: s(8),
     borderLeftWidth: 4,
     borderLeftColor: colors.danger,
   },
@@ -850,41 +854,41 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: s(8),
   },
   clientName: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   clientAddress: {
-    fontSize: 13,
+    fontSize: s(13),
     fontWeight: '400',
     color: colors.textSecondary,
-    marginTop: 1,
+    marginTop: s(1),
   },
   totalAmount: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '800',
     color: colors.danger,
-    marginTop: 2,
+    marginTop: s(2),
   },
   cardActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: s(8),
     alignItems: 'center',
   },
-  actionBtn: { padding: 6 },
+  actionBtn: { padding: s(6) },
   transferBtn: {
     backgroundColor: colors.successLighter,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: s(10),
+    paddingVertical: s(6),
+    borderRadius: s(8),
     borderWidth: 1,
     borderColor: colors.successLight,
   },
   transferBtnText: {
-    fontSize: 14,
+    fontSize: s(14),
     fontWeight: '700',
     color: colors.successDark,
   },
@@ -893,7 +897,7 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: s(8),
   },
   debtRowFirst: {
     borderTopWidth: 1,
@@ -906,47 +910,47 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: s(6),
   },
   debtAmount: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '700',
     color: colors.danger,
   },
   debtDate: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.textHint,
   },
   ageBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
+    paddingHorizontal: s(6),
+    paddingVertical: s(2),
+    borderRadius: s(10),
   },
   ageBadgeText: {
-    fontSize: 10,
+    fontSize: s(10),
     fontWeight: '800',
   },
   debtActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: s(8),
     alignItems: 'center',
   },
   editBtn: {
-    padding: 8,
-    borderRadius: 8,
+    padding: s(8),
+    borderRadius: s(8),
   },
   editRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: s(8),
     flex: 1,
   },
   editInput: {
     flex: 1,
     backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 18,
+    borderRadius: s(8),
+    padding: s(10),
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     borderWidth: 1,
@@ -954,17 +958,17 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   saveEditBtn: {
     backgroundColor: colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: s(14),
+    paddingVertical: s(10),
+    borderRadius: s(8),
   },
   saveEditText: {
     color: colors.textWhite,
     fontWeight: '700',
   },
   cancelEditBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: s(10),
+    paddingVertical: s(10),
   },
   cancelEditText: {
     color: colors.textMuted,
@@ -972,120 +976,120 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   paidBtn: {
     backgroundColor: colors.success,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: s(12),
+    paddingVertical: s(8),
+    borderRadius: s(8),
   },
   paidBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: s(15),
   },
   // Pay all button
   payAllBtn: {
     backgroundColor: colors.success,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: s(10),
+    borderRadius: s(8),
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: s(10),
   },
   payAllBtnText: {
     color: colors.textWhite,
     fontWeight: '800',
-    fontSize: 14,
+    fontSize: s(14),
   },
   reminderBtn: {
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: s(10),
+    borderRadius: s(8),
     alignItems: 'center',
-    marginTop: 6,
+    marginTop: s(6),
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
   reminderBtnText: {
     color: colors.textSecondary,
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: s(14),
   },
   // Empty
   empty: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: s(40),
   },
-  emptyEmoji: { fontSize: 40, marginBottom: 8 },
+  emptyEmoji: { fontSize: s(40), marginBottom: s(8) },
   emptyText: {
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textHint,
   },
   // Add debt panel
   addPanelList: {
-    paddingHorizontal: 12,
-    paddingBottom: 20,
+    paddingHorizontal: s(12),
+    paddingBottom: s(20),
   },
   addPanelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    gap: 12,
+    paddingVertical: s(12),
+    paddingHorizontal: s(4),
+    gap: s(12),
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.cardBorder,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: s(40),
+    height: s(40),
+    borderRadius: s(20),
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
   addPanelName: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   addPanelAddress: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.textSecondary,
-    marginTop: 1,
+    marginTop: s(1),
   },
   debtBadge: {
-    fontSize: 13,
+    fontSize: s(13),
     fontWeight: '700',
     color: colors.danger,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: s(8),
+    paddingVertical: s(3),
   },
   // Selected client amount input
   addAmountSection: {
-    padding: 16,
-    gap: 16,
+    padding: s(16),
+    gap: s(16),
   },
   selectedClientRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: s(12),
   },
   addAmountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: s(8),
   },
   currencySign: {
-    fontSize: 22,
+    fontSize: s(22),
     fontWeight: '700',
     color: colors.textMuted,
   },
   amountInput: {
     flex: 1,
     backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 18,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     borderWidth: 1,
@@ -1093,9 +1097,9 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   confirmAddBtn: {
     backgroundColor: colors.danger,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: s(20),
+    paddingVertical: s(12),
+    borderRadius: s(10),
   },
   confirmAddBtnDisabled: {
     opacity: 0.5,
@@ -1103,8 +1107,9 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   confirmAddBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
-});
+  });
+};
 
 export default DebtsSheet;

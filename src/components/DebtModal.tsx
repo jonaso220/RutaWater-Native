@@ -19,6 +19,7 @@ import { normalizePhone, getClientMatchKey, getModalWidth } from '../utils/helpe
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useLayout } from '../hooks/useLayout';
 
 interface DebtModalProps {
   visible: boolean;
@@ -52,9 +53,10 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth);
+  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
   const [newAmount, setNewAmount] = useState('');
   const [editingDebt, setEditingDebt] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
@@ -341,7 +343,9 @@ const DebtModal: React.FC<DebtModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -351,7 +355,7 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   modal: {
     backgroundColor: colors.modalBackground,
-    borderRadius: 20,
+    borderRadius: s(20),
     maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '80%',
     maxWidth: isTablet ? undefined : 500,
     alignSelf: 'center' as const,
@@ -361,41 +365,41 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: s(16),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
   },
   totalText: {
-    fontSize: 22,
+    fontSize: s(22),
     fontWeight: '800',
     color: colors.danger,
-    marginTop: 4,
+    marginTop: s(4),
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 18,
+    fontSize: s(18),
     color: colors.textMuted,
   },
   body: {
-    padding: 16,
+    padding: s(16),
   },
   debtCard: {
     backgroundColor: colors.dangerLight,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: s(12),
+    padding: s(12),
+    marginBottom: s(8),
     borderWidth: 1,
     borderColor: colors.dangerBorder,
   },
@@ -405,43 +409,43 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     alignItems: 'center',
   },
   debtAmount: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '800',
     color: colors.danger,
   },
   debtDate: {
-    fontSize: 13,
+    fontSize: s(13),
     color: colors.textHint,
-    marginTop: 2,
+    marginTop: s(2),
   },
   debtActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: s(8),
   },
   debtActionBtn: {
-    padding: 8,
-    borderRadius: 8,
+    padding: s(8),
+    borderRadius: s(8),
   },
   paidBtn: {
     backgroundColor: colors.success,
-    paddingHorizontal: 12,
+    paddingHorizontal: s(12),
   },
   paidBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: s(15),
   },
   editRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: s(8),
   },
   editInput: {
     flex: 1,
     backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 18,
+    borderRadius: s(8),
+    padding: s(10),
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     borderWidth: 1,
@@ -449,17 +453,17 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   saveEditBtn: {
     backgroundColor: colors.primary,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: s(14),
+    paddingVertical: s(10),
+    borderRadius: s(8),
   },
   saveEditText: {
     color: colors.textWhite,
     fontWeight: '700',
   },
   cancelEditBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: s(10),
+    paddingVertical: s(10),
   },
   cancelEditText: {
     color: colors.textMuted,
@@ -467,42 +471,42 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 32,
+    paddingVertical: s(32),
   },
   emptyEmoji: {
-    fontSize: 40,
-    marginBottom: 8,
+    fontSize: s(40),
+    marginBottom: s(8),
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textHint,
   },
   payAllBtn: {
     backgroundColor: colors.success,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: s(12),
+    borderRadius: s(10),
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: s(16),
   },
   payAllBtnText: {
     color: colors.textWhite,
     fontWeight: '800',
-    fontSize: 16,
+    fontSize: s(16),
   },
   whatsappSection: {
-    marginTop: 16,
-    gap: 8,
+    marginTop: s(16),
+    gap: s(8),
   },
   whatsappBtn: {
     backgroundColor: '#25D366',
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingVertical: s(12),
+    borderRadius: s(10),
     alignItems: 'center',
   },
   whatsappBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
   whatsappBtnSecondary: {
     backgroundColor: colors.sectionBackground,
@@ -510,29 +514,29 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   whatsappBtnSecondaryText: {
     color: colors.textSecondary,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
   footer: {
-    padding: 16,
+    padding: s(16),
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
   addRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: s(8),
   },
   currencySign: {
-    fontSize: 22,
+    fontSize: s(22),
     fontWeight: '700',
     color: colors.textMuted,
   },
   amountInput: {
     flex: 1,
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 18,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     borderWidth: 1,
@@ -540,9 +544,9 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   addBtn: {
     backgroundColor: colors.danger,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10,
+    paddingHorizontal: s(20),
+    paddingVertical: s(12),
+    borderRadius: s(10),
   },
   addBtnDisabled: {
     opacity: 0.6,
@@ -550,8 +554,9 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   addBtnText: {
     color: colors.textWhite,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: s(16),
   },
-});
+  });
+};
 
 export default DebtModal;

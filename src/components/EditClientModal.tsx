@@ -23,6 +23,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
 import { getModalWidth } from '../utils/helpers';
+import { useLayout } from '../hooks/useLayout';
 
 interface EditClientModalProps {
   visible: boolean;
@@ -53,9 +54,10 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
+  const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth);
+  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -591,21 +593,23 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   );
 };
 
-const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: colors.overlay,
     justifyContent: isTablet ? 'center' : 'flex-end',
     alignItems: 'center',
-    paddingHorizontal: isTablet ? 24 : 8,
-    paddingVertical: isTablet ? 24 : 0,
+    paddingHorizontal: isTablet ? s(24) : s(8),
+    paddingVertical: isTablet ? s(24) : 0,
   },
   modal: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: isTablet ? 20 : 0,
-    borderBottomRightRadius: isTablet ? 20 : 0,
+    borderTopLeftRadius: s(20),
+    borderTopRightRadius: s(20),
+    borderBottomLeftRadius: isTablet ? s(20) : 0,
+    borderBottomRightRadius: isTablet ? s(20) : 0,
     maxHeight: Platform.OS === 'android' ? '100%' : isTablet ? '90%' : '85%',
     maxWidth: isTablet ? undefined : 600,
     alignSelf: 'center' as const,
@@ -615,69 +619,69 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: s(16),
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
     flex: 1,
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeBtnText: {
-    fontSize: 18,
+    fontSize: s(18),
     color: colors.textMuted,
   },
   body: {
-    padding: 16,
+    padding: s(16),
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '700',
     color: colors.textMuted,
     textTransform: 'uppercase',
-    marginBottom: 12,
+    marginBottom: s(12),
   },
   fieldInput: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(16),
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    marginBottom: 10,
+    marginBottom: s(10),
   },
   productRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: s(8),
     borderBottomWidth: 1,
     borderBottomColor: colors.sectionBackground,
   },
   productLabel: {
-    fontSize: 16,
+    fontSize: s(16),
     color: colors.textSecondary,
   },
   qtyControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: s(12),
   },
   qtyBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: s(32),
+    height: s(32),
+    borderRadius: s(8),
     backgroundColor: colors.sectionBackground,
     justifyContent: 'center',
     alignItems: 'center',
@@ -686,7 +690,7 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     backgroundColor: colors.primary,
   },
   qtyBtnText: {
-    fontSize: 20,
+    fontSize: s(20),
     fontWeight: '700',
     color: colors.textSecondary,
   },
@@ -694,39 +698,39 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     color: colors.textWhite,
   },
   qtyValue: {
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
     color: colors.textPrimary,
-    minWidth: 24,
+    minWidth: s(24),
     textAlign: 'center',
   },
   notesInput: {
     backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
+    borderRadius: s(10),
+    padding: s(12),
+    fontSize: s(16),
     color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.inputBorder,
     textAlignVertical: 'top',
-    minHeight: 80,
+    minHeight: s(80),
   },
   freqGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: s(8),
   },
   freqChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: s(14),
+    paddingVertical: s(8),
+    borderRadius: s(20),
     backgroundColor: colors.sectionBackground,
   },
   freqChipSelected: {
     backgroundColor: colors.primary,
   },
   freqChipText: {
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '600',
     color: colors.textSecondary,
   },
@@ -738,24 +742,24 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: s(10),
+    padding: s(12),
+    marginBottom: s(8),
   },
   selectedDateText: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '600',
     color: colors.textPrimary,
   },
   clearDateText: {
-    fontSize: 15,
+    fontSize: s(15),
     color: colors.danger,
     fontWeight: '600',
   },
   dateHint: {
-    fontSize: 15,
+    fontSize: s(15),
     color: colors.textMuted,
-    marginBottom: 8,
+    marginBottom: s(8),
   },
   datePicker: {
     height: 350,
@@ -764,55 +768,55 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
     alignSelf: 'center' as const,
     width: 330,
     overflow: 'hidden' as const,
-    marginTop: 4,
+    marginTop: s(4),
   },
   dateBtn: {
     backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: s(10),
+    padding: s(14),
     alignItems: 'center',
   },
   dateBtnText: {
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '600',
     color: colors.primary,
   },
   footer: {
-    padding: 16,
-    paddingBottom: Platform.OS === 'android' ? 32 : 16,
+    padding: s(16),
+    paddingBottom: Platform.OS === 'android' ? s(32) : s(16),
     borderTopWidth: 1,
     borderTopColor: colors.cardBorder,
   },
   linkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: s(10),
     backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
+    borderRadius: s(10),
+    paddingVertical: s(14),
+    paddingHorizontal: s(14),
   },
   linkBtnText: {
     flex: 1,
-    fontSize: 15,
+    fontSize: s(15),
     fontWeight: '600',
     color: colors.textPrimary,
   },
   saveBtn: {
     backgroundColor: colors.primary,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingVertical: s(14),
+    borderRadius: s(12),
     alignItems: 'center',
   },
   saveBtnText: {
     color: colors.textWhite,
-    fontSize: 18,
+    fontSize: s(18),
     fontWeight: '700',
   },
   deleteBtn: {
-    marginTop: 12,
-    paddingVertical: 14,
-    borderRadius: 12,
+    marginTop: s(12),
+    paddingVertical: s(14),
+    borderRadius: s(12),
     alignItems: 'center',
     backgroundColor: colors.dangerLight,
     borderWidth: 1,
@@ -820,21 +824,22 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
   },
   deleteBtnText: {
     color: colors.danger,
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '700',
   },
   removeFromDayBtn: {
-    marginTop: 12,
-    paddingVertical: 14,
-    borderRadius: 12,
+    marginTop: s(12),
+    paddingVertical: s(14),
+    borderRadius: s(12),
     alignItems: 'center',
     backgroundColor: colors.sectionBackground,
   },
   removeFromDayBtnText: {
     color: colors.textSecondary,
-    fontSize: 16,
+    fontSize: s(16),
     fontWeight: '600',
   },
-});
+  });
+};
 
 export default EditClientModal;

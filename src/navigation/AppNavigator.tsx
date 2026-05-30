@@ -31,6 +31,9 @@ const TabNavigator = () => {
   // emoji icons are tall, so the bar needs extra height + bottom room or the
   // label gets clipped against the bottom edge.
   const isWideNav = width >= 900;
+  // Emoji icons need a roomy lineHeight when scaled up, otherwise the glyph's
+  // bottom gets clipped on wide screens. Phone keeps the default lineHeight.
+  const tabIconStyle = { fontSize: s(22), lineHeight: isWideNav ? s(30) : undefined, textAlign: 'center' as const };
 
   return (
     <>
@@ -85,7 +88,7 @@ const TabNavigator = () => {
             ),
             headerRight: () => <ProfileSwitcherButton />,
             tabBarLabel: t('nav.home'),
-            tabBarIcon: () => <Text style={{ fontSize: s(22) }}>🏠</Text>,
+            tabBarIcon: () => <Text style={tabIconStyle}>🏠</Text>,
           }}
         />
         <Tab.Screen
@@ -106,7 +109,7 @@ const TabNavigator = () => {
               </View>
             ),
             tabBarLabel: t('nav.directory'),
-            tabBarIcon: () => <Text style={{ fontSize: s(22) }}>📋</Text>,
+            tabBarIcon: () => <Text style={tabIconStyle}>📋</Text>,
           }}
         />
         <Tab.Screen
@@ -115,7 +118,7 @@ const TabNavigator = () => {
           options={{
             headerTitle: t('nav.settings'),
             tabBarLabel: t('nav.settings'),
-            tabBarIcon: () => <Text style={{ fontSize: s(22) }}>⚙️</Text>,
+            tabBarIcon: () => <Text style={tabIconStyle}>⚙️</Text>,
           }}
         />
       </Tab.Navigator>

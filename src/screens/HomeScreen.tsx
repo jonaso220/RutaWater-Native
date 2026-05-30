@@ -708,6 +708,7 @@ const HomeScreen = () => {
       stableHandlers,
       colors,
       fontScale,
+      isWide,
       isAdmin,
       isDragEnabled,
       selectedDay,
@@ -886,6 +887,7 @@ const HomeScreen = () => {
     [
       colors,
       fontScale,
+      isWide,
       gridFontScale,
       isAdmin,
       selectedDay,
@@ -1127,7 +1129,9 @@ const HomeScreen = () => {
           extraData={`${debts.length}-${transfers.length}-${numColumns}`}
           keyExtractor={keyExtractor}
           renderItem={renderGridItem}
+          style={{ flex: 1 }}
           contentContainerStyle={styles.listContent}
+          onScrollBeginDrag={() => showFilters && setShowFilters(false)}
           initialNumToRender={12}
           maxToRenderPerBatch={12}
           windowSize={11}

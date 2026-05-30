@@ -36,33 +36,37 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
       .where(scopeField, '==', scopeValue)
       .onSnapshot(
         (snapshot) => {
+          // Build the list from the authoritative snapshot.docs (so membership
+          // is always correct — deleted docs are absent), but REUSE the prior
+          // object reference for any doc that didn't change. Reusing references
+          // keeps the React.memo on ClientCard intact so a single write (our
+          // own reorder echo, or another device's edit) only re-renders the
+          // card that actually changed — not all 100+ — which is what fixed
+          // the drag "jitter".
+          //
+          // We must rebuild from snapshot.docs (not merge docChanges into the
+          // old cache) because when this listener RE-SUBSCRIBES — e.g. after
+          // switching the active reparto and coming back, with the previous
+          // scope's cache still alive (gcTime: Infinity) — the fresh listener
+          // reports every doc as "added" and never emits "removed" for docs
+          // deleted while it was detached. Merging would resurrect those as
+          // ghost clients. Rebuilding from snapshot.docs avoids that.
           const prev = queryClient.getQueryData<Client[]>(queryKey);
-          // First snapshot (or cache cleared): build the full list.
-          if (!prev) {
-            queryClient.setQueryData<Client[]>(
-              queryKey,
-              snapshot.docs.map((doc) => withDefaults(doc.id, doc.data())),
-            );
-            return;
-          }
-          // Incremental update: rebuild ONLY the documents that actually
-          // changed and reuse the existing object reference for everything
-          // else. Without this, every snapshot (including the local echo of
-          // our own reorder write, and any write from another device) handed
-          // a brand-new object to all 100+ clients, defeating the React.memo
-          // on ClientCard and re-rendering the entire list at once — the
-          // source of the card "jitter" when moving a client far down the list.
-          const changes = snapshot.docChanges();
-          if (changes.length === 0) return; // doc set identical; keep same reference
-          const byId = new Map(prev.map((c) => [c.id, c]));
-          changes.forEach((change) => {
-            if (change.type === 'removed') {
-              byId.delete(change.doc.id);
-            } else {
-              byId.set(change.doc.id, withDefaults(change.doc.id, change.doc.data()));
-            }
+          const prevById = new Map((prev ?? []).map((c) => [c.id, c]));
+          // Docs added/modified in this snapshot must get a fresh object.
+          const changedIds = new Set(
+            snapshot
+              .docChanges()
+              .filter((ch) => ch.type !== 'removed')
+              .map((ch) => ch.doc.id),
+          );
+          const next = snapshot.docs.map((doc) => {
+            const existing = prevById.get(doc.id);
+            return existing && !changedIds.has(doc.id)
+              ? existing
+              : withDefaults(doc.id, doc.data());
           });
-          queryClient.setQueryData<Client[]>(queryKey, Array.from(byId.values()));
+          queryClient.setQueryData<Client[]>(queryKey, next);
         },
         (error) => {
           reportError(error, 'Error loading clients');

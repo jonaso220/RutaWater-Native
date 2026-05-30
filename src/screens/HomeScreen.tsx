@@ -66,10 +66,11 @@ interface SectionHeaderProps {
   isToday: boolean;
   colors: ThemeColors;
   fontScale: number;
+  isWide?: boolean;
 }
 
-const SectionHeader = React.memo<SectionHeaderProps>(({ title, count, isToday, colors, fontScale }) => {
-  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
+const SectionHeader = React.memo<SectionHeaderProps>(({ title, count, isToday, colors, fontScale, isWide = false }) => {
+  const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
   return (
     <View style={[styles.sectionHeader, isToday && styles.sectionHeaderToday]}>
       <Text style={[styles.sectionHeaderText, isToday && styles.sectionHeaderTextToday]}>
@@ -668,6 +669,7 @@ const HomeScreen = () => {
             isToday={item.isToday}
             colors={colors}
             fontScale={fontScale}
+            isWide={isWide}
           />
         );
       }
@@ -840,6 +842,7 @@ const HomeScreen = () => {
               isToday={item.isToday}
               colors={colors}
               fontScale={fontScale}
+              isWide={isWide}
             />
           </View>
         );
@@ -1479,7 +1482,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     gap: 12,
     alignItems: 'flex-start',
     width: '100%',
-    maxWidth: 1450,
+    maxWidth: 1600,
     alignSelf: 'center',
   },
   gridCell: {
@@ -1487,17 +1490,17 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
   },
   gridHeaderWrap: {
     width: '100%',
-    maxWidth: 1450,
+    maxWidth: 1600,
     alignSelf: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    marginTop: 6,
-    marginBottom: 6,
+    paddingVertical: s(8),
+    paddingHorizontal: s(4),
+    marginTop: s(6),
+    marginBottom: s(6),
     borderBottomWidth: 2,
     borderBottomColor: colors.cardBorder,
   },
@@ -1505,7 +1508,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     borderBottomColor: colors.primary,
   },
   sectionHeaderText: {
-    fontSize: s(16),
+    fontSize: isWide ? s(19) : s(16),
     fontWeight: '700',
     color: colors.textMuted,
   },
@@ -1513,13 +1516,13 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     color: colors.primary,
   },
   sectionHeaderCount: {
-    fontSize: s(14),
+    fontSize: isWide ? s(15) : s(14),
     fontWeight: '700',
     color: colors.textHint,
     backgroundColor: colors.sectionBackground,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    paddingHorizontal: s(8),
+    paddingVertical: s(2),
+    borderRadius: s(10),
     overflow: 'hidden',
   },
   sectionHeaderCountToday: {
@@ -1548,11 +1551,11 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     borderTopWidth: 2,
     borderTopColor: colors.cardBorder,
     borderStyle: 'dashed',
-    marginTop: 12,
-    paddingTop: 4,
+    marginTop: s(12),
+    paddingTop: s(4),
   },
   completedHeader: {
-    padding: 12,
+    padding: s(12),
   },
   completedTitle: {
     fontSize: s(15),
@@ -1563,9 +1566,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
   },
   completedCard: {
     backgroundColor: colors.successLighter,
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 6,
+    borderRadius: s(10),
+    padding: s(12),
+    marginBottom: s(6),
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1584,9 +1587,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
   },
   deleteAllBtn: {
     backgroundColor: colors.dangerLight,
-    borderRadius: 10,
-    padding: 12,
-    marginTop: 8,
+    borderRadius: s(10),
+    padding: s(12),
+    marginTop: s(8),
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.dangerBorder,

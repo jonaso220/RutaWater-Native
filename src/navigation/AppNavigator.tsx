@@ -36,11 +36,16 @@ const TabNavigator = () => {
           headerStyle: { backgroundColor: colors.headerBackground },
           headerTintColor: colors.headerText,
           headerTitleStyle: { fontWeight: '700', fontSize: s(17) },
+          // Keep the icon-over-label layout on every screen size. On wide
+          // screens (iPad/Mac) React Navigation defaults to label-beside-icon,
+          // which looks squished — force below-icon like on the phone.
+          tabBarLabelPosition: 'below-icon',
           tabBarStyle: {
             backgroundColor: colors.tabBarBackground,
             borderTopColor: colors.tabBarBorder,
-            paddingBottom: 4,
-            height: s(56),
+            paddingTop: s(6),
+            paddingBottom: s(8),
+            height: s(60),
           },
           tabBarActiveTintColor: colors.tabActive,
           tabBarInactiveTintColor: colors.tabInactive,

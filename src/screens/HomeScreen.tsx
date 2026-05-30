@@ -1380,7 +1380,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
   },
   searchRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: s(8),
     alignItems: 'center',
   },
   searchInputWrapper: {
@@ -1388,13 +1388,13 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.sectionBackground,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    height: 38,
+    borderRadius: s(10),
+    paddingHorizontal: s(10),
+    height: s(38),
   },
   searchIcon: {
     fontSize: s(16),
-    marginRight: 6,
+    marginRight: s(6),
   },
   searchInput: {
     flex: 1,
@@ -1403,7 +1403,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     padding: 0,
   },
   clearBtn: {
-    padding: 10,
+    padding: s(10),
   },
   clearBtnText: {
     fontSize: s(16),

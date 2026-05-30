@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import { db } from '../config/firebase';
 import { reportError } from '../lib/crashReporting';
@@ -34,6 +34,7 @@ export const useProfiles = (
   const [activeProfileId, setActiveProfileId] = useState<string>(PRIMARY_PROFILE_ID);
   const [primaryName, setPrimaryName] = useState<string>('Reparto 1');
   const [loaded, setLoaded] = useState(false);
+  const backfilledRef = useRef<Set<string>>(new Set());
 
   // Perfiles propios (donde el usuario es miembro).
   useEffect(() => {
@@ -80,6 +81,34 @@ export const useProfiles = (
       );
     return unsub;
   }, [userId]);
+
+  // Backfill: perfiles propios creados antes de existir el sharing pueden no
+  // tener `code`/`members`. Los completamos una sola vez por perfil (ref guard
+  // para no regenerar el código en cada snapshot).
+  useEffect(() => {
+    if (!userId) return;
+    customProfiles.forEach((p) => {
+      if (p.ownerId !== userId) return;
+      const needsCode = !p.code;
+      const needsMember = !p.members || !p.members[userId];
+      if ((!needsCode && !needsMember) || backfilledRef.current.has(p.id)) return;
+      backfilledRef.current.add(p.id);
+      const patch: Record<string, any> = {};
+      if (needsCode) patch.code = generateCode();
+      if (needsMember) {
+        patch[`members.${userId}`] = {
+          role: 'admin',
+          name: displayName || '',
+          email: email || '',
+        };
+        patch.memberUids = firestore.FieldValue.arrayUnion(userId);
+      }
+      db.collection('profiles')
+        .doc(p.id)
+        .update(patch)
+        .catch((e) => reportError(e, 'Error backfilling profile'));
+    });
+  }, [customProfiles, userId, displayName, email]);
 
   const primary = useMemo<Profile>(
     () => ({

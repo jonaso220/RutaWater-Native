@@ -33,6 +33,7 @@ export const useProfiles = (
   const [customProfiles, setCustomProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string>(PRIMARY_PROFILE_ID);
   const [primaryName, setPrimaryName] = useState<string>('Reparto 1');
+  const [storedProfileIds, setStoredProfileIds] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   const backfilledRef = useRef<Set<string>>(new Set());
 
@@ -75,6 +76,7 @@ export const useProfiles = (
           const data = doc.data() || {};
           setActiveProfileId(data.activeProfileId || PRIMARY_PROFILE_ID);
           setPrimaryName(data.primaryProfileName || 'Reparto 1');
+          setStoredProfileIds(Array.isArray(data.profileIds) ? data.profileIds : []);
           setLoaded(true);
         },
         () => setLoaded(true),
@@ -109,6 +111,21 @@ export const useProfiles = (
         .catch((e) => reportError(e, 'Error backfilling profile'));
     });
   }, [customProfiles, userId, displayName, email]);
+
+  // Mantiene `users/{uid}.profileIds` = ids de repartos a los que pertenece el
+  // usuario. Lo usan las reglas de Firestore para autorizar las consultas por
+  // lista (where('groupId' == perfil)) con una sola lectura del doc del usuario.
+  useEffect(() => {
+    if (!userId) return;
+    const desired = customProfiles.map((p) => p.id);
+    const a = [...desired].sort();
+    const b = [...storedProfileIds].sort();
+    if (a.length === b.length && a.every((v, i) => v === b[i])) return;
+    db.collection('users')
+      .doc(userId)
+      .set({ profileIds: desired }, { merge: true })
+      .catch((e) => reportError(e, 'Error syncing profileIds'));
+  }, [customProfiles, storedProfileIds, userId]);
 
   const primary = useMemo<Profile>(
     () => ({

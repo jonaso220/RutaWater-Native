@@ -2,45 +2,114 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
-      return request.auth != null;
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(uid()));
     }
-    function myUid() {
-      return request.auth.uid;
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(uid())).data;
     }
-    // Lee el doc del usuario (rol y grupo). Null-safe: si no existe, devuelve null.
-    function userField(field) {
-      return exists(/databases/$(database)/documents/users/$(myUid()))
-        ? get(/databases/$(database)/documents/users/$(myUid())).data[field]
-        : null;
-    }
-
-    // PASO 1 (conservador): todo lo que ya funcionaba sigue igual — cualquier
-    // usuario autenticado puede leer/crear/actualizar (mismo comportamiento que
-    // las reglas anteriores). Lo ÚNICO que cambia es el borrado, que se controla
-    // por colección abajo. El cierre fino de lecturas se hará junto con los
-    // perfiles (multi-reparto), porque ahí cambia el modelo de scope.
-    match /{document=**} {
-      allow read, create, update: if isSignedIn();
+    function myGroupId() { return userExists() ? userData().groupId : null; }
+    function myRole() { return userExists() ? userData().role : null; }
+    // Repartos (perfiles) a los que pertenece el usuario. La app lo mantiene en
+    // users/{uid}.profileIds para poder autorizar las consultas por lista con
+    // una sola lectura.
+    function myProfileIds() {
+      return (userExists() && userData().profileIds is list) ? userData().profileIds : [];
     }
 
-    // Clientes: solo puede BORRAR el dueño (cuando trabaja solo, sin grupo) o el
-    // admin del grupo. Un miembro (rol 'member', ej. una persona que trabaja
-    // contigo) NO puede borrar clientes agendados del directorio.
+    // Un doc (clients/debts/transfers) está en mi alcance si es mío (userId), de
+    // mi grupo familiar (Reparto 1) o de un reparto al que pertenezco.
+    function inScope(data) {
+      return signedIn() && (
+        data.userId == uid() ||
+        (data.groupId != null && (data.groupId == myGroupId() || data.groupId in myProfileIds()))
+      );
+    }
+
+    // Borrar un cliente: usuario solo (sin grupo), admin del grupo (Reparto 1) o
+    // dueño del reparto. Un miembro NO puede borrar.
+    function canDeleteClient(data) {
+      return signedIn() && (
+        (data.userId == uid() && data.groupId == null) ||
+        (data.groupId != null && data.groupId == myGroupId() && myRole() == 'admin') ||
+        (data.groupId != null && data.groupId != myGroupId()
+          && exists(/databases/$(database)/documents/profiles/$(data.groupId))
+          && get(/databases/$(database)/documents/profiles/$(data.groupId)).data.ownerId == uid())
+      );
+    }
+
+    // ── Clientes ────────────────────────────────────────────────────────────
     match /clients/{id} {
-      allow delete: if isSignedIn()
-        && (userField('groupId') == null || userField('role') == 'admin');
+      allow read:   if inScope(resource.data);
+      allow create: if inScope(request.resource.data);
+      allow update: if inScope(resource.data) && inScope(request.resource.data);
+      allow delete: if canDeleteClient(resource.data);
     }
 
-    // Resto de colecciones: el borrado queda disponible para cualquier usuario
-    // autenticado (igual que hasta ahora; la app ya controla estos flujos).
-    match /debts/{id}            { allow delete: if isSignedIn(); }
-    match /transfers/{id}        { allow delete: if isSignedIn(); }
-    match /groups/{id}           { allow delete: if isSignedIn(); }
-    match /daily_loads/{id}      { allow delete: if isSignedIn(); }
-    match /settings/{id}         { allow delete: if isSignedIn(); }
-    match /aiUsage/{id}          { allow delete: if isSignedIn(); }
-    match /premiumOverrides/{id} { allow delete: if isSignedIn(); }
-    match /users/{id}            { allow delete: if isSignedIn(); }
+    // ── Deudas y transferencias (acceso completo dentro del alcance) ─────────
+    match /debts/{id} {
+      allow read, update, delete: if inScope(resource.data);
+      allow create: if inScope(request.resource.data);
+    }
+    match /transfers/{id} {
+      allow read, update, delete: if inScope(resource.data);
+      allow create: if inScope(request.resource.data);
+    }
+
+    // ── Carga diaria: docId "<uid>_<dia>", por usuario ──────────────────────
+    match /daily_loads/{id} {
+      allow read, write: if signedIn() && id.split('_')[0] == uid();
+    }
+
+    // ── Uso de IA / overrides premium: docId == uid ─────────────────────────
+    match /aiUsage/{id}          { allow read, write: if signedIn() && id == uid(); }
+    match /premiumOverrides/{id} { allow read, write: if signedIn() && id == uid(); }
+
+    // ── Settings (plantillas + catálogo de productos): docId == uid o mi grupo
+    match /settings/{id} {
+      allow read, write: if signedIn() && (id == uid() || id == myGroupId());
+    }
+
+    // ── Users ───────────────────────────────────────────────────────────────
+    match /users/{id} {
+      // Propio doc, o miembros de mi grupo familiar (para listar miembros).
+      allow read: if signedIn() && (
+        id == uid() || (myGroupId() != null && resource.data.groupId == myGroupId())
+      );
+      allow create: if signedIn() && id == uid();
+      // Propio doc, o el admin del grupo actualizando a un miembro (quitarlo, etc.).
+      allow update: if signedIn() && (
+        id == uid() ||
+        (myRole() == 'admin' && myGroupId() != null && resource.data.groupId == myGroupId())
+      );
+      allow delete: if false;
+    }
+
+    // ── Grupos familiares ─────────────────────────────────────────────────────
+    match /groups/{id} {
+      allow read: if signedIn(); // necesario para buscar por código al unirse
+      allow create: if signedIn() && request.resource.data.adminId == uid();
+      allow update, delete: if signedIn() && resource.data.adminId == uid();
+    }
+
+    // ── Repartos (perfiles) ──────────────────────────────────────────────────
+    match /profiles/{id} {
+      allow read: if signedIn(); // necesario para buscar por código al unirse
+      allow create: if signedIn()
+        && request.resource.data.ownerId == uid()
+        && uid() in request.resource.data.memberUids;
+      // El dueño puede modificar todo. Otra persona puede modificar SOLO la
+      // membresía (unirse/salir) — no el nombre ni el dueño.
+      // Nota: este guard permite a cualquier miembro tocar la lista de miembros;
+      // suficiente para un equipo de confianza. Endurecer si hace falta.
+      allow update: if signedIn() && (
+        resource.data.ownerId == uid() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'members'])
+      );
+      allow delete: if signedIn() && resource.data.ownerId == uid();
+    }
   }
 }

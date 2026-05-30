@@ -14,6 +14,7 @@ import { getLastActivityDate } from '../utils/recency';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
+import { useProfileStore } from '../stores/profileStore';
 import { useDebtsStore } from '../stores/debtsStore';
 import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
@@ -37,6 +38,10 @@ const DirectoryScreen = () => {
   const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
   const navigation = useNavigation<any>();
   const { isAdmin } = useAuthContext();
+  const activeProfile = useProfileStore((s) => s.activeProfile);
+  // Quién puede editar/borrar clientes en el reparto activo: en Reparto 1 (primary)
+  // manda el rol del grupo familiar; en un reparto nuevo, solo su dueño.
+  const canManage = activeProfile && !activeProfile.isPrimary ? !!activeProfile.isOwner : isAdmin;
   const getFilteredDirectory = useClientsStore((s) => s.getFilteredDirectory);
   const directoryCounts = useClientsStore((s) => s.directoryCounts);
   const scheduleFromDirectory = useClientsStore((s) => s.scheduleFromDirectory);
@@ -194,13 +199,13 @@ const DirectoryScreen = () => {
       client={item}
       debtTotal={getClientDebtTotal(item.id)}
       showRecency={isRecurrenciaMode}
-      isAdmin={isAdmin}
+      isAdmin={canManage}
       onSchedule={setScheduleClient}
       onDebt={setDebtClient}
       onRelationship={setRelationshipClient}
       onEdit={setEditClient}
     />
-  ), [isAdmin, isRecurrenciaMode, getClientDebtTotal]);
+  ), [canManage, isRecurrenciaMode, getClientDebtTotal]);
 
   // FlashList v2 can stall on data-update transitions (empty→populated, or the
   // big grow when clearing the search), painting nothing until the user
@@ -364,8 +369,8 @@ const DirectoryScreen = () => {
         onEditDebt={editDebt}
       />
 
-      {/* Edit Client Modal (admin only) */}
-      {isAdmin && (
+      {/* Edit Client Modal (solo dueño/admin del reparto activo) */}
+      {canManage && (
         <EditClientModal
           visible={!!editClient}
           client={editClient}

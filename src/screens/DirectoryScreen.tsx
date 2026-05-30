@@ -16,7 +16,7 @@ import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
 import { useProfileStore } from '../stores/profileStore';
 import { useDebtsStore } from '../stores/debtsStore';
-import { useNavigation, useFocusEffect, useScrollToTop } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useScrollToTop, useIsFocused } from '@react-navigation/native';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import ScheduleModal from '../components/ScheduleModal';
 import DebtModal from '../components/DebtModal';
@@ -62,6 +62,13 @@ const DirectoryScreen = () => {
   const getClientDebtTotal = useDebtsStore((s) => s.getClientDebtTotal);
   const scrollRef = useRef<any>(null);
   useScrollToTop(scrollRef);
+  // While the Directory tab is in the background, freeze its derived list so a
+  // Firestore snapshot doesn't trigger a fuzzy-match + sort over all 600+
+  // clients for a screen the user isn't looking at. It recomputes fresh as
+  // soon as the tab regains focus (isFocused flips → the memo re-runs with the
+  // current data), so the list is never stale on return.
+  const isFocused = useIsFocused();
+  const filteredClientsRef = useRef<Client[]>([]);
   // Two states: searchInput drives the TextInput (immediate), search drives
   // the actual filter (debounced). With 600+ clients fuzzyMatch on every
   // keystroke is noticeable; debouncing keeps the UI responsive.
@@ -129,15 +136,17 @@ const DirectoryScreen = () => {
 
   // Apply with_debt and recurrencia filters at screen level
   const filteredClients = useMemo(() => {
+    // Background tab: keep the last list, skip the expensive recompute.
+    if (!isFocused) return filteredClientsRef.current;
+
     const isSpecialFilter = activeFilter === 'with_debt' || activeFilter === 'recurrencia';
     const base = getFilteredDirectory(search, isSpecialFilter ? 'all' : activeFilter);
 
+    let result: Client[];
     if (activeFilter === 'with_debt') {
-      return base.filter(clientHasDebt);
-    }
-
-    if (activeFilter === 'recurrencia') {
-      return base
+      result = base.filter(clientHasDebt);
+    } else if (activeFilter === 'recurrencia') {
+      result = base
         .filter((c) => c.freq === 'once' || c.freq === 'on_demand')
         .sort((a, b) => {
           const dateA = getLastActivityDate(a);
@@ -149,10 +158,13 @@ const DirectoryScreen = () => {
           // Oldest first (most stale at top)
           return dateA.getTime() - dateB.getTime();
         });
+    } else {
+      result = base;
     }
 
-    return base;
-  }, [search, activeFilter, getFilteredDirectory, debts, clients, clientHasDebt]);
+    filteredClientsRef.current = result;
+    return result;
+  }, [isFocused, search, activeFilter, getFilteredDirectory, debts, clients, clientHasDebt]);
 
   // Reset scroll to top when the search term or filter changes — otherwise
   // FlashList keeps the previous offset and the user has to scroll up to

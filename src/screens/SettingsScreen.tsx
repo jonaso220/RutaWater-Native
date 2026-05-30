@@ -316,7 +316,7 @@ const SettingsScreen = () => {
       {/* Family group */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Ionicons name="people-outline" size={20} color={colors.textMuted} />
+          <Ionicons name="people-outline" size={20} color={colors.primary} />
           <Text style={styles.sectionTitle}>{t('settings.familyGroup')}</Text>
         </View>
         <Text style={styles.sectionSubtitle}>{t('settings.familyGroupSubtitle')}</Text>
@@ -904,65 +904,6 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isTablet: boolean = f
     height: 1,
     backgroundColor: colors.sectionBackground,
     marginVertical: 14,
-  },
-  templateLabel: {
-    fontSize: s(14),
-    fontWeight: '600',
-    color: colors.textMuted,
-    marginBottom: 6,
-  },
-  templateInput: {
-    backgroundColor: colors.inputBackground,
-    borderRadius: 10,
-    padding: 12,
-    fontSize: s(15),
-    color: colors.textPrimary,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    textAlignVertical: 'top',
-    minHeight: 60,
-  },
-  templateHint: {
-    fontSize: s(12),
-    color: colors.textHint,
-    marginTop: 4,
-  },
-  templateActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 14,
-  },
-  templateSaveBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 6,
-    backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  templateSaveBtnText: {
-    color: colors.textWhite,
-    fontWeight: '700',
-    fontSize: s(15),
-  },
-  templateResetBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 6,
-    backgroundColor: colors.sectionBackground,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  templateResetBtnText: {
-    color: colors.textMuted,
-    fontWeight: '700',
-    fontSize: s(15),
   },
   exportBtn: {
     flexDirection: 'row',

@@ -34,8 +34,8 @@ import { useLayout } from '../hooks/useLayout';
 const DirectoryScreen = () => {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const { fontScale } = useLayout();
-  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
+  const { fontScale, isWide } = useLayout();
+  const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
   const navigation = useNavigation<any>();
   const { isAdmin } = useAuthContext();
   const activeProfile = useProfileStore((s) => s.activeProfile);
@@ -404,7 +404,7 @@ const DirectoryScreen = () => {
   );
 };
 
-const getStyles = (colors: ThemeColors, scale: number = 1) => {
+const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = false) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
   container: {
@@ -412,36 +412,36 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     backgroundColor: colors.background,
   },
   searchContainer: {
-    padding: 12,
+    padding: s(12),
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
   searchInput: {
     backgroundColor: colors.sectionBackground,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: s(12),
+    paddingHorizontal: s(16),
+    paddingVertical: s(12),
     fontSize: s(16),
     color: colors.textPrimary,
   },
   filterBar: {
-    marginTop: 10,
+    marginTop: s(10),
     flexGrow: 0,
   },
   filterBarContent: {
-    gap: 8,
-    paddingHorizontal: 2,
+    gap: s(8),
+    paddingHorizontal: s(2),
     justifyContent: 'center',
     flexGrow: 1,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    height: s(34),
-    borderRadius: s(17),
+    gap: s(6),
+    paddingHorizontal: s(12),
+    height: isWide ? s(38) : s(34),
+    borderRadius: isWide ? s(19) : s(17),
     backgroundColor: colors.sectionBackground,
   },
   filterChipActive: {
@@ -457,7 +457,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     backgroundColor: colors.warning,
   },
   filterChipText: {
-    fontSize: s(13),
+    fontSize: isWide ? s(14) : s(13),
     fontWeight: '700',
     color: colors.textMuted,
   },
@@ -465,14 +465,14 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     color: colors.textWhite,
   },
   filterChipCount: {
-    fontSize: s(10),
+    fontSize: isWide ? s(11) : s(10),
     fontWeight: '700',
     color: colors.textMuted,
     backgroundColor: colors.cardBorder,
     minWidth: s(20),
     height: s(20),
     borderRadius: s(10),
-    paddingHorizontal: 6,
+    paddingHorizontal: s(6),
     textAlign: 'center',
     lineHeight: s(20),
     overflow: 'hidden',
@@ -484,8 +484,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   countRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    paddingHorizontal: 12,
-    marginTop: 8,
+    paddingHorizontal: s(12),
+    marginTop: s(8),
   },
   countBadge: {
     fontSize: s(12),
@@ -494,18 +494,18 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     backgroundColor: colors.sectionBackground,
     paddingHorizontal: s(10),
     paddingVertical: s(4),
-    borderRadius: 12,
+    borderRadius: s(12),
     overflow: 'hidden',
   },
   listContent: {
-    padding: 12,
+    padding: s(12),
     paddingBottom: 100,
   },
   importBtn: {
     backgroundColor: colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
+    paddingHorizontal: s(12),
+    paddingVertical: s(10),
+    borderRadius: s(10),
     justifyContent: 'center',
   },
   importBtnText: {

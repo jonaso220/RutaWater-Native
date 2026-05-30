@@ -36,8 +36,33 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
       .where(scopeField, '==', scopeValue)
       .onSnapshot(
         (snapshot) => {
-          const clients = snapshot.docs.map((doc) => withDefaults(doc.id, doc.data()));
-          queryClient.setQueryData<Client[]>(queryKey, clients);
+          const prev = queryClient.getQueryData<Client[]>(queryKey);
+          // First snapshot (or cache cleared): build the full list.
+          if (!prev) {
+            queryClient.setQueryData<Client[]>(
+              queryKey,
+              snapshot.docs.map((doc) => withDefaults(doc.id, doc.data())),
+            );
+            return;
+          }
+          // Incremental update: rebuild ONLY the documents that actually
+          // changed and reuse the existing object reference for everything
+          // else. Without this, every snapshot (including the local echo of
+          // our own reorder write, and any write from another device) handed
+          // a brand-new object to all 100+ clients, defeating the React.memo
+          // on ClientCard and re-rendering the entire list at once — the
+          // source of the card "jitter" when moving a client far down the list.
+          const changes = snapshot.docChanges();
+          if (changes.length === 0) return; // doc set identical; keep same reference
+          const byId = new Map(prev.map((c) => [c.id, c]));
+          changes.forEach((change) => {
+            if (change.type === 'removed') {
+              byId.delete(change.doc.id);
+            } else {
+              byId.set(change.doc.id, withDefaults(change.doc.id, change.doc.data()));
+            }
+          });
+          queryClient.setQueryData<Client[]>(queryKey, Array.from(byId.values()));
         },
         (error) => {
           reportError(error, 'Error loading clients');

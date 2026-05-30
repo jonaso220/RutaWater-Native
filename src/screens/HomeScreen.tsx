@@ -940,8 +940,11 @@ const HomeScreen = () => {
         containerStyle={{ flex: 1 }}
         contentContainerStyle={styles.listContent}
         initialNumToRender={15}
-        maxToRenderPerBatch={10}
-        windowSize={5}
+        // Wider render buffer so long-distance drags (e.g. moving a client
+        // from position 1 to 67 in a 100+ client day) don't surface blank
+        // cells while the list autoscrolls past dozens of rows.
+        maxToRenderPerBatch={15}
+        windowSize={11}
         updateCellsBatchingPeriod={30}
         refreshControl={
           <RefreshControl

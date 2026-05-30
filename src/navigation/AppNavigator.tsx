@@ -31,9 +31,18 @@ const TabNavigator = () => {
   // emoji icons are tall, so the bar needs extra height + bottom room or the
   // label gets clipped against the bottom edge.
   const isWideNav = width >= 900;
-  // Emoji icons need a roomy lineHeight when scaled up, otherwise the glyph's
-  // bottom gets clipped on wide screens. Phone keeps the default lineHeight.
-  const tabIconStyle = { fontSize: s(22), lineHeight: isWideNav ? s(30) : undefined, textAlign: 'center' as const };
+  // On wide screens the scaled emoji gets clipped at the bottom inside the tab
+  // bar's icon slot. Wrapping it in a roomy, centered box (instead of forcing a
+  // big lineHeight, which pushes the glyph down and clips it more) gives the
+  // emoji space above and below. Phone keeps the plain text icon untouched.
+  const renderTabIcon = (emoji: string) =>
+    isWideNav ? (
+      <View style={{ height: s(36), justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontSize: s(22), lineHeight: s(26), textAlign: 'center' }}>{emoji}</Text>
+      </View>
+    ) : (
+      <Text style={{ fontSize: s(22) }}>{emoji}</Text>
+    );
 
   return (
     <>
@@ -88,7 +97,7 @@ const TabNavigator = () => {
             ),
             headerRight: () => <ProfileSwitcherButton />,
             tabBarLabel: t('nav.home'),
-            tabBarIcon: () => <Text style={tabIconStyle}>🏠</Text>,
+            tabBarIcon: () => renderTabIcon('🏠'),
           }}
         />
         <Tab.Screen
@@ -109,7 +118,7 @@ const TabNavigator = () => {
               </View>
             ),
             tabBarLabel: t('nav.directory'),
-            tabBarIcon: () => <Text style={tabIconStyle}>📋</Text>,
+            tabBarIcon: () => renderTabIcon('📋'),
           }}
         />
         <Tab.Screen
@@ -118,7 +127,7 @@ const TabNavigator = () => {
           options={{
             headerTitle: t('nav.settings'),
             tabBarLabel: t('nav.settings'),
-            tabBarIcon: () => <Text style={tabIconStyle}>⚙️</Text>,
+            tabBarIcon: () => renderTabIcon('⚙️'),
           }}
         />
       </Tab.Navigator>

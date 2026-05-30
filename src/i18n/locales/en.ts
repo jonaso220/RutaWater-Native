@@ -268,6 +268,8 @@ export default {
     premiumDeactivated: 'Premium deactivated.',
     redeemError: 'Could not redeem the code.',
     familyGroup: 'Family Group',
+    familyGroupSubtitle: 'Share your account with another person so you both work the same data.',
+    manageGroup: 'Manage Family Group',
     groupCode: 'Group code',
     admin: 'Admin',
     member: 'Member',

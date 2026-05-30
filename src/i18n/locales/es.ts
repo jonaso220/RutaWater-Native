@@ -268,6 +268,8 @@ export default {
     premiumDeactivated: 'Premium desactivado.',
     redeemError: 'No se pudo canjear el codigo.',
     familyGroup: 'Grupo Familiar',
+    familyGroupSubtitle: 'Compartí tu cuenta con otra persona para que trabajen los mismos datos.',
+    manageGroup: 'Gestionar Grupo Familiar',
     groupCode: 'Codigo del grupo',
     admin: 'Admin',
     member: 'Miembro',

@@ -268,6 +268,8 @@ export default {
     premiumDeactivated: 'Premium desativado.',
     redeemError: 'Nao foi possivel resgatar o codigo.',
     familyGroup: 'Grupo Familiar',
+    familyGroupSubtitle: 'Compartilhe sua conta com outra pessoa para trabalharem os mesmos dados.',
+    manageGroup: 'Gerenciar Grupo Familiar',
     groupCode: 'Codigo do grupo',
     admin: 'Admin',
     member: 'Membro',

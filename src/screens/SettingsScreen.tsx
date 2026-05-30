@@ -11,7 +11,10 @@ import {
   ActivityIndicator,
   Linking,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
+import ModalOverlay from '../components/ModalOverlay';
+import { getModalWidth } from '../utils/helpers';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -33,8 +36,10 @@ const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
-  const { fontScale } = useLayout();
-  const styles = getStyles(colors, fontScale);
+  const { fontScale, width: screenWidth } = useLayout();
+  const isTablet = screenWidth >= 600;
+  const groupModalWidth = getModalWidth(screenWidth);
+  const styles = getStyles(colors, fontScale, isTablet, groupModalWidth);
   const { user: firebaseUser, groupData, isAdmin, signOut, deleteAccount, setGroupData } = useAuthContext();
   const clientCount = useClientsStore((s) => s.clientCount);
   const findDuplicateClients = useClientsStore((s) => s.findDuplicateClients);
@@ -51,6 +56,7 @@ const SettingsScreen = () => {
   const [productsModalVisible, setProductsModalVisible] = useState(false);
   const [profilesModalVisible, setProfilesModalVisible] = useState(false);
   const [whatsappModalVisible, setWhatsappModalVisible] = useState(false);
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
   const activeProfile = useProfileStore((s) => s.activeProfile);
   // ALL hooks must be called before any early return (Rules of Hooks)
   const [loading, setLoading] = useState(false);
@@ -307,135 +313,160 @@ const SettingsScreen = () => {
         )}
       </View>
 
-      {/* Group section */}
+      {/* Family group */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="people-outline" size={20} color={colors.textMuted} />
           <Text style={styles.sectionTitle}>{t('settings.familyGroup')}</Text>
         </View>
-
-        {groupData ? (
-          <View>
-            {/* Group code */}
-            <View style={styles.codeCard}>
-              <Text style={styles.codeLabel}>{t('settings.groupCode')}</Text>
-              <Text style={styles.codeValue}>{groupData.code}</Text>
-              <Text style={styles.codeHint}>
-                {t('settings.shareCodeHint')}
-              </Text>
-            </View>
-
-            {/* Members */}
-            <Text style={styles.subsectionTitle}>
-              {t('settings.members')} ({members.length})
-            </Text>
-            {members.map((member) => (
-              <View key={member.id} style={styles.memberRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.memberName}>
-                    {member.displayName || member.email}
-                  </Text>
-                  <Text style={styles.memberRole}>
-                    {member.role === 'admin' ? t('settings.admin') : t('settings.member')}
-                  </Text>
-                </View>
-                {isAdmin && member.id !== user.uid && (
-                  <TouchableOpacity
-                    onPress={() =>
-                      handleRemoveMember(
-                        member.id,
-                        member.displayName || member.email,
-                      )
-                    }
-                    style={styles.removeBtn}
-                  >
-                    <Text style={styles.removeBtnText}>{t('settings.removeMember')}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-
-            {/* Group actions */}
-            <View style={styles.groupActions}>
-              {!isAdmin && (
-                <TouchableOpacity
-                  onPress={handleLeaveGroup}
-                  style={styles.dangerBtn}
-                >
-                  <Text style={styles.dangerBtnText}>{t('settings.leaveGroup')}</Text>
-                </TouchableOpacity>
-              )}
-              {isAdmin && (
-                <TouchableOpacity
-                  onPress={handleDissolveGroup}
-                  style={styles.dangerBtn}
-                >
-                  <Text style={styles.dangerBtnText}>{t('settings.dissolveGroup')}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        ) : isPremium ? (
-          <View>
-            <Text style={styles.noGroupText}>
-              {t('settings.noGroupText')}
-            </Text>
-
-            <TouchableOpacity
-              onPress={handleCreateGroup}
-              style={styles.primaryBtn}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.primaryBtnText}>{t('settings.createGroup')}</Text>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>{t('settings.or')}</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <View style={styles.joinRow}>
-              <TextInput
-                style={styles.joinInput}
-                value={joinCode}
-                onChangeText={setJoinCode}
-                placeholder={t('settings.joinPlaceholder')}
-                placeholderTextColor={colors.textHint}
-                autoCapitalize="characters"
-                maxLength={6}
-              />
-              <TouchableOpacity
-                onPress={handleJoinGroup}
-                style={[styles.joinBtn, !joinCode && styles.joinBtnDisabled]}
-                disabled={!joinCode || loading}
-              >
-                <Text style={styles.joinBtnText}>{t('settings.joinGroup')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View>
-            <View style={styles.lockedCard}>
-              <Ionicons name="lock-closed" size={24} color={colors.textHint} />
-              <Text style={styles.lockedText}>
-                {t('settings.groupsPremiumMsg')}
-              </Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('Paywall')}
-                style={styles.upgradeBtn}
-              >
-                <Ionicons name="diamond" size={16} color="#FFFFFF" />
-                <Text style={styles.upgradeBtnText}>{t('settings.getPremium')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        <Text style={styles.sectionSubtitle}>{t('settings.familyGroupSubtitle')}</Text>
+        <View style={styles.sectionCard}>
+          <TouchableOpacity onPress={() => setGroupModalVisible(true)} style={styles.exportBtn}>
+            <Ionicons name="people-outline" size={18} color={colors.primary} />
+            <Text style={styles.exportBtnText}>{t('settings.manageGroup')}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Family group — modal (same content/logic as before, moved into a modal) */}
+      <ModalOverlay visible={groupModalVisible} onClose={() => setGroupModalVisible(false)} animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.groupModalOverlay}
+        >
+          <View style={styles.groupModalCard}>
+            <View style={styles.groupModalHeader}>
+              <Text style={styles.groupModalTitle}>{t('settings.familyGroup')}</Text>
+              <TouchableOpacity onPress={() => setGroupModalVisible(false)} style={styles.groupModalClose}>
+                <Text style={styles.groupModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.groupModalBody} keyboardShouldPersistTaps="handled">
+              {groupData ? (
+                <View>
+                  {/* Group code */}
+                  <View style={styles.codeCard}>
+                    <Text style={styles.codeLabel}>{t('settings.groupCode')}</Text>
+                    <Text style={styles.codeValue}>{groupData.code}</Text>
+                    <Text style={styles.codeHint}>
+                      {t('settings.shareCodeHint')}
+                    </Text>
+                  </View>
+
+                  {/* Members */}
+                  <Text style={styles.subsectionTitle}>
+                    {t('settings.members')} ({members.length})
+                  </Text>
+                  {members.map((member) => (
+                    <View key={member.id} style={styles.memberRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.memberName}>
+                          {member.displayName || member.email}
+                        </Text>
+                        <Text style={styles.memberRole}>
+                          {member.role === 'admin' ? t('settings.admin') : t('settings.member')}
+                        </Text>
+                      </View>
+                      {isAdmin && member.id !== user.uid && (
+                        <TouchableOpacity
+                          onPress={() =>
+                            handleRemoveMember(
+                              member.id,
+                              member.displayName || member.email,
+                            )
+                          }
+                          style={styles.removeBtn}
+                        >
+                          <Text style={styles.removeBtnText}>{t('settings.removeMember')}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+
+                  {/* Group actions */}
+                  <View style={styles.groupActions}>
+                    {!isAdmin && (
+                      <TouchableOpacity
+                        onPress={handleLeaveGroup}
+                        style={styles.dangerBtn}
+                      >
+                        <Text style={styles.dangerBtnText}>{t('settings.leaveGroup')}</Text>
+                      </TouchableOpacity>
+                    )}
+                    {isAdmin && (
+                      <TouchableOpacity
+                        onPress={handleDissolveGroup}
+                        style={styles.dangerBtn}
+                      >
+                        <Text style={styles.dangerBtnText}>{t('settings.dissolveGroup')}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ) : isPremium ? (
+                <View>
+                  <Text style={styles.noGroupText}>
+                    {t('settings.noGroupText')}
+                  </Text>
+
+                  <TouchableOpacity
+                    onPress={handleCreateGroup}
+                    style={styles.primaryBtn}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.primaryBtnText}>{t('settings.createGroup')}</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <View style={styles.divider}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>{t('settings.or')}</Text>
+                    <View style={styles.dividerLine} />
+                  </View>
+
+                  <View style={styles.joinRow}>
+                    <TextInput
+                      style={styles.joinInput}
+                      value={joinCode}
+                      onChangeText={setJoinCode}
+                      placeholder={t('settings.joinPlaceholder')}
+                      placeholderTextColor={colors.textHint}
+                      autoCapitalize="characters"
+                      maxLength={6}
+                    />
+                    <TouchableOpacity
+                      onPress={handleJoinGroup}
+                      style={[styles.joinBtn, !joinCode && styles.joinBtnDisabled]}
+                      disabled={!joinCode || loading}
+                    >
+                      <Text style={styles.joinBtnText}>{t('settings.joinGroup')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View>
+                  <View style={styles.lockedCard}>
+                    <Ionicons name="lock-closed" size={24} color={colors.textHint} />
+                    <Text style={styles.lockedText}>
+                      {t('settings.groupsPremiumMsg')}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => { setGroupModalVisible(false); navigation.navigate('Paywall'); }}
+                      style={styles.upgradeBtn}
+                    >
+                      <Ionicons name="diamond" size={16} color="#FFFFFF" />
+                      <Text style={styles.upgradeBtnText}>{t('settings.getPremium')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </ModalOverlay>
 
       {/* Profiles / Repartos */}
       <View style={styles.section}>
@@ -583,13 +614,51 @@ const SettingsScreen = () => {
   );
 };
 
-const getStyles = (colors: ThemeColors, scale: number = 1) => {
+const getStyles = (colors: ThemeColors, scale: number = 1, isTablet: boolean = false, modalWidth?: number) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
+  groupModalOverlay: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: isTablet ? 'center' : 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: isTablet ? s(24) : s(8),
+    paddingVertical: isTablet ? s(24) : 0,
+  },
+  groupModalCard: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: s(20),
+    borderTopRightRadius: s(20),
+    borderBottomLeftRadius: isTablet ? s(20) : 0,
+    borderBottomRightRadius: isTablet ? s(20) : 0,
+    maxHeight: Platform.OS === 'android' ? '100%' : '90%',
+    maxWidth: isTablet ? undefined : 600,
+    alignSelf: 'center',
+    width: isTablet ? modalWidth : '100%',
+  },
+  groupModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: s(16),
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+  },
+  groupModalTitle: { fontSize: s(20), fontWeight: '700', color: colors.textPrimary },
+  groupModalClose: {
+    width: s(32),
+    height: s(32),
+    borderRadius: s(16),
+    backgroundColor: colors.sectionBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  groupModalCloseText: { fontSize: s(18), color: colors.textMuted },
+  groupModalBody: { padding: s(16) },
   contentContainer: {
     maxWidth: 800,
     width: '100%' as const,

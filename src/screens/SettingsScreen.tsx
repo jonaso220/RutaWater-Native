@@ -316,17 +316,54 @@ const SettingsScreen = () => {
       {/* Management group heading */}
       <Text style={styles.groupHeading}>{t('settings.managementGroup')}</Text>
 
-      {/* Family group */}
+      {/* Management — consolidated list (Family group / Repartos / Products / WhatsApp) */}
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="people-outline" size={20} color={colors.primary} />
-          <Text style={styles.sectionTitle}>{t('settings.familyGroup')}</Text>
-        </View>
-        <Text style={styles.sectionSubtitle}>{t('settings.familyGroupSubtitle')}</Text>
-        <View style={styles.sectionCard}>
-          <TouchableOpacity onPress={() => setGroupModalVisible(true)} style={styles.exportBtn}>
-            <Ionicons name="people-outline" size={18} color={colors.primary} />
-            <Text style={styles.exportBtnText}>{t('settings.manageGroup')}</Text>
+        <View style={styles.mgmtCard}>
+          {/* Grupo Familiar */}
+          <TouchableOpacity style={styles.mgmtRow} onPress={() => setGroupModalVisible(true)} activeOpacity={0.6}>
+            <Ionicons name="people-outline" size={22} color={colors.primary} style={styles.mgmtIcon} />
+            <View style={styles.mgmtRowText}>
+              <Text style={styles.mgmtRowTitle}>{t('settings.familyGroup')}</Text>
+              <Text style={styles.mgmtRowSubtitle} numberOfLines={2}>{t('settings.familyGroupSubtitle')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textHint} />
+          </TouchableOpacity>
+
+          <View style={styles.mgmtDivider} />
+
+          {/* Repartos */}
+          <TouchableOpacity style={styles.mgmtRow} onPress={() => setProfilesModalVisible(true)} activeOpacity={0.6}>
+            <Ionicons name="git-branch-outline" size={22} color={colors.primary} style={styles.mgmtIcon} />
+            <View style={styles.mgmtRowText}>
+              <Text style={styles.mgmtRowTitle}>{t('settings.profilesTitle')}</Text>
+              <Text style={styles.mgmtRowSubtitle} numberOfLines={2}>{t('settings.profilesSubtitle')}</Text>
+            </View>
+            {activeProfile ? <Text style={styles.mgmtRowValue} numberOfLines={1}>{activeProfile.name}</Text> : null}
+            <Ionicons name="chevron-forward" size={18} color={colors.textHint} />
+          </TouchableOpacity>
+
+          <View style={styles.mgmtDivider} />
+
+          {/* Productos */}
+          <TouchableOpacity style={styles.mgmtRow} onPress={() => setProductsModalVisible(true)} activeOpacity={0.6}>
+            <Ionicons name="cube-outline" size={22} color={colors.primary} style={styles.mgmtIcon} />
+            <View style={styles.mgmtRowText}>
+              <Text style={styles.mgmtRowTitle}>{t('settings.productsTitle')}</Text>
+              <Text style={styles.mgmtRowSubtitle} numberOfLines={2}>{t('settings.productsSubtitle')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textHint} />
+          </TouchableOpacity>
+
+          <View style={styles.mgmtDivider} />
+
+          {/* Mensajes WhatsApp */}
+          <TouchableOpacity style={styles.mgmtRow} onPress={() => setWhatsappModalVisible(true)} activeOpacity={0.6}>
+            <Ionicons name="logo-whatsapp" size={22} color={colors.successDark} style={styles.mgmtIcon} />
+            <View style={styles.mgmtRowText}>
+              <Text style={styles.mgmtRowTitle}>{t('settings.whatsappMessages')}</Text>
+              <Text style={styles.mgmtRowSubtitle} numberOfLines={2}>{t('settings.whatsappSubtitle')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textHint} />
           </TouchableOpacity>
         </View>
       </View>
@@ -470,54 +507,6 @@ const SettingsScreen = () => {
           </View>
         </KeyboardAvoidingView>
       </ModalOverlay>
-
-      {/* Profiles / Repartos */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="git-branch-outline" size={20} color={colors.primary} />
-          <Text style={styles.sectionTitle}>{t('settings.profilesTitle')}</Text>
-        </View>
-        <Text style={styles.sectionSubtitle}>{t('settings.profilesSubtitle')}</Text>
-        <View style={styles.sectionCard}>
-          <TouchableOpacity onPress={() => setProfilesModalVisible(true)} style={styles.exportBtn}>
-            <Ionicons name="git-branch-outline" size={18} color={colors.primary} />
-            <Text style={styles.exportBtnText}>
-              {t('settings.manageProfiles')}
-              {activeProfile ? `  ·  ${activeProfile.name}` : ''}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Products catalog */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="cube-outline" size={20} color={colors.primary} />
-          <Text style={styles.sectionTitle}>{t('settings.productsTitle')}</Text>
-        </View>
-        <Text style={styles.sectionSubtitle}>{t('settings.productsSubtitle')}</Text>
-        <View style={styles.sectionCard}>
-          <TouchableOpacity onPress={() => setProductsModalVisible(true)} style={styles.exportBtn}>
-            <Ionicons name="create-outline" size={18} color={colors.primary} />
-            <Text style={styles.exportBtnText}>{t('settings.manageProducts')}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* WhatsApp Templates */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="logo-whatsapp" size={20} color={colors.successDark} />
-          <Text style={styles.sectionTitle}>{t('settings.whatsappMessages')}</Text>
-        </View>
-        <Text style={styles.sectionSubtitle}>{t('settings.whatsappSubtitle')}</Text>
-        <View style={styles.sectionCard}>
-          <TouchableOpacity onPress={() => setWhatsappModalVisible(true)} style={styles.exportBtn}>
-            <Ionicons name="logo-whatsapp" size={18} color={colors.primary} />
-            <Text style={styles.exportBtnText}>{t('settings.manageWhatsapp')}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
 
       {/* Export & Maintenance */}
       <View style={styles.section}>
@@ -692,6 +681,49 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isTablet: boolean = f
     marginTop: s(24),
     marginBottom: s(-8),
     marginHorizontal: s(16),
+  },
+  mgmtCard: {
+    backgroundColor: colors.card,
+    borderRadius: s(12),
+    marginTop: s(8),
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    overflow: 'hidden',
+  },
+  mgmtRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(12),
+    paddingVertical: s(13),
+    paddingHorizontal: s(16),
+  },
+  mgmtIcon: {
+    width: s(24),
+    textAlign: 'center',
+  },
+  mgmtRowText: {
+    flex: 1,
+  },
+  mgmtRowTitle: {
+    fontSize: s(16),
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  mgmtRowSubtitle: {
+    fontSize: s(12),
+    color: colors.textHint,
+    marginTop: s(2),
+  },
+  mgmtRowValue: {
+    fontSize: s(13),
+    color: colors.textMuted,
+    marginRight: s(4),
+    maxWidth: s(120),
+  },
+  mgmtDivider: {
+    height: 1,
+    backgroundColor: colors.cardBorder,
+    marginLeft: s(52),
   },
   sectionSubtitle: {
     fontSize: s(13),

@@ -183,9 +183,8 @@ const HomeScreen = () => {
   const { fontScale, isWide, width: screenWidth } = useLayout();
   // Wide-screen column count (also gates the grid layout further down).
   const numColumns = useMemo(() => {
-    if (screenWidth >= 1500) return 3;
-    if (screenWidth >= 900) return 2;
-    return 1;
+    // Máximo 2 columnas: 3 marea en una pantalla ancha (Mac).
+    return screenWidth >= 900 ? 2 : 1;
   }, [screenWidth]);
   // On wide screens the top chrome (day tabs, product counter, action bar,
   // search) scales up with the screen too — otherwise it looks tiny next to

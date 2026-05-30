@@ -18,7 +18,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { getModalWidth } from '../utils/helpers';
 import { useProfileStore } from '../stores/profileStore';
-import ProfileShareModal from './ProfileShareModal';
+import { useAuthContext } from '../context/AuthContext';
 
 interface ProfilesModalProps {
   visible: boolean;
@@ -28,6 +28,7 @@ interface ProfilesModalProps {
 const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { user } = useAuthContext();
   const { width: windowWidth } = useWindowDimensions();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
@@ -40,10 +41,17 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
   const renameProfile = useProfileStore((s) => s.renameProfile);
   const deleteProfile = useProfileStore((s) => s.deleteProfile);
   const joinProfile = useProfileStore((s) => s.joinProfile);
+  const removeMember = useProfileStore((s) => s.removeMember);
+  const leaveProfile = useProfileStore((s) => s.leaveProfile);
 
   const [newName, setNewName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [shareProfileId, setShareProfileId] = useState<string | null>(null);
+
+  const myUid = user?.uid || '';
+  // Panel de compartir embebido (NO un segundo Modal: en iOS apilar modales
+  // nativos deja la presentación trabada).
+  const shareProfile = profiles.find((p) => p.id === shareProfileId) || null;
 
   const handleCreate = () => {
     if (!newName.trim()) return;
@@ -78,8 +86,37 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
     Alert.alert(res === 'ok' ? t('done') : t('error'), t(msgKey));
   };
 
+  const handleRemoveMember = (uid: string, name: string) => {
+    if (!shareProfile) return;
+    Alert.alert(t('settings.removeMemberTitle'), t('settings.removeProfileMemberMsg', { name }), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('settings.removeMember'),
+        style: 'destructive',
+        onPress: () => removeMember(shareProfile.id, uid),
+      },
+    ]);
+  };
+
+  const handleLeave = () => {
+    if (!shareProfile) return;
+    const id = shareProfile.id;
+    Alert.alert(t('settings.leaveProfileTitle'), t('settings.leaveProfileMsg', { name: shareProfile.name }), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('settings.leaveProfileAction'),
+        style: 'destructive',
+        onPress: () => {
+          leaveProfile(id);
+          setShareProfileId(null);
+        },
+      },
+    ]);
+  };
+
+  const memberEntries = shareProfile ? Object.entries(shareProfile.members || {}) : [];
+
   return (
-    <>
     <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -191,15 +228,69 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose }) => {
               <Text style={styles.doneBtnText}>{t('done')}</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Panel de compartir (overlay embebido, no un segundo modal) */}
+          {shareProfile && (
+            <View style={styles.shareBackdrop}>
+              <TouchableOpacity
+                style={StyleSheet.absoluteFill}
+                activeOpacity={1}
+                onPress={() => setShareProfileId(null)}
+              />
+              <View style={styles.shareCard}>
+                <View style={styles.shareHeader}>
+                  <Text style={styles.shareTitle} numberOfLines={1}>
+                    {shareProfile.name}
+                  </Text>
+                  <TouchableOpacity onPress={() => setShareProfileId(null)} style={styles.closeBtn}>
+                    <Text style={styles.closeBtnText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+                  <Text style={styles.shareSection}>{t('settings.shareProfileTitle')}</Text>
+                  <View style={styles.codeBox}>
+                    <Text style={styles.codeText}>{shareProfile.code || '—'}</Text>
+                  </View>
+                  <Text style={styles.hint}>{t('settings.profileCodeHint')}</Text>
+
+                  <Text style={[styles.shareSection, { marginTop: 20 }]}>
+                    {t('settings.members')} ({memberEntries.length})
+                  </Text>
+                  {memberEntries.map(([uid, m]) => {
+                    const label = m.name || m.email || uid;
+                    const isSelf = uid === myUid;
+                    return (
+                      <View key={uid} style={styles.memberRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.memberName}>
+                            {label} {isSelf ? t('settings.youSuffix') : ''}
+                          </Text>
+                          <Text style={styles.memberRole}>
+                            {m.role === 'admin' ? t('settings.roleAdmin') : t('settings.roleMember')}
+                          </Text>
+                        </View>
+                        {shareProfile.isOwner && !isSelf && (
+                          <TouchableOpacity onPress={() => handleRemoveMember(uid, label)} style={styles.iconBtn}>
+                            <Ionicons name="close-circle" size={22} color={colors.danger} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    );
+                  })}
+
+                  {!shareProfile.isOwner && (
+                    <TouchableOpacity onPress={handleLeave} style={styles.leaveBtn}>
+                      <Ionicons name="exit-outline" size={18} color={colors.danger} />
+                      <Text style={styles.leaveBtnText}>{t('settings.leaveProfileAction')}</Text>
+                    </TouchableOpacity>
+                  )}
+                </ScrollView>
+              </View>
+            </View>
+          )}
         </View>
       </KeyboardAvoidingView>
     </ModalOverlay>
-    <ProfileShareModal
-      visible={shareProfileId !== null}
-      profileId={shareProfileId}
-      onClose={() => setShareProfileId(null)}
-    />
-    </>
   );
 };
 
@@ -312,6 +403,65 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number) 
       alignItems: 'center',
     },
     doneBtnText: { color: colors.textPrimary, fontSize: 17, fontWeight: '700' },
+    // Share panel (embedded overlay)
+    shareBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.overlay,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 20,
+    },
+    shareCard: {
+      width: '100%',
+      maxWidth: 380,
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 16,
+    },
+    shareHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    shareTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, flex: 1, marginRight: 8 },
+    shareSection: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textMuted,
+      textTransform: 'uppercase',
+      marginBottom: 8,
+    },
+    codeBox: {
+      backgroundColor: colors.primaryLighter,
+      borderRadius: 12,
+      paddingVertical: 16,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.primaryInactiveBorder,
+    },
+    codeText: { fontSize: 30, fontWeight: '800', letterSpacing: 4, color: colors.primaryDark },
+    memberRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.sectionBackground,
+    },
+    memberName: { fontSize: 16, color: colors.textPrimary, fontWeight: '500' },
+    memberRole: { fontSize: 13, color: colors.textMuted, marginTop: 2 },
+    leaveBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      marginTop: 18,
+      paddingVertical: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.danger,
+    },
+    leaveBtnText: { color: colors.danger, fontSize: 15, fontWeight: '700' },
   });
 
 export default ProfilesModal;

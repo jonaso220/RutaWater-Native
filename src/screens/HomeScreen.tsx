@@ -833,13 +833,15 @@ const HomeScreen = () => {
     ({ item }: { item: ListItem }) => {
       if (item.type === 'header') {
         return (
-          <SectionHeader
-            title={item.title}
-            count={item.count}
-            isToday={item.isToday}
-            colors={colors}
-            fontScale={fontScale}
-          />
+          <View style={styles.gridHeaderWrap}>
+            <SectionHeader
+              title={item.title}
+              count={item.count}
+              isToday={item.isToday}
+              colors={colors}
+              fontScale={fontScale}
+            />
+          </View>
         );
       }
       if (item.type !== 'gridrow') return null;
@@ -1467,13 +1469,25 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     padding: 12,
     paddingBottom: 100,
   },
+  // The 2-column block is capped and centered as a whole so on very wide
+  // screens (Mac) the columns stay together (normal gap) and the extra space
+  // goes to the outer margins — instead of each card centering in its own
+  // half and leaving a big empty gutter down the middle.
   gridRow: {
     flexDirection: 'row',
     gap: 12,
     alignItems: 'flex-start',
+    width: '100%',
+    maxWidth: 1450,
+    alignSelf: 'center',
   },
   gridCell: {
     flex: 1,
+  },
+  gridHeaderWrap: {
+    width: '100%',
+    maxWidth: 1450,
+    alignSelf: 'center',
   },
   sectionHeader: {
     flexDirection: 'row',

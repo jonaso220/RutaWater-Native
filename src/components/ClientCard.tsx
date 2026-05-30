@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -74,7 +74,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   const { colors } = useTheme();
   const { t } = useTranslation();
   const s = (v: number) => Math.round(v * fontScale);
-  const styles = getStyles(colors, fontScale);
+  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
   const [showPositionPrompt, setShowPositionPrompt] = useState(false);
   const allProducts = useAllProducts();
 

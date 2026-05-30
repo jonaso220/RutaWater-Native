@@ -68,9 +68,18 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   const clientsHook = useClients({ userId, groupId: effectiveGroupId });
 
   const dayCounts = useMemo(() => {
+    // Single pass over clients (one bucket-increment per assigned day) instead
+    // of 7 × getVisibleClients(day) — each of which filtered AND sorted the
+    // whole 600+ client array just to read .length. Matches getAllDayClients'
+    // filter: skip on_demand/completed; count each day in visitDays ∪ visitDay.
     const counts: Record<string, number> = {};
-    ALL_DAYS.forEach((day) => {
-      counts[day] = clientsHook.getVisibleClients(day).length;
+    ALL_DAYS.forEach((day) => { counts[day] = 0; });
+    clientsHook.clients.forEach((c) => {
+      if (c.freq === 'on_demand' || c.isCompleted) return;
+      const days = new Set<string>();
+      if (Array.isArray(c.visitDays)) c.visitDays.forEach((d) => days.add(d));
+      if (c.visitDay) days.add(c.visitDay);
+      days.forEach((d) => { if (counts[d] !== undefined) counts[d] += 1; });
     });
     return counts;
   }, [clientsHook.clients]); // eslint-disable-line react-hooks/exhaustive-deps

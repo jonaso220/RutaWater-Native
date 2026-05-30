@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
+import { useLayout } from '../hooks/useLayout';
 import { useProfileStore } from '../stores/profileStore';
 
 /**
@@ -10,6 +11,9 @@ import { useProfileStore } from '../stores/profileStore';
  */
 const ProfileSwitcherButton: React.FC = () => {
   const { colors } = useTheme();
+  const { fontScale } = useLayout();
+  const styles = useMemo(() => getStyles(fontScale), [fontScale]);
+  const iconSize = Math.round(14 * fontScale);
   const activeProfile = useProfileStore((s) => s.activeProfile);
   const setSwitcherVisible = useProfileStore((s) => s.setSwitcherVisible);
 
@@ -24,26 +28,29 @@ const ProfileSwitcherButton: React.FC = () => {
       style={[styles.chip, { backgroundColor: 'rgba(255,255,255,0.18)' }]}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
-      <Ionicons name="git-branch" size={14} color={colors.headerText} style={{ marginRight: 4 }} />
+      <Ionicons name="git-branch" size={iconSize} color={colors.headerText} style={{ marginRight: 4 }} />
       <Text style={[styles.text, { color: colors.headerText }]} numberOfLines={1}>
         {shown}
       </Text>
-      <Ionicons name="chevron-down" size={14} color={colors.headerText} style={{ marginLeft: 2 }} />
+      <Ionicons name="chevron-down" size={iconSize} color={colors.headerText} style={{ marginLeft: 2 }} />
     </TouchableOpacity>
   );
 };
 
-const styles = StyleSheet.create({
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    marginRight: 12,
-    maxWidth: 160,
-  },
-  text: { fontSize: 14, fontWeight: '600' },
-});
+const getStyles = (scale: number = 1) => {
+  const s = (v: number) => Math.round(v * scale);
+  return StyleSheet.create({
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: s(10),
+      paddingVertical: s(5),
+      borderRadius: s(14),
+      marginRight: 12,
+      maxWidth: s(160),
+    },
+    text: { fontSize: s(14), fontWeight: '600' },
+  });
+};
 
 export default ProfileSwitcherButton;

@@ -20,13 +20,17 @@ const Stack = createNativeStackNavigator();
 
 const TabNavigator = () => {
   const { colors } = useTheme();
-  const { fontScale } = useLayout();
+  const { fontScale, width } = useLayout();
   const { t } = useTranslation();
   const { activeAlarm, dismissAlarm } = useAlarmChecker();
 
   // Header + tab bar scale with the global fontScale, which ramps up on wide
   // screens (see useLayout) so they don't look tiny on an iPad/Mac.
   const s = (v: number) => Math.round(v * fontScale);
+  // On wide screens (iPad/Mac) there's no home-indicator inset and the scaled
+  // emoji icons are tall, so the bar needs extra height + bottom room or the
+  // label gets clipped against the bottom edge.
+  const isWideNav = width >= 900;
 
   return (
     <>
@@ -44,8 +48,8 @@ const TabNavigator = () => {
             backgroundColor: colors.tabBarBackground,
             borderTopColor: colors.tabBarBorder,
             paddingTop: s(6),
-            paddingBottom: s(8),
-            height: s(60),
+            paddingBottom: isWideNav ? s(16) : s(8),
+            height: isWideNav ? s(76) : s(60),
           },
           tabBarActiveTintColor: colors.tabActive,
           tabBarInactiveTintColor: colors.tabInactive,

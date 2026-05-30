@@ -26,7 +26,7 @@ const DaySelector = React.memo<DaySelectorProps>(({
   fontScale,
   onSelectDay,
 }) => {
-  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
+  const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
   const todayName = useMemo(() => getTodayDayName(), []);
 
   return (
@@ -75,7 +75,7 @@ const DaySelector = React.memo<DaySelectorProps>(({
   );
 });
 
-const getStyles = (colors: ThemeColors, scale: number = 1) => {
+const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = false) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
     daySelector: {
@@ -86,21 +86,21 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       borderBottomColor: colors.cardBorder,
     },
     daySelectorContent: {
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      paddingHorizontal: s(12),
+      paddingVertical: s(10),
       alignItems: 'center',
       justifyContent: 'center',
       flexGrow: 1,
     },
     dayChip: {
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 20,
+      paddingHorizontal: s(14),
+      paddingVertical: s(8),
+      borderRadius: s(20),
       backgroundColor: colors.sectionBackground,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      marginRight: 8,
+      gap: s(6),
+      marginRight: s(8),
     },
     dayChipSelected: {
       backgroundColor: colors.primary,
@@ -110,7 +110,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       borderColor: colors.primary,
     },
     dayChipText: {
-      fontSize: s(16),
+      // A bit larger on wide screens so the day names don't look small.
+      fontSize: isWide ? s(18) : s(16),
       fontWeight: '600',
       color: colors.textSecondary,
     },
@@ -118,13 +119,13 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.textWhite,
     },
     dayCount: {
-      fontSize: s(13),
+      fontSize: isWide ? s(15) : s(13),
       fontWeight: '700',
       color: colors.textMuted,
       backgroundColor: colors.cardBorder,
-      paddingHorizontal: 6,
-      paddingVertical: 1,
-      borderRadius: 8,
+      paddingHorizontal: s(6),
+      paddingVertical: s(1),
+      borderRadius: s(8),
       overflow: 'hidden',
     },
     dayCountSelected: {

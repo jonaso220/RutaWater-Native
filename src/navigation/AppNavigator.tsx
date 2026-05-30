@@ -47,9 +47,11 @@ const TabNavigator = () => {
           tabBarStyle: {
             backgroundColor: colors.tabBarBackground,
             borderTopColor: colors.tabBarBorder,
-            paddingTop: s(6),
-            paddingBottom: isWideNav ? s(16) : s(8),
-            height: isWideNav ? s(76) : s(60),
+            // Symmetric padding on wide screens so the icon+label stack stays
+            // centered in the taller bar (asymmetric padding pushed it up).
+            paddingTop: isWideNav ? s(10) : s(6),
+            paddingBottom: isWideNav ? s(10) : s(8),
+            height: isWideNav ? s(70) : s(60),
           },
           tabBarActiveTintColor: colors.tabActive,
           tabBarInactiveTintColor: colors.tabInactive,

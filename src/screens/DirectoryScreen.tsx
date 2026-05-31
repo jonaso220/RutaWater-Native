@@ -219,12 +219,16 @@ const DirectoryScreen = () => {
     />
   ), [canManage, isRecurrenciaMode, getClientDebtTotal]);
 
-  // FlashList v2 can stall on data-update transitions (empty→populated, or the
-  // big grow when clearing the search), painting nothing until the user
-  // scrolls. Remount it on those boundaries — filter change, search toggling
-  // on/off, and first data arrival — so it always starts from a clean render.
-  // Keyed on the search *toggle* (not its text) to avoid remounting per keystroke.
-  const listKey = `${activeFilter}|${search.length > 0}|${clients.length > 0}`;
+  // FlashList v2 can stall on grow transitions (empty→populated), painting
+  // nothing until the user scrolls. We remount on filter change and on first
+  // data arrival so the list always starts from a clean render on those.
+  // We deliberately DON'T key on the search toggle anymore: typing only shrinks
+  // and clearing only grows the already-mounted list, and remounting all 600
+  // rows on every search in/out was the heavy daily cost (FlashList 2.3.0
+  // handles in-place data grow/shrink fine). If the blank-list-until-scroll
+  // bug ever returns when CLEARING the search, restore the `search.length > 0`
+  // segment to this key.
+  const listKey = `${activeFilter}|${clients.length > 0}`;
 
   return (
     <View style={styles.container}>

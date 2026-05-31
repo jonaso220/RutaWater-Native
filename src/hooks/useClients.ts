@@ -14,6 +14,26 @@ interface UseClientsProps {
   groupId?: string;
 }
 
+// Comparator for a single day's list: prefer listOrders[day], fall back to the
+// legacy single `listOrder`, and push clients with no order to the end.
+// (Identical to the inline sort getAllDayClients used before it was cached.)
+const compareDayOrder = (day: string) => (a: Client, b: Client) => {
+  const hasOrderA = a.listOrders && typeof a.listOrders[day] === 'number';
+  const hasOrderB = b.listOrders && typeof b.listOrders[day] === 'number';
+  let orderA: number, orderB: number;
+  if (hasOrderA) {
+    orderA = a.listOrders![day];
+  } else {
+    orderA = (a.listOrder ?? 0) > 1000000 ? 999999 + ((a.listOrder ?? 0) / 1e15) : (a.listOrder || 999999);
+  }
+  if (hasOrderB) {
+    orderB = b.listOrders![day];
+  } else {
+    orderB = (b.listOrder ?? 0) > 1000000 ? 999999 + ((b.listOrder ?? 0) / 1e15) : (b.listOrder || 999999);
+  }
+  return orderA - orderB;
+};
+
 export const useClients = ({ userId, groupId }: UseClientsProps) => {
   // Data source: TanStack Query holds the live array fed by a perpetual
   // Firestore listener (see useClientsQuery). isPending stays true until
@@ -46,31 +66,38 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
   // Get ALL clients assigned to a day (including not-due), sorted by position
   // Normalization matches webapp: listOrders[day] is preferred, timestamps pushed to end
+  // Precompute the filtered+sorted client list for every weekday ONCE per
+  // clients change, instead of re-filtering and re-sorting the whole array on
+  // every getAllDayClients/getVisibleClients call (several per render, per day).
+  // Same filter as before: skip on_demand/completed; a client belongs to each
+  // day in visitDays ∪ {visitDay}. Same per-day sort (compareDayOrder).
+  const clientsByDay = useMemo(() => {
+    const map: Record<string, Client[]> = {};
+    ALL_DAYS.forEach((day) => { map[day] = []; });
+    clients.forEach((c) => {
+      if (c.freq === 'on_demand' || c.isCompleted) return;
+      const days = new Set<string>();
+      if (Array.isArray(c.visitDays)) c.visitDays.forEach((d) => days.add(d));
+      if (c.visitDay) days.add(c.visitDay);
+      days.forEach((d) => { if (map[d]) map[d].push(c); });
+    });
+    ALL_DAYS.forEach((day) => { map[day].sort(compareDayOrder(day)); });
+    return map;
+  }, [clients]);
+
   const getAllDayClients = useCallback((day: string): Client[] => {
     if (!day) return [];
+    const cached = clientsByDay[day];
+    if (cached) return cached;
+    // Fallback for any day key outside ALL_DAYS (not used in practice).
     return clients
       .filter((c) => {
         if (c.freq === 'on_demand') return false;
         if (c.isCompleted) return false;
         return (c.visitDays && c.visitDays.includes(day)) || c.visitDay === day;
       })
-      .sort((a, b) => {
-        const hasOrderA = a.listOrders && typeof a.listOrders[day] === 'number';
-        const hasOrderB = b.listOrders && typeof b.listOrders[day] === 'number';
-        let orderA: number, orderB: number;
-        if (hasOrderA) {
-          orderA = a.listOrders![day];
-        } else {
-          orderA = (a.listOrder ?? 0) > 1000000 ? 999999 + ((a.listOrder ?? 0) / 1e15) : (a.listOrder || 999999);
-        }
-        if (hasOrderB) {
-          orderB = b.listOrders![day];
-        } else {
-          orderB = (b.listOrder ?? 0) > 1000000 ? 999999 + ((b.listOrder ?? 0) / 1e15) : (b.listOrder || 999999);
-        }
-        return orderA - orderB;
-      });
-  }, [clients]);
+      .sort(compareDayOrder(day));
+  }, [clientsByDay, clients]);
 
   // Get visible (non-completed) clients for a specific day — sorted by assigned position
   const getVisibleClients = useCallback((day: string): Client[] => {

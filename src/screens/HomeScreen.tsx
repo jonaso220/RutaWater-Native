@@ -87,6 +87,7 @@ const SectionHeader = React.memo<SectionHeaderProps>(({ title, count, isToday, c
 const keyExtractor = (item: ListItem) => item.key;
 
 import DaySelector from '../components/DaySelector';
+import { ProductLabel } from '../components/ProductIcon';
 
 // --- Memoized wrapper to prevent ClientCard re-renders on every day switch ---
 interface ClientItemProps {
@@ -1112,9 +1113,12 @@ const HomeScreen = () => {
                   style={[styles.filterChip, activeFilters.has(p.id) && styles.filterChipActive]}
                   onPress={() => toggleFilter(p.id)}
                 >
-                  <Text style={[styles.filterChipText, activeFilters.has(p.id) && styles.filterChipTextActive]}>
-                    {p.emoji} {p.short}
-                  </Text>
+                  <ProductLabel
+                    value={p.emoji}
+                    label={p.short}
+                    size={Math.round((isWide ? 15 : 14) * fontScale)}
+                    style={[styles.filterChipText, activeFilters.has(p.id) && styles.filterChipTextActive]}
+                  />
                 </TouchableOpacity>
               ))}
             </View>

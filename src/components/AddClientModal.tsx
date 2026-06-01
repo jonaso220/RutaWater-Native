@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
+import { ProductLabel } from './ProductIcon';
 import { ALL_DAYS } from '../constants/products';
 import { useProducts } from '../stores/productCatalogStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -475,9 +476,12 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('addModal.products')}</Text>
             {catalogProducts.map((p) => (
               <View key={p.id} style={styles.productRow}>
-                <Text style={styles.productLabel}>
-                  {p.emoji} {p.label}
-                </Text>
+                <ProductLabel
+                  value={p.emoji}
+                  label={p.label}
+                  size={Math.round(18 * fontScale)}
+                  style={styles.productLabel}
+                />
                 <View style={styles.qtyControls}>
                   <TouchableOpacity
                     onPress={() => adjustQty(p.id, -1)}

@@ -9,6 +9,7 @@ import { normalizePhone } from '../utils/helpers';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import PromptModal from './PromptModal';
+import { ProductIcon } from './ProductIcon';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
 
@@ -290,7 +291,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
           <View style={styles.productsRow}>
             {productList.map((p) => (
               <View key={p.id} style={styles.productChip}>
-                <Text style={styles.productEmoji}>{p.emoji}</Text>
+                <ProductIcon value={p.emoji} size={s(15)} style={styles.productEmoji} />
                 <Text style={styles.productQty}>{p.qty}</Text>
                 <Text style={styles.productShort}>{p.short}</Text>
               </View>

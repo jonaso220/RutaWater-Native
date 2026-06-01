@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
+import { ProductLabel } from './ProductIcon';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
 import { ALL_DAYS, FREQUENCY_LABELS, Frequency } from '../constants/products';
@@ -309,9 +310,12 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             </Text>
             {catalogProducts.map((p) => (
               <View key={p.id} style={styles.productRow}>
-                <Text style={styles.productLabel}>
-                  {p.emoji} {p.label}
-                </Text>
+                <ProductLabel
+                  value={p.emoji}
+                  label={p.label}
+                  size={Math.round(18 * fontScale)}
+                  style={styles.productLabel}
+                />
                 <View style={styles.qtyControls}>
                   <TouchableOpacity
                     onPress={() => adjustQty(p.id, -1)}

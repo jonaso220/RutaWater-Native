@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ModalOverlay from './ModalOverlay';
+import { ProductLabel } from './ProductIcon';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
@@ -600,6 +601,7 @@ const Field: React.FC<{ label: string; value: string; styles: ReturnType<typeof 
 
 const ProductsList: React.FC<{ products: Record<string, number>; styles: ReturnType<typeof getStyles> }> = ({ products, styles }) => {
   const allProducts = useAllProducts();
+  const { fontScale } = useLayout();
   const entries = Object.entries(products || {}).filter(([_, v]) => v > 0);
   if (entries.length === 0) return null;
   return (
@@ -609,9 +611,12 @@ const ProductsList: React.FC<{ products: Record<string, number>; styles: ReturnT
         const p = allProducts.find((x) => x.id === id);
         return (
           <View key={id} style={styles.productLine}>
-            <Text style={styles.productLineText}>
-              {p?.emoji || '•'} {p?.label || id}
-            </Text>
+            <ProductLabel
+              value={p?.emoji || '•'}
+              label={p?.label || id}
+              size={Math.round(16 * fontScale)}
+              style={styles.productLineText}
+            />
             <Text style={styles.productQty}>× {qty}</Text>
           </View>
         );

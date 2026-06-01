@@ -9,6 +9,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { useTranslation } from 'react-i18next';
+import { ProductLabel } from './ProductIcon';
 
 const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
 
@@ -229,9 +230,14 @@ const DirectoryClientCard = ({
         {prodChips.length > 0 && (
           <View style={styles.prodChipsRow}>
             {prodChips.map((p, i) => (
-              <Text key={i} style={styles.prodChip}>
-                {p.emoji} {p.qty}x {p.label}
-              </Text>
+              <ProductLabel
+                key={i}
+                value={p.emoji}
+                label={`${p.qty}x ${p.label}`}
+                size={Math.round(13 * fontScale)}
+                containerStyle={styles.prodChip}
+                style={styles.prodChipText}
+              />
             ))}
           </View>
         )}
@@ -450,6 +456,12 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.cardBorder,
+  },
+  // Text-only style for the sticker case (chip background lives on prodChip).
+  prodChipText: {
+    fontSize: s(11),
+    fontWeight: '500',
+    color: colors.textSecondary,
   },
   actionsRow: {
     flexDirection: 'row',

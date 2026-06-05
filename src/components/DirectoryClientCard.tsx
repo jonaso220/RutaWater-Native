@@ -4,7 +4,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Client } from '../types';
 import { normalizePhone } from '../utils/helpers';
 import { useAllProducts } from '../stores/productCatalogStore';
-import { getLastActivityDate, getDaysSince } from '../utils/recency';
+import { getLastActivityDate, getEffectiveLastActivityDate, getDaysSince } from '../utils/recency';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
@@ -17,6 +17,7 @@ interface Props {
   client: Client;
   debtTotal: number;
   showRecency: boolean;
+  clientsById?: Map<string, Client> | null;
   isAdmin: boolean;
   onSchedule: (client: Client) => void;
   onDebt: (client: Client) => void;
@@ -40,6 +41,7 @@ const DirectoryClientCard = ({
   client: item,
   debtTotal,
   showRecency,
+  clientsById,
   isAdmin,
   onSchedule,
   onDebt,
@@ -86,7 +88,12 @@ const DirectoryClientCard = ({
   };
 
   const getRecencyBadge = (client: Client): { label: string; bgColor: string; textColor: string } => {
-    const lastDate = getLastActivityDate(client);
+    const ownDate = getLastActivityDate(client);
+    const lastDate = getEffectiveLastActivityDate(client, clientsById);
+    // La fecha efectiva vino de un familiar (no del cliente): lo marcamos con 👪 para
+    // que se entienda por qué aparece como visitado recientemente.
+    const fromFamily = !!lastDate && (!ownDate || lastDate.getTime() > ownDate.getTime());
+    const fam = fromFamily ? ' 👪' : '';
     const days = getDaysSince(lastDate);
 
     if (days === null) {
@@ -99,7 +106,7 @@ const DirectoryClientCard = ({
 
     if (days <= 7) {
       return {
-        label: days === 0 ? t('directory.today') : t('directory.daysAgo', { count: days }),
+        label: (days === 0 ? t('directory.today') : t('directory.daysAgo', { count: days })) + fam,
         bgColor: isDark ? '#064E3B' : '#ECFDF5',
         textColor: isDark ? '#6EE7B7' : '#059669',
       };
@@ -107,7 +114,7 @@ const DirectoryClientCard = ({
 
     if (days <= 21) {
       return {
-        label: t('directory.daysAgo', { count: days }),
+        label: t('directory.daysAgo', { count: days }) + fam,
         bgColor: isDark ? '#451A03' : '#FFFBEB',
         textColor: isDark ? '#F59E0B' : '#D97706',
       };
@@ -115,14 +122,14 @@ const DirectoryClientCard = ({
 
     if (days <= 45) {
       return {
-        label: t('directory.daysAgo', { count: days }),
+        label: t('directory.daysAgo', { count: days }) + fam,
         bgColor: isDark ? '#431407' : '#FFF7ED',
         textColor: isDark ? '#FB923C' : '#EA580C',
       };
     }
 
     return {
-      label: `Hace ${days} dias`,
+      label: `Hace ${days} dias${fam}`,
       bgColor: isDark ? '#450A0A' : '#FEF2F2',
       textColor: isDark ? '#F87171' : '#DC2626',
     };

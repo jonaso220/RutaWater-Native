@@ -50,6 +50,7 @@ interface ClientCardProps {
   onChangePosition?: (newPosition: number) => void;
   onDrag?: () => void;
   fontScale?: number;
+  wideLayout?: boolean;
 }
 
 const ClientCard: React.FC<ClientCardProps> = ({
@@ -71,6 +72,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   onDrag,
   enCaminoMessage,
   fontScale = 1,
+  wideLayout = false,
 }) => {
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -132,8 +134,13 @@ const ClientCard: React.FC<ClientCardProps> = ({
 
   // --- NOTE CARD ---
   if (client.isNote) {
+    const noteDoneBtn = (
+      <TouchableOpacity style={[styles.doneButton, wideLayout && styles.doneButtonWide]} onPress={onMarkDone}>
+        <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> {t('done')}</Text>
+      </TouchableOpacity>
+    );
     return (
-      <View style={[styles.card, styles.noteCard]}>
+      <View style={[styles.card, styles.noteCard, wideLayout && styles.cardWide]}>
         <PromptModal
           visible={showPositionPrompt}
           title={t('clientCard.changePosition')}
@@ -153,7 +160,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
           <Text style={styles.orderText}>{index + 1}</Text>
           {onDrag && <Text style={styles.dragGrip}>≡</Text>}
         </TouchableOpacity>
-        <View style={styles.cardBody}>
+        <View style={[styles.cardBody, wideLayout && styles.cardBodyWide]}>
           <View style={styles.headerRow}>
             <Text style={styles.noteLabel}><Ionicons name="document-text" size={s(13)} /> {t('clientCard.note')}</Text>
             <View style={styles.actions}>
@@ -168,14 +175,19 @@ const ClientCard: React.FC<ClientCardProps> = ({
           <Text style={styles.noteText}>
             {parseTextWithLinks(client.notes || '', colors.primary)}
           </Text>
-          <View style={styles.actionBar}>
-            <Text style={styles.badge}>{client.specificDate || t('clientCard.onceLabel')}</Text>
-            <View style={{ flex: 1 }} />
-            <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
-              <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> {t('done')}</Text>
-            </TouchableOpacity>
-          </View>
+          {wideLayout ? (
+            <View style={styles.freqRow}>
+              <Text style={styles.badge}>{client.specificDate || t('clientCard.onceLabel')}</Text>
+            </View>
+          ) : (
+            <View style={styles.actionBar}>
+              <Text style={styles.badge}>{client.specificDate || t('clientCard.onceLabel')}</Text>
+              <View style={{ flex: 1 }} />
+              {noteDoneBtn}
+            </View>
+          )}
         </View>
+        {wideLayout && <View style={styles.rightPanel}>{noteDoneBtn}</View>}
       </View>
     );
   }
@@ -185,6 +197,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
     <View
       style={[
         styles.card,
+        wideLayout && styles.cardWide,
         client.isStarred && styles.cardStarred,
         (client.freq === 'once') && styles.cardOnce,
       ]}
@@ -208,7 +221,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
         <Text style={styles.orderText}>{index + 1}</Text>
         {onDrag && <Text style={styles.dragGrip}>≡</Text>}
       </TouchableOpacity>
-      <View style={styles.cardBody}>
+      <View style={[styles.cardBody, wideLayout && styles.cardBodyWide]}>
         {/* Toolbar */}
         <View style={styles.toolbar}>
           {onToggleStar && (
@@ -316,31 +329,61 @@ const ClientCard: React.FC<ClientCardProps> = ({
           </Text>
         </View>
 
-        {/* Action bar: Call | Camera | En camino | Listo */}
-        <View style={styles.actionBar}>
+        {/* Action bar (narrow phones): Call | Camera | En camino | Listo below */}
+        {!wideLayout && (
+          <View style={styles.actionBar}>
+            {client.phone ? (
+              <>
+                <TouchableOpacity onPress={callClient} style={styles.actionBtnDark}>
+                  <Ionicons name="call" size={s(18)} color={colors.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={openWhatsAppCamera} style={styles.actionBtnDark}>
+                  <Ionicons name="camera" size={s(18)} color={colors.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={sendEnCamino} style={styles.enCaminoBtn} activeOpacity={0.7}>
+                  <Text style={styles.enCaminoText}><Ionicons name="chatbubble" size={s(14)} color={colors.textWhite} /> {t('clientCard.onTheWay')}</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity onPress={onEdit} style={styles.addPhoneBtn} activeOpacity={0.6}>
+                <Ionicons name="call-outline" size={s(14)} color={colors.textHint} />
+                <Text style={styles.addPhoneText}>{t('clientCard.addPhone')}</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
+              <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> {t('done')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+      {/* Action panel (wide screens): stacked on the right so the card stays short */}
+      {wideLayout && (
+        <View style={styles.rightPanel}>
           {client.phone ? (
             <>
-              <TouchableOpacity onPress={callClient} style={styles.actionBtnDark}>
-                <Ionicons name="call" size={s(18)} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={openWhatsAppCamera} style={styles.actionBtnDark}>
-                <Ionicons name="camera" size={s(18)} color={colors.textSecondary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={sendEnCamino} style={styles.enCaminoBtn} activeOpacity={0.7}>
+              <View style={styles.wideIconRow}>
+                <TouchableOpacity onPress={callClient} style={styles.actionBtnDarkWide}>
+                  <Ionicons name="call" size={s(18)} color={colors.textSecondary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={openWhatsAppCamera} style={styles.actionBtnDarkWide}>
+                  <Ionicons name="camera" size={s(18)} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity onPress={sendEnCamino} style={styles.enCaminoBtnWide} activeOpacity={0.7}>
                 <Text style={styles.enCaminoText}><Ionicons name="chatbubble" size={s(14)} color={colors.textWhite} /> {t('clientCard.onTheWay')}</Text>
               </TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity onPress={onEdit} style={styles.addPhoneBtn} activeOpacity={0.6}>
+            <TouchableOpacity onPress={onEdit} style={styles.addPhoneBtnWide} activeOpacity={0.6}>
               <Ionicons name="call-outline" size={s(14)} color={colors.textHint} />
               <Text style={styles.addPhoneText}>{t('clientCard.addPhone')}</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
+          <TouchableOpacity style={styles.doneButtonWide} onPress={onMarkDone}>
             <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> {t('done')}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      )}
     </View>
   );
 };
@@ -647,6 +690,66 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.textWhite,
       fontSize: s(15),
       fontWeight: '700',
+    },
+    // --- Wide-screen (Mac/iPad) horizontal layout ---
+    // Wider card so a single full-width row uses the extra space; the action
+    // buttons move into a right-hand panel (rightPanel) instead of a bottom bar,
+    // which also keeps the card short ("más fina").
+    cardWide: {
+      maxWidth: 1280,
+    },
+    cardBodyWide: {
+      paddingVertical: s(12),
+      justifyContent: 'center',
+    },
+    rightPanel: {
+      width: s(210),
+      paddingVertical: s(10),
+      paddingHorizontal: s(10),
+      justifyContent: 'center',
+      gap: s(6),
+      borderLeftWidth: 1,
+      borderLeftColor: colors.sectionBackground,
+    },
+    wideIconRow: {
+      flexDirection: 'row',
+      gap: s(6),
+    },
+    actionBtnDarkWide: {
+      flex: 1,
+      height: s(40),
+      borderRadius: s(8),
+      backgroundColor: colors.sectionBackground,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    enCaminoBtnWide: {
+      height: s(40),
+      borderRadius: s(8),
+      backgroundColor: colors.successBright,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: s(4),
+    },
+    doneButtonWide: {
+      height: s(40),
+      backgroundColor: colors.primary,
+      borderRadius: s(8),
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    addPhoneBtnWide: {
+      height: s(40),
+      borderRadius: s(8),
+      backgroundColor: colors.sectionBackground,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: s(4),
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderStyle: 'dashed',
     },
   });
 };

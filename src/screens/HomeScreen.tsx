@@ -49,6 +49,7 @@ import PromptModal from '../components/PromptModal';
 import SmartOrderModal from '../components/SmartOrderModal';
 import RelationshipsModal from '../components/RelationshipsModal';
 import ProfilesModal from '../components/ProfilesModal';
+import CalendarModal from '../components/CalendarModal';
 import { useProfileStore } from '../stores/profileStore';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -100,6 +101,7 @@ interface ClientItemProps {
   isDragEnabled: boolean;
   enCaminoMessage?: string;
   fontScale?: number;
+  wideLayout?: boolean;
   selectedDay: string;
   onMarkDone: (client: Client) => void;
   onEdit: (client: Client) => void;
@@ -124,6 +126,7 @@ const ClientItem = React.memo<ClientItemProps>(({
   isDragEnabled,
   enCaminoMessage,
   fontScale,
+  wideLayout,
   selectedDay,
   onMarkDone,
   onEdit,
@@ -170,6 +173,7 @@ const ClientItem = React.memo<ClientItemProps>(({
       onDrag={draggable && isDragEnabled ? drag : undefined}
       enCaminoMessage={enCaminoMessage}
       fontScale={fontScale}
+      wideLayout={wideLayout}
     />
   );
 
@@ -183,11 +187,12 @@ const HomeScreen = () => {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { fontScale, isWide, width: screenWidth } = useLayout();
-  // Wide-screen column count (also gates the grid layout further down).
-  const numColumns = useMemo(() => {
-    // Máximo 2 columnas: 3 marea en una pantalla ancha (Mac).
-    return screenWidth >= 900 ? 2 : 1;
-  }, [screenWidth]);
+  // Always a single column. On wide screens (Mac/iPad) the card itself switches
+  // to a horizontal layout (info on the left, action buttons on the right) so it
+  // uses the extra width instead of tiling into 2 narrower columns.
+  const numColumns = 1;
+  // Gate the card's horizontal (wide) layout: only on genuinely large screens.
+  const wideCard = screenWidth >= 900;
   // Chrome (day tabs, product counter, action bar, search) scales with the
   // global fontScale, which now ramps up on wide screens (see useLayout).
   const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
@@ -248,6 +253,7 @@ const HomeScreen = () => {
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [showSmartModal, setShowSmartModal] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -691,6 +697,7 @@ const HomeScreen = () => {
           isDragEnabled={isDragEnabled}
           enCaminoMessage={appSettings?.whatsappEnCamino}
           fontScale={fontScale}
+          wideLayout={wideCard}
           selectedDay={selectedDay}
           onMarkDone={stableHandlers.onMarkDone}
           onEdit={stableHandlers.onEdit}
@@ -710,6 +717,7 @@ const HomeScreen = () => {
       colors,
       fontScale,
       isWide,
+      wideCard,
       isAdmin,
       isDragEnabled,
       selectedDay,
@@ -1044,6 +1052,13 @@ const HomeScreen = () => {
             </Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnCalendar]}
+          onPress={() => setShowCalendar(true)}
+          accessibilityLabel={t('home.calendar')}
+        >
+          <Text style={[styles.actionBtnText, styles.actionBtnCalendarText]}>📅 {t('home.calendar')}</Text>
+        </TouchableOpacity>
         {pendingTransferCount > 0 && (
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnTransfer]}
@@ -1295,6 +1310,12 @@ const HomeScreen = () => {
         visible={profileSwitcherVisible}
         onClose={() => setProfileSwitcherVisible(false)}
       />
+
+      {/* Calendario (solo vista del mes) */}
+      <CalendarModal
+        visible={showCalendar}
+        onClose={() => setShowCalendar(false)}
+      />
     </View>
   );
 };
@@ -1357,6 +1378,14 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
   },
   actionBtnNoteText: {
     color: colors.warningDarker,
+  },
+  actionBtnCalendar: {
+    backgroundColor: colors.sectionBackground,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  actionBtnCalendarText: {
+    color: colors.textSecondary,
   },
   actionBtnDebt: {
     backgroundColor: colors.dangerLight,

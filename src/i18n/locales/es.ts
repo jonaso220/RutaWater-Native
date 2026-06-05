@@ -130,6 +130,7 @@ export default {
     tapToUndo: 'Toca para deshacer',
     client: 'Cliente',
     note: 'Nota',
+    calendar: 'Calendario',
     transfers: 'Transferencias',
     noClientsSubtitle: 'Agrega clientes desde el Directorio',
     noSearchResults: 'No se encontraron resultados',

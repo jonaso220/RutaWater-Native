@@ -130,6 +130,7 @@ export default {
     tapToUndo: 'Tap to undo',
     client: 'Client',
     note: 'Note',
+    calendar: 'Calendar',
     transfers: 'Transfers',
     noClientsSubtitle: 'Add clients from the Directory',
     noSearchResults: 'No results found',

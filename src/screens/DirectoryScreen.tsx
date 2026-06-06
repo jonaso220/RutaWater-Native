@@ -156,7 +156,7 @@ const DirectoryScreen = () => {
       result = base.filter(clientHasDebt);
     } else if (activeFilter === 'recurrencia') {
       result = base
-        .filter((c) => c.freq === 'once' || c.freq === 'on_demand')
+        .filter((c) => (c.freq === 'once' || c.freq === 'on_demand') && !c.isInactive)
         .sort((a, b) => {
           // "Visita del hogar": si visitaste a un familiar, el cliente cuenta como
           // visitado y baja en el orden de antigüedad.
@@ -198,6 +198,7 @@ const DirectoryScreen = () => {
     { key: 'recurrencia', label: t('directory.filterRecurrence') },
     { key: 'no_location', label: t('directory.filterNoLocation') },
     { key: 'with_debt', label: t('directory.filterDebt') },
+    { key: 'inactive', label: t('directory.filterInactive') },
   ];
 
   const handleClone = (client: Client) => {

@@ -194,6 +194,8 @@ export default {
     filterRecurrence: 'Recurrence',
     filterNoLocation: 'No loc.',
     filterDebt: 'Debt',
+    filterInactive: 'Inactive',
+    inactiveBadge: 'Inactive',
     noHistory: 'No history',
     today: 'Today',
     daysAgo_one: '{{count}} day ago',
@@ -502,6 +504,8 @@ export default {
     editClientData: 'Edit client info',
     editFrequency: 'Edit frequency',
     noDate: 'No date',
+    markInactive: '🚫 Mark as inactive',
+    reactivate: '✓ Reactivate client',
   },
 
   // Add Client Modal

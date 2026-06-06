@@ -29,5 +29,6 @@ export const withDefaults = (id: string, data: any): Client => ({
   updatedAt: null,
   startWeek: 0,
   userId: '',
+  isInactive: false,
   ...data,
 });

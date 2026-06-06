@@ -213,6 +213,9 @@ const DirectoryClientCard = ({
 
         {/* BADGES: Freq + Days + Debt */}
         <View style={styles.badgesRow}>
+          {item.isInactive && (
+            <Text style={styles.inactiveBadge}>{t('directory.inactiveBadge')}</Text>
+          )}
           <Text style={[styles.freqBadge, { backgroundColor: freqStyle.bg, color: freqStyle.text }]}>
             {getFreqLabel(item.freq)}
           </Text>
@@ -399,6 +402,16 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   freqBadge: {
     fontSize: s(10),
     fontWeight: '700',
+    paddingHorizontal: s(8),
+    paddingVertical: s(3),
+    borderRadius: s(12),
+    overflow: 'hidden',
+  },
+  inactiveBadge: {
+    fontSize: s(10),
+    fontWeight: '700',
+    color: colors.textWhite,
+    backgroundColor: colors.textMuted,
     paddingHorizontal: s(8),
     paddingVertical: s(3),
     borderRadius: s(12),

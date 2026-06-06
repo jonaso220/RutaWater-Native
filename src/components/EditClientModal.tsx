@@ -305,6 +305,25 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     );
   };
 
+  // "Ya no es cliente": marca/desmarca al cliente como inactivo. Al marcarlo lo
+  // pasa al directorio (on_demand, sin días) para que salga de todas las rutas;
+  // se mantiene guardado y reaparece al reactivarlo.
+  const handleToggleInactive = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const data: Partial<Client> = client.isInactive
+        ? { isInactive: false }
+        : { isInactive: true, freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [] };
+      await onSave(client.id, data);
+      onClose();
+    } catch (e) {
+      Alert.alert(t('error'), t('editModal.saveError'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <ModalOverlay visible={visible} onClose={onClose}>
       <KeyboardAvoidingView
@@ -553,6 +572,15 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
           <View style={styles.footer}>
             <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
               <Text style={styles.saveBtnText}>{t('editModal.save')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.inactiveToggleBtn, saving && { opacity: 0.6 }]}
+              onPress={handleToggleInactive}
+              disabled={saving}
+            >
+              <Text style={styles.inactiveToggleBtnText}>
+                {client.isInactive ? t('editModal.reactivate') : t('editModal.markInactive')}
+              </Text>
             </TouchableOpacity>
             {onRemoveFromDay && (
               <TouchableOpacity
@@ -847,6 +875,20 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     backgroundColor: colors.sectionBackground,
   },
   removeFromDayBtnText: {
+    color: colors.textSecondary,
+    fontSize: s(16),
+    fontWeight: '600',
+  },
+  inactiveToggleBtn: {
+    marginTop: s(12),
+    paddingVertical: s(14),
+    borderRadius: s(12),
+    alignItems: 'center',
+    backgroundColor: colors.sectionBackground,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  inactiveToggleBtnText: {
     color: colors.textSecondary,
     fontSize: s(16),
     fontWeight: '600',

@@ -194,6 +194,8 @@ export default {
     filterRecurrence: 'Recorrencia',
     filterNoLocation: 'Sem loc.',
     filterDebt: 'Divida',
+    filterInactive: 'Inativos',
+    inactiveBadge: 'Inativo',
     noHistory: 'Sem historico',
     today: 'Hoje',
     daysAgo_one: 'Ha {{count}} dia',
@@ -502,6 +504,8 @@ export default {
     editClientData: 'Editar dados do cliente',
     editFrequency: 'Editar frequencia',
     noDate: 'Sem data',
+    markInactive: '🚫 Marcar como inativo',
+    reactivate: '✓ Reativar cliente',
   },
 
   // Add Client Modal

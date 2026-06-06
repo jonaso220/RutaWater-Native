@@ -120,6 +120,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       .filter((c) => !c.isNote)
       .filter((c) => {
         if (filter === 'all') return true;
+        if (filter === 'inactive') return !!c.isInactive;
+        // Los ex-clientes ("inactivo") salen de todos los filtros de trabajo.
+        // (El filtro Deuda se resuelve a nivel de pantalla, así que ahí sí aparecen.)
+        if (c.isInactive) return false;
         if (filter === 'no_location') return !((c.lat && c.lng) || c.mapsLink);
         if (filter === 'sin_frecuencia') return c.freq === 'once' || c.freq === 'on_demand';
         return c.freq === filter;
@@ -148,8 +152,14 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       sin_frecuencia: 0,
       recurrencia: 0,
       no_location: 0,
+      inactive: 0,
     };
     all.forEach((c) => {
+      // Los inactivos solo cuentan en "Todos" (total) y en su propio chip.
+      if (c.isInactive) {
+        counts.inactive++;
+        return;
+      }
       if (c.freq && counts[c.freq] !== undefined) counts[c.freq]++;
       if (c.freq === 'once' || c.freq === 'on_demand') {
         counts.sin_frecuencia++;

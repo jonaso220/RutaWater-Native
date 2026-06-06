@@ -29,6 +29,8 @@ export interface Client {
   userId: string;
   groupId?: string;
   relationships?: Record<string, string>; // clientId → relationship type
+  isInactive?: boolean; // "ya no es cliente": se mantiene en el directorio pero
+                        // fuera de los filtros de trabajo (solo en Todos / Inactivos / Deuda)
   // Computed at runtime
   hasDebt?: boolean;
   hasPendingTransfer?: boolean;

@@ -167,6 +167,14 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       notes,
       freq,
     };
+    // Editing/re-scheduling an active client clears any stale "completed" flag.
+    // Otherwise a re-scheduled order (e.g. a weekly client moved to a one-time
+    // day) stays marked as delivered and never shows in the route — it only
+    // appears in the Directory, looking like it "disappeared".
+    if (freq !== 'on_demand') {
+      (data as any).isCompleted = false;
+      (data as any).completedAt = null;
+    }
     // Reset lastVisited when frequency changes so getNextVisitDate recalculates correctly
     if (freq !== client.freq) {
       (data as any).lastVisited = null;

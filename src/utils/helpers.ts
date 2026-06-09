@@ -96,6 +96,15 @@ export const parseDate = (val: any): Date | null => {
   return isNaN(date.getTime()) ? null : date;
 };
 
+// yyyy-mm-dd of a date in LOCAL time. new Date().toISOString() uses UTC and in
+// UTC-3 already belongs to tomorrow from 21:00 — never use it for "today".
+export const toLocalDateString = (d: Date): string => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 export const normalizeText = (text: string): string => {
   if (!text) return '';
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -361,12 +370,20 @@ export const getWeekNumber = (d: Date): number => {
   return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 };
 
+// Días que una visita no entregada sigue figurando como pendiente ("Hoy")
+// antes de saltar sola al próximo ciclo, como si se hubiera marcado Listo.
+const LATE_GRACE_DAYS = 2;
+
 export const getNextVisitDate = (client: Client, forDay?: string): Date | null => {
   // Only use specificDate as-is for 'once' clients (one-time orders).
   // For periodic clients, specificDate is a start-date hint and should not
   // override the normal next-visit calculation.
   if (client.freq === 'once') {
-    return client.specificDate ? new Date(client.specificDate + 'T12:00:00') : null;
+    if (!client.specificDate) return null;
+    // The shared DB (webapp/AI) can hold malformed dates; an Invalid Date here
+    // would crash any caller that calls toISOString() on the result.
+    const onceDate = new Date(client.specificDate + 'T12:00:00');
+    return isNaN(onceDate.getTime()) ? null : onceDate;
   }
 
   const today = new Date();
@@ -394,23 +411,61 @@ export const getNextVisitDate = (client: Client, forDay?: string): Date | null =
     const lastVisitedDay = new Date(lastVisited);
     lastVisitedDay.setHours(0, 0, 0, 0);
 
-    if (intervalWeeks === 1) {
-      // Weekly: if visited after the previous occurrence of the target day,
-      // the client was already served this cycle — push to next week.
-      // This handles marking "Listo" on a day before the scheduled day.
-      const prevOccurrence = new Date(nextDate);
-      prevOccurrence.setDate(prevOccurrence.getDate() - 7);
-      if (lastVisitedDay.getTime() > prevOccurrence.getTime()) {
-        nextDate.setDate(nextDate.getDate() + 7);
-      }
-    } else {
-      // Biweekly/triweekly/monthly: ensure at least intervalWeeks*7 days since last visit
-      const minNextDate = new Date(lastVisitedDay);
-      minNextDate.setDate(minNextDate.getDate() + intervalWeeks * 7);
-      while (nextDate < minNextDate) {
-        nextDate.setDate(nextDate.getDate() + 7);
-      }
+    // The cycle is anchored to the client's scheduled DAY, not the delivery
+    // timestamp:
+    //  1) The visit is attributed to its NEAREST scheduled occurrence (tie →
+    //     the past one): a late delivery (Tue for a Monday client) belongs to
+    //     the Monday that passed; an early one (Sat) to the upcoming Monday.
+    //     Late deliveries therefore keep the client's day and rhythm.
+    //  2) The next visit of the target day is its occurrence intervalWeeks
+    //     after the attributed week — or the same week, for a later sibling
+    //     day of a multi-day client (they visit every selected day of their
+    //     "on" week).
+    //  3) A missed occurrence stays pending for LATE_GRACE_DAYS (the grouping
+    //     shows it under "Hoy"), then rolls to the next cycle on its own — as
+    //     if it had been marked done.
+    const dayIndexes = new Set<number>([targetDayIndex]);
+    if (Array.isArray(client.visitDays)) {
+      client.visitDays.forEach((d) => {
+        const idx = getDayIndex(d);
+        if (idx !== -1) dayIndexes.add(idx);
+      });
     }
+    const mainDayIndex = getDayIndex(client.visitDay);
+    if (mainDayIndex !== -1) dayIndexes.add(mainDayIndex);
+
+    let bestOffset: number | null = null;
+    dayIndexes.forEach((idx) => {
+      const fwd = (idx - lastVisitedDay.getDay() + 7) % 7;
+      const offsets = fwd === 0 ? [0] : [fwd - 7, fwd];
+      offsets.forEach((off) => {
+        if (
+          bestOffset === null ||
+          Math.abs(off) < Math.abs(bestOffset) ||
+          (Math.abs(off) === Math.abs(bestOffset) && off < bestOffset)
+        ) {
+          bestOffset = off;
+        }
+      });
+    });
+    const attributed = new Date(lastVisitedDay);
+    attributed.setDate(attributed.getDate() + (bestOffset ?? 0));
+
+    // Target day's occurrence in the attributed (Monday-start) week, then
+    // jump whole cycles until past the attributed visit and the grace window.
+    const candidate = new Date(attributed);
+    candidate.setDate(
+      candidate.getDate() - ((attributed.getDay() + 6) % 7) + ((targetDayIndex + 6) % 7),
+    );
+    if (candidate.getTime() <= attributed.getTime()) {
+      candidate.setDate(candidate.getDate() + intervalWeeks * 7);
+    }
+    const graceLimit = new Date(today);
+    graceLimit.setDate(graceLimit.getDate() - LATE_GRACE_DAYS);
+    while (candidate < graceLimit) {
+      candidate.setDate(candidate.getDate() + intervalWeeks * 7);
+    }
+    nextDate.setTime(candidate.getTime());
   }
 
   // For periodic clients, respect specificDate as an anchor date.

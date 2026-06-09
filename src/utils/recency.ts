@@ -41,7 +41,11 @@ export const getEffectiveLastActivityDate = (
 
 export const getDaysSince = (date: Date | null): number | null => {
   if (!date) return null;
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
+  // Días CALENDARIO, no períodos de 24 h: una visita de ayer a las 20:00 debe
+  // decir "Hace 1 día" hoy a la mañana, no "Hace 0 días".
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 };

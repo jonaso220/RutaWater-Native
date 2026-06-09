@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useClientsStore } from '../stores/clientsStore';
 import { useAiUsageStore } from '../stores/aiUsageStore';
 import { API_ENDPOINTS } from '../config/api';
+import { toLocalDateString } from '../utils/helpers';
 import { fbAuth } from '../config/firebase';
 
 export interface CreateNewClientInput {
@@ -145,7 +146,9 @@ export const useAiParse = (): UseAiParseReturn => {
           notes: c.notes || '',
         };
       });
-      const todayIso = new Date().toISOString().slice(0, 10);
+      // Local date: toISOString() is UTC and already says "tomorrow" after
+      // 21:00 in UTC-3, shifting every relative date the AI resolves.
+      const todayIso = toLocalDateString(new Date());
 
       const idToken = await fbAuth.currentUser?.getIdToken();
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };

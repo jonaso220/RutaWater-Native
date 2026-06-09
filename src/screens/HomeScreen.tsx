@@ -21,7 +21,7 @@ import DraggableFlatList, {
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
-import { getTodayDayName, fuzzyMatch, getNextVisitDate } from '../utils/helpers';
+import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString } from '../utils/helpers';
 import { hapticLight, hapticMedium, hapticSelection, hapticError } from '../utils/haptics';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
@@ -370,10 +370,13 @@ const HomeScreen = () => {
       filtered = filtered.filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
     }
 
-    // Active filters (type filters: AND, product filters: OR — matches webapp)
+    // Active filters (type filters: AND, freq filters: OR, product filters: OR — matches webapp)
     if (activeFilters.size > 0) {
       const typeFilters = [...activeFilters].filter((f) => f === 'once_starred' || f === 'con_deuda');
-      const productFilters = [...activeFilters].filter((f) => f !== 'once_starred' && f !== 'con_deuda');
+      const freqFilters = [...activeFilters].filter((f) => f.startsWith('freq_'));
+      const productFilters = [...activeFilters].filter(
+        (f) => f !== 'once_starred' && f !== 'con_deuda' && !f.startsWith('freq_')
+      );
 
       filtered = filtered.filter((c) => {
         // Type filters: AND (must pass all)
@@ -382,12 +385,14 @@ const HomeScreen = () => {
           if (f === 'con_deuda') return getClientDebtTotal(c.id) > 0;
           return true;
         });
+        // Frequency filters: OR (a client has a single freq, so AND would never match two)
+        const passesFreq = freqFilters.length === 0 || freqFilters.includes(`freq_${c.freq}`);
         // Product filters: OR (must have at least one)
         const passesProduct = productFilters.length === 0 || productFilters.some((f) => {
           const qty = parseInt(String(c.products?.[f] || 0), 10);
           return qty > 0;
         });
-        return passesType && passesProduct;
+        return passesType && passesFreq && passesProduct;
       });
     }
 
@@ -398,16 +403,20 @@ const HomeScreen = () => {
   const clientSections = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayKey = today.toISOString().split('T')[0];
+    // Local date keys: toISOString() is UTC and would shift the day in
+    // timezones east of Greenwich (harmless in UTC-3, wrong in Europe).
+    const todayKey = toLocalDateString(today);
 
     const groups: Record<string, Client[]> = {};
 
     // Cache getDayIndex result for selectedDay since it's the same for all clients
     visibleClients.forEach((c) => {
       const nextDate = getNextVisitDate(c, deferredDay);
-      const dateKey = nextDate
-        ? nextDate.toISOString().split('T')[0].slice(0, 10)
-        : todayKey;
+      let dateKey = nextDate ? toLocalDateString(nextDate) : todayKey;
+      // Overdue dates (e.g. an uncompleted one-time order from days ago) group
+      // under today: they're still pending, and a past dateKey would create a
+      // bogus extra "Hoy" section and hijack the day's load counter.
+      if (dateKey < todayKey) dateKey = todayKey;
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(c);
     });
@@ -1119,6 +1128,17 @@ const HomeScreen = () => {
                   💰 {t('home.filterWithDebt')}
                 </Text>
               </TouchableOpacity>
+              {(['biweekly', 'triweekly', 'monthly'] as const).map((freq) => (
+                <TouchableOpacity
+                  key={freq}
+                  style={[styles.filterChip, activeFilters.has(`freq_${freq}`) && styles.filterChipActive]}
+                  onPress={() => toggleFilter(`freq_${freq}`)}
+                >
+                  <Text style={[styles.filterChipText, activeFilters.has(`freq_${freq}`) && styles.filterChipTextActive]}>
+                    📆 {t(`freq.${freq}`)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
             <Text style={[styles.filterSectionTitle, { marginTop: 10 }]}>{t('home.filterProducts')}</Text>
             <View style={styles.filterChipsRow}>

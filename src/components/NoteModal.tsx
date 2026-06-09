@@ -19,7 +19,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
-import { getModalWidth } from '../utils/helpers';
+import { getModalWidth, toLocalDateString } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 
 interface NoteModalProps {
@@ -39,13 +39,13 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
 
   const [notes, setNotes] = useState('');
   const [pickerDate, setPickerDate] = useState(new Date());
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(toLocalDateString(new Date()));
   const [showAndroidPicker, setShowAndroidPicker] = useState(false);
 
   const handleClose = () => {
     setNotes('');
     setPickerDate(new Date());
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(toLocalDateString(new Date()));
     onClose();
   };
 
@@ -85,7 +85,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
     onSave(notes.trim(), date);
     setNotes('');
     setPickerDate(new Date());
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(toLocalDateString(new Date()));
     onClose();
   };
 

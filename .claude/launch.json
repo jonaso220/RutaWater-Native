@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rutawater-webapp",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8011", "--directory", "/Volumes/OLIVERA/RutaWater"],
+      "port": 8011
+    }
+  ]
+}

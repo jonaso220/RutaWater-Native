@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 
@@ -33,14 +33,20 @@ interface UseDailyLoadsProps {
 export const useDailyLoads = ({ userId }: UseDailyLoadsProps) => {
   const [dailyLoad, setDailyLoad] = useState<DailyLoad>(EMPTY_LOAD);
   const [currentDay, setCurrentDay] = useState('');
+  // Switching days fast fires concurrent get()s; without a sequence token the
+  // LAST response to arrive wins even if it belongs to a previously selected
+  // day, showing (and potentially saving) another day's quantities.
+  const loadSeq = useRef(0);
 
   const loadForDay = useCallback(
     async (day: string) => {
       if (!userId || !day) return;
+      const mySeq = ++loadSeq.current;
       setCurrentDay(day);
       try {
         const docId = `${userId}_${day}`;
         const doc = await db.collection('daily_loads').doc(docId).get();
+        if (mySeq !== loadSeq.current) return; // a newer day was requested
         if (doc.exists) {
           setDailyLoad(doc.data() as DailyLoad);
         } else {
@@ -48,7 +54,7 @@ export const useDailyLoads = ({ userId }: UseDailyLoadsProps) => {
         }
       } catch (e) {
         reportError(e, 'Error loading daily load');
-        setDailyLoad(EMPTY_LOAD);
+        if (mySeq === loadSeq.current) setDailyLoad(EMPTY_LOAD);
       }
     },
     [userId],

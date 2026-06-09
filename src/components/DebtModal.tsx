@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -61,6 +61,15 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const [editingDebt, setEditingDebt] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // The modal stays mounted with client=null between opens; reset the form
+  // whenever the target client changes so an amount typed for client A can't
+  // be submitted against client B with one tap.
+  useEffect(() => {
+    setNewAmount('');
+    setEditingDebt(null);
+    setEditAmount('');
+  }, [client?.id]);
 
   if (!client) return null;
 

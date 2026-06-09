@@ -120,26 +120,42 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
       if (busyRef.current.has(key)) return;
       busyRef.current.add(key);
       try {
-        const matchingIds = new Set(getMatchingIds(transfer.clientId));
+        const candidateIds = getMatchingIds(transfer.clientId);
         const existingIds = getExistingMatchingIds(transfer.clientId);
-        const batch = db.batch();
-        batch.delete(db.collection('transfers').doc(transfer.id));
-        const remaining = transfersRef.current.filter(
-          (t) => matchingIds.has(t.clientId) && t.id !== transfer.id,
-        );
-        if (remaining.length === 0) {
-          existingIds.forEach((id) => {
-            batch.update(db.collection('clients').doc(id), { hasPendingTransfer: false });
-          });
+
+        await db.collection('transfers').doc(transfer.id).delete();
+
+        // Releer desde Firestore: la copia local puede no reflejar todavía una
+        // revisión anterior (dos seguidas del mismo cliente) y dejaría
+        // hasPendingTransfer prendido para siempre.
+        if (existingIds.length > 0) {
+          const scopeField = groupId ? 'groupId' : 'userId';
+          const scopeValue = groupId || userId;
+          let remaining = 0;
+          for (let i = 0; i < candidateIds.length && remaining === 0; i += 10) {
+            const chunk = candidateIds.slice(i, i + 10);
+            const snap = await db
+              .collection('transfers')
+              .where(scopeField, '==', scopeValue)
+              .where('clientId', 'in', chunk)
+              .get();
+            remaining += snap.size;
+          }
+          if (remaining === 0) {
+            const batch = db.batch();
+            existingIds.forEach((id) => {
+              batch.update(db.collection('clients').doc(id), { hasPendingTransfer: false });
+            });
+            await batch.commit();
+          }
         }
-        await batch.commit();
       } catch (e) {
         reportError(e, 'Error reviewing transfer');
       } finally {
         busyRef.current.delete(key);
       }
     },
-    [getMatchingIds, getExistingMatchingIds],
+    [getMatchingIds, getExistingMatchingIds, groupId, userId],
   );
 
   return {

@@ -90,7 +90,9 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   );
   const canAddClient = isPremium || clientCount < FREE_CLIENT_LIMIT;
 
-  useClientsAutoCleanup(clientsHook.clients);
+  // Scope key = same value the clients query is keyed by; `loaded` gates the
+  // pass until the real active profile arrived from users/{uid}.
+  useClientsAutoCleanup(clientsHook.clients, effectiveGroupId || userId, profilesHook.loaded);
 
   useEffect(() => {
     useClientsStore.setState({

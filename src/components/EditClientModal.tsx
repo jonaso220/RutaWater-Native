@@ -167,13 +167,20 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       notes,
       freq,
     };
-    // Editing/re-scheduling an active client clears any stale "completed" flag.
-    // Otherwise a re-scheduled order (e.g. a weekly client moved to a one-time
-    // day) stays marked as delivered and never shows in the route — it only
-    // appears in the Directory, looking like it "disappeared".
+    // Re-scheduling an active client (frequency or date actually changed)
+    // clears any stale "completed" flag. Otherwise a re-scheduled order (e.g.
+    // a weekly client moved to a one-time day) stays marked as delivered and
+    // never shows in the route. Editing unrelated fields (phone, notes) must
+    // NOT clear it, or a delivered one-time order pops back into today's route.
     if (freq !== 'on_demand') {
-      (data as any).isCompleted = false;
-      (data as any).completedAt = null;
+      const dateChanged = needsDate && (startDate || '') !== (client.specificDate || '');
+      if (freq !== client.freq || dateChanged) {
+        (data as any).isCompleted = false;
+        (data as any).completedAt = null;
+      }
+      // Saving an active frequency reactivates an ex-client; otherwise they'd
+      // run in the route while still flagged "Inactivo" in the Directory.
+      if (client.isInactive) (data as any).isInactive = false;
     }
     // Reset lastVisited when frequency changes so getNextVisitDate recalculates correctly
     if (freq !== client.freq) {

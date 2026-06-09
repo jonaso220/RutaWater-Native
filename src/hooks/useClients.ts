@@ -338,6 +338,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         isCompleted: false,
         isStarred: false,
         isNote: false,
+        // Scheduling an ex-client reactivates them: without this the client
+        // runs in the route while still flagged "Inactivo" in the Directory.
+        isInactive: false,
         alarm: '',
         products: newProducts || {},
       };

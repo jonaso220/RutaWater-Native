@@ -39,6 +39,9 @@ interface DebtsSheetProps {
 type SortMode = 'date' | 'amount';
 
 interface ClientDebtGroup {
+  // Clave única del grupo (matchKey): el clientId puede repetirse entre grupos
+  // cuando una deuda huérfana se "promueve" al mismo cliente activo.
+  matchKey: string;
   clientId: string;
   clientName: string;
   clientPhone: string;
@@ -122,6 +125,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 
       if (!grouped[key]) {
         grouped[key] = {
+          matchKey: key,
           // Usar el id del cliente activo cuando exista, así operaciones como
           // markAllDebtsPaid pueden actualizar hasDebt en el cliente correcto.
           clientId: client?.id || debt.clientId,
@@ -538,7 +542,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             data={filteredGroups}
             renderItem={renderGroup}
             keyboardShouldPersistTaps="handled"
-            keyExtractor={(item) => item.clientId}
+            keyExtractor={(item) => item.matchKey}
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               <View style={styles.empty}>

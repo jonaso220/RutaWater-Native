@@ -151,27 +151,54 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
       if (busyRef.current.has(key)) return;
       busyRef.current.add(key);
       try {
-        const matchingIds = new Set(getMatchingIds(debt.clientId));
-        const existingIds = getExistingMatchingIds(debt.clientId);
-        const batch = db.batch();
-        batch.delete(db.collection('debts').doc(debt.id));
-        // Si no quedan deudas en NINGUNA instancia duplicada, apaga hasDebt en todas las que existan
-        const remaining = debtsRef.current.filter(
-          (d) => matchingIds.has(d.clientId) && d.id !== debt.id,
-        );
-        if (remaining.length === 0) {
-          existingIds.forEach((id) => {
-            batch.update(db.collection('clients').doc(id), { hasDebt: false });
-          });
+        // Instancias del mismo cliente humano. Si la deuda quedó huérfana (su
+        // clientId ya no está en el directorio), caer a las instancias vivas
+        // con el mismo nombre — igual que el agrupado de DebtsSheet — para que
+        // hasDebt no quede prendido para siempre en ellas.
+        let candidateIds = getMatchingIds(debt.clientId);
+        let existingIds = getExistingMatchingIds(debt.clientId);
+        if (existingIds.length === 0 && debt.clientName) {
+          const norm = (s: string) => (s || '').toLowerCase().trim();
+          existingIds = clientsRef.current
+            .filter((c) => !c.isNote && norm(c.name || '') === norm(debt.clientName))
+            .map((c) => c.id);
+          candidateIds = [...new Set([...candidateIds, ...existingIds])];
         }
-        await batch.commit();
+
+        await db.collection('debts').doc(debt.id).delete();
+
+        // Releer desde Firestore: la copia local puede no reflejar todavía un
+        // pago anterior (dos pagos seguidos del mismo cliente) y dejaría
+        // hasDebt prendido para siempre. La query lleva el campo de scope
+        // para que las reglas puedan autorizarla.
+        if (existingIds.length > 0) {
+          const scopeField = groupId ? 'groupId' : 'userId';
+          const scopeValue = groupId || userId;
+          let remaining = 0;
+          for (let i = 0; i < candidateIds.length && remaining === 0; i += 10) {
+            const chunk = candidateIds.slice(i, i + 10);
+            const snap = await db
+              .collection('debts')
+              .where(scopeField, '==', scopeValue)
+              .where('clientId', 'in', chunk)
+              .get();
+            remaining += snap.size;
+          }
+          if (remaining === 0) {
+            const batch = db.batch();
+            existingIds.forEach((id) => {
+              batch.update(db.collection('clients').doc(id), { hasDebt: false });
+            });
+            await batch.commit();
+          }
+        }
       } catch (e) {
         reportError(e, 'Error marking debt paid');
       } finally {
         busyRef.current.delete(key);
       }
     },
-    [getMatchingIds, getExistingMatchingIds],
+    [getMatchingIds, getExistingMatchingIds, groupId, userId],
   );
 
   // Edit debt amount (guarded)

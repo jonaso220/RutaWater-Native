@@ -267,6 +267,20 @@ export const useProfiles = (
     async (id: string) => {
       if (!userId || id === PRIMARY_PROFILE_ID) return; // Reparto 1 no se borra
       try {
+        // Borrar primero los datos del reparto: las reglas autorizan el delete
+        // por dueño del perfil leyendo profiles/{id}, así que el doc del perfil
+        // tiene que seguir existiendo mientras se borran. Antes solo se borraba
+        // el perfil y clientes/deudas/transferencias quedaban huérfanos e
+        // inaccesibles para siempre.
+        for (const col of ['clients', 'debts', 'transfers']) {
+          let snap = await db.collection(col).where('groupId', '==', id).limit(450).get();
+          while (!snap.empty) {
+            const batch = db.batch();
+            snap.docs.forEach((doc) => batch.delete(doc.ref));
+            await batch.commit();
+            snap = await db.collection(col).where('groupId', '==', id).limit(450).get();
+          }
+        }
         await db.collection('profiles').doc(id).delete();
         if (activeProfileId === id) {
           await db

@@ -4,9 +4,9 @@ import { db } from '../config/firebase';
 import { Client } from '../types';
 
 /**
- * One-shot maintenance pass that runs the first time clients are loaded
- * after sign-in. Removes/converts entries that should no longer be
- * active in the directory:
+ * One-shot maintenance pass that runs the first time a scope's clients are
+ * loaded. Removes/converts entries that should no longer be active in the
+ * directory:
  *
  *   1. Notes (`isNote=true`) that are either completed or whose
  *      specificDate is in the past — kept only while they describe
@@ -17,17 +17,21 @@ import { Client } from '../types';
  *      `visitDay: 'Sin Asignar'`, so the client survives in the
  *      directory but no longer occupies a day slot.
  *
- * Guarded by an internal ref so it never runs twice in a single session
- * (e.g. when Firestore pushes a snapshot update). Writes are batched by
- * 450 to stay under Firestore's 500-op limit.
+ * Runs once per scope (reparto/grupo) per session, and only after the active
+ * profile is actually known (`ready`): at boot the cached clients snapshot
+ * usually beats the users/{uid} doc, and a session-wide guard used to burn
+ * the single pass on Reparto 1's data even when another reparto was active —
+ * the active reparto then never got cleaned. Writes are batched by 450 to
+ * stay under Firestore's 500-op limit.
  */
-export const useClientsAutoCleanup = (clients: Client[]) => {
-  const done = useRef(false);
+export const useClientsAutoCleanup = (clients: Client[], scopeKey: string, ready: boolean) => {
+  const doneScopes = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (done.current) return;
+    if (!ready || !scopeKey) return;
+    if (doneScopes.current.has(scopeKey)) return;
     if (clients.length === 0) return;
-    done.current = true;
+    doneScopes.current.add(scopeKey);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -73,5 +77,5 @@ export const useClientsAutoCleanup = (clients: Client[]) => {
       });
       batch.commit().catch((err) => reportError(err, 'Auto-cleanup error'));
     }
-  }, [clients]);
+  }, [clients, scopeKey, ready]);
 };

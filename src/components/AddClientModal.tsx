@@ -293,6 +293,9 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   };
 
   const handleSave = async () => {
+    // A fast double-tap can fire twice before the disabled state re-renders,
+    // creating the client twice in Firestore.
+    if (saving) return;
     if (!name.trim()) {
       Alert.alert(t('error'), t('addModal.nameRequired'));
       return;

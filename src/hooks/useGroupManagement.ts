@@ -46,13 +46,20 @@ export const useGroupManagement = (
     const unsubscribe = db
       .collection('users')
       .where('groupId', '==', groupData.groupId)
-      .onSnapshot((snapshot) => {
-        const loaded = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setMembers(loaded);
-      });
+      .onSnapshot(
+        (snapshot) => {
+          const loaded = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          setMembers(loaded);
+        },
+        () => {
+          // Being expelled drops this listener with permission-denied; clear
+          // the list instead of leaving stale members on screen.
+          setMembers([]);
+        },
+      );
     return () => unsubscribe();
   }, [groupData?.groupId]);
 
@@ -78,7 +85,9 @@ export const useGroupManagement = (
         role: 'admin',
       });
 
-      // Migrate existing data
+      // Migrate existing data — only unscoped personal docs. Docs that already
+      // have a groupId belong to a reparto (profile) or another group and must
+      // keep that scope, otherwise creating a group would absorb every reparto.
       const updates: { ref: any; data: any }[] = [];
       const collections = ['clients', 'debts', 'transfers'];
       for (const collectionName of collections) {
@@ -86,7 +95,9 @@ export const useGroupManagement = (
           .collection(collectionName)
           .where('userId', '==', user.uid)
           .get();
-        snap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId } }));
+        snap.docs.forEach((doc) => {
+          if (!doc.data().groupId) updates.push({ ref: doc.ref, data: { groupId } });
+        });
       }
       await commitBatchUpdates(updates);
 

@@ -85,7 +85,8 @@ service cloud.firestore {
         id == uid() ||
         (myRole() == 'admin' && myGroupId() != null && resource.data.groupId == myGroupId())
       );
-      allow delete: if false;
+      // Solo el propio usuario, al eliminar su cuenta.
+      allow delete: if signedIn() && id == uid();
     }
 
     // ── Grupos familiares ─────────────────────────────────────────────────────

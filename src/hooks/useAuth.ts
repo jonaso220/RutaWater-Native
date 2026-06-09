@@ -5,6 +5,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { appleAuth } from '@invertase/react-native-apple-authentication';
 import { db } from '../config/firebase';
 import { Group } from '../types';
+import { ALL_DAYS } from '../constants/products';
 
 // Configure Google Sign-In (webClientId from Firebase Console)
 GoogleSignin.configure({
@@ -16,46 +17,71 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
   const [groupData, setGroupData] = useState<Group | null>(null);
 
-  // Listen to auth state changes
+  // Listen to auth state changes + live group membership.
   useEffect(() => {
-    const unsubscribe = auth().onAuthStateChanged(async (firebaseUser) => {
+    let unsubUser: (() => void) | null = null;
+    let seq = 0;
+    const unsubscribe = auth().onAuthStateChanged((firebaseUser) => {
       setUser(firebaseUser);
-      if (firebaseUser) {
-        await loadGroupData(firebaseUser.uid);
-      } else {
+      if (unsubUser) {
+        unsubUser();
+        unsubUser = null;
+      }
+      if (!firebaseUser) {
         setGroupData(null);
+        setLoading(false);
+        return;
       }
-      setLoading(false);
+      // Live subscription to users/{uid}: if the admin expels this user or
+      // dissolves the group, the scope switches immediately. This used to be a
+      // one-shot read, leaving the session frozen on the old group (listeners
+      // in permission-denied, writes failing silently) until an app restart.
+      unsubUser = db
+        .collection('users')
+        .doc(firebaseUser.uid)
+        .onSnapshot(
+          async (userDoc) => {
+            const mySeq = ++seq;
+            try {
+              const data = userDoc.exists ? userDoc.data() : null;
+              if (data?.groupId) {
+                // Fetch group code from groups collection
+                let code = '';
+                const groupDoc = await db.collection('groups').doc(data.groupId).get();
+                if (groupDoc.exists) {
+                  code = groupDoc.data()?.code || '';
+                }
+                if (mySeq !== seq) return; // a newer snapshot superseded this one
+                setGroupData({
+                  groupId: data.groupId,
+                  role: data.role || 'member',
+                  code,
+                });
+              } else {
+                setGroupData(null);
+              }
+            } catch (e) {
+              reportError(e, 'Error loading group data');
+              if (mySeq === seq) setGroupData(null);
+            } finally {
+              if (mySeq === seq) setLoading(false);
+            }
+          },
+          (e) => {
+            // After sign-out the listener can drop with permission-denied;
+            // that's only a real error while someone is still signed in.
+            if (auth().currentUser) {
+              reportError(e, 'Error watching user doc');
+            }
+            setLoading(false);
+          },
+        );
     });
-    return unsubscribe;
+    return () => {
+      if (unsubUser) unsubUser();
+      unsubscribe();
+    };
   }, []);
-
-  const loadGroupData = async (uid: string) => {
-    try {
-      const userDoc = await db.collection('users').doc(uid).get();
-      if (userDoc.exists) {
-        const data = userDoc.data();
-        if (data?.groupId) {
-          // Fetch group code from groups collection
-          let code = '';
-          const groupDoc = await db.collection('groups').doc(data.groupId).get();
-          if (groupDoc.exists) {
-            code = groupDoc.data()?.code || '';
-          }
-          setGroupData({
-            groupId: data.groupId,
-            role: data.role || 'member',
-            code,
-          });
-          return;
-        }
-      }
-      setGroupData(null);
-    } catch (e) {
-      reportError(e, 'Error loading group data');
-      setGroupData(null);
-    }
-  };
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
@@ -144,55 +170,74 @@ export const useAuth = () => {
     if (!currentUser) throw new Error('No user logged in');
 
     const uid = currentUser.uid;
-    const scope = groupData?.groupId
-      ? { field: 'groupId', value: groupData.groupId }
-      : { field: 'userId', value: uid };
+
+    // Delete every doc of `col` matching `field == value` that passes the
+    // filter, in batches under Firestore's 500-write cap.
+    const deleteMatching = async (
+      col: string,
+      field: string,
+      value: string,
+      shouldDelete: (data: any) => boolean,
+    ) => {
+      const snap = await db.collection(col).where(field, '==', value).get();
+      const refs = snap.docs.filter((d) => shouldDelete(d.data())).map((d) => d.ref);
+      for (let i = 0; i < refs.length; i += 450) {
+        const batch = db.batch();
+        refs.slice(i, i + 450).forEach((ref) => batch.delete(ref));
+        await batch.commit();
+      }
+    };
 
     try {
-      // If user is in a group, leave/dissolve it first
-      if (groupData?.groupId) {
-        if (groupData.role === 'admin') {
-          // Admin: remove all members from group, delete group doc
-          const membersSnap = await db
-            .collection('users')
-            .where('groupId', '==', groupData.groupId)
-            .get();
-          for (const doc of membersSnap.docs) {
-            if (doc.id !== uid) {
-              await db.collection('users').doc(doc.id).update({ groupId: null, role: null });
-            }
-          }
-          await db.collection('groups').doc(groupData.groupId).delete();
-        } else {
-          // Member: just leave
-          await db.collection('users').doc(uid).update({ groupId: null, role: null });
-        }
-      }
-
-      // Delete user's data in batches
       const collections = ['clients', 'debts', 'transfers'];
-      for (const col of collections) {
-        let snap = await db
-          .collection(col)
-          .where(scope.field, '==', scope.value)
-          .limit(450)
-          .get();
-        while (!snap.empty) {
-          const batch = db.batch();
-          snap.docs.forEach((doc) => batch.delete(doc.ref));
-          await batch.commit();
-          snap = await db
-            .collection(col)
-            .where(scope.field, '==', scope.value)
-            .limit(450)
-            .get();
+
+      // 1. Family group: only the admin dissolves it and deletes its shared
+      //    data. A member must NOT touch group data (it stays with the group)
+      //    and must NOT leave before the deletions below — the security rules
+      //    resolve scopes from users/{uid}, so leaving first revokes access
+      //    mid-flight and the account is left half-deleted.
+      if (groupData?.groupId && groupData.role === 'admin') {
+        for (const col of collections) {
+          await deleteMatching(col, 'groupId', groupData.groupId, () => true);
         }
+        const membersSnap = await db
+          .collection('users')
+          .where('groupId', '==', groupData.groupId)
+          .get();
+        for (const doc of membersSnap.docs) {
+          if (doc.id !== uid) {
+            await db.collection('users').doc(doc.id).update({ groupId: null, role: null });
+          }
+        }
+        await db.collection('groups').doc(groupData.groupId).delete();
       }
 
-      // Delete user doc from Firestore
-      await db.collection('users').doc(uid).delete();
+      // 2. Personal data: only unscoped docs. Docs scoped to a reparto or left
+      //    behind in a group belong to that team and must survive (the rules
+      //    deny deleting them anyway, which would abort the whole batch).
+      for (const col of collections) {
+        await deleteMatching(col, 'userId', uid, (data) => !data.groupId);
+      }
 
-      // Delete Firebase Auth account
+      // 3. Per-user docs keyed by uid.
+      await db.collection('settings').doc(uid).delete();
+      await db.collection('aiUsage').doc(uid).delete();
+      await db.collection('premiumOverrides').doc(uid).delete();
+      for (const day of ALL_DAYS) {
+        await db.collection('daily_loads').doc(`${uid}_${day}`).delete();
+      }
+
+      // 4. The user doc goes last: the rules read users/{uid} to resolve
+      //    group/reparto scopes for everything above.
+      try {
+        await db.collection('users').doc(uid).delete();
+      } catch {
+        // If the deployed rules still forbid deleting user docs, scrub it so
+        // no group/reparto references survive the account.
+        await db.collection('users').doc(uid).set({});
+      }
+
+      // 5. Firebase Auth account.
       await currentUser.delete();
     } catch (error: any) {
       // If requires recent login, re-throw with specific message

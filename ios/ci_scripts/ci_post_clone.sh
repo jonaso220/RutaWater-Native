@@ -15,3 +15,7 @@ npm ci
 command -v pod >/dev/null 2>&1 || brew install cocoapods
 cd ios
 pod install
+
+# 4) Las build phases de RN/Hermes corren con el PATH pelado de Xcode:
+#    dejarles la ruta absoluta del node de la nube en .xcode.env.local
+echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local

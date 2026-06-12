@@ -358,6 +358,15 @@ const HomeScreen = () => {
     });
   }, []);
 
+  const clearFreqFilters = useCallback(() => {
+    setActiveFilters((prev) => {
+      if (![...prev].some((f) => f.startsWith('freq_'))) return prev;
+      return new Set([...prev].filter((f) => !f.startsWith('freq_')));
+    });
+  }, []);
+
+  const hasFreqFilter = [...activeFilters].some((f) => f.startsWith('freq_'));
+
   const allVisibleClients = useMemo(() => getVisibleClients(deferredDay), [getVisibleClients, deferredDay]);
   const completedClients = useMemo(() => getCompletedClients(deferredDay), [getCompletedClients, deferredDay]);
 
@@ -1128,7 +1137,18 @@ const HomeScreen = () => {
                   💰 {t('home.filterWithDebt')}
                 </Text>
               </TouchableOpacity>
-              {(['biweekly', 'triweekly', 'monthly'] as const).map((freq) => (
+            </View>
+            <Text style={[styles.filterSectionTitle, { marginTop: 10 }]}>{t('home.filterFrequency')}</Text>
+            <View style={styles.filterChipsRow}>
+              <TouchableOpacity
+                style={[styles.filterChip, !hasFreqFilter && styles.filterChipActive]}
+                onPress={clearFreqFilters}
+              >
+                <Text style={[styles.filterChipText, !hasFreqFilter && styles.filterChipTextActive]}>
+                  {t('home.filterFreqAll')}
+                </Text>
+              </TouchableOpacity>
+              {(['weekly', 'biweekly', 'triweekly', 'monthly', 'once'] as const).map((freq) => (
                 <TouchableOpacity
                   key={freq}
                   style={[styles.filterChip, activeFilters.has(`freq_${freq}`) && styles.filterChipActive]}

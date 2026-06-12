@@ -124,6 +124,8 @@ export default {
     today: 'Today',
     filterType: 'Type',
     filterOnceStarred: 'Orders/Fav',
+    filterFrequency: 'Frequency',
+    filterFreqAll: 'All',
     filterProducts: 'Products',
     loadingClients: 'Loading clients...',
     selectTime: 'Select time',

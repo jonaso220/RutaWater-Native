@@ -55,5 +55,3 @@ Thumbs.db
 # Bundle
 *.jsbundle
 
-# CocoaPods
-ios/Podfile.lock

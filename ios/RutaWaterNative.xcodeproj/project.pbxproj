@@ -12,6 +12,7 @@
 		13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB01A68108700A75B9A /* AppDelegate.mm */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		13B07FC11A68108700A75B9A /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 13B07FB71A68108700A75B9A /* main.m */; };
+		FACEB00C1A68108700A75B02 /* Empty.swift in Sources */ = {isa = PBXBuildFile; fileRef = FACEB00C1A68108700A75B01 /* Empty.swift */; };
 		4243BBBD0C03829F91206FFA /* Pods_RutaWaterNative_RutaWaterNativeTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DFFE95365FFFDF826EB1EFFB /* Pods_RutaWaterNative_RutaWaterNativeTests.framework */; };
 		5A5A2EA799DB7F961DFA56CE /* Pods_RutaWaterNative.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5BA680DC2D42B0EBEB53F182 /* Pods_RutaWaterNative.framework */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
@@ -40,6 +41,7 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = RutaWaterNative/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = RutaWaterNative/Info.plist; sourceTree = "<group>"; };
 		13B07FB71A68108700A75B9A /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = RutaWaterNative/main.m; sourceTree = "<group>"; };
+		FACEB00C1A68108700A75B01 /* Empty.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Empty.swift; path = RutaWaterNative/Empty.swift; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = RutaWaterNative/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1A08029996D59FB9A2A9CAE3 /* Pods-RutaWaterNative.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RutaWaterNative.release.xcconfig"; path = "Target Support Files/Pods-RutaWaterNative/Pods-RutaWaterNative.release.xcconfig"; sourceTree = "<group>"; };
 		3F09B1CF753AA0F3EAA989EC /* Pods-RutaWaterNative-RutaWaterNativeTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RutaWaterNative-RutaWaterNativeTests.debug.xcconfig"; path = "Target Support Files/Pods-RutaWaterNative-RutaWaterNativeTests/Pods-RutaWaterNative-RutaWaterNativeTests.debug.xcconfig"; sourceTree = "<group>"; };
@@ -102,6 +104,7 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB71A68108700A75B9A /* main.m */,
+				FACEB00C1A68108700A75B01 /* Empty.swift */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
 				F1A1B2C3D4E5F60700APPLE0 /* RutaWaterNative.entitlements */,
 				E5A1B2C300000002ESLPROJ /* InfoPlist.strings */,
@@ -461,6 +464,7 @@
 			files = (
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
+				FACEB00C1A68108700A75B02 /* Empty.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

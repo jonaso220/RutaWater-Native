@@ -369,7 +369,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         products: newProducts || {},
       };
 
-      if (newDate) {
+      if (newDate && newFreq === 'once') {
         // One-time order - place at the beginning
         const d = new Date(newDate + 'T12:00:00');
         const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -399,11 +399,21 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         newData.listOrder = newOrder;
         newData.listOrders = { [dayName]: newOrder };
       } else {
-        // Periodic order - place at the end
+        // Periodic order - place at the end.
+        // newDate here is an optional START anchor ("semanal a partir del 11/7"):
+        // getNextVisitDate pushes the first visit to the first selected day on
+        // or after it, and the first Listo clears it so the cycle continues.
         newData.visitDays = newDays;
         newData.visitDay = newDays[0];
         newData.startWeek = currentWeek;
-        newData.specificDate = null;
+        newData.specificDate = newDate || null;
+        if (newDate) {
+          // Start fresh from the chosen date: a stale lastVisited/doneFor from
+          // a previous run of this client would otherwise pull the first visit
+          // back near today (mirrors EditClientModal's reset on date change).
+          newData.lastVisited = null;
+          newData.doneFor = '';
+        }
 
         const listOrders: Record<string, number> = {};
         newDays.forEach((day) => {
@@ -427,11 +437,11 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         newData.listOrder = listOrders[newDays[0]];
       }
 
-      // Editing a recurring schedule (no specific date, periodic freq) is always
+      // Editing a recurring schedule (with or without a start date) is always
       // an update of the client's agenda — never a "new pending order on top".
       // The 'add' mode is meant for one-time extras (freq='once' with a date),
       // not for changing visitDays of an already-active recurring client.
-      const isRecurringScheduleEdit = !newDate && newFreq !== 'once' && newFreq !== 'on_demand';
+      const isRecurringScheduleEdit = newFreq !== 'once' && newFreq !== 'on_demand';
 
       if (clientData.freq === 'on_demand' || clientData.visitDay === 'Sin Asignar') {
         // Reactivate existing client

@@ -228,8 +228,18 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        const days = i.visitDay ? [i.visitDay] : (client.visitDays && client.visitDays.length ? client.visitDays : (client.visitDay ? [client.visitDay] : []));
         const freq: Frequency = i.freq === 'keep' ? (client.freq as Frequency) : (i.freq as Frequency);
+        let days = i.visitDay ? [i.visitDay] : (client.visitDays && client.visitDays.length ? client.visitDays : (client.visitDay ? [client.visitDay] : []));
+        // Pedido periódico con fecha ("semanal a partir del sábado 11") sin día
+        // explícito: el día de visita pasa a ser el de la fecha, que actúa como
+        // ancla de inicio en scheduleFromDirectory.
+        if (i.specificDate && !i.visitDay && freq !== 'once' && freq !== 'on_demand') {
+          const anchorDay = new Date(i.specificDate + 'T12:00:00');
+          if (!isNaN(anchorDay.getTime())) {
+            const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+            days = [dayNames[anchorDay.getDay()]];
+          }
+        }
         // Resolve notes via shared resolver (supports notes_mode = clear/replace/append/keep).
         // If undefined → keep current; otherwise pass the resolved value.
         const resolvedNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);

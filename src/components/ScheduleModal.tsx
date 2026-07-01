@@ -22,8 +22,11 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
-import { getModalWidth } from '../utils/helpers';
+import { getModalWidth, getDayIndex, toLocalDateString } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
+
+// Nombres de día indexados por Date.getDay() (0 = Domingo).
+const ALL_DAYS_BY_INDEX = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
 interface ScheduleModalProps {
   visible: boolean;
@@ -58,6 +61,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const [localDate, setLocalDate] = useState('');
   const [pickerDate, setPickerDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
+  // Ancla opcional para frecuencias periódicas: '' = arranca esta semana.
+  const [startDate, setStartDate] = useState('');
+  const [startPickerDate, setStartPickerDate] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
   const [localNotes, setLocalNotes] = useState('');
   const [localProducts, setLocalProducts] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
@@ -79,6 +86,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       setLocalDate(`${yyyy}-${mm}-${dd}`);
       setShowPicker(false);
       setPickerDate(now);
+      setStartDate('');
+      setShowStartPicker(false);
+      setStartPickerDate(now);
       const prods: Record<string, number> = {};
       catalogProducts.forEach((p) => {
         prods[p.id] = 0;
@@ -135,6 +145,38 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     return `${dayNames[d.getDay()]} ${d.getDate()} de ${monthNames[d.getMonth()]}`;
   };
 
+  const onStartDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowStartPicker(false);
+    }
+    if (selectedDate) {
+      setStartPickerDate(selectedDate);
+      setStartDate(toLocalDateString(selectedDate));
+      // WYSIWYG: la fecha elegida es la primera visita, así que su día queda
+      // seleccionado (reemplaza en modo un-día, se suma en modo multi-día).
+      const dayName = ALL_DAYS_BY_INDEX[selectedDate.getDay()];
+      setLocalDays((prev) => {
+        if (prev.length <= 1) return [dayName];
+        return prev.includes(dayName) ? prev : [...prev, dayName];
+      });
+    }
+  };
+
+  // Primera visita real dado (días seleccionados, fecha de inicio): el primer
+  // día seleccionado en o después del ancla. Mismo criterio que getNextVisitDate.
+  const firstVisitLabel = (): string => {
+    if (!startDate || localDays.length === 0) return '';
+    const start = new Date(startDate + 'T12:00:00');
+    if (isNaN(start.getTime())) return '';
+    const selectedIdx = new Set(localDays.map(getDayIndex).filter((i) => i !== -1));
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      if (selectedIdx.has(d.getDay())) return formatDisplayDate(toLocalDateString(d));
+    }
+    return '';
+  };
+
   const handleSubmit = async () => {
     if (saving) return;
     if (localFreq === 'once' && !localDate) {
@@ -152,7 +194,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     });
     let saveError: unknown = null;
     try {
-      const dateArg = localFreq === 'once' ? localDate : '';
+      // Periódico: la fecha (si se eligió) va como ancla de inicio de la frecuencia.
+      const dateArg = localFreq === 'once' ? localDate : startDate;
       await onSave(client, localDays, localFreq, dateArg, localNotes, cleanProducts);
     } catch (e) {
       saveError = e;
@@ -301,6 +344,64 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                     {t('scheduleModal.daysSelected', { count: localDays.length })}
                   </Text>
                 )}
+
+                {/* Fecha de inicio opcional de la frecuencia */}
+                <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
+                  {t('scheduleModal.startDate')}{' '}
+                  <Text style={styles.hintInline}>{t('scheduleModal.startDateOptional')}</Text>
+                </Text>
+                <TouchableOpacity
+                  style={styles.selectedDateRow}
+                  onPress={() => setShowStartPicker((v) => !v)}
+                >
+                  <Text style={styles.selectedDateText}>
+                    {startDate ? formatDisplayDate(startDate) : t('scheduleModal.startThisWeek')}
+                  </Text>
+                </TouchableOpacity>
+                {showStartPicker && (
+                  Platform.OS === 'ios' ? (
+                    <View style={styles.datePickerWrapper}>
+                      <DateTimePicker
+                        value={startPickerDate}
+                        mode="date"
+                        display="inline"
+                        onChange={onStartDateChange}
+                        minimumDate={new Date()}
+                        locale="es-ES"
+                        style={styles.datePicker}
+                        themeVariant={isDark ? 'dark' : 'light'}
+                      />
+                    </View>
+                  ) : (
+                    <DateTimePicker
+                      value={startPickerDate}
+                      mode="date"
+                      display="default"
+                      onChange={onStartDateChange}
+                      minimumDate={new Date()}
+                      locale="es-ES"
+                    />
+                  )
+                )}
+                {startDate ? (
+                  <View style={styles.startDateFooter}>
+                    {firstVisitLabel() ? (
+                      <Text style={styles.hintText}>
+                        {t('scheduleModal.firstVisit', { date: firstVisitLabel() })}
+                      </Text>
+                    ) : null}
+                    <TouchableOpacity
+                      onPress={() => {
+                        setStartDate('');
+                        setShowStartPicker(false);
+                      }}
+                    >
+                      <Text style={styles.clearStartText}>
+                        {t('scheduleModal.clearStartDate')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
               </View>
             )}
 
@@ -524,6 +625,19 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     color: colors.primary,
     fontWeight: '600',
     marginTop: s(8),
+  },
+  startDateFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: s(8),
+  },
+  clearStartText: {
+    fontSize: s(14),
+    color: colors.primary,
+    fontWeight: '600',
+    paddingVertical: s(4),
   },
   productRow: {
     flexDirection: 'row',

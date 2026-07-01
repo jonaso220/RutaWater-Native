@@ -10,7 +10,7 @@ interface ClientsStore {
   getCompletedClients: (day: string) => Client[];
   getFilteredDirectory: (term: string, filter?: string) => Client[];
   directoryCounts: Record<string, number>;
-  markAsDone: (clientId: string, client: Client) => Promise<void>;
+  markAsDone: (clientId: string, client: Client, forDay?: string) => Promise<void>;
   undoComplete: (clientId: string) => Promise<void>;
   deleteAllCompleted: (day: string) => Promise<void>;
   deleteFromDay: (clientId: string, day: string) => Promise<void>;

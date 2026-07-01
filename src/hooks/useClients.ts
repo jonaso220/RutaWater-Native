@@ -3,7 +3,7 @@ import firestore from '@react-native-firebase/firestore';
 import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
 import { Client, RELATIONSHIP_INVERSE } from '../types';
-import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, getWeekNumber, normalizePhoneForComparison } from '../utils/helpers';
+import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, getWeekNumber, normalizePhoneForComparison, toLocalDateString } from '../utils/helpers';
 import { ALL_DAYS, Frequency } from '../constants/products';
 import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
@@ -172,8 +172,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
   // --- MUTATION FUNCTIONS ---
 
-  // Mark a client as done for the day
-  const markAsDone = useCallback(async (clientId: string, client: Client) => {
+  // Mark a client as done for the day. `forDay` is the day-tab the client was
+  // shown under (matters for multi-day clients); defaults to the client's own
+  // visit day.
+  const markAsDone = useCallback(async (clientId: string, client: Client, forDay?: string) => {
     if (markingDoneRef.current.has(clientId)) return;
     markingDoneRef.current.add(clientId);
     try {
@@ -190,11 +192,33 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           isStarred: false,
         });
       } else {
-        // Periodic: update lastVisited to hide until next cycle
+        // Periodic: update lastVisited to hide until next cycle.
+        // doneFor pins WHICH scheduled occurrence this tap completed (the one
+        // the card was displayed under), so getNextVisitDate reschedules by
+        // one full cycle from it even when the delivery happens days away
+        // from the visit day (e.g. a Saturday client marked done on Monday).
         const updates: Record<string, any> = {
           lastVisited: new Date(),
           alarm: '',
         };
+
+        const pendingOccurrence = getNextVisitDate(client, forDay);
+        if (pendingOccurrence) {
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+          const daysAhead = Math.round(
+            (pendingOccurrence.getTime() - todayStart.getTime()) / 86400000,
+          );
+          const intervalWeeks =
+            client.freq === 'biweekly' ? 2 : client.freq === 'triweekly' ? 3 :
+            client.freq === 'monthly' ? 4 : 1;
+          // Never pin more than one cycle ahead: a repeat tap on a client that
+          // already advanced keeps the previous doneFor (idempotent) instead
+          // of ratcheting the schedule one extra cycle per tap.
+          if (daysAhead < intervalWeeks * 7) {
+            updates.doneFor = toLocalDateString(pendingOccurrence);
+          }
+        }
 
         if (client.specificDate) {
           updates.specificDate = '';

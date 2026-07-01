@@ -185,10 +185,12 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     // Reset lastVisited when frequency changes so getNextVisitDate recalculates correctly
     if (freq !== client.freq) {
       (data as any).lastVisited = null;
+      (data as any).doneFor = '';
     }
     // Reset lastVisited when date changes on a periodic client so it reappears on the new date
     if (needsDate && startDate && freq !== 'once' && client.specificDate !== startDate) {
       (data as any).lastVisited = null;
+      (data as any).doneFor = '';
     }
     // Clear specificDate when changing FROM 'once' to a periodic frequency
     if (client.freq === 'once' && freq !== 'once') {

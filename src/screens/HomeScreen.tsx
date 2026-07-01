@@ -506,13 +506,14 @@ const HomeScreen = () => {
         isCompleted: client.isCompleted ?? false,
         completedAt: toDate(client.completedAt),
         lastVisited: toDate(client.lastVisited),
+        doneFor: client.doneFor ?? '',
         specificDate: client.specificDate ?? '',
         alarm: client.alarm ?? '',
         isStarred: client.isStarred ?? false,
       };
 
       hapticLight();
-      markAsDone(client.id, client);
+      markAsDone(client.id, client, selectedDayRef.current);
       pushUndo({
         client,
         previousData,

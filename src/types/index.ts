@@ -23,6 +23,9 @@ export interface Client {
   isNote: boolean;
   alarm: string;
   lastVisited: FirebaseFirestoreTypes.Timestamp | null;
+  doneFor?: string; // yyyy-mm-dd de la ocurrencia agendada que completó el último "Listo".
+                    // Permite reagendar exacto aunque la entrega sea días antes/después
+                    // del día de visita (ver getNextVisitDate). Vacío/ausente = usar heurística.
   completedAt: FirebaseFirestoreTypes.Timestamp | null;
   updatedAt: FirebaseFirestoreTypes.Timestamp | null;
   startWeek: number;

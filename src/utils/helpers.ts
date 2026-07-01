@@ -424,32 +424,58 @@ export const getNextVisitDate = (client: Client, forDay?: string): Date | null =
     //  3) A missed occurrence stays pending for LATE_GRACE_DAYS (the grouping
     //     shows it under "Hoy"), then rolls to the next cycle on its own — as
     //     if it had been marked done.
-    const dayIndexes = new Set<number>([targetDayIndex]);
-    if (Array.isArray(client.visitDays)) {
-      client.visitDays.forEach((d) => {
-        const idx = getDayIndex(d);
-        if (idx !== -1) dayIndexes.add(idx);
-      });
-    }
-    const mainDayIndex = getDayIndex(client.visitDay);
-    if (mainDayIndex !== -1) dayIndexes.add(mainDayIndex);
-
-    let bestOffset: number | null = null;
-    dayIndexes.forEach((idx) => {
-      const fwd = (idx - lastVisitedDay.getDay() + 7) % 7;
-      const offsets = fwd === 0 ? [0] : [fwd - 7, fwd];
-      offsets.forEach((off) => {
-        if (
-          bestOffset === null ||
-          Math.abs(off) < Math.abs(bestOffset) ||
-          (Math.abs(off) === Math.abs(bestOffset) && off < bestOffset)
-        ) {
-          bestOffset = off;
+    //
+    // When markAsDone recorded WHICH occurrence the tap completed (doneFor),
+    // that beats the nearest-day guess: a delivery more than half a week away
+    // from the scheduled day (a Saturday client marked done on Monday) gets
+    // attributed to the wrong occurrence and the client doesn't move. doneFor
+    // is only trusted while it plausibly belongs to the same completion event
+    // as lastVisited — the webapp and older versions update lastVisited alone,
+    // which would otherwise leave a stale doneFor pinning the attribution.
+    let attributed: Date | null = null;
+    if (client.doneFor) {
+      const doneForDate = new Date(client.doneFor + 'T00:00:00');
+      if (!isNaN(doneForDate.getTime())) {
+        const drift = Math.round(
+          (doneForDate.getTime() - lastVisitedDay.getTime()) / 86400000,
+        );
+        // At write time the pending occurrence sits between today−grace and
+        // one full cycle ahead; anything outside means lastVisited was
+        // updated later without doneFor → fall back to the heuristic.
+        if (drift >= -(LATE_GRACE_DAYS + 1) && drift <= intervalWeeks * 7) {
+          attributed = doneForDate;
         }
+      }
+    }
+
+    if (!attributed) {
+      const dayIndexes = new Set<number>([targetDayIndex]);
+      if (Array.isArray(client.visitDays)) {
+        client.visitDays.forEach((d) => {
+          const idx = getDayIndex(d);
+          if (idx !== -1) dayIndexes.add(idx);
+        });
+      }
+      const mainDayIndex = getDayIndex(client.visitDay);
+      if (mainDayIndex !== -1) dayIndexes.add(mainDayIndex);
+
+      let bestOffset: number | null = null;
+      dayIndexes.forEach((idx) => {
+        const fwd = (idx - lastVisitedDay.getDay() + 7) % 7;
+        const offsets = fwd === 0 ? [0] : [fwd - 7, fwd];
+        offsets.forEach((off) => {
+          if (
+            bestOffset === null ||
+            Math.abs(off) < Math.abs(bestOffset) ||
+            (Math.abs(off) === Math.abs(bestOffset) && off < bestOffset)
+          ) {
+            bestOffset = off;
+          }
+        });
       });
-    });
-    const attributed = new Date(lastVisitedDay);
-    attributed.setDate(attributed.getDate() + (bestOffset ?? 0));
+      attributed = new Date(lastVisitedDay);
+      attributed.setDate(attributed.getDate() + (bestOffset ?? 0));
+    }
 
     // Target day's occurrence in the attributed (Monday-start) week, then
     // jump whole cycles until past the attributed visit and the grace window.

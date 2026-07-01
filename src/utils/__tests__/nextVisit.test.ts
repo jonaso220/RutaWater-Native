@@ -139,6 +139,44 @@ describe('getNextVisitDate — clientes multi-día', () => {
   });
 });
 
+describe('getNextVisitDate — specificDate como ancla de inicio de un periódico', () => {
+  // Agendado desde el directorio con "empieza el <fecha>": specificDate queda
+  // como ancla y scheduleFromDirectory resetea lastVisited/doneFor.
+  test('ancla futura: la primera visita es la fecha elegida', () => {
+    const c = makeClient({ specificDate: '2026-07-11' });
+    expect(key(getNextVisitDate(c, 'Sábado'))).toBe('2026-07-11');
+  });
+
+  test('ancla a dos semanas: la frecuencia no arranca antes', () => {
+    const c = makeClient({ freq: 'biweekly', specificDate: '2026-07-18' });
+    expect(key(getNextVisitDate(c, 'Sábado'))).toBe('2026-07-18');
+  });
+
+  test('ancla futura con día distinto: primer día seleccionado en o después', () => {
+    // Ancla miércoles 8/7 pero visita los sábados → primera visita sáb 11/7.
+    const c = makeClient({ specificDate: '2026-07-08' });
+    expect(key(getNextVisitDate(c, 'Sábado'))).toBe('2026-07-11');
+  });
+
+  test('ancla reciente pasada (sin lastVisited): reaparece en esa semana', () => {
+    // Hoy lunes 29/6, ancla sáb 27/6 → la visita del 27 sigue pendiente.
+    const c = makeClient({ specificDate: '2026-06-27' });
+    expect(key(getNextVisitDate(c, 'Sábado'))).toBe('2026-06-27');
+  });
+
+  test('tras el primer Listo el ciclo sigue desde la ocurrencia completada', () => {
+    // markAsDone limpia specificDate y escribe lastVisited + doneFor.
+    const c = makeClient({
+      freq: 'biweekly',
+      specificDate: '',
+      lastVisited: new Date(2026, 6, 11, 10, 0) as any,
+      doneFor: '2026-07-11',
+    });
+    jest.setSystemTime(new Date(2026, 6, 11, 10, 1).getTime());
+    expect(key(getNextVisitDate(c, 'Sábado'))).toBe('2026-07-25');
+  });
+});
+
 describe('getNextVisitDate — casos base sin lastVisited', () => {
   test('cliente nuevo aparece en la próxima ocurrencia del día', () => {
     expect(key(getNextVisitDate(makeClient(), 'Sábado'))).toBe('2026-07-04');

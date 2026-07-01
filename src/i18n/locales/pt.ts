@@ -475,6 +475,11 @@ export default {
     freqBiweekly: 'A cada 2 Sem',
     freqTriweekly: 'A cada 3 Sem',
     freqMonthly: 'Mensal',
+    startDate: 'Começa',
+    startDateOptional: '(opcional, toque para escolher a data)',
+    startThisWeek: 'Esta semana',
+    firstVisit: 'Primeira visita: {{date}}',
+    clearStartDate: 'Remover data',
   },
 
   // Edit Client Modal

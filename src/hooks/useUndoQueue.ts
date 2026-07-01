@@ -68,6 +68,7 @@ export const useUndoQueue = () => {
     } else {
       updateClient(client.id, {
         lastVisited: previousData.lastVisited,
+        doneFor: previousData.doneFor ?? '',
         specificDate: previousData.specificDate,
         alarm: previousData.alarm,
         isStarred: previousData.isStarred,

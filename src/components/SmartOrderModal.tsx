@@ -79,6 +79,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   const updateClient = useClientsStore((s) => s.updateClient);
   const addNote = useClientsStore((s) => s.addNote);
   const clients = useClientsStore((s) => s.clients);
+  const canAddClient = useClientsStore((s) => s.canAddClient);
 
   // Calcula el valor final de la nota a guardar.
   // Orden de prioridad para determinar el mode:
@@ -126,6 +127,16 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
     try {
       if (result.tool === 'create_new_client') {
         const i = result.input;
+        // La IA también crea documentos de cliente: respeta el límite del
+        // plan free igual que el botón "+" (antes era un bypass).
+        if (!canAddClient) {
+          Alert.alert(
+            'Límite alcanzado',
+            'Llegaste al límite de clientes del plan gratuito. Pasate a Premium para crear más.',
+          );
+          setSaving(false);
+          return;
+        }
         await aiCreateClient({
           name: i.name,
           phone: i.phone || '',
@@ -312,7 +323,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
     } finally {
       setSaving(false);
     }
-  }, [result, aiCreateClient, scheduleFromDirectory, updateClient, addNote, clients, handleClose, text]);
+  }, [result, aiCreateClient, scheduleFromDirectory, updateClient, addNote, clients, canAddClient, handleClose, text]);
 
   const remainingUses = Math.max(0, usage.limit - usage.count);
 

@@ -406,7 +406,7 @@ export default {
     templatesSavedMsg: '',
     noClientsToExport: 'No clients to export.',
     noDataToExport: 'No data to export.',
-    duplicatesFoundMsg: '{{count}} duplicates found. Delete them?',
+    duplicatesFoundMsg: '{{count}} duplicates found. The copy with the most data is kept and its debts, transfers and family links move to it. Pending orders are not touched. Delete them?',
     promoSuccess: 'Premium activated',
     promoRedeemError: 'Could not redeem the code.',
     removePromoTitle: 'Remove Premium?',

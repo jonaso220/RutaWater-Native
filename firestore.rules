@@ -64,9 +64,36 @@ service cloud.firestore {
       allow read, write: if signedIn() && id.split('_')[0] == uid();
     }
 
-    // ── Uso de IA / overrides premium: docId == uid ─────────────────────────
-    match /aiUsage/{id}          { allow read, write: if signedIn() && id == uid(); }
-    match /premiumOverrides/{id} { allow read, write: if signedIn() && id == uid(); }
+    // ── Uso de IA: el contador solo puede avanzar. Sin esto, un cliente
+    //    modificado podía escribir count:0 y saltarse el límite mensual.
+    //    (Residual: cambiar la fecha del dispositivo altera `period`; cerrar
+    //    eso requiere contar los usos en el servidor.)
+    match /aiUsage/{id} {
+      allow read: if signedIn() && id == uid();
+      allow create: if signedIn() && id == uid()
+        && request.resource.data.count == 1;
+      allow update: if signedIn() && id == uid()
+        && (
+          (request.resource.data.period == resource.data.get('period', '')
+            && request.resource.data.count > resource.data.get('count', 0))
+          || (request.resource.data.period != resource.data.get('period', '')
+            && request.resource.data.count == 1)
+        );
+    }
+
+    // ── Premium por código promo: solo se activa con un código válido.
+    //    Las reglas no son legibles por los clientes, así que la lista de
+    //    códigos acá NO queda expuesta. Antes cualquier usuario podía
+    //    escribirse {active: true} y obtener premium gratis.
+    match /premiumOverrides/{id} {
+      allow read: if signedIn() && id == uid();
+      allow delete: if signedIn() && id == uid();
+      allow create, update: if signedIn() && id == uid() && (
+        request.resource.data.active == false ||
+        (request.resource.data.active == true
+          && request.resource.data.get('code', '') in ['RUTAFAMILIA', 'RUTAAMIGOS', 'RUTAVIP2026'])
+      );
+    }
 
     // ── Settings (plantillas + catálogo de productos): docId == uid o mi grupo
     match /settings/{id} {

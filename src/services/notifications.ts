@@ -21,13 +21,20 @@ let channelPromise: Promise<string> | null = null;
 const ensureAndroidChannel = async (): Promise<string> => {
   if (Platform.OS !== 'android') return ANDROID_CHANNEL_ID;
   if (!channelPromise) {
-    channelPromise = notifee.createChannel({
-      id: ANDROID_CHANNEL_ID,
-      name: 'Alarmas de visita',
-      importance: AndroidImportance.HIGH,
-      vibration: true,
-      sound: 'default',
-    });
+    channelPromise = notifee
+      .createChannel({
+        id: ANDROID_CHANNEL_ID,
+        name: 'Alarmas de visita',
+        importance: AndroidImportance.HIGH,
+        vibration: true,
+        sound: 'default',
+      })
+      .catch((e) => {
+        // No cachear el rechazo: un fallo transitorio dejaría TODAS las
+        // alarmas futuras sin programar hasta reiniciar la app.
+        channelPromise = null;
+        throw e;
+      });
   }
   return channelPromise;
 };
@@ -110,5 +117,20 @@ export const cancelClientAlarm = async (clientId: string): Promise<void> => {
     await notifee.cancelTriggerNotification(notificationIdFor(clientId));
   } catch (e) {
     reportError(e, 'cancelClientAlarm error');
+  }
+};
+
+/** Ids de cliente que tienen un trigger de alarma pendiente en ESTE dispositivo. */
+export const getScheduledAlarmClientIds = async (): Promise<Set<string>> => {
+  try {
+    const ids = await notifee.getTriggerNotificationIds();
+    return new Set(
+      ids
+        .filter((id) => id.startsWith('alarm-'))
+        .map((id) => id.slice('alarm-'.length)),
+    );
+  } catch (e) {
+    reportError(e, 'getScheduledAlarmClientIds error');
+    return new Set();
   }
 };

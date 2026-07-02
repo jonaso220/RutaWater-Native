@@ -202,6 +202,19 @@ const DirectoryScreen = () => {
   ];
 
   const handleClone = (client: Client) => {
+    // Clonar crea un doc nuevo: respeta el límite de clientes del plan free
+    // igual que el botón "+" (antes era un bypass).
+    if (!canAddClient) {
+      Alert.alert(
+        t('home.limitReached'),
+        t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
+        [
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
+        ],
+      );
+      return;
+    }
     Alert.alert(
       t('directory.cloneClient'),
       t('directory.cloneConfirm', { name: client.name }),

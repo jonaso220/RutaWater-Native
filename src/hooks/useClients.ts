@@ -1,5 +1,5 @@
 import { useCallback, useRef, useMemo } from 'react';
-import firestore from '@react-native-firebase/firestore';
+import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
 import { Client, RELATIONSHIP_INVERSE } from '../types';
@@ -919,6 +919,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     // Build groups by composite key: normalized name + normalized phone
     const groups: Record<string, Client[]> = {};
     clients.filter(c => !c.isNote).forEach(c => {
+      // Los pedidos "una vez" PENDIENTES no son duplicados: la propia app los
+      // crea a propósito sobre el mismo cliente (pedido extra desde Agendar,
+      // clonar para visita adicional). Borrarlos = perder una entrega.
+      if (c.freq === 'once' && !c.isCompleted) return;
       const normName = (c.name || '').toLowerCase().trim();
       if (!normName) return;
       const normPhone = normalizePhoneForComparison(c.phone);
@@ -951,6 +955,12 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         if ((c.lat && c.lng) || c.mapsLink) score += 5;
         // Has address
         if (c.address && c.address.trim()) score += 3;
+        // Vínculos familiares e historial de visitas: el doc "master" con
+        // años de datos no debe perder contra un duplicado recién creado
+        // que solo tiene productos cargados.
+        if (c.relationships) score += Object.keys(c.relationships).length * 15;
+        if (c.lastVisited || c.completedAt) score += 10;
+        if (c.alarm) score += 2;
         // More recently updated
         if (c.updatedAt) {
           const ts = (c.updatedAt as any).seconds || (c.updatedAt as any).getTime?.() / 1000 || 0;
@@ -977,10 +987,88 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     return { staleIds, details };
   }, [clients]);
 
-  // Delete stale duplicate clients in batches
+  // Delete stale duplicate clients in batches, migrating their data to the
+  // surviving copy first: debts/transfers point to the keeper (otherwise they
+  // go orphan and stop counting in the directory badge and the client modal),
+  // family links move over, and non-empty notes are preserved.
   const cleanupDuplicates = useCallback(async () => {
-    const { staleIds } = findDuplicateClients();
+    const { staleIds, details } = findDuplicateClients();
     if (staleIds.length === 0) return 0;
+
+    const byId = new Map(clientsRef.current.map((c) => [c.id, c]));
+    const FieldValue = firestore.FieldValue;
+
+    try {
+      const migrationOps: Array<{ ref: FirebaseFirestoreTypes.DocumentReference; data: Record<string, any> }> = [];
+
+      // 1) Reasignar deudas y transferencias del duplicado al que sobrevive.
+      //    Firestore limita `in` a 10 valores por consulta.
+      const staleToKeeper = new Map(details.map((d) => [d.staleId, d.activeId]));
+      for (const collection of ['debts', 'transfers'] as const) {
+        for (let i = 0; i < staleIds.length; i += 10) {
+          const chunk = staleIds.slice(i, i + 10);
+          const snap = await db.collection(collection).where('clientId', 'in', chunk).get();
+          snap.docs.forEach((docSnap) => {
+            const staleId = (docSnap.data() as any).clientId as string;
+            const keeperId = staleToKeeper.get(staleId);
+            const keeper = keeperId ? byId.get(keeperId) : undefined;
+            if (!keeper) return;
+            migrationOps.push({
+              ref: docSnap.ref,
+              data: {
+                clientId: keeper.id,
+                clientName: keeper.name || (docSnap.data() as any).clientName || '',
+              },
+            });
+          });
+        }
+      }
+
+      // 2) Mover vínculos familiares y completar notas faltantes del keeper.
+      details.forEach(({ staleId, activeId }) => {
+        const stale = byId.get(staleId);
+        const keeper = byId.get(activeId);
+        if (!stale || !keeper) return;
+
+        const keeperUpdates: Record<string, any> = {};
+        Object.entries(stale.relationships || {}).forEach(([targetId, type]) => {
+          if (targetId === activeId) return; // vínculo consigo mismo, descartar
+          const target = byId.get(targetId);
+          if (!target) return;
+          // El pariente apuntaba al duplicado: mover el backlink al keeper
+          // conservando el tipo inverso que ya tenía guardado.
+          const inverseType = target.relationships?.[staleId];
+          const targetUpdates: Record<string, any> = {
+            [`relationships.${staleId}`]: FieldValue.delete(),
+          };
+          if (inverseType && !target.relationships?.[activeId]) {
+            targetUpdates[`relationships.${activeId}`] = inverseType;
+          }
+          migrationOps.push({ ref: db.collection('clients').doc(targetId), data: targetUpdates });
+          if (!keeper.relationships?.[targetId]) {
+            keeperUpdates[`relationships.${targetId}`] = type;
+          }
+        });
+        if ((!keeper.notes || !keeper.notes.trim()) && stale.notes && stale.notes.trim()) {
+          keeperUpdates.notes = stale.notes;
+        }
+        if (Object.keys(keeperUpdates).length > 0) {
+          migrationOps.push({ ref: db.collection('clients').doc(activeId), data: keeperUpdates });
+        }
+      });
+
+      const OPS_PER_BATCH = 450;
+      for (let i = 0; i < migrationOps.length; i += OPS_PER_BATCH) {
+        const batch = db.batch();
+        migrationOps.slice(i, i + OPS_PER_BATCH).forEach(({ ref, data }) => batch.update(ref, data));
+        await batch.commit();
+      }
+    } catch (e) {
+      // Si la migración falla, NO borrar: mejor dejar los duplicados que
+      // perder deudas o vínculos.
+      reportError(e, 'Error migrating duplicate data');
+      throw e;
+    }
 
     const BATCH_SIZE = 450;
     for (let i = 0; i < staleIds.length; i += BATCH_SIZE) {
@@ -990,6 +1078,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         batch.delete(db.collection('clients').doc(id));
       });
       await batch.commit();
+      await Promise.all(chunk.map((id) => cancelClientAlarm(id)));
     }
     return staleIds.length;
   }, [findDuplicateClients]);

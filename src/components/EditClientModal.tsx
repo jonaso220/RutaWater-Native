@@ -25,6 +25,7 @@ import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
 import { getModalWidth } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
+import { scheduleClientAlarm } from '../services/notifications';
 
 interface EditClientModalProps {
   visible: boolean;
@@ -273,6 +274,25 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     if (mapsLink.trim() !== (client.mapsLink || '').trim()) data.mapsLink = mapsLink.trim();
     try {
       await onSave(client.id, data);
+      // Si el cliente tenía alarma y el guardado le cambió el día o la fecha,
+      // reprogramar el trigger de notifee: hasta ahora quedaba apuntando al
+      // día viejo aunque la campana siguiera encendida en el día nuevo.
+      const savedDay = (data as any).visitDay as string | undefined;
+      const savedDate = (data as any).specificDate as string | undefined;
+      const dayMoved = savedDay !== undefined && savedDay !== client.visitDay;
+      const dateMoved = savedDate !== undefined && savedDate !== (client.specificDate || '');
+      if (client.alarm && (dayMoved || dateMoved)) {
+        void scheduleClientAlarm(
+          client.id,
+          (data.name ?? client.name) || '',
+          (data.address ?? client.address) || '',
+          client.alarm,
+          {
+            targetDay: savedDay || client.visitDay,
+            specificDate: freq === 'once' ? (savedDate || client.specificDate) : undefined,
+          },
+        );
+      }
       onClose();
     } catch (e) {
       Alert.alert(t('error'), t('editModal.saveError'));

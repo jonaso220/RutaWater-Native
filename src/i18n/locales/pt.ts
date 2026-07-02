@@ -406,7 +406,7 @@ export default {
     templatesSavedMsg: '',
     noClientsToExport: 'Nao ha clientes para exportar.',
     noDataToExport: 'Nao ha dados para exportar.',
-    duplicatesFoundMsg: '{{count}} duplicados encontrados. Excluir?',
+    duplicatesFoundMsg: '{{count}} duplicados encontrados. A copia com mais dados e mantida e suas dividas, transferencias e familiares passam para ela. Pedidos pendentes nao sao tocados. Excluir?',
     promoSuccess: 'Premium ativado',
     promoRedeemError: 'Nao foi possivel resgatar o codigo.',
     removePromoTitle: 'Remover Premium?',

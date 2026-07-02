@@ -87,7 +87,7 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
     const totalByKey: Record<string, number> = {};
     const totalByClientId: Record<string, number> = {};
     debts.forEach((d) => {
-      const amt = d.amount || 0;
+      const amt = Number(d.amount) || 0;
       totalByClientId[d.clientId] = (totalByClientId[d.clientId] || 0) + amt;
       const key = keyByClientId[d.clientId];
       if (key !== undefined) totalByKey[key] = (totalByKey[key] || 0) + amt;

@@ -179,6 +179,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     if (markingDoneRef.current.has(clientId)) return;
     markingDoneRef.current.add(clientId);
     try {
+      // La notificación local ya programada debe cancelarse acá: escribir
+      // alarm:'' solo limpia el campo, el trigger de notifee sonaría igual
+      // después de entregar. (cancelClientAlarm nunca rechaza.)
+      void cancelClientAlarm(clientId);
       if (client.isNote) {
         // Notes: delete permanently (they don't belong in the directory)
         await db.collection('clients').doc(clientId).delete();
@@ -278,11 +282,14 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
               listOrder: 0,
               isCompleted: false,
               completedAt: null,
+              alarm: '',
               updatedAt: new Date(),
             });
           }
         });
         await batch.commit();
+        // Fuera de la ruta ⇒ sus alarmas pendientes ya no corresponden.
+        await Promise.all(chunk.map((c) => cancelClientAlarm(c.id)));
       }
     } catch (e) {
       reportError(e, 'Error clearing completed');
@@ -303,7 +310,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           visitDay: remainingDays[0],
         });
       } else {
-        // Last (or only) day — move to directory
+        // Last (or only) day — move to directory. Sale de la ruta: su alarma
+        // pendiente ya no corresponde (se cancela el trigger y el campo).
+        void cancelClientAlarm(clientId);
         await db.collection('clients').doc(clientId).update({
           freq: 'on_demand',
           visitDay: 'Sin Asignar',
@@ -313,6 +322,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           listOrder: 0,
           isCompleted: false,
           completedAt: null,
+          alarm: '',
         });
       }
     } catch (e) {
@@ -444,12 +454,15 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       const isRecurringScheduleEdit = newFreq !== 'once' && newFreq !== 'on_demand';
 
       if (clientData.freq === 'on_demand' || clientData.visitDay === 'Sin Asignar') {
-        // Reactivate existing client
+        // Reactivate existing client. newData pisa alarm:'' → cancelar también
+        // el trigger programado para que no suene una alarma vieja.
+        void cancelClientAlarm(clientData.id);
         await db.collection('clients').doc(clientData.id).update(newData);
       } else if (mode === 'replace' || isRecurringScheduleEdit) {
         // Move/replace: update the existing pending-order doc in place
         // (e.g. user said "movélo del 29-4 al 6 de mayo"), or the user is
         // editing the recurring schedule of an already-active client.
+        void cancelClientAlarm(clientData.id);
         await db.collection('clients').doc(clientData.id).update(newData);
       } else {
         // Add: keep the existing order and add a new one (only reached for
@@ -466,6 +479,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
         if (existingOnDemand) {
           // Reuse the on_demand document instead of creating a new one
+          void cancelClientAlarm(existingOnDemand.id);
           await db.collection('clients').doc(existingOnDemand.id).update(newData);
         } else {
           newData.createdAt = new Date();
@@ -491,9 +505,12 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   // if the alarm was cleared / failed) so the UI can confirm to the user.
   const saveAlarm = useCallback(async (clientId: string, time: string, targetDay?: string): Promise<Date | null> => {
     try {
-      await db.collection('clients').doc(clientId).update({ alarm: time });
       if (time) {
-        await requestNotificationPermission();
+        // Sin permiso de notificaciones no hay alarma real: no escribir el
+        // campo (la campana quedaría "activa" sin que nada vaya a sonar).
+        const granted = await requestNotificationPermission();
+        if (!granted) return null;
+
         const client = clientsRef.current.find((c) => c.id === clientId);
         // Prefer the day the user is currently viewing; fall back to the client's
         // configured visit day(s) so the alarm fires on the right delivery day.
@@ -501,7 +518,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           targetDay ||
           (client?.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined) ||
           client?.visitDay;
-        return await scheduleClientAlarm(
+        const fireAt = await scheduleClientAlarm(
           clientId,
           client?.name || '',
           client?.address || '',
@@ -511,7 +528,14 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
             specificDate: client?.freq === 'once' ? client?.specificDate : undefined,
           },
         );
+        // El campo se escribe solo si la notificación quedó programada de
+        // verdad; si notifee falló, la UI no debe mostrar la campana activa.
+        if (fireAt) {
+          await db.collection('clients').doc(clientId).update({ alarm: time });
+        }
+        return fireAt;
       } else {
+        await db.collection('clients').doc(clientId).update({ alarm: '' });
         await cancelClientAlarm(clientId);
         return null;
       }

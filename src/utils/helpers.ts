@@ -535,6 +535,36 @@ export const formatDate = (date: Date | null): string => {
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
 };
 
+// Parseo de montos en formato rioplatense: la coma es el separador decimal y
+// el punto (o espacio) separa miles — "1.500" son mil quinientos y "150,50"
+// son ciento cincuenta con cincuenta. parseFloat haría 1.5 y 150. Un punto
+// solo se toma como decimal cuando le siguen 1-2 dígitos finales ("150.50").
+// Devuelve NaN si no se puede interpretar.
+export const parseMoneyInput = (raw: string | undefined | null): number => {
+  if (raw === undefined || raw === null) return NaN;
+  let s = String(raw).trim().replace(/[$\s]/g, '');
+  if (!s) return NaN;
+  const commas = (s.match(/,/g) || []).length;
+  if (commas > 1) return NaN;
+  if (commas === 1) {
+    // Coma decimal; los puntos que queden son de miles.
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes('.')) {
+    const parts = s.split('.');
+    const last = parts[parts.length - 1];
+    const isDecimalDot = parts.length === 2 && last.length >= 1 && last.length <= 2;
+    if (!isDecimalDot) {
+      // "1.500" / "1.234.567" → puntos de miles (cada grupo debe tener 3 dígitos)
+      if (parts.slice(1).some((p) => p.length !== 3)) return NaN;
+      s = parts.join('');
+    }
+  }
+  if (!/^\d+(\.\d+)?$/.test(s)) return NaN;
+  const n = Number(s);
+  // Dos decimales máximo (es plata): evita flotantes raros tipo 150.500000001
+  return isFinite(n) ? Math.round(n * 100) / 100 : NaN;
+};
+
 export const normalizePhone = (phone: string): string => {
   if (!phone) return '';
   const clean = phone.replace(/\D/g, '');

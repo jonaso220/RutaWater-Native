@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, fuzzyMatch, matchScore, getClientMatchKey, getModalWidth } from '../utils/helpers';
+import { normalizePhone, fuzzyMatch, matchScore, getClientMatchKey, getModalWidth, parseMoneyInput } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -145,7 +145,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           grouped[key].clientId = client.id;
         }
       }
-      grouped[key].total += debt.amount || 0;
+      grouped[key].total += Number(debt.amount) || 0;
       grouped[key].debts.push(debt);
       const age = getAgeDays(debt.createdAt);
       if (age > grouped[key].maxAgeDays) {
@@ -205,7 +205,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 
   const handleAddDebt = async () => {
     if (!selectedClient || !onAddDebt || saving) return;
-    const amount = parseFloat(addAmount);
+    const amount = parseMoneyInput(addAmount);
     if (!amount || amount <= 0) return;
     setSaving(true);
     try {
@@ -226,7 +226,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   };
 
   const handleSaveEdit = async (debtId: string) => {
-    const amount = parseFloat(editAmount);
+    const amount = parseMoneyInput(editAmount);
     if (!amount || amount <= 0 || saving) return;
     setSaving(true);
     try {
@@ -238,7 +238,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     }
   };
 
-  const grandTotal = debts.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const grandTotal = debts.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
   // Cuenta clientes únicos por matchKey para no contar el mismo cliente dos veces cuando tiene instancias duplicadas
   const uniqueClients = clientGroups.length;
 

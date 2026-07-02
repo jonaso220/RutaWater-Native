@@ -514,11 +514,16 @@ const HomeScreen = () => {
 
       hapticLight();
       markAsDone(client.id, client, selectedDayRef.current);
-      pushUndo({
-        client,
-        previousData,
-        sectionDay: selectedDayRef.current,
-      });
+      // Las notas se BORRAN al marcarlas listas — no hay doc que restaurar,
+      // así que ofrecer "deshacer" sería mentirle al usuario (el update
+      // fallaría en silencio).
+      if (!client.isNote) {
+        pushUndo({
+          client,
+          previousData,
+          sectionDay: selectedDayRef.current,
+        });
+      }
     },
     [markAsDone, pushUndo],
   );
@@ -800,17 +805,25 @@ const HomeScreen = () => {
         }
       }
 
-      // Map neighbor to position in the full day client list
+      // Map neighbor to position in the full day client list.
+      // changePosition espera la posición FINAL (con el arrastrado ya
+      // removido de la lista): si el arrastrado venía ANTES que el vecino
+      // (drag hacia abajo), el índice del vecino en la lista original está
+      // corrido +1 y hay que descontarlo — sin esto toda caída hacia abajo
+      // terminaba un lugar más abajo de donde se soltó.
       const day = selectedDayRef.current;
       const allDayClients = getAllDayClients(day);
+      const movedIdx = allDayClients.findIndex((c) => c.id === movedItem.client.id);
       let targetPos: number;
 
       if (prevClientId) {
         const prevIdx = allDayClients.findIndex((c) => c.id === prevClientId);
-        targetPos = prevIdx >= 0 ? prevIdx + 2 : 1;
+        const draggedDown = movedIdx >= 0 && prevIdx >= 0 && movedIdx < prevIdx;
+        targetPos = prevIdx >= 0 ? prevIdx + (draggedDown ? 1 : 2) : 1;
       } else if (nextClientId) {
         const nextIdx = allDayClients.findIndex((c) => c.id === nextClientId);
-        targetPos = nextIdx >= 0 ? nextIdx + 1 : 1;
+        const draggedDown = movedIdx >= 0 && nextIdx >= 0 && movedIdx < nextIdx;
+        targetPos = nextIdx >= 0 ? nextIdx + (draggedDown ? 0 : 1) : 1;
       } else {
         targetPos = 1;
       }
@@ -1077,6 +1090,13 @@ const HomeScreen = () => {
           accessibilityLabel={t('home.calendar')}
         >
           <Text style={[styles.actionBtnText, styles.actionBtnCalendarText]}>📅 {t('home.calendar')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnCalendar]}
+          onPress={() => setShowDailyLoadModal(true)}
+          accessibilityLabel={t('home.dailyLoad')}
+        >
+          <Text style={[styles.actionBtnText, styles.actionBtnCalendarText]}>🚚 {t('home.dailyLoad')}</Text>
         </TouchableOpacity>
         {pendingTransferCount > 0 && (
           <TouchableOpacity

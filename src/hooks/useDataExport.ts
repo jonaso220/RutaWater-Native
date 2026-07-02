@@ -14,7 +14,11 @@ interface ExportUser {
 }
 
 const escapeCsv = (val: string | number | boolean | undefined | null): string => {
-  const str = String(val ?? '');
+  let str = String(val ?? '');
+  // Neutralizar inyección de fórmulas: Excel/Sheets ejecutan celdas que
+  // empiezan con = + - @ (un nombre/nota malicioso podría colar un
+  // =HYPERLINK). El apóstrofe inicial las fuerza a texto plano.
+  if (/^[=+\-@\t\r]/.test(str)) str = "'" + str;
   if (str.includes(',') || str.includes('"') || str.includes('\n')) {
     return '"' + str.replace(/"/g, '""') + '"';
   }
@@ -41,7 +45,8 @@ export const useDataExport = (user: ExportUser) => {
 
   const handleExportCSV = async () => {
     try {
-      const allClients = clients.filter((c) => c.name);
+      // Las notas sueltas (isNote) no son clientes: salían como filas "NOTA".
+      const allClients = clients.filter((c) => c.name && !c.isNote);
       if (allClients.length === 0) {
         Alert.alert(t('settings.noDataCSV'), t('settings.noClientsToExport'));
         return;
@@ -64,7 +69,9 @@ export const useDataExport = (user: ExportUser) => {
           escapeCsv(c.name),
           escapeCsv(c.phone),
           escapeCsv(c.address),
-          escapeCsv(c.visitDay || (c.visitDays || []).join(', ')),
+          // visitDays primero: un cliente multi-día exportaba un solo día
+          // (visitDay siempre está seteado y ganaba la precedencia).
+          escapeCsv((c.visitDays && c.visitDays.length > 0) ? c.visitDays.join(' / ') : (c.visitDay || '')),
           escapeCsv(FREQUENCY_LABELS[c.freq as Frequency] || c.freq || ''),
           escapeCsv(prodParts.join(', ')),
           escapeCsv(c.notes || ''),
@@ -107,6 +114,20 @@ export const useDataExport = (user: ExportUser) => {
           products: c.products || {}, isStarred: c.isStarred || false,
           alarm: c.alarm || '', mapsLink: c.mapsLink || '', isNote: c.isNote || false,
           hasDebt: c.hasDebt || false,
+          // Estado de ciclo y orden de ruta: sin estos campos el backup no
+          // permitía restaurar qué se entregó ni el orden de cada día.
+          isCompleted: c.isCompleted || false,
+          isInactive: c.isInactive || false,
+          lastVisited: (c.lastVisited as any)?.seconds
+            ? new Date((c.lastVisited as any).seconds * 1000).toISOString()
+            : '',
+          completedAt: (c.completedAt as any)?.seconds
+            ? new Date((c.completedAt as any).seconds * 1000).toISOString()
+            : '',
+          doneFor: c.doneFor || '',
+          listOrder: c.listOrder ?? 0,
+          listOrders: c.listOrders || {},
+          relationships: c.relationships || {},
         })),
         debts: debts.map((d) => ({
           id: d.id, clientId: d.clientId, clientName: d.clientName || '',

@@ -95,10 +95,13 @@ export const useAiParse = (): UseAiParseReturn => {
     setLimitReached(false);
 
     try {
-      // 1) Chequear y consumir 1 parseo del contador mensual
-      const tryConsume = useAiUsageStore.getState().tryConsume;
-      const allowed = await tryConsume();
-      if (!allowed) {
+      // 1) Chequear el límite con el contador local (alimentado por el
+      //    listener en vivo). El consumo real se hace DESPUÉS de un parseo
+      //    exitoso: antes se cobraba antes del fetch, así que un corte de red
+      //    quemaba el cupo sin resultado, y un fallo de la transacción
+      //    (p. ej. sin conexión) se mostraba como "llegaste al límite".
+      const { count, limit, loading } = useAiUsageStore.getState();
+      if (!loading && limit > 0 && count >= limit) {
         setLimitReached(true);
         return null;
       }
@@ -167,10 +170,22 @@ export const useAiParse = (): UseAiParseReturn => {
       }
 
       const data = (await res.json()) as ParseResult;
+
+      // Consumir 1 uso recién ahora, con el resultado en mano. Best-effort:
+      // si la transacción falla (o el límite se alcanzó en paralelo desde
+      // otro dispositivo), el usuario ya tiene su respuesta — las reglas de
+      // Firestore impiden decrementos, así que no hay "devolución" posible
+      // y cobrar después del éxito es el orden justo.
+      useAiUsageStore.getState().tryConsume().catch(() => {});
+
       return data;
     } catch (e: any) {
-      const msg = e?.message || 'Error desconocido';
-      console.warn('[useAiParse] error:', msg);
+      const raw = e?.message || 'Error desconocido';
+      const isNetwork = /network request failed|failed to fetch|abort/i.test(raw);
+      const msg = isNetwork
+        ? 'Sin conexión. Verificá tu internet e intentá de nuevo.'
+        : raw;
+      console.warn('[useAiParse] error:', raw);
       setError(msg);
       return null;
     } finally {

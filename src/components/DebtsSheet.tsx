@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, fuzzyMatch, matchScore, getClientMatchKey, getModalWidth, parseMoneyInput } from '../utils/helpers';
+import { normalizePhone, normalizePhoneForComparison, fuzzyMatch, matchScore, getClientMatchKey, getModalWidth, parseMoneyInput } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -113,13 +113,23 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 
     debts.forEach((debt) => {
       let client = clients.find((c) => c.id === debt.clientId);
-      // Fallback: si el clientId está huérfano, intenta resolver por nombre.
+      // Fallback: si el clientId está huérfano, intenta resolver por nombre —
+      // pero SOLO cuando es inequívoco. Con homónimos (dos "María" con
+      // teléfonos distintos), colgar la deuda de cualquiera manda el
+      // recordatorio y el cobro a la persona equivocada; mejor tarjeta propia.
       if (!client && debt.clientName) {
         const candidates = clientsByName[debt.clientName.toLowerCase().trim()] || [];
-        // Preferir una instancia con teléfono (mejor matching para getMatchingIds)
-        client = candidates.find((c) => c.phone) || candidates[0];
+        const distinctPhones = new Set(
+          candidates.map((c) => normalizePhoneForComparison(c.phone || '')).filter(Boolean),
+        );
+        if (distinctPhones.size <= 1) {
+          // Preferir una instancia con teléfono (mejor matching para getMatchingIds)
+          client = candidates.find((c) => c.phone) || candidates[0];
+        }
       }
-      const name = debt.clientName || client?.name || '';
+      // Nombre vivo primero: el congelado en la deuda queda viejo tras un
+      // rename y partía la tarjeta en dos.
+      const name = client?.name || debt.clientName || '';
       const phone = client?.phone || '';
       const key = getClientMatchKey(name, phone, debt.clientId);
 

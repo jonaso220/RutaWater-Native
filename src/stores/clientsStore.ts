@@ -14,7 +14,9 @@ interface ClientsStore {
   undoComplete: (clientId: string) => Promise<void>;
   deleteAllCompleted: (day: string) => Promise<void>;
   deleteFromDay: (clientId: string, day: string) => Promise<void>;
-  updateClient: (clientId: string, data: Partial<Client>) => Promise<void>;
+  // Devuelven true si el write llegó a Firestore (la IA los usa para no
+  // confirmar "Listo" cuando en realidad falló).
+  updateClient: (clientId: string, data: Partial<Client>) => Promise<boolean>;
   scheduleFromDirectory: (
     client: Client,
     days: string[],
@@ -23,10 +25,10 @@ interface ClientsStore {
     notes: string,
     products: Record<string, number>,
     mode?: 'add' | 'replace',
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   toggleStar: (clientId: string, currentValue: boolean) => Promise<void>;
   saveAlarm: (clientId: string, time: string, targetDay?: string) => Promise<Date | null>;
-  addNote: (notesText: string, date: string) => Promise<void>;
+  addNote: (notesText: string, date: string) => Promise<boolean>;
   addClient: (
     name: string,
     address: string,
@@ -46,7 +48,7 @@ interface ClientsStore {
     freq: Frequency;
     visitDay: string;
     specificDate: string;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   changePosition: (clientId: string, newPos: number, day: string) => Promise<void>;
   deleteClient: (clientId: string) => Promise<void>;
   cloneClient: (client: Client) => Promise<void>;
@@ -73,11 +75,11 @@ export const useClientsStore = create<ClientsStore>()(() => ({
   undoComplete: noop,
   deleteAllCompleted: noop,
   deleteFromDay: noop,
-  updateClient: noop,
+  updateClient: async () => false,
   scheduleFromDirectory: noop as any,
   toggleStar: noop,
   saveAlarm: async () => null,
-  addNote: noop,
+  addNote: async () => false,
   addClient: noop as any,
   aiCreateClient: noop as any,
   changePosition: noop,

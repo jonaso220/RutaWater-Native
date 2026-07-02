@@ -109,7 +109,10 @@ const DirectoryScreen = () => {
     debts.forEach((d) => {
       if (!(d.amount > 0)) return;
       const c = clients.find((cl) => cl.id === d.clientId);
-      const name = d.clientName || c?.name || '';
+      // Nombre vivo primero: el congelado en la deuda queda viejo tras un
+      // rename y sacaba al cliente del filtro "con deuda" aunque su tarjeta
+      // mostrara el badge rojo.
+      const name = c?.name || d.clientName || '';
       const phone = c?.phone || '';
       set.add(getClientMatchKey(name, phone, d.clientId));
     });

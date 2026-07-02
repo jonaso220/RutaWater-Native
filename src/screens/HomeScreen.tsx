@@ -28,7 +28,6 @@ import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
 import { useDebtsStore } from '../stores/debtsStore';
 import { useTransfersStore } from '../stores/transfersStore';
-import { useDailyLoadsStore } from '../stores/dailyLoadsStore';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
@@ -41,7 +40,6 @@ import EditClientModal from '../components/EditClientModal';
 import DebtModal from '../components/DebtModal';
 import ProductCounter from '../components/ProductCounter';
 import NoteModal from '../components/NoteModal';
-import DailyLoadModal from '../components/DailyLoadModal';
 import TransfersSheet from '../components/TransfersSheet';
 import DebtsSheet from '../components/DebtsSheet';
 import AddClientModal from '../components/AddClientModal';
@@ -231,9 +229,6 @@ const HomeScreen = () => {
   const hasPendingTransfer = useTransfersStore((s) => s.hasPendingTransfer);
   const addTransfer = useTransfersStore((s) => s.addTransfer);
   const markTransferReviewed = useTransfersStore((s) => s.markTransferReviewed);
-  const dailyLoad = useDailyLoadsStore((s) => s.dailyLoad);
-  const loadForDay = useDailyLoadsStore((s) => s.loadForDay);
-  const saveDailyLoad = useDailyLoadsStore((s) => s.saveDailyLoad);
 
   const scrollRef = useRef<any>(null);
   useScrollToTop(scrollRef);
@@ -248,7 +243,6 @@ const HomeScreen = () => {
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [debtClient, setDebtClient] = useState<Client | null>(null);
   const [showNoteModal, setShowNoteModal] = useState(false);
-  const [showDailyLoadModal, setShowDailyLoadModal] = useState(false);
   const [showTransfersSheet, setShowTransfersSheet] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [showSmartModal, setShowSmartModal] = useState(false);
@@ -488,14 +482,12 @@ const HomeScreen = () => {
 
   const isDragEnabled = debouncedSearchTerm.trim().length === 0 && activeFilters.size === 0;
 
-  // Load daily load data when day changes + scroll to top
+  // Scroll to top on day change for instant feel
   useEffect(() => {
-    loadForDay(deferredDay);
-    // Scroll to top on day change for instant feel
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
     });
-  }, [deferredDay, loadForDay]);
+  }, [deferredDay]);
 
   const handleMarkDone = useCallback(
     (client: Client) => {
@@ -1091,13 +1083,6 @@ const HomeScreen = () => {
         >
           <Text style={[styles.actionBtnText, styles.actionBtnCalendarText]}>📅 {t('home.calendar')}</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnCalendar]}
-          onPress={() => setShowDailyLoadModal(true)}
-          accessibilityLabel={t('home.dailyLoad')}
-        >
-          <Text style={[styles.actionBtnText, styles.actionBtnCalendarText]}>🚚 {t('home.dailyLoad')}</Text>
-        </TouchableOpacity>
         {pendingTransferCount > 0 && (
           <TouchableOpacity
             style={[styles.actionBtn, styles.actionBtnTransfer]}
@@ -1293,15 +1278,6 @@ const HomeScreen = () => {
         visible={showNoteModal}
         onSave={addNote}
         onClose={() => setShowNoteModal(false)}
-      />
-
-      {/* Daily Load Modal */}
-      <DailyLoadModal
-        visible={showDailyLoadModal}
-        day={selectedDay}
-        initialData={dailyLoad}
-        onSave={saveDailyLoad}
-        onClose={() => setShowDailyLoadModal(false)}
       />
 
       {/* Add Client Modal */}

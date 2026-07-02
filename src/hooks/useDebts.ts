@@ -2,7 +2,7 @@ import { useCallback, useRef, useMemo } from 'react';
 import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 import { Debt, Client } from '../types';
-import { getClientMatchKey } from '../utils/helpers';
+import { getClientMatchKey, normalizePhoneForComparison } from '../utils/helpers';
 import { useDebtsQuery } from './queries/useDebtsQuery';
 
 interface UseDebtsProps {
@@ -159,10 +159,19 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
         let existingIds = getExistingMatchingIds(debt.clientId);
         if (existingIds.length === 0 && debt.clientName) {
           const norm = (s: string) => (s || '').toLowerCase().trim();
-          existingIds = clientsRef.current
-            .filter((c) => !c.isNote && norm(c.name || '') === norm(debt.clientName))
-            .map((c) => c.id);
-          candidateIds = [...new Set([...candidateIds, ...existingIds])];
+          const candidates = clientsRef.current.filter(
+            (c) => !c.isNote && norm(c.name || '') === norm(debt.clientName),
+          );
+          // Solo cuando el nombre es inequívoco: con homónimos de teléfonos
+          // distintos, apagarle hasDebt a la persona equivocada es peor que
+          // dejar el flag como está.
+          const distinctPhones = new Set(
+            candidates.map((c) => normalizePhoneForComparison(c.phone || '')).filter(Boolean),
+          );
+          if (distinctPhones.size <= 1) {
+            existingIds = candidates.map((c) => c.id);
+            candidateIds = [...new Set([...candidateIds, ...existingIds])];
+          }
         }
 
         await db.collection('debts').doc(debt.id).delete();

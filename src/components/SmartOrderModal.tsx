@@ -19,7 +19,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
 import { useAllProducts } from '../stores/productCatalogStore';
-import { getModalWidth } from '../utils/helpers';
+import { getModalWidth, getDayIndex, sanitizePhone, isSafeUrl } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import { useAiParse, ParseResult, NotesMode } from '../hooks/useAiParse';
 import { useAiUsageStore } from '../stores/aiUsageStore';
@@ -58,6 +58,30 @@ const inferNotesModeFromUserText = (userText: string): NotesMode | null => {
   // Verbos que ya implican nota sin mencionar la palabra: "anotá que ...", "anota que ..."
   if (/\banot[áa]\b/i.test(t)) return 'append';
   return null;
+};
+
+// Validación de lo que devuelve la IA antes de escribir en Firestore: una
+// fecha malformada producía dayNames[NaN] = undefined (write rechazado en
+// silencio) y un día fuera del enum creaba un cliente invisible en todas las
+// listas de día.
+const isValidDateStr = (s: string): boolean =>
+  /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s + 'T12:00:00').getTime());
+
+const DAY_CANON = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+// "miércoles"/"MARTES"/"sabado" → nombre canónico; '' si no es un día real.
+const normalizeDayName = (d: string): string => {
+  const idx = getDayIndex(d || '');
+  return idx >= 0 ? DAY_CANON[idx] : '';
+};
+
+// Set absoluto de productos de la IA: solo enteros positivos razonables.
+const cleanProductSet = (p: Record<string, number> | undefined): Record<string, number> => {
+  const out: Record<string, number> = {};
+  Object.entries(p || {}).forEach(([k, v]) => {
+    const n = Math.round(Number(v));
+    if (Number.isFinite(n) && n > 0 && n <= 9999) out[k] = n;
+  });
+  return out;
 };
 
 const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) => {
@@ -137,17 +161,33 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        await aiCreateClient({
+        if (i.specificDate && !isValidDateStr(i.specificDate)) {
+          Alert.alert('Error', `La IA devolvió una fecha inválida ("${i.specificDate}"). Reformulá el pedido con la fecha clara.`);
+          setSaving(false);
+          return;
+        }
+        const newVisitDay = i.visitDay ? normalizeDayName(i.visitDay) : '';
+        if (i.visitDay && !newVisitDay) {
+          Alert.alert('Error', `La IA devolvió un día inválido ("${i.visitDay}"). Reformulá el pedido con el día claro.`);
+          setSaving(false);
+          return;
+        }
+        const created = await aiCreateClient({
           name: i.name,
-          phone: i.phone || '',
+          phone: sanitizePhone(i.phone || ''),
           address: i.address || '',
-          mapsLink: i.mapsLink || '',
+          mapsLink: i.mapsLink && isSafeUrl(i.mapsLink) ? i.mapsLink : '',
           notes: i.notes || '',
-          products: i.products || {},
+          products: cleanProductSet(i.products),
           freq: i.freq as Frequency,
-          visitDay: i.visitDay || '',
+          visitDay: newVisitDay,
           specificDate: i.specificDate || '',
         });
+        if (!created) {
+          Alert.alert('Error', 'No se pudo crear el cliente. Verificá la conexión e intentá de nuevo.');
+          setSaving(false);
+          return;
+        }
         Alert.alert('Listo', `Cliente "${i.name}" creado.`);
         handleClose();
         return;
@@ -181,7 +221,12 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         const updates: any = { products: merged, updatedAt: new Date() };
         const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
         if (nextNotes !== undefined) updates.notes = nextNotes;
-        await updateClient(client.id, updates);
+        const mergedOk = await updateClient(client.id, updates);
+        if (!mergedOk) {
+          Alert.alert('Error', 'No se pudo actualizar el pedido. Verificá la conexión e intentá de nuevo.');
+          setSaving(false);
+          return;
+        }
         const addCount = Object.keys(i.add_products || {}).length;
         const removeCount = Object.keys(i.remove_products || {}).length;
         const verb =
@@ -202,9 +247,9 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           return;
         }
         const updates: Record<string, string> = {};
-        if (i.mapsLink) updates.mapsLink = i.mapsLink;
+        if (i.mapsLink && isSafeUrl(i.mapsLink)) updates.mapsLink = i.mapsLink;
         if (i.address) updates.address = i.address;
-        if (i.phone) updates.phone = i.phone;
+        if (i.phone) updates.phone = sanitizePhone(i.phone);
         const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
         if (nextNotes !== undefined) updates.notes = nextNotes;
         if (Object.keys(updates).length === 0) {
@@ -212,7 +257,12 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        await updateClient(client.id, updates as any);
+        const updatedOk = await updateClient(client.id, updates as any);
+        if (!updatedOk) {
+          Alert.alert('Error', 'No se pudieron guardar los datos. Verificá la conexión e intentá de nuevo.');
+          setSaving(false);
+          return;
+        }
         Alert.alert('Listo', `Datos de ${i.matched_client_name} actualizados.`);
         handleClose();
         return;
@@ -239,16 +289,39 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        const freq: Frequency = i.freq === 'keep' ? (client.freq as Frequency) : (i.freq as Frequency);
-        let days = i.visitDay ? [i.visitDay] : (client.visitDays && client.visitDays.length ? client.visitDays : (client.visitDay ? [client.visitDay] : []));
+        if (i.specificDate && !isValidDateStr(i.specificDate)) {
+          Alert.alert('Error', `La IA devolvió una fecha inválida ("${i.specificDate}"). Reformulá el pedido con la fecha clara.`);
+          setSaving(false);
+          return;
+        }
+        const schedVisitDay = i.visitDay ? normalizeDayName(i.visitDay) : '';
+        if (i.visitDay && !schedVisitDay) {
+          Alert.alert('Error', `La IA devolvió un día inválido ("${i.visitDay}"). Reformulá el pedido con el día claro.`);
+          setSaving(false);
+          return;
+        }
+        let freq: Frequency = i.freq === 'keep' ? (client.freq as Frequency) : (i.freq as Frequency);
+        // 'keep' sobre un cliente de directorio hereda on_demand (la guardia de
+        // arriba solo bloquea el on_demand explícito). Sin fecha sería un no-op
+        // silencioso con "Listo" en falso; con fecha, la intención es un pedido
+        // puntual.
+        if (freq === 'on_demand') {
+          if (i.specificDate) {
+            freq = 'once';
+          } else {
+            Alert.alert('Nada para agendar', 'El pedido no tiene día ni fecha. Especificá cuándo (por ej. "para el sábado").');
+            setSaving(false);
+            return;
+          }
+        }
+        let days = schedVisitDay ? [schedVisitDay] : (client.visitDays && client.visitDays.length ? client.visitDays : (client.visitDay ? [client.visitDay] : []));
         // Pedido periódico con fecha ("semanal a partir del sábado 11") sin día
         // explícito: el día de visita pasa a ser el de la fecha, que actúa como
         // ancla de inicio en scheduleFromDirectory.
-        if (i.specificDate && !i.visitDay && freq !== 'once' && freq !== 'on_demand') {
+        if (i.specificDate && !schedVisitDay && freq !== 'once') {
           const anchorDay = new Date(i.specificDate + 'T12:00:00');
           if (!isNaN(anchorDay.getTime())) {
-            const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-            days = [dayNames[anchorDay.getDay()]];
+            days = [DAY_CANON[anchorDay.getDay()]];
           }
         }
         // Resolve notes via shared resolver (supports notes_mode = clear/replace/append/keep).
@@ -264,7 +337,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
                       || (i.remove_products && Object.keys(i.remove_products).length > 0);
         let productsToPass: Record<string, number>;
         if (hasAbsoluteSet) {
-          productsToPass = i.products;
+          productsToPass = cleanProductSet(i.products);
         } else if (hasDelta) {
           productsToPass = {};
           const current = (client.products || {}) as Record<string, string | number>;
@@ -289,7 +362,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         // expected to set it explicitly, but this matches the most common intent ("movélo a X").
         // If the current client is on_demand the store already updates in place regardless.
         const scheduleMode: 'add' | 'replace' = i.schedule_mode === 'add' ? 'add' : 'replace';
-        await scheduleFromDirectory(
+        const scheduledOk = await scheduleFromDirectory(
           client,
           days,
           freq,
@@ -298,6 +371,11 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           productsToPass,
           scheduleMode,
         );
+        if (!scheduledOk) {
+          Alert.alert('Error', 'No se pudo agendar el pedido. Verificá la conexión e intentá de nuevo.');
+          setSaving(false);
+          return;
+        }
         const verb = scheduleMode === 'add' ? 'agendado (extra)' : 'actualizado';
         Alert.alert('Listo', `Pedido de ${i.matched_client_name} ${verb}.`);
         handleClose();
@@ -311,7 +389,17 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        await addNote(i.notes.trim(), i.specificDate);
+        if (!isValidDateStr(i.specificDate)) {
+          Alert.alert('Error', `La IA devolvió una fecha inválida ("${i.specificDate}"). Reformulá la nota con la fecha clara.`);
+          setSaving(false);
+          return;
+        }
+        const noteOk = await addNote(i.notes.trim(), i.specificDate);
+        if (!noteOk) {
+          Alert.alert('Error', 'No se pudo guardar la nota. Verificá la conexión e intentá de nuevo.');
+          setSaving(false);
+          return;
+        }
         Alert.alert('Listo', `Nota agregada para ${i.specificDate}.`);
         handleClose();
         return;

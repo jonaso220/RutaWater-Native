@@ -255,13 +255,20 @@ const HomeScreen = () => {
   // Pull-to-refresh: force a server-side read of clients so the user can
   // get a fresh copy even if the realtime listener is temporarily quiet
   // (e.g. after coming back from background or in poor network).
+  // El scope debe ser el del REPARTO ACTIVO (igual que la query del listener):
+  // con el grupo primario acá, refrescar desde un reparto custom primaba la
+  // caché del scope equivocado y no traía nada de lo que se estaba viendo.
+  const activeScopeGroupId = useProfileStore((s) => s.activeProfile?.scopeGroupId);
   const onRefresh = useCallback(async () => {
     if (!user?.uid) return;
     setRefreshing(true);
     hapticSelection();
     try {
-      const scopeField = groupData?.groupId ? 'groupId' : 'userId';
-      const scopeValue = groupData?.groupId || user.uid;
+      // Perfil activo primero; si todavía no cargó, caer al grupo familiar
+      // (comportamiento previo) y por último al usuario solo.
+      const scopeGroupId = activeScopeGroupId || groupData?.groupId;
+      const scopeField = scopeGroupId ? 'groupId' : 'userId';
+      const scopeValue = scopeGroupId || user.uid;
       await db
         .collection('clients')
         .where(scopeField, '==', scopeValue)
@@ -271,7 +278,7 @@ const HomeScreen = () => {
     } finally {
       setRefreshing(false);
     }
-  }, [user?.uid, groupData?.groupId]);
+  }, [user?.uid, activeScopeGroupId, groupData?.groupId]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());

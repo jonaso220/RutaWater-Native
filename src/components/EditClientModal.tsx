@@ -197,7 +197,13 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     if (client.freq === 'once' && freq !== 'once') {
       data.specificDate = '';
     }
-    if (needsDate && startDate) {
+    // El bloque de fecha solo aplica si la fecha realmente CAMBIÓ en esta
+    // edición (o el pedido es 'once', donde la fecha ES la agenda). startDate
+    // se siembra desde client.specificDate al abrir el modal: sin este guard,
+    // un ancla vieja movía el día de visita al guardar cualquier cosa (p. ej.
+    // solo productos) y sacaba al cliente de su ruta.
+    const dateActuallyChanged = (startDate || '') !== (client.specificDate || '');
+    if (needsDate && startDate && (freq === 'once' || dateActuallyChanged)) {
       data.specificDate = startDate;
       const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
       const d = new Date(startDate + 'T12:00:00');
@@ -221,6 +227,12 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
         data.visitDays = [newDay];
       } else if (isSingleDay && newDay !== oldDay) {
         // For periodic clients with a single visit day, move to the new day
+        data.visitDay = newDay;
+        data.visitDays = [newDay];
+      } else if (effectiveVisitDays.length === 0) {
+        // Cliente de directorio pasado a frecuencia con solo una fecha: sin
+        // esto quedaba freq periódica con visitDay 'Sin Asignar' — figuraba
+        // "semanal" en el Directorio pero invisible en todas las rutas.
         data.visitDay = newDay;
         data.visitDays = [newDay];
       }

@@ -68,8 +68,16 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
           });
           queryClient.setQueryData<Client[]>(queryKey, next);
         },
-        (error) => {
+        (error: any) => {
           reportError(error, 'Error loading clients');
+          // Permiso revocado (expulsado del reparto, reparto borrado): el
+          // listener muere y NO se recupera. Dejar la caché intacta era una
+          // UI congelada con datos viejos donde toda acción fallaba en
+          // silencio — vaciar la lista es honesto (pantalla "sin clientes").
+          if (String(error?.code || '').includes('permission-denied')) {
+            queryClient.setQueryData<Client[]>(queryKey, []);
+            return;
+          }
           // Parity with the legacy hook: on a Firestore error before any
           // data has loaded, surface an empty array so consumers exit the
           // `isPending` state (the old code did setLoading(false)+empty).

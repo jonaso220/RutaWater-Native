@@ -330,13 +330,33 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, []);
 
-  // Generic update for client fields
-  const updateClient = useCallback(async (clientId: string, data: Partial<Client>) => {
+  // Generic update for client fields. Devuelve true si el write llegó a
+  // Firestore — los callers de la IA lo usan para no mostrar "Listo" en falso.
+  const updateClient = useCallback(async (clientId: string, data: Partial<Client>): Promise<boolean> => {
     try {
       await db.collection('clients').doc(clientId).update(data);
     } catch (e) {
       reportError(e, 'Error updating client');
+      return false;
     }
+    // Renombrar debe reflejarse en deudas/transferencias: clientName queda
+    // congelado al crearlas, y desactualizado partía la tarjeta del sheet en
+    // dos y desincronizaba el filtro "con deuda" del directorio. Best-effort:
+    // si esta parte falla, el rename principal ya quedó guardado.
+    if (typeof data.name === 'string' && data.name.trim()) {
+      try {
+        for (const collection of ['debts', 'transfers'] as const) {
+          const snap = await db.collection(collection).where('clientId', '==', clientId).get();
+          if (snap.empty) continue;
+          const batch = db.batch();
+          snap.docs.forEach((docSnap) => batch.update(docSnap.ref, { clientName: data.name }));
+          await batch.commit();
+        }
+      } catch (e) {
+        reportError(e, 'Error syncing clientName to debts/transfers');
+      }
+    }
+    return true;
   }, []);
 
   // Schedule a client from the directory to a specific day/frequency.
@@ -486,8 +506,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           await db.collection('clients').add(newData);
         }
       }
+      return true;
     } catch (e) {
       reportError(e, 'Error scheduling client');
+      return false;
     }
   }, [groupId, userId]);
 
@@ -593,8 +615,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
+      return true;
     } catch (e) {
       reportError(e, 'Error adding note');
+      return false;
     }
   }, [groupId, userId]);
 
@@ -768,8 +792,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         createdAt: new Date(),
         updatedAt: new Date(),
       });
+      return true;
     } catch (e) {
       reportError(e, 'Error in aiCreateClient');
+      return false;
     }
   }, [groupId, userId]);
 

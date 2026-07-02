@@ -155,6 +155,7 @@ export default {
     removeAlarm: 'Remove alarm',
     alarmScheduled: 'Alarm scheduled',
     alarmScheduledMsg: 'Will ring on {{when}} at {{time}}',
+    alarmFailed: 'Could not schedule the alarm. Check that the app has notification permission in Settings.',
     addTransfer: 'Add transfer?',
     addTransferMsg: 'Confirm pending transfer from {{name}}',
     limitReached: 'Limit reached',

@@ -155,6 +155,7 @@ export default {
     removeAlarm: 'Remover alarme',
     alarmScheduled: 'Alarme programado',
     alarmScheduledMsg: 'Tocara em {{when}} as {{time}}',
+    alarmFailed: 'Nao foi possivel programar o alarme. Verifique se o app tem permissao de notificacoes nos Ajustes.',
     addTransfer: 'Adicionar transferencia?',
     addTransferMsg: 'Confirmar transferencia pendente de {{name}}',
     limitReached: 'Limite atingido',

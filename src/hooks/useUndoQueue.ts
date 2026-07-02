@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Client } from '../types';
 import { useClientsStore } from '../stores/clientsStore';
+import { scheduleClientAlarm } from '../services/notifications';
 
 export interface UndoEntry {
   client: Client;
@@ -27,7 +28,6 @@ interface PushArgs {
  * The hook also owns the cleanup of pending timers on unmount.
  */
 export const useUndoQueue = () => {
-  const undoComplete = useClientsStore((s) => s.undoComplete);
   const updateClient = useClientsStore((s) => s.updateClient);
 
   const [queue, setQueue] = useState<UndoEntry[]>([]);
@@ -49,10 +49,17 @@ export const useUndoQueue = () => {
     setQueue((prev) => {
       // Replace any prior entry for the same client (and cancel its timer)
       // — guards against accidental re-marks racing with the server echo.
+      // IMPORTANTE: se conserva el previousData ORIGINAL. Un segundo "Listo"
+      // rápido llega con el snapshot ya completado (lastVisited/doneFor
+      // nuevos); si lo tomáramos como "estado previo", deshacer no
+      // desharía nada.
       const existing = prev.find((e) => e.client.id === clientId);
       if (existing) clearTimeout(existing.timer);
+      const merged: UndoEntry = existing
+        ? { ...entry, client: existing.client, previousData: existing.previousData }
+        : entry;
       const filtered = prev.filter((e) => e.client.id !== clientId);
-      return [...filtered, entry];
+      return [...filtered, merged];
     });
   }, []);
 
@@ -64,7 +71,15 @@ export const useUndoQueue = () => {
 
     const { client, previousData } = entry;
     if (client.freq === 'once') {
-      undoComplete(client.id);
+      // No alcanza con undoComplete: markAsDone también borró alarm/isStarred
+      // y hay que devolverlos, igual que en la rama periódica.
+      updateClient(client.id, {
+        isCompleted: previousData.isCompleted ?? false,
+        completedAt: previousData.completedAt ?? null,
+        alarm: previousData.alarm ?? '',
+        isStarred: previousData.isStarred ?? false,
+        updatedAt: new Date(),
+      } as any);
     } else {
       updateClient(client.id, {
         lastVisited: previousData.lastVisited,
@@ -75,8 +90,23 @@ export const useUndoQueue = () => {
       } as any);
     }
 
+    // markAsDone canceló el trigger de notifee al completar; si el cliente
+    // tenía alarma, reprogramarla para que la campana restaurada sea real.
+    if (previousData.alarm) {
+      void scheduleClientAlarm(
+        client.id,
+        client.name || '',
+        client.address || '',
+        previousData.alarm,
+        {
+          targetDay: entry.sectionDay,
+          specificDate: client.freq === 'once' ? previousData.specificDate : undefined,
+        },
+      );
+    }
+
     setQueue((prev) => prev.filter((e) => e.client.id !== client.id));
-  }, [undoComplete, updateClient]);
+  }, [updateClient]);
 
   return { queue, push, undoMostRecent };
 };

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, getClientMatchKey, getModalWidth } from '../utils/helpers';
+import { normalizePhone, getClientMatchKey, getModalWidth, parseMoneyInput } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -85,10 +85,10 @@ const DebtModal: React.FC<DebtModalProps> = ({
     return new Set(ids.length > 0 ? ids : [client.id]);
   })();
   const clientDebts = debts.filter((d) => matchingIds.has(d.clientId));
-  const total = clientDebts.reduce((sum, d) => sum + (d.amount || 0), 0);
+  const total = clientDebts.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
   const handleAdd = async () => {
-    const amount = parseFloat(newAmount);
+    const amount = parseMoneyInput(newAmount);
     if (!amount || amount <= 0 || saving) return;
     setSaving(true);
     try {
@@ -147,7 +147,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   };
 
   const handleSaveEdit = async (debtId: string) => {
-    const amount = parseFloat(editAmount);
+    const amount = parseMoneyInput(editAmount);
     if (!amount || amount <= 0 || saving) return;
     setSaving(true);
     try {

@@ -3,7 +3,6 @@ const { authenticateEvent } = require('./_shared/firebaseAuth');
 
 const MAX_TEXT_LENGTH = 8000;
 const MAX_CLIENTS = 1200;
-const REQUIRE_FIREBASE_AUTH = process.env.REQUIRE_FIREBASE_AUTH_FOR_AI === 'true';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -28,13 +27,14 @@ exports.handler = async (event) => {
     return json(500, { error: 'Servidor mal configurado: falta ANTHROPIC_API_KEY' });
   }
 
-  const authHeader = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
-  if (REQUIRE_FIREBASE_AUTH || authHeader) {
-    try {
-      await authenticateEvent(event);
-    } catch (err) {
-      return json(401, { error: 'No autorizado.' });
-    }
+  // Auth SIEMPRE obligatoria: la condición vieja (env opcional || header
+  // presente) dejaba pasar cualquier request SIN header, exponiendo la
+  // API key de Anthropic a quien conociera la URL. La app manda el token
+  // de Firebase desde la versión 1.36.
+  try {
+    await authenticateEvent(event);
+  } catch (err) {
+    return json(401, { error: 'No autorizado.' });
   }
 
   let payload;

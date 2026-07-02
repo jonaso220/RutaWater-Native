@@ -86,7 +86,13 @@ const AlarmPicker: React.FC<AlarmPickerProps> = ({ client, selectedDay, onClose 
     const target = client;
     onClose();
     const fireAt = await saveAlarm(target.id, `${hours}:${minutes}`, selectedDay);
-    if (fireAt) showAlarmConfirm(fireAt);
+    if (fireAt) {
+      showAlarmConfirm(fireAt);
+    } else {
+      // Permiso de notificaciones denegado o fallo al programar: avisar en vez
+      // de dejar al usuario creyendo que la alarma quedó puesta.
+      Alert.alert(t('error'), t('home.alarmFailed'));
+    }
   };
 
   if (!client) return null;

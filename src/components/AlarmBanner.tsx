@@ -46,7 +46,7 @@ const AlarmBanner: React.FC<Props> = ({ alarm, onDismiss }) => {
 const getStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -59,10 +59,10 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     maxWidth: 340,
     alignItems: 'center',
     borderTopWidth: 6,
-    borderTopColor: '#FACC15',
+    borderTopColor: colors.warningYellow,
   },
   bellContainer: {
-    backgroundColor: '#FACC15',
+    backgroundColor: colors.warningYellow,
     width: 64,
     height: 64,
     borderRadius: 32,
@@ -88,7 +88,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   label: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FACC15',
+    color: colors.warningYellow,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
     marginBottom: 16,
@@ -114,7 +114,7 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textMuted,
   },
   dismissBtn: {
-    backgroundColor: '#FACC15',
+    backgroundColor: colors.warningYellow,
     paddingVertical: 14,
     paddingHorizontal: 40,
     borderRadius: 12,

@@ -75,17 +75,6 @@ export const firestoreRetry = async <T>(operation: () => Promise<T>, maxRetries 
   throw new Error('Max retries reached');
 };
 
-export const getErrorMessage = (error: any): string => {
-  if (!error) return 'Ocurrió un error inesperado.';
-  const code = error.code || '';
-  const msg = error.message || '';
-  if (code === 'permission-denied' || code === 'PERMISSION_DENIED') return 'No tenés permisos para esta acción.';
-  if (code === 'not-found') return 'El registro no fue encontrado.';
-  if (code === 'unavailable' || code === 'deadline-exceeded' || msg.includes('network') || msg.includes('Failed to fetch'))
-    return 'Error de conexión. Verificá tu internet e intentá de nuevo.';
-  return 'Ocurrió un error. Intentá de nuevo.';
-};
-
 // --- DATE HELPERS ---
 
 // Conversor canónico a Date. El mismo campo puede llegar como Timestamp de

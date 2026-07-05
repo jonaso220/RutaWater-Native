@@ -439,7 +439,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         newData.visitDays = newDays;
         newData.visitDay = newDays[0];
         newData.startWeek = currentWeek;
-        newData.specificDate = newDate || null;
+        // '' (no null): la convención de "sin fecha" en todo el resto del
+        // código es cadena vacía (addClient, aiCreateClient, EditClientModal).
+        newData.specificDate = newDate || '';
         if (newDate) {
           // Start fresh from the chosen date: a stale lastVisited/doneFor from
           // a previous run of this client would otherwise pull the first visit

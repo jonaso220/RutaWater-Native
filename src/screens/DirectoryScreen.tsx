@@ -493,7 +493,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     backgroundColor: colors.primary,
   },
   filterChipWarning: {
-    backgroundColor: '#EAB308',
+    backgroundColor: colors.warningYellow,
   },
   filterChipDanger: {
     backgroundColor: colors.danger,

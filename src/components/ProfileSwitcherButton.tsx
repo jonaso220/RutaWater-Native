@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { useLayout } from '../hooks/useLayout';
 import { useProfileStore } from '../stores/profileStore';
@@ -11,6 +12,7 @@ import { useProfileStore } from '../stores/profileStore';
  */
 const ProfileSwitcherButton: React.FC = () => {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { fontScale } = useLayout();
   const styles = useMemo(() => getStyles(fontScale), [fontScale]);
   const iconSize = Math.round(14 * fontScale);
@@ -19,7 +21,7 @@ const ProfileSwitcherButton: React.FC = () => {
 
   // Se muestra siempre: da contexto (en qué reparto estás) y abre el gestor para
   // crear/cambiar de reparto.
-  const name = activeProfile?.name || 'Reparto 1';
+  const name = activeProfile?.name || t('settings.defaultPrimaryProfile');
   const shown = name.length > 14 ? name.slice(0, 13) + '…' : name;
 
   return (

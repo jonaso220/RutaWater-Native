@@ -28,6 +28,8 @@ export interface Client {
                     // del día de visita (ver getNextVisitDate). Vacío/ausente = usar heurística.
   completedAt: FirebaseFirestoreTypes.Timestamp | null;
   updatedAt: FirebaseFirestoreTypes.Timestamp | null;
+  // LEGACY webapp: la app lo escribe por compatibilidad pero nunca lo lee
+  // (la lógica de ciclos usa lastVisited/doneFor). No usar para lógica nueva.
   startWeek: number;
   userId: string;
   groupId?: string;

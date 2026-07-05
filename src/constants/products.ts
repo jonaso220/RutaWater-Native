@@ -2,6 +2,9 @@ import i18n from '../i18n';
 import { getDayIndex } from '../utils/helpers';
 
 // Productos - mismos IDs que la web app para compatibilidad con Firestore
+// ⚠️ ACOPLADO AL BACKEND: netlify/functions/_shared/anthropic.js replica
+// PRODUCT_IDS, DAY_NAMES y FREQUENCIES para el prompt de la IA. Si se
+// agrega/cambia un producto, día o frecuencia acá, actualizar allá también.
 export interface Product {
   id: string;
   label: string;

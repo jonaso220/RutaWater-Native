@@ -2,7 +2,13 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env'), override: true });
 const express = require('express');
 const cors = require('cors');
-const { parseOrder } = require('./lib/anthropic');
+const { parseOrder, MODEL } = require('./lib/anthropic');
+
+// Mismos límites que producción (netlify/functions/parse-order.js): un pedido
+// que funciona acá no debe fallar con 413 en prod. La diferencia que queda es
+// que prod además exige token de Firebase (acá no, para simplificar el dev).
+const MAX_TEXT_LENGTH = 8000;
+const MAX_CLIENTS = 1200;
 
 if (!process.env.ANTHROPIC_API_KEY) {
   console.error('ERROR: falta ANTHROPIC_API_KEY en .env');
@@ -14,7 +20,7 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, model: 'claude-haiku-4-5' });
+  res.json({ ok: true, model: MODEL });
 });
 
 app.post('/parse-order', async (req, res) => {
@@ -23,8 +29,14 @@ app.post('/parse-order', async (req, res) => {
   if (typeof text !== 'string' || !text.trim()) {
     return res.status(400).json({ error: 'Falta `text` (string no vacío).' });
   }
+  if (text.length > MAX_TEXT_LENGTH) {
+    return res.status(413).json({ error: `El texto supera el máximo de ${MAX_TEXT_LENGTH} caracteres.` });
+  }
   if (!Array.isArray(clients)) {
     return res.status(400).json({ error: '`clients` debe ser un array.' });
+  }
+  if (clients.length > MAX_CLIENTS) {
+    return res.status(413).json({ error: `La lista de clientes supera el máximo de ${MAX_CLIENTS}.` });
   }
   if (!todayIso || !/^\d{4}-\d{2}-\d{2}$/.test(todayIso)) {
     return res.status(400).json({ error: '`todayIso` debe ser YYYY-MM-DD.' });

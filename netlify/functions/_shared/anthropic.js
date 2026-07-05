@@ -6,6 +6,10 @@ const client = new Anthropic({
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
+// ⚠️ ACOPLADO A LA APP: estos listados replican src/constants/products.ts
+// (PRODUCTS ids, ALL_DAYS y Frequency). Si se agrega/cambia un producto, día
+// o frecuencia en la app, actualizar acá también — si no, la IA nunca lo
+// reconoce (o devuelve valores que la app rechaza).
 const PRODUCT_IDS = ['b20', 'b12', 'b6', 'soda', 'bombita', 'disp_elec_new', 'disp_elec_chg', 'disp_nat'];
 const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const FREQUENCIES = ['weekly', 'biweekly', 'triweekly', 'monthly', 'once', 'on_demand'];
@@ -484,4 +488,4 @@ async function parseOrder({ text, clients, todayIso }) {
   };
 }
 
-module.exports = { parseOrder };
+module.exports = { parseOrder, MODEL };

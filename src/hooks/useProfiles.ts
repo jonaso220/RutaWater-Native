@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import { db } from '../config/firebase';
 import { reportError } from '../lib/crashReporting';
+import i18n from '../i18n';
 import { Profile, ProfileMember, PRIMARY_PROFILE_ID } from '../stores/profileStore';
 
 const generateCode = (): string => {
@@ -32,7 +33,8 @@ export const useProfiles = (
 ) => {
   const [customProfiles, setCustomProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string>(PRIMARY_PROFILE_ID);
-  const [primaryName, setPrimaryName] = useState<string>('Reparto 1');
+  // '' = sin nombre guardado; el fallback traducido se resuelve al mostrar.
+  const [primaryName, setPrimaryName] = useState<string>('');
   const [storedProfileIds, setStoredProfileIds] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   const backfilledRef = useRef<Set<string>>(new Set());
@@ -49,7 +51,7 @@ export const useProfiles = (
             const data = d.data();
             return {
               id: d.id,
-              name: data.name || 'Reparto',
+              name: data.name || i18n.t('settings.defaultProfileName'),
               isPrimary: false,
               scopeGroupId: d.id,
               ownerId: data.ownerId,
@@ -75,7 +77,7 @@ export const useProfiles = (
         (doc) => {
           const data = doc.data() || {};
           setActiveProfileId(data.activeProfileId || PRIMARY_PROFILE_ID);
-          setPrimaryName(data.primaryProfileName || 'Reparto 1');
+          setPrimaryName(data.primaryProfileName || '');
           setStoredProfileIds(Array.isArray(data.profileIds) ? data.profileIds : []);
           setLoaded(true);
         },
@@ -130,7 +132,7 @@ export const useProfiles = (
   const primary = useMemo<Profile>(
     () => ({
       id: PRIMARY_PROFILE_ID,
-      name: primaryName,
+      name: primaryName || i18n.t('settings.defaultPrimaryProfile'),
       isPrimary: true,
       scopeGroupId: groupId, // undefined => scope por userId (sin cambios)
       isOwner: true, // Reparto 1 se comparte vía Grupo familiar (en Ajustes), no acá

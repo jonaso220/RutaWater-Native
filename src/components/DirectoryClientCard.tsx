@@ -98,10 +98,12 @@ const DirectoryClientCard = ({
     const fam = fromFamily ? ' 👪' : '';
     const days = getDaysSince(lastDate);
 
+    // Mismos valores que antes pero vía tokens del theme (cada par claro/oscuro
+    // coincide exactamente con el token en ambas paletas).
     if (days === null) {
       return {
         label: t('directory.noHistory'),
-        bgColor: isDark ? '#374151' : '#E5E7EB',
+        bgColor: colors.cardBorder,
         textColor: colors.textMuted,
       };
     }
@@ -109,31 +111,31 @@ const DirectoryClientCard = ({
     if (days <= 7) {
       return {
         label: (days === 0 ? t('directory.today') : t('directory.daysAgo', { count: days })) + fam,
-        bgColor: isDark ? '#064E3B' : '#ECFDF5',
-        textColor: isDark ? '#6EE7B7' : '#059669',
+        bgColor: colors.successLighter,
+        textColor: isDark ? colors.successAccent : colors.successDark,
       };
     }
 
     if (days <= 21) {
       return {
         label: t('directory.daysAgo', { count: days }) + fam,
-        bgColor: isDark ? '#451A03' : '#FFFBEB',
-        textColor: isDark ? '#F59E0B' : '#D97706',
+        bgColor: colors.warningAmberBg,
+        textColor: isDark ? colors.warningAmber : colors.warningDark,
       };
     }
 
     if (days <= 45) {
       return {
         label: t('directory.daysAgo', { count: days }) + fam,
-        bgColor: isDark ? '#431407' : '#FFF7ED',
-        textColor: isDark ? '#FB923C' : '#EA580C',
+        bgColor: colors.warningLightBg,
+        textColor: colors.warningOrangeText,
       };
     }
 
     return {
-      label: `Hace ${days} dias${fam}`,
-      bgColor: isDark ? '#450A0A' : '#FEF2F2',
-      textColor: isDark ? '#F87171' : '#DC2626',
+      label: t('directory.daysAgo', { count: days }) + fam,
+      bgColor: colors.dangerLight,
+      textColor: isDark ? colors.dangerBright : colors.danger,
     };
   };
 

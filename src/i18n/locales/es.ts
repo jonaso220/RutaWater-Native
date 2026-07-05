@@ -348,6 +348,8 @@ export default {
       other: 'Otros',
     },
     profilesTitle: 'Repartos',
+    defaultPrimaryProfile: 'Reparto 1',
+    defaultProfileName: 'Reparto',
     profilesSubtitle: 'Cada reparto tiene sus propios clientes y datos, separados del resto.',
     manageProfiles: 'Gestionar repartos',
     switchProfile: 'Cambiar',

@@ -127,6 +127,9 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
           clientAddress: client.address || '',
           amount,
           createdAt: new Date(),
+          // LEGACY webapp: esta app nunca lee `paid` — pagar una deuda BORRA
+          // el documento (markDebtPaid/markAllDebtsPaid). Se mantiene por
+          // compatibilidad con datos existentes.
           paid: false,
         });
         // Marca hasDebt=true en todas las instancias duplicadas (filtrando docs inexistentes)

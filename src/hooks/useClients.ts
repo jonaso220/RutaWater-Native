@@ -3,7 +3,7 @@ import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firest
 import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
 import { Client, RELATIONSHIP_INVERSE } from '../types';
-import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, getWeekNumber, normalizePhoneForComparison, toLocalDateString } from '../utils/helpers';
+import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, getWeekNumber, normalizePhoneForComparison, toLocalDateString, parseDate } from '../utils/helpers';
 import { ALL_DAYS, Frequency } from '../constants/products';
 import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
@@ -989,7 +989,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         if (c.alarm) score += 2;
         // More recently updated
         if (c.updatedAt) {
-          const ts = (c.updatedAt as any).seconds || (c.updatedAt as any).getTime?.() / 1000 || 0;
+          const ts = (parseDate(c.updatedAt)?.getTime() || 0) / 1000;
           score += Math.min(ts / 1e10, 1); // tiny tiebreaker from timestamp
         }
         return { client: c, score };

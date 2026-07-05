@@ -1,20 +1,14 @@
 import { Client } from '../types';
-
-const toDate = (val: any): Date | null => {
-  if (!val) return null;
-  if (typeof val.toDate === 'function') return val.toDate();
-  if (val instanceof Date) return val;
-  return null;
-};
+import { parseDate } from './helpers';
 
 export const getLastActivityDate = (client: Client): Date | null => {
-  return toDate(client.completedAt) || toDate(client.lastVisited) || toDate(client.updatedAt);
+  return parseDate(client.completedAt) || parseDate(client.lastVisited) || parseDate(client.updatedAt);
 };
 
 // Solo visitas reales (entrega marcada como hecha), sin el fallback de updatedAt:
 // editar la ficha de un familiar no debe contar como haberlo visitado.
 const getVisitDate = (client: Client): Date | null => {
-  return toDate(client.completedAt) || toDate(client.lastVisited);
+  return parseDate(client.completedAt) || parseDate(client.lastVisited);
 };
 
 // Última actividad "del hogar": la visita más reciente entre el cliente y todos sus

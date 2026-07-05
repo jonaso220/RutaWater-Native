@@ -88,8 +88,18 @@ export const getErrorMessage = (error: any): string => {
 
 // --- DATE HELPERS ---
 
+// Conversor canónico a Date. El mismo campo puede llegar como Timestamp de
+// Firestore (tiene .toDate()), Date de JS (write local aún sin eco del
+// servidor), objeto plano {seconds} (dato serializado, p.ej. backup) o string
+// ISO. Todo consumo de fechas de Firestore debe pasar por acá — no
+// reimplementar la conversión en cada pantalla.
 export const parseDate = (val: any): Date | null => {
   if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  if (typeof val.toDate === 'function') {
+    const d = val.toDate();
+    return d instanceof Date && !isNaN(d.getTime()) ? d : null;
+  }
   const date = val.seconds !== undefined
     ? new Date(val.seconds * 1000)
     : new Date(val);

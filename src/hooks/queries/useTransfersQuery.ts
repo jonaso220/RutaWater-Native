@@ -3,6 +3,7 @@ import { reportError } from '../../lib/crashReporting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Transfer } from '../../types';
+import { parseDate } from '../../utils/helpers';
 
 interface UseTransfersQueryArgs {
   userId: string;
@@ -34,8 +35,8 @@ export const useTransfersQuery = ({ userId, groupId }: UseTransfersQueryArgs) =>
             ...doc.data(),
           })) as Transfer[];
           loaded.sort((a, b) => {
-            const dateA = (a.createdAt as any)?.seconds || 0;
-            const dateB = (b.createdAt as any)?.seconds || 0;
+            const dateA = parseDate(a.createdAt)?.getTime() || 0;
+            const dateB = parseDate(b.createdAt)?.getTime() || 0;
             return dateB - dateA;
           });
           queryClient.setQueryData<Transfer[]>(queryKey, loaded);

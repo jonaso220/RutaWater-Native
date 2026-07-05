@@ -7,6 +7,7 @@ import { useDebtsStore } from '../stores/debtsStore';
 import { useTransfersStore } from '../stores/transfersStore';
 import { useProductCatalogStore } from '../stores/productCatalogStore';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { parseDate } from '../utils/helpers';
 
 interface ExportUser {
   uid: string;
@@ -118,12 +119,8 @@ export const useDataExport = (user: ExportUser) => {
           // permitía restaurar qué se entregó ni el orden de cada día.
           isCompleted: c.isCompleted || false,
           isInactive: c.isInactive || false,
-          lastVisited: (c.lastVisited as any)?.seconds
-            ? new Date((c.lastVisited as any).seconds * 1000).toISOString()
-            : '',
-          completedAt: (c.completedAt as any)?.seconds
-            ? new Date((c.completedAt as any).seconds * 1000).toISOString()
-            : '',
+          lastVisited: parseDate(c.lastVisited)?.toISOString() || '',
+          completedAt: parseDate(c.completedAt)?.toISOString() || '',
           doneFor: c.doneFor || '',
           listOrder: c.listOrder ?? 0,
           listOrders: c.listOrders || {},
@@ -132,16 +129,12 @@ export const useDataExport = (user: ExportUser) => {
         debts: debts.map((d) => ({
           id: d.id, clientId: d.clientId, clientName: d.clientName || '',
           clientAddress: (d as any).clientAddress || '', amount: d.amount || 0,
-          createdAt: (d.createdAt as any)?.seconds
-            ? new Date((d.createdAt as any).seconds * 1000).toISOString()
-            : '',
+          createdAt: parseDate(d.createdAt)?.toISOString() || '',
         })),
         transfers: transfers.map((t) => ({
           id: t.id, clientId: t.clientId, clientName: t.clientName || '',
           clientAddress: (t as any).clientAddress || '',
-          createdAt: (t.createdAt as any)?.seconds
-            ? new Date((t.createdAt as any).seconds * 1000).toISOString()
-            : '',
+          createdAt: parseDate(t.createdAt)?.toISOString() || '',
         })),
       };
 

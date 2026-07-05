@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, getClientMatchKey, getModalWidth, parseMoneyInput } from '../utils/helpers';
+import { normalizePhone, getClientMatchKey, getModalWidth, parseMoneyInput, parseDate } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -178,11 +178,8 @@ const DebtModal: React.FC<DebtModalProps> = ({
   };
 
   const formatDate = (timestamp: any): string => {
-    if (!timestamp) return '';
-    const date = timestamp.seconds
-      ? new Date(timestamp.seconds * 1000)
-      : new Date(timestamp);
-    if (isNaN(date.getTime())) return '';
+    const date = parseDate(timestamp);
+    if (!date) return '';
     return date.toLocaleDateString('es-ES', {
       day: 'numeric',
       month: 'short',

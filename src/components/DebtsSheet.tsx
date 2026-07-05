@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, normalizePhoneForComparison, fuzzyMatch, matchScore, getClientMatchKey, getModalWidth, parseMoneyInput } from '../utils/helpers';
+import { normalizePhone, normalizePhoneForComparison, fuzzyMatch, matchScore, getClientMatchKey, getModalWidth, parseMoneyInput, parseDate } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -84,9 +84,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const now = Date.now();
 
   const getAgeDays = (timestamp: any): number => {
-    if (!timestamp) return 0;
-    const ts = timestamp.seconds ? timestamp.seconds * 1000 : timestamp;
-    return Math.floor((now - ts) / 86400000);
+    const d = parseDate(timestamp);
+    return d ? Math.floor((now - d.getTime()) / 86400000) : 0;
   };
 
   // Agrupa deudas por "cliente humano" (nombre+teléfono normalizados),
@@ -170,8 +169,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     } else {
       // Sort by most recent debt
       groups.sort((a, b) => {
-        const latestA = Math.max(...a.debts.map((d) => (d.createdAt as any)?.seconds || 0));
-        const latestB = Math.max(...b.debts.map((d) => (d.createdAt as any)?.seconds || 0));
+        const latestA = Math.max(...a.debts.map((d) => parseDate(d.createdAt)?.getTime() || 0));
+        const latestB = Math.max(...b.debts.map((d) => parseDate(d.createdAt)?.getTime() || 0));
         return latestB - latestA;
       });
     }
@@ -253,11 +252,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const uniqueClients = clientGroups.length;
 
   const formatDate = (timestamp: any): string => {
-    if (!timestamp) return '';
-    const date = timestamp.seconds
-      ? new Date(timestamp.seconds * 1000)
-      : new Date(timestamp);
-    if (isNaN(date.getTime())) return '';
+    const date = parseDate(timestamp);
+    if (!date) return '';
     return date.toLocaleDateString('es-ES', {
       day: 'numeric',
       month: 'short',

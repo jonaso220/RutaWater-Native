@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Transfer } from '../types';
-import { normalizePhone, getModalWidth } from '../utils/helpers';
+import { normalizePhone, getModalWidth, parseDate } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -42,11 +42,8 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   const styles = getStyles(colors, isTablet, modalWidth, fontScale);
 
   const formatDate = (timestamp: any): string => {
-    if (!timestamp) return '';
-    const date = timestamp.seconds
-      ? new Date(timestamp.seconds * 1000)
-      : new Date(timestamp);
-    if (isNaN(date.getTime())) return '';
+    const date = parseDate(timestamp);
+    if (!date) return '';
     return date.toLocaleDateString('es-ES', {
       day: 'numeric',
       month: 'short',

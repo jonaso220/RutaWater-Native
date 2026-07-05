@@ -21,7 +21,7 @@ import DraggableFlatList, {
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
-import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString } from '../utils/helpers';
+import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString, parseDate } from '../utils/helpers';
 import { hapticLight, hapticMedium, hapticSelection, hapticError } from '../utils/haptics';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
@@ -500,11 +500,12 @@ const HomeScreen = () => {
     (client: Client) => {
       // Capture ALL fields markAsDone may modify, regardless of current
       // freq, so undo restores correctly even if freq changed concurrently.
-      const toDate = (v: any) => (v && v.toDate ? v.toDate() : v ?? null);
+      // parseDate: el undo reescribe estos valores en Firestore, que acepta
+      // Date pero no el objeto Timestamp leído; null si el campo estaba vacío.
       const previousData: Record<string, any> = {
         isCompleted: client.isCompleted ?? false,
-        completedAt: toDate(client.completedAt),
-        lastVisited: toDate(client.lastVisited),
+        completedAt: parseDate(client.completedAt),
+        lastVisited: parseDate(client.lastVisited),
         doneFor: client.doneFor ?? '',
         specificDate: client.specificDate ?? '',
         alarm: client.alarm ?? '',

@@ -15,7 +15,8 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, getClientMatchKey, getModalWidth, parseMoneyInput, parseDate } from '../utils/helpers';
+import { normalizePhone, getClientMatchKey, getModalWidth, parseMoneyInput } from '../utils/helpers';
+import { formatMoney, formatShortDate } from '../utils/format';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -102,7 +103,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const handlePaid = (debt: Debt) => {
     Alert.alert(
       t('debtModal.confirmPayment'),
-      t('debtModal.paidConfirm', { name: debt.clientName, amount: debt.amount?.toLocaleString() }),
+      t('debtModal.paidConfirm', { name: debt.clientName, amount: formatMoney(debt.amount) }),
       [
         { text: t('cancel'), style: 'cancel' },
         {
@@ -127,7 +128,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
       t('debtsSheet.allPaidMsg', {
         name: client.name,
         count: clientDebts.length,
-        total: total.toLocaleString(),
+        total: formatMoney(total),
       }),
       [
         { text: t('cancel'), style: 'cancel' },
@@ -164,7 +165,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
     const cleanPhone = normalizePhone(client.phone);
     const defaultTemplate = 'La deuda es de ${total}. Saludos';
     const template = debtTemplate || defaultTemplate;
-    const text = template.replace('${total}', `$${total.toLocaleString()}`);
+    const text = template.replace('${total}', formatMoney(total));
     const msg = encodeURIComponent(text);
     Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
   };
@@ -175,16 +176,6 @@ const DebtModal: React.FC<DebtModalProps> = ({
     const defaultMsg = 'Hola, buenas \nEste es un mensaje automatico para informarle que, segun nuestros registros, quedo pendiente un saldo por regularizar.\nCuando pueda, le agradecemos que nos indique en que fecha podriamos saldarlo. Si necesita nuevamente los datos de la cuenta, con gusto se los enviamos.\nMuchas gracias.';
     const msg = encodeURIComponent(reminderTemplate || defaultMsg);
     Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
-  };
-
-  const formatDate = (timestamp: any): string => {
-    const date = parseDate(timestamp);
-    if (!date) return '';
-    return date.toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
   };
 
   return (
@@ -202,7 +193,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
               </Text>
               {total > 0 && (
                 <Text style={styles.totalText}>
-                  Total: ${total.toLocaleString()}
+                  {t('total')}: {formatMoney(total)}
                 </Text>
               )}
             </View>
@@ -248,10 +239,10 @@ const DebtModal: React.FC<DebtModalProps> = ({
                     <View style={styles.debtRow}>
                       <View>
                         <Text style={styles.debtAmount}>
-                          ${debt.amount?.toLocaleString()}
+                          {formatMoney(debt.amount)}
                         </Text>
                         <Text style={styles.debtDate}>
-                          {formatDate(debt.createdAt)}
+                          {formatShortDate(debt.createdAt)}
                         </Text>
                       </View>
                       <View style={styles.debtActions}>
@@ -304,7 +295,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                   style={styles.whatsappBtn}
                 >
                   <Text style={styles.whatsappBtnText}>
-                    <Ionicons name="chatbubble" size={16} /> {t('debtModal.sendTotal', { amount: total.toLocaleString() })}
+                    <Ionicons name="chatbubble" size={16} /> {t('debtModal.sendTotal', { amount: formatMoney(total) })}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity

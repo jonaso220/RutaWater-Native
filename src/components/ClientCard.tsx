@@ -6,6 +6,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { Client } from '../types';
 import { useAllProducts } from '../stores/productCatalogStore';
 import { normalizePhone } from '../utils/helpers';
+import { formatShortDate } from '../utils/format';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import PromptModal from './PromptModal';
@@ -324,7 +325,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
         <View style={styles.freqRow}>
           <Text style={[styles.badge, client.freq === 'once' && styles.badgeOnce]}>
             {client.freq === 'once'
-              ? (client.specificDate ? t('clientCard.onceWithDate', { date: client.specificDate.split('-').reverse().join('/') }) : t('clientCard.onceLabel'))
+              ? (client.specificDate ? t('clientCard.onceWithDate', { date: formatShortDate(client.specificDate) }) : t('clientCard.onceLabel'))
               : t(`freq.${client.freq}`)}
           </Text>
         </View>

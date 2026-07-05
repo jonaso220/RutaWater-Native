@@ -100,6 +100,12 @@ export const parseDate = (val: any): Date | null => {
     const d = val.toDate();
     return d instanceof Date && !isNaN(d.getTime()) ? d : null;
   }
+  // 'yyyy-mm-dd' sin hora se parsea a mediodía LOCAL: new Date('yyyy-mm-dd')
+  // asume medianoche UTC y en UTC-3 cae en el día anterior.
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    const d = new Date(val + 'T12:00:00');
+    return isNaN(d.getTime()) ? null : d;
+  }
   const date = val.seconds !== undefined
     ? new Date(val.seconds * 1000)
     : new Date(val);
@@ -529,20 +535,6 @@ export const getNextVisitDate = (client: Client, forDay?: string): Date | null =
   }
 
   return nextDate;
-};
-
-export const formatDate = (date: Date | null): string => {
-  if (!date) return 'Sin fecha';
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  if (d.getTime() === today.getTime()) return 'Para Hoy';
-  const diffTime = d.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  if (diffDays === 1) return 'Mañana';
-  if (diffDays === 7) return 'Próxima Semana';
-  return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
 };
 
 // Parseo de montos en formato rioplatense: la coma es el separador decimal y

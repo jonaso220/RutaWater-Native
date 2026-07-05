@@ -222,9 +222,6 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     { key: 'monthly', label: t('freq.monthly') },
   ];
 
-  // Format today's date as YYYY-MM-DD for the default
-  const today = new Date().toISOString().split('T')[0];
-
   return (
     <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
       <KeyboardAvoidingView

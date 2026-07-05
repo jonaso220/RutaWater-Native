@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Transfer } from '../types';
-import { normalizePhone, getModalWidth, parseDate } from '../utils/helpers';
+import { normalizePhone, getModalWidth } from '../utils/helpers';
+import { formatShortDateTime } from '../utils/format';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -40,17 +41,6 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth, fontScale);
-
-  const formatDate = (timestamp: any): string => {
-    const date = parseDate(timestamp);
-    if (!date) return '';
-    return date.toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
 
   const handleReview = (transfer: Transfer) => {
     Alert.alert(
@@ -85,7 +75,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
         {item.clientAddress ? (
           <Text style={styles.clientAddress}>{item.clientAddress}</Text>
         ) : null}
-        <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
+        <Text style={styles.date}>{formatShortDateTime(item.createdAt)}</Text>
       </View>
       <View style={styles.cardActions}>
         {((item.clientLat && item.clientLng) || item.clientMapsLink) && (

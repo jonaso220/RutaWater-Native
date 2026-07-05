@@ -174,9 +174,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
   // Mark a client as done for the day. `forDay` is the day-tab the client was
   // shown under (matters for multi-day clients); defaults to the client's own
-  // visit day.
-  const markAsDone = useCallback(async (clientId: string, client: Client, forDay?: string) => {
-    if (markingDoneRef.current.has(clientId)) return;
+  // visit day. Devuelve false si el write falló, para que la UI pueda avisar
+  // en vez de dejar la percepción de éxito.
+  const markAsDone = useCallback(async (clientId: string, client: Client, forDay?: string): Promise<boolean> => {
+    if (markingDoneRef.current.has(clientId)) return true;
     markingDoneRef.current.add(clientId);
     try {
       // La notificación local ya programada debe cancelarse acá: escribir
@@ -234,8 +235,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
         await db.collection('clients').doc(clientId).update(updates);
       }
+      return true;
     } catch (e) {
       reportError(e, 'Error marking as done');
+      return false;
     } finally {
       markingDoneRef.current.delete(clientId);
     }

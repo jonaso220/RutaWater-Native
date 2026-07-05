@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import ModalOverlay from '../components/ModalOverlay';
 import { getModalWidth } from '../utils/helpers';
+import { formatShortDate } from '../utils/format';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -234,7 +235,7 @@ const SettingsScreen = () => {
             </Text>
             {expirationDate && (
               <Text style={styles.premiumExpiry}>
-                {t('settings.renews')}: {new Date(expirationDate).toLocaleDateString()}
+                {t('settings.renews')}: {formatShortDate(expirationDate)}
               </Text>
             )}
             <TouchableOpacity

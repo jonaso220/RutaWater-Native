@@ -10,7 +10,8 @@ interface ClientsStore {
   getCompletedClients: (day: string) => Client[];
   getFilteredDirectory: (term: string, filter?: string) => Client[];
   directoryCounts: Record<string, number>;
-  markAsDone: (clientId: string, client: Client, forDay?: string) => Promise<void>;
+  // Devuelve false si el write falló (la UI avisa en vez de asumir éxito).
+  markAsDone: (clientId: string, client: Client, forDay?: string) => Promise<boolean>;
   undoComplete: (clientId: string) => Promise<void>;
   deleteAllCompleted: (day: string) => Promise<void>;
   deleteFromDay: (clientId: string, day: string) => Promise<void>;
@@ -71,7 +72,7 @@ export const useClientsStore = create<ClientsStore>()(() => ({
   getCompletedClients: () => [],
   getFilteredDirectory: () => [],
   directoryCounts: {},
-  markAsDone: noop,
+  markAsDone: async () => true,
   undoComplete: noop,
   deleteAllCompleted: noop,
   deleteFromDay: noop,

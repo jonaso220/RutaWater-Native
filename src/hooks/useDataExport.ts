@@ -43,6 +43,11 @@ export const useDataExport = (user: ExportUser) => {
   const clients = useClientsStore((s) => s.clients);
   const debts = useDebtsStore((s) => s.debts);
   const transfers = useTransfersStore((s) => s.transfers);
+  // Mismo criterio que el badge de la UI: la deuda se deriva en vivo de la
+  // colección (agregando duplicados por nombre+teléfono), no del flag
+  // persistido c.hasDebt, que puede quedar desincronizado (p. ej. deuda
+  // creada desde la webapp o instancia duplicada creada después de la deuda).
+  const getClientDebtTotal = useDebtsStore((s) => s.getClientDebtTotal);
 
   const handleExportCSV = async () => {
     try {
@@ -76,7 +81,7 @@ export const useDataExport = (user: ExportUser) => {
           escapeCsv(FREQUENCY_LABELS[c.freq as Frequency] || c.freq || ''),
           escapeCsv(prodParts.join(', ')),
           escapeCsv(c.notes || ''),
-          c.hasDebt ? 'Sí' : 'No',
+          getClientDebtTotal(c.id) > 0 ? 'Sí' : 'No',
           c.isStarred ? 'Sí' : 'No',
           escapeCsv(c.mapsLink || ''),
         ].join(',');
@@ -114,7 +119,7 @@ export const useDataExport = (user: ExportUser) => {
           specificDate: c.specificDate || '', notes: c.notes || '',
           products: c.products || {}, isStarred: c.isStarred || false,
           alarm: c.alarm || '', mapsLink: c.mapsLink || '', isNote: c.isNote || false,
-          hasDebt: c.hasDebt || false,
+          hasDebt: getClientDebtTotal(c.id) > 0,
           // Estado de ciclo y orden de ruta: sin estos campos el backup no
           // permitía restaurar qué se entregó ni el orden de cada día.
           isCompleted: c.isCompleted || false,

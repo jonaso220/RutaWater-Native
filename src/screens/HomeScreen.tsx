@@ -513,7 +513,12 @@ const HomeScreen = () => {
       };
 
       hapticLight();
-      markAsDone(client.id, client, selectedDayRef.current);
+      // Optimista a propósito (offline el promise queda pendiente y no debe
+      // bloquear); si el servidor rechaza el write, avisar — el listener ya
+      // habrá vuelto a mostrar el cliente.
+      markAsDone(client.id, client, selectedDayRef.current).then((ok) => {
+        if (!ok) Alert.alert(t('error'), t('home.markDoneFailed'));
+      });
       // Las notas se BORRAN al marcarlas listas — no hay doc que restaurar,
       // así que ofrecer "deshacer" sería mentirle al usuario (el update
       // fallaría en silencio).
@@ -525,7 +530,7 @@ const HomeScreen = () => {
         });
       }
     },
-    [markAsDone, pushUndo],
+    [markAsDone, pushUndo, t],
   );
 
   const handleDelete = useCallback(

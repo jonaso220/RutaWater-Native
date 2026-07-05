@@ -113,6 +113,7 @@ export default {
   // Home Screen
   home: {
     title: 'RutaWater',
+    markDoneFailed: 'Não foi possível marcar como concluído. Verifique a conexão e tente novamente.',
     searchPlaceholder: 'Buscar por nome ou endereco...',
     noClientsTitle: 'Sem clientes para {{day}}',
     noClients: 'Sem clientes para {{day}}',
@@ -633,10 +634,10 @@ export default {
   // Debt Modal
   debtModal: {
     confirmPayment: 'Confirmar pagamento',
-    paidConfirm: '{{name}} pagou ${{amount}}?',
+    paidConfirm: '{{name}} pagou {{amount}}?',
     paid: 'Paga',
     noDebts: 'Sem dividas registradas',
-    sendTotal: 'Enviar total (${{amount}})',
+    sendTotal: 'Enviar total ({{amount}})',
     sendReminder: 'Enviar lembrete',
   },
 
@@ -653,7 +654,7 @@ export default {
     noDebts: 'Nao ha dividas pendentes',
     payAll: 'Pagar todas ({{count}})',
     allPaidTitle: 'Todas pagas?',
-    allPaidMsg: 'Confirmar que {{name}} pagou todas as dividas ({{count}}) por um total de ${{total}}',
+    allPaidMsg: 'Confirmar que {{name}} pagou todas as dividas ({{count}}) por um total de {{total}}',
     allPaid: 'Todas pagas',
     owes: 'Deve',
     client_one: 'Cliente',

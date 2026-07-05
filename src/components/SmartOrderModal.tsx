@@ -21,6 +21,7 @@ import { ThemeColors } from '../theme/colors';
 import { Frequency, getDayLabel, getFreqLabel } from '../constants/products';
 import { useAllProducts } from '../stores/productCatalogStore';
 import { getModalWidth, getDayIndex, sanitizePhone, isSafeUrl } from '../utils/helpers';
+import { formatShortDate } from '../utils/format';
 import { useLayout } from '../hooks/useLayout';
 import { useAiParse, ParseResult, NotesMode } from '../hooks/useAiParse';
 import { useAiUsageStore } from '../stores/aiUsageStore';
@@ -402,7 +403,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        Alert.alert(t('done'), t('smartOrder.noteAdded', { date: i.specificDate }));
+        Alert.alert(t('done'), t('smartOrder.noteAdded', { date: formatShortDate(i.specificDate) }));
         handleClose();
         return;
       }
@@ -574,7 +575,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
         <Text style={[styles.resultText, { color: colors.textMuted, marginBottom: 8 }]}>
           {t('smartOrder.standaloneNoteSubtitle')}
         </Text>
-        <Field label={t('smartOrder.fieldDate')} value={i.specificDate} styles={styles} />
+        <Field label={t('smartOrder.fieldDate')} value={formatShortDate(i.specificDate)} styles={styles} />
         <Field label={t('smartOrder.fieldNote')} value={i.notes} styles={styles} />
       </View>
     );
@@ -658,7 +659,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
         {i.phone ? <Field label={t('smartOrder.fieldPhone')} value={i.phone} styles={styles} /> : null}
         <Field label={t('smartOrder.fieldFreq')} value={getFreqLabel(i.freq)} styles={styles} />
         {i.visitDay ? <Field label={t('smartOrder.fieldDay')} value={getDayLabel(i.visitDay)} styles={styles} /> : null}
-        {i.specificDate ? <Field label={t('smartOrder.fieldDate')} value={i.specificDate} styles={styles} /> : null}
+        {i.specificDate ? <Field label={t('smartOrder.fieldDate')} value={formatShortDate(i.specificDate)} styles={styles} /> : null}
         <ProductsList products={i.products} styles={styles} />
         {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label={t('smartOrder.fieldNotes')} value={i.notes} styles={styles} /> : null}
       </View>
@@ -686,7 +687,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
         <Field label={t('smartOrder.fieldFreq')} value={getFreqLabel(i.freq)} styles={styles} />
       )}
       {i.visitDay ? <Field label={t('smartOrder.fieldDay')} value={getDayLabel(i.visitDay)} styles={styles} /> : null}
-      {i.specificDate ? <Field label={t('smartOrder.fieldDate')} value={i.specificDate} styles={styles} /> : null}
+      {i.specificDate ? <Field label={t('smartOrder.fieldDate')} value={formatShortDate(i.specificDate)} styles={styles} /> : null}
       {hasAbsolute && <ProductsList products={i.products} styles={styles} />}
       {addEntries.length > 0 && (
         <View style={{ marginTop: 4 }}>

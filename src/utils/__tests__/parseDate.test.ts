@@ -31,6 +31,14 @@ describe('parseDate', () => {
     expect(parseDate(iso)?.getTime()).toBe(when.getTime());
   });
 
+  it('parsea yyyy-mm-dd a mediodía LOCAL (sin off-by-one UTC)', () => {
+    const result = parseDate('2026-07-05');
+    expect(result?.getFullYear()).toBe(2026);
+    expect(result?.getMonth()).toBe(6);
+    expect(result?.getDate()).toBe(5);
+    expect(result?.getHours()).toBe(12);
+  });
+
   it('devuelve null para vacíos e inválidos', () => {
     expect(parseDate(null)).toBeNull();
     expect(parseDate(undefined)).toBeNull();

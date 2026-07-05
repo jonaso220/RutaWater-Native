@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Client } from '../types';
 import { normalizePhone } from '../utils/helpers';
+import { formatMoney } from '../utils/format';
+import { getDayLabel } from '../constants/products';
 import { useAllProducts } from '../stores/productCatalogStore';
 import { getLastActivityDate, getEffectiveLastActivityDate, getDaysSince } from '../utils/recency';
 import { useTheme } from '../theme/ThemeContext';
@@ -221,12 +223,12 @@ const DirectoryClientCard = ({
           </Text>
           {item.visitDays && item.visitDays.length > 0 && (
             <Text style={styles.daysBadge}>
-              {item.visitDays.map((d) => d.slice(0, 3)).join(', ')}
+              {item.visitDays.map((d) => getDayLabel(d).slice(0, 3)).join(', ')}
             </Text>
           )}
           {debtTotal > 0 && (
             <TouchableOpacity onPress={() => onDebt(item)}>
-              <Text style={styles.debtBadge}><Ionicons name="cash" size={12} /> ${debtTotal.toLocaleString()}</Text>
+              <Text style={styles.debtBadge}><Ionicons name="cash" size={12} /> {formatMoney(debtTotal)}</Text>
             </TouchableOpacity>
           )}
           {hasRelationships && (

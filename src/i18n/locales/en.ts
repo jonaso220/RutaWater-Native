@@ -113,6 +113,7 @@ export default {
   // Home Screen
   home: {
     title: 'RutaWater',
+    markDoneFailed: 'Could not mark as done. Check your connection and try again.',
     searchPlaceholder: 'Search by name or address...',
     noClientsTitle: 'No clients for {{day}}',
     noClients: 'No clients for {{day}}',
@@ -633,10 +634,10 @@ export default {
   // Debt Modal
   debtModal: {
     confirmPayment: 'Confirm payment',
-    paidConfirm: '{{name}} paid ${{amount}}?',
+    paidConfirm: '{{name}} paid {{amount}}?',
     paid: 'Paid',
     noDebts: 'No debts registered',
-    sendTotal: 'Send total (${{amount}})',
+    sendTotal: 'Send total ({{amount}})',
     sendReminder: 'Send reminder',
   },
 
@@ -653,7 +654,7 @@ export default {
     noDebts: 'No pending debts',
     payAll: 'Pay all ({{count}})',
     allPaidTitle: 'All paid?',
-    allPaidMsg: 'Confirm that {{name}} paid all debts ({{count}}) for a total of ${{total}}',
+    allPaidMsg: 'Confirm that {{name}} paid all debts ({{count}}) for a total of {{total}}',
     allPaid: 'All paid',
     owes: 'Owes',
     client_one: 'Client',

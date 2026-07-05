@@ -15,6 +15,7 @@ import {
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
 import { normalizePhone, normalizePhoneForComparison, fuzzyMatch, matchScore, getClientMatchKey, getModalWidth, parseMoneyInput, parseDate } from '../utils/helpers';
+import { formatMoney, formatShortDate } from '../utils/format';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -251,21 +252,11 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   // Cuenta clientes únicos por matchKey para no contar el mismo cliente dos veces cuando tiene instancias duplicadas
   const uniqueClients = clientGroups.length;
 
-  const formatDate = (timestamp: any): string => {
-    const date = parseDate(timestamp);
-    if (!date) return '';
-    return date.toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
   const handleMarkPaid = (debt: Debt) => {
     if (saving) return;
     Alert.alert(
       t('debtModal.confirmPayment'),
-      t('debtModal.paidConfirm', { name: debt.clientName, amount: debt.amount?.toLocaleString() }),
+      t('debtModal.paidConfirm', { name: debt.clientName, amount: formatMoney(debt.amount) }),
       [
         { text: t('cancel'), style: 'cancel' },
         {
@@ -287,7 +278,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     if (saving) return;
     Alert.alert(
       t('debtsSheet.allPaidTitle'),
-      t('debtsSheet.allPaidMsg', { name: group.clientName, count: group.debts.length, total: group.total.toLocaleString() }),
+      t('debtsSheet.allPaidMsg', { name: group.clientName, count: group.debts.length, total: formatMoney(group.total) }),
       [
         { text: t('cancel'), style: 'cancel' },
         {
@@ -336,7 +327,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             <Text style={styles.clientAddress}>{item.clientAddress}</Text>
           ) : null}
           <Text style={styles.totalAmount}>
-            ${item.total.toLocaleString()}
+            {formatMoney(item.total)}
           </Text>
         </View>
         <View style={styles.cardActions}>
@@ -400,7 +391,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               <>
                 <View>
                   <View style={styles.dateRow}>
-                    <Text style={styles.debtDate}>{formatDate(debt.createdAt)}</Text>
+                    <Text style={styles.debtDate}>{formatShortDate(debt.createdAt)}</Text>
                     {showBadge && (
                       <View style={[styles.ageBadge, { backgroundColor: badgeBg }]}>
                         <Text style={[styles.ageBadgeText, { color: badgeText }]}>
@@ -410,7 +401,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                     )}
                   </View>
                   <Text style={styles.debtAmount}>
-                    ${debt.amount?.toLocaleString()}
+                    {formatMoney(debt.amount)}
                   </Text>
                 </View>
                 <View style={styles.debtActions}>
@@ -484,7 +475,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           {debts.length > 0 && (
             <View style={styles.summaryRow}>
               <View style={[styles.summaryBox, styles.summaryBoxDanger]}>
-                <Text style={styles.summaryValueDanger}>${grandTotal.toLocaleString()}</Text>
+                <Text style={styles.summaryValueDanger}>{formatMoney(grandTotal)}</Text>
                 <Text style={styles.summaryLabelDanger}>{t('total')}</Text>
               </View>
               <View style={styles.summaryBox}>

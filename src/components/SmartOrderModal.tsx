@@ -13,11 +13,12 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import ModalOverlay from './ModalOverlay';
 import { ProductLabel } from './ProductIcon';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
-import { FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { Frequency, getDayLabel, getFreqLabel } from '../constants/products';
 import { useAllProducts } from '../stores/productCatalogStore';
 import { getModalWidth, getDayIndex, sanitizePhone, isSafeUrl } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
@@ -86,6 +87,7 @@ const cleanProductSet = (p: Record<string, number> | undefined): Record<string, 
 
 const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) => {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
@@ -137,13 +139,13 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
 
   const handleInterpret = useCallback(async () => {
     if (!text.trim()) {
-      Alert.alert('Falta texto', 'Pegá o escribí el pedido para que la IA lo interprete.');
+      Alert.alert(t('smartOrder.missingTextTitle'), t('smartOrder.missingTextMsg'));
       return;
     }
     setResult(null);
     const r = await parse(text.trim());
     if (r) setResult(r);
-  }, [text, parse]);
+  }, [text, parse, t]);
 
   const handleConfirm = useCallback(async () => {
     if (!result) return;
@@ -155,20 +157,20 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         // plan free igual que el botón "+" (antes era un bypass).
         if (!canAddClient) {
           Alert.alert(
-            'Límite alcanzado',
-            'Llegaste al límite de clientes del plan gratuito. Pasate a Premium para crear más.',
+            t('smartOrder.clientLimitTitle'),
+            t('smartOrder.clientLimitMsg'),
           );
           setSaving(false);
           return;
         }
         if (i.specificDate && !isValidDateStr(i.specificDate)) {
-          Alert.alert('Error', `La IA devolvió una fecha inválida ("${i.specificDate}"). Reformulá el pedido con la fecha clara.`);
+          Alert.alert(t('error'), t('smartOrder.invalidDate', { date: i.specificDate }));
           setSaving(false);
           return;
         }
         const newVisitDay = i.visitDay ? normalizeDayName(i.visitDay) : '';
         if (i.visitDay && !newVisitDay) {
-          Alert.alert('Error', `La IA devolvió un día inválido ("${i.visitDay}"). Reformulá el pedido con el día claro.`);
+          Alert.alert(t('error'), t('smartOrder.invalidDay', { day: i.visitDay }));
           setSaving(false);
           return;
         }
@@ -184,11 +186,11 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           specificDate: i.specificDate || '',
         });
         if (!created) {
-          Alert.alert('Error', 'No se pudo crear el cliente. Verificá la conexión e intentá de nuevo.');
+          Alert.alert(t('error'), t('smartOrder.createFailed'));
           setSaving(false);
           return;
         }
-        Alert.alert('Listo', `Cliente "${i.name}" creado.`);
+        Alert.alert(t('done'), t('smartOrder.clientCreated', { name: i.name }));
         handleClose();
         return;
       }
@@ -197,7 +199,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         const i = result.input;
         const client = clients.find((c) => c.id === i.matched_client_id);
         if (!client) {
-          Alert.alert('Error', 'No se encontró el cliente.');
+          Alert.alert(t('error'), t('smartOrder.clientNotFound'));
           setSaving(false);
           return;
         }
@@ -223,17 +225,17 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         if (nextNotes !== undefined) updates.notes = nextNotes;
         const mergedOk = await updateClient(client.id, updates);
         if (!mergedOk) {
-          Alert.alert('Error', 'No se pudo actualizar el pedido. Verificá la conexión e intentá de nuevo.');
+          Alert.alert(t('error'), t('smartOrder.mergeFailed'));
           setSaving(false);
           return;
         }
         const addCount = Object.keys(i.add_products || {}).length;
         const removeCount = Object.keys(i.remove_products || {}).length;
-        const verb =
-          addCount && removeCount ? 'actualizado' :
-          removeCount ? 'recortado' :
-          'agregado';
-        Alert.alert('Listo', `Pedido de ${i.matched_client_name} ${verb}.`);
+        const mergeMsgKey =
+          addCount && removeCount ? 'smartOrder.mergeUpdated' :
+          removeCount ? 'smartOrder.mergeTrimmed' :
+          'smartOrder.mergeAdded';
+        Alert.alert(t('done'), t(mergeMsgKey, { name: i.matched_client_name }));
         handleClose();
         return;
       }
@@ -242,7 +244,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         const i = result.input;
         const client = clients.find((c) => c.id === i.matched_client_id);
         if (!client) {
-          Alert.alert('Error', 'No se encontró el cliente en el directorio actual.');
+          Alert.alert(t('error'), t('smartOrder.clientNotFoundDirectory'));
           setSaving(false);
           return;
         }
@@ -253,17 +255,17 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
         if (nextNotes !== undefined) updates.notes = nextNotes;
         if (Object.keys(updates).length === 0) {
-          Alert.alert('Sin cambios', 'No detecté ningún dato para actualizar.');
+          Alert.alert(t('smartOrder.noChangesTitle'), t('smartOrder.noChangesMsg'));
           setSaving(false);
           return;
         }
         const updatedOk = await updateClient(client.id, updates as any);
         if (!updatedOk) {
-          Alert.alert('Error', 'No se pudieron guardar los datos. Verificá la conexión e intentá de nuevo.');
+          Alert.alert(t('error'), t('smartOrder.updateFailed'));
           setSaving(false);
           return;
         }
-        Alert.alert('Listo', `Datos de ${i.matched_client_name} actualizados.`);
+        Alert.alert(t('done'), t('smartOrder.dataUpdated', { name: i.matched_client_name }));
         handleClose();
         return;
       }
@@ -272,7 +274,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         const i = result.input;
         const client = clients.find((c) => c.id === i.matched_client_id);
         if (!client) {
-          Alert.alert('Error', 'No se encontró el cliente en el directorio actual. Probá de nuevo.');
+          Alert.alert(t('error'), t('smartOrder.clientNotFoundRetry'));
           setSaving(false);
           return;
         }
@@ -283,20 +285,20 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           || (!i.visitDay && !i.specificDate && i.freq !== 'keep');
         if (isCancellation) {
           Alert.alert(
-            'No se puede cancelar por IA',
-            'Para borrar o cancelar un pedido, usá los botones de la app (Eliminar / Completar / Quitar del día). La IA no tiene permitido eliminar.',
+            t('smartOrder.cannotCancelTitle'),
+            t('smartOrder.cannotCancelMsg'),
           );
           setSaving(false);
           return;
         }
         if (i.specificDate && !isValidDateStr(i.specificDate)) {
-          Alert.alert('Error', `La IA devolvió una fecha inválida ("${i.specificDate}"). Reformulá el pedido con la fecha clara.`);
+          Alert.alert(t('error'), t('smartOrder.invalidDate', { date: i.specificDate }));
           setSaving(false);
           return;
         }
         const schedVisitDay = i.visitDay ? normalizeDayName(i.visitDay) : '';
         if (i.visitDay && !schedVisitDay) {
-          Alert.alert('Error', `La IA devolvió un día inválido ("${i.visitDay}"). Reformulá el pedido con el día claro.`);
+          Alert.alert(t('error'), t('smartOrder.invalidDay', { day: i.visitDay }));
           setSaving(false);
           return;
         }
@@ -309,7 +311,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           if (i.specificDate) {
             freq = 'once';
           } else {
-            Alert.alert('Nada para agendar', 'El pedido no tiene día ni fecha. Especificá cuándo (por ej. "para el sábado").');
+            Alert.alert(t('smartOrder.nothingToScheduleTitle'), t('smartOrder.nothingToScheduleMsg'));
             setSaving(false);
             return;
           }
@@ -372,12 +374,12 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           scheduleMode,
         );
         if (!scheduledOk) {
-          Alert.alert('Error', 'No se pudo agendar el pedido. Verificá la conexión e intentá de nuevo.');
+          Alert.alert(t('error'), t('smartOrder.scheduleFailed'));
           setSaving(false);
           return;
         }
-        const verb = scheduleMode === 'add' ? 'agendado (extra)' : 'actualizado';
-        Alert.alert('Listo', `Pedido de ${i.matched_client_name} ${verb}.`);
+        const scheduledMsgKey = scheduleMode === 'add' ? 'smartOrder.scheduledExtra' : 'smartOrder.scheduledUpdated';
+        Alert.alert(t('done'), t(scheduledMsgKey, { name: i.matched_client_name }));
         handleClose();
         return;
       }
@@ -385,33 +387,33 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
       if (result.tool === 'add_standalone_note') {
         const i = result.input;
         if (!i.notes?.trim() || !i.specificDate) {
-          Alert.alert('Error', 'No se pudo crear la nota: falta texto o fecha.');
+          Alert.alert(t('error'), t('smartOrder.noteMissing'));
           setSaving(false);
           return;
         }
         if (!isValidDateStr(i.specificDate)) {
-          Alert.alert('Error', `La IA devolvió una fecha inválida ("${i.specificDate}"). Reformulá la nota con la fecha clara.`);
+          Alert.alert(t('error'), t('smartOrder.invalidDateNote', { date: i.specificDate }));
           setSaving(false);
           return;
         }
         const noteOk = await addNote(i.notes.trim(), i.specificDate);
         if (!noteOk) {
-          Alert.alert('Error', 'No se pudo guardar la nota. Verificá la conexión e intentá de nuevo.');
+          Alert.alert(t('error'), t('smartOrder.noteFailed'));
           setSaving(false);
           return;
         }
-        Alert.alert('Listo', `Nota agregada para ${i.specificDate}.`);
+        Alert.alert(t('done'), t('smartOrder.noteAdded', { date: i.specificDate }));
         handleClose();
         return;
       }
 
       // report_not_found nunca llega acá (no hay botón de confirmar)
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'No se pudo guardar el pedido.');
+      Alert.alert(t('error'), e?.message || t('smartOrder.saveFailed'));
     } finally {
       setSaving(false);
     }
-  }, [result, aiCreateClient, scheduleFromDirectory, updateClient, addNote, clients, canAddClient, handleClose, text]);
+  }, [result, aiCreateClient, scheduleFromDirectory, updateClient, addNote, clients, canAddClient, handleClose, text, t]);
 
   const remainingUses = Math.max(0, usage.limit - usage.count);
 
@@ -426,7 +428,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           <View style={styles.header}>
             <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="sparkles" size={20} color={colors.primary} />
-              <Text style={styles.headerTitle}>Pedido inteligente</Text>
+              <Text style={styles.headerTitle}>{t('smartOrder.title')}</Text>
             </View>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
@@ -438,18 +440,20 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
             <View style={styles.usageBanner}>
               <Ionicons name="flash" size={14} color={colors.textMuted} />
               <Text style={styles.usageText}>
-                {usage.loading ? 'Cargando uso...' : `${usage.count} / ${usage.limit} parseos este mes`}
+                {usage.loading
+                  ? t('smartOrder.usageLoading')
+                  : t('smartOrder.usageCount', { used: usage.count, limit: usage.limit })}
               </Text>
             </View>
 
             {/* Input */}
-            <Text style={styles.sectionTitle}>Pedido</Text>
+            <Text style={styles.sectionTitle}>{t('smartOrder.orderSection')}</Text>
             <View style={styles.inputBox}>
               <TextInput
                 style={styles.input}
                 value={text}
                 onChangeText={setText}
-                placeholder="Ej: Juan García, Belgrano 432, los lunes 2 botellones de 20L y un sifón soda."
+                placeholder={t('smartOrder.placeholder')}
                 placeholderTextColor={colors.textHint}
                 multiline
                 textAlignVertical="top"
@@ -468,7 +472,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
               ) : (
                 <>
                   <Ionicons name="sparkles" size={16} color={colors.textWhite} />
-                  <Text style={styles.primaryBtnText}>Interpretar con IA</Text>
+                  <Text style={styles.primaryBtnText}>{t('smartOrder.interpretBtn')}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -476,9 +480,9 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
             {/* Limit reached */}
             {limitReached && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorTitle}>Llegaste al límite del mes</Text>
+                <Text style={styles.errorTitle}>{t('smartOrder.limitTitle')}</Text>
                 <Text style={styles.errorMsg}>
-                  Ya usaste tus {usage.limit} parseos de IA. Podés seguir cargando pedidos a mano y vuelve a estar disponible el 1° del próximo mes.
+                  {t('smartOrder.limitMsg', { limit: usage.limit })}
                 </Text>
               </View>
             )}
@@ -486,9 +490,9 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
             {/* Generic error */}
             {error && !limitReached && (
               <View style={styles.errorBox}>
-                <Text style={styles.errorTitle}>Error al interpretar</Text>
+                <Text style={styles.errorTitle}>{t('smartOrder.parseErrorTitle')}</Text>
                 <Text style={styles.errorMsg}>{error}</Text>
-                <Text style={styles.errorHint}>Verificá que el servidor local esté corriendo en puerto 3000.</Text>
+                <Text style={styles.errorHint}>{t('smartOrder.parseErrorHint')}</Text>
               </View>
             )}
 
@@ -500,7 +504,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           {result && result.tool !== 'report_not_found' && (
             <View style={styles.footer}>
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setResult(null)} disabled={saving}>
-                <Text style={styles.secondaryBtnText}>Volver</Text>
+                <Text style={styles.secondaryBtnText}>{t('back')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.confirmBtn, saving && styles.primaryBtnDisabled]}
@@ -512,7 +516,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
                 ) : (
                   <>
                     <Ionicons name="checkmark" size={18} color={colors.textWhite} />
-                    <Text style={styles.confirmBtnText}>Confirmar y guardar</Text>
+                    <Text style={styles.confirmBtnText}>{t('smartOrder.confirmBtn')}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -522,7 +526,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           {result && result.tool === 'report_not_found' && (
             <View style={styles.footer}>
               <TouchableOpacity style={[styles.confirmBtn, { flex: 1 }]} onPress={handleClose}>
-                <Text style={styles.confirmBtnText}>Entendido</Text>
+                <Text style={styles.confirmBtnText}>{t('smartOrder.understoodBtn')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -541,15 +545,16 @@ interface PreviewProps {
 }
 
 const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
+  const { t } = useTranslation();
   if (result.tool === 'report_not_found') {
     return (
       <View style={[styles.resultBox, { borderColor: colors.warning }]}>
         <View style={styles.resultHeader}>
           <Ionicons name="alert-circle" size={20} color={colors.warning} />
-          <Text style={styles.resultTitle}>Cliente no encontrado</Text>
+          <Text style={styles.resultTitle}>{t('smartOrder.notFoundTitle')}</Text>
         </View>
         <Text style={styles.resultText}>
-          No encontré a "{result.input.mentioned_name}" en tu directorio.
+          {t('smartOrder.notFoundMsg', { name: result.input.mentioned_name })}
         </Text>
         <Text style={[styles.resultText, { marginTop: 6, color: colors.textMuted }]}>
           {result.input.reason}
@@ -564,13 +569,13 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
       <View style={[styles.resultBox, { borderColor: colors.primary }]}>
         <View style={styles.resultHeader}>
           <Ionicons name="document-text" size={20} color={colors.primary} />
-          <Text style={styles.resultTitle}>Nota suelta del día</Text>
+          <Text style={styles.resultTitle}>{t('smartOrder.standaloneNoteTitle')}</Text>
         </View>
         <Text style={[styles.resultText, { color: colors.textMuted, marginBottom: 8 }]}>
-          Recordatorio sin cliente asociado.
+          {t('smartOrder.standaloneNoteSubtitle')}
         </Text>
-        <Field label="Fecha" value={i.specificDate} styles={styles} />
-        <Field label="Nota" value={i.notes} styles={styles} />
+        <Field label={t('smartOrder.fieldDate')} value={i.specificDate} styles={styles} />
+        <Field label={t('smartOrder.fieldNote')} value={i.notes} styles={styles} />
       </View>
     );
   }
@@ -581,15 +586,15 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
     const removeEntries = Object.entries(i.remove_products || {}).filter(([_, v]) => v > 0);
     const onlyRemoves = addEntries.length === 0 && removeEntries.length > 0;
     const headerText = onlyRemoves
-      ? `Quitar del pedido: ${i.matched_client_name}`
+      ? t('smartOrder.mergeRemoveTitle', { name: i.matched_client_name })
       : addEntries.length && removeEntries.length
-        ? `Modificar pedido: ${i.matched_client_name}`
-        : `Sumar al pedido: ${i.matched_client_name}`;
+        ? t('smartOrder.mergeModifyTitle', { name: i.matched_client_name })
+        : t('smartOrder.mergeAddTitle', { name: i.matched_client_name });
     const subtitle = onlyRemoves
-      ? 'Se quitan estos productos del pedido pendiente (sin tocar día ni frecuencia).'
+      ? t('smartOrder.mergeRemoveSubtitle')
       : addEntries.length && removeEntries.length
-        ? 'Se ajustan los productos del pedido pendiente (sin tocar día ni frecuencia).'
-        : 'Se agregan estos productos al pedido pendiente (sin tocar día ni frecuencia).';
+        ? t('smartOrder.mergeModifySubtitle')
+        : t('smartOrder.mergeAddSubtitle');
     return (
       <View style={[styles.resultBox, { borderColor: colors.primary }]}>
         <View style={styles.resultHeader}>
@@ -601,20 +606,20 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
         </Text>
         {addEntries.length > 0 && (
           <View>
-            <Text style={[styles.fieldLabel, { color: colors.success }]}>Sumar</Text>
+            <Text style={[styles.fieldLabel, { color: colors.success }]}>{t('smartOrder.addLabel')}</Text>
             <ProductsList products={i.add_products} styles={styles} />
           </View>
         )}
         {removeEntries.length > 0 && (
           <View style={{ marginTop: addEntries.length ? 8 : 0 }}>
-            <Text style={[styles.fieldLabel, { color: colors.warning }]}>Quitar</Text>
+            <Text style={[styles.fieldLabel, { color: colors.warning }]}>{t('smartOrder.removeLabel')}</Text>
             <ProductsList products={i.remove_products} styles={styles} />
           </View>
         )}
         {i.notes_mode === 'clear' ? (
-          <Field label="Notas" value="(borrar)" styles={styles} />
+          <Field label={t('smartOrder.fieldNotes')} value={t('smartOrder.clearNotesValue')} styles={styles} />
         ) : i.notes && !looksLikeAutoDescription(i.notes) ? (
-          <Field label="Notas" value={i.notes} styles={styles} />
+          <Field label={t('smartOrder.fieldNotes')} value={i.notes} styles={styles} />
         ) : null}
       </View>
     );
@@ -626,15 +631,15 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
       <View style={[styles.resultBox, { borderColor: colors.primary }]}>
         <View style={styles.resultHeader}>
           <Ionicons name="create" size={20} color={colors.primary} />
-          <Text style={styles.resultTitle}>Actualizar: {i.matched_client_name}</Text>
+          <Text style={styles.resultTitle}>{t('smartOrder.updateTitle', { name: i.matched_client_name })}</Text>
         </View>
         {i.mapsLink ? <Field label="Maps" value={i.mapsLink} styles={styles} /> : null}
-        {i.address ? <Field label="Dirección" value={i.address} styles={styles} /> : null}
-        {i.phone ? <Field label="Teléfono" value={i.phone} styles={styles} /> : null}
+        {i.address ? <Field label={t('smartOrder.fieldAddress')} value={i.address} styles={styles} /> : null}
+        {i.phone ? <Field label={t('smartOrder.fieldPhone')} value={i.phone} styles={styles} /> : null}
         {i.notes_mode === 'clear' ? (
-          <Field label="Notas" value="(borrar)" styles={styles} />
+          <Field label={t('smartOrder.fieldNotes')} value={t('smartOrder.clearNotesValue')} styles={styles} />
         ) : i.notes && !looksLikeAutoDescription(i.notes) ? (
-          <Field label="Notas" value={i.notes} styles={styles} />
+          <Field label={t('smartOrder.fieldNotes')} value={i.notes} styles={styles} />
         ) : null}
       </View>
     );
@@ -646,16 +651,16 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
       <View style={[styles.resultBox, { borderColor: colors.primary }]}>
         <View style={styles.resultHeader}>
           <Ionicons name="person-add" size={20} color={colors.primary} />
-          <Text style={styles.resultTitle}>Cliente nuevo: {i.name}</Text>
+          <Text style={styles.resultTitle}>{t('smartOrder.newClientTitle', { name: i.name })}</Text>
         </View>
-        {i.address ? <Field label="Dirección" value={i.address} styles={styles} /> : null}
+        {i.address ? <Field label={t('smartOrder.fieldAddress')} value={i.address} styles={styles} /> : null}
         {i.mapsLink ? <Field label="Maps" value={i.mapsLink} styles={styles} /> : null}
-        {i.phone ? <Field label="Teléfono" value={i.phone} styles={styles} /> : null}
-        <Field label="Frecuencia" value={FREQUENCY_LABELS[i.freq as Frequency] || i.freq} styles={styles} />
-        {i.visitDay ? <Field label="Día" value={i.visitDay} styles={styles} /> : null}
-        {i.specificDate ? <Field label="Fecha" value={i.specificDate} styles={styles} /> : null}
+        {i.phone ? <Field label={t('smartOrder.fieldPhone')} value={i.phone} styles={styles} /> : null}
+        <Field label={t('smartOrder.fieldFreq')} value={getFreqLabel(i.freq)} styles={styles} />
+        {i.visitDay ? <Field label={t('smartOrder.fieldDay')} value={getDayLabel(i.visitDay)} styles={styles} /> : null}
+        {i.specificDate ? <Field label={t('smartOrder.fieldDate')} value={i.specificDate} styles={styles} /> : null}
         <ProductsList products={i.products} styles={styles} />
-        {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label="Notas" value={i.notes} styles={styles} /> : null}
+        {i.notes && !looksLikeAutoDescription(i.notes) ? <Field label={t('smartOrder.fieldNotes')} value={i.notes} styles={styles} /> : null}
       </View>
     );
   }
@@ -675,28 +680,28 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
         <Text style={styles.resultTitle}>{i.matched_client_name}</Text>
       </View>
       <Text style={[styles.resultText, { color: colors.textMuted, marginBottom: 8 }]}>
-        {isExtra ? 'Agendar pedido EXTRA (no reemplaza el actual)' : 'Mover/actualizar el pedido existente'}
+        {isExtra ? t('smartOrder.extraSubtitle') : t('smartOrder.moveSubtitle')}
       </Text>
       {i.freq && i.freq !== 'keep' && (
-        <Field label="Frecuencia" value={FREQUENCY_LABELS[i.freq as Frequency] || i.freq} styles={styles} />
+        <Field label={t('smartOrder.fieldFreq')} value={getFreqLabel(i.freq)} styles={styles} />
       )}
-      {i.visitDay ? <Field label="Día" value={i.visitDay} styles={styles} /> : null}
-      {i.specificDate ? <Field label="Fecha" value={i.specificDate} styles={styles} /> : null}
+      {i.visitDay ? <Field label={t('smartOrder.fieldDay')} value={getDayLabel(i.visitDay)} styles={styles} /> : null}
+      {i.specificDate ? <Field label={t('smartOrder.fieldDate')} value={i.specificDate} styles={styles} /> : null}
       {hasAbsolute && <ProductsList products={i.products} styles={styles} />}
       {addEntries.length > 0 && (
         <View style={{ marginTop: 4 }}>
-          <Text style={[styles.fieldLabel, { color: colors.success }]}>Sumar</Text>
+          <Text style={[styles.fieldLabel, { color: colors.success }]}>{t('smartOrder.addLabel')}</Text>
           <ProductsList products={i.add_products || {}} styles={styles} />
         </View>
       )}
       {removeEntries.length > 0 && (
         <View style={{ marginTop: 4 }}>
-          <Text style={[styles.fieldLabel, { color: colors.warning }]}>Quitar</Text>
+          <Text style={[styles.fieldLabel, { color: colors.warning }]}>{t('smartOrder.removeLabel')}</Text>
           <ProductsList products={i.remove_products || {}} styles={styles} />
         </View>
       )}
-      {showClearNotes && <Field label="Notas" value="(borrar)" styles={styles} />}
-      {showIncomingNotes && <Field label="Notas" value={i.notes} styles={styles} />}
+      {showClearNotes && <Field label={t('smartOrder.fieldNotes')} value={t('smartOrder.clearNotesValue')} styles={styles} />}
+      {showIncomingNotes && <Field label={t('smartOrder.fieldNotes')} value={i.notes} styles={styles} />}
     </View>
   );
 };
@@ -709,13 +714,14 @@ const Field: React.FC<{ label: string; value: string; styles: ReturnType<typeof 
 );
 
 const ProductsList: React.FC<{ products: Record<string, number>; styles: ReturnType<typeof getStyles> }> = ({ products, styles }) => {
+  const { t } = useTranslation();
   const allProducts = useAllProducts();
   const { fontScale } = useLayout();
   const entries = Object.entries(products || {}).filter(([_, v]) => v > 0);
   if (entries.length === 0) return null;
   return (
     <View style={{ marginTop: 6 }}>
-      <Text style={styles.fieldLabel}>Productos</Text>
+      <Text style={styles.fieldLabel}>{t('smartOrder.fieldProducts')}</Text>
       {entries.map(([id, qty]) => {
         const p = allProducts.find((x) => x.id === id);
         return (

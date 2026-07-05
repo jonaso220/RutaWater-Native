@@ -72,7 +72,14 @@ export const usePromoCode = ({ userId }: { userId: string | undefined }): PromoS
         });
 
         return { success: true, message: 'Premium activado!' };
-      } catch (error) {
+      } catch (error: any) {
+        // permission-denied acá = el código pasó la lista local (PROMO_CODES)
+        // pero las reglas lo rechazaron: los listados divergieron. Para el
+        // usuario es un código inválido, no un error de conexión.
+        if (String(error?.code || '').includes('permission-denied')) {
+          reportError(error, 'Promo redeem rejected by rules: PROMO_CODES y firestore.rules desincronizados');
+          return { success: false, message: 'Codigo invalido.' };
+        }
         reportError(error, 'Promo redeem error');
         return { success: false, message: 'Error al activar el codigo.' };
       }

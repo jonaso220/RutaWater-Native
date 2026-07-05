@@ -85,6 +85,9 @@ service cloud.firestore {
     //    Las reglas no son legibles por los clientes, así que la lista de
     //    códigos acá NO queda expuesta. Antes cualquier usuario podía
     //    escribirse {active: true} y obtener premium gratis.
+    //    ⚠️ Mantener el listado en sincronía con PROMO_CODES en
+    //    src/constants/subscription.ts (y desplegar las reglas al cambiarlo):
+    //    si divergen, la app valida el código y el canje se rechaza acá.
     match /premiumOverrides/{id} {
       allow read: if signedIn() && id == uid();
       allow delete: if signedIn() && id == uid();

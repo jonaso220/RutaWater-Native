@@ -25,6 +25,18 @@ import { queryClient } from '../lib/queryClient';
  * StoreSync bridges the existing React hooks (which manage Firebase listeners)
  * with Zustand stores. This gives us selective subscriptions without rewriting
  * the proven hook logic.
+ *
+ * CONTRATO DE SCOPES — qué datos cambian al cambiar de reparto/perfil:
+ *   - POR PERFIL ACTIVO (effectiveGroupId): clients, debts, transfers.
+ *     Cambiar de reparto cambia estos datos y nada más.
+ *   - POR CUENTA (grupo familiar primario o uid, doc settings/{groupId||uid},
+ *     ver settingsDocId en utils/helpers): catálogo de productos y plantillas
+ *     de WhatsApp. Son configuración compartida entre todos los repartos, a
+ *     propósito; además las reglas de Firestore solo autorizan uid/groupId
+ *     como id de settings.
+ *   - POR USUARIO (uid): daily_loads, aiUsage, premiumOverrides, suscripción.
+ * Si se agrega una colección nueva, elegir un scope de esta tabla y
+ * documentarlo acá.
  */
 export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, groupData } = useAuthContext();
@@ -145,6 +157,8 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   }, [dailyLoadsHook.dailyLoad, dailyLoadsHook.loadForDay, dailyLoadsHook.saveDailyLoad]);
 
   // --- Product catalog (editable: rename / hide / add) ---
+  // groupId PRIMARIO a propósito (no effectiveGroupId): el catálogo es de la
+  // cuenta y se comparte entre repartos — ver el contrato de scopes arriba.
   const catalog = useProductCatalog(userId, groupId);
 
   useEffect(() => {

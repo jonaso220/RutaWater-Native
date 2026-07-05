@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { db } from '../config/firebase';
 import { reportError } from '../lib/crashReporting';
 import { useTranslation } from 'react-i18next';
+import { settingsDocId } from '../utils/helpers';
 
 export const DEFAULT_EN_CAMINO = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
 export const DEFAULT_DEUDA = 'La deuda es de ${total}. Saludos';
@@ -17,8 +18,7 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
 
   useEffect(() => {
     if (!uid) return;
-    const settingsDocId = groupId || uid;
-    db.collection('settings').doc(settingsDocId).get().then((doc) => {
+    db.collection('settings').doc(settingsDocId(uid, groupId)).get().then((doc) => {
       if (doc.exists) {
         const data = doc.data();
         if (data?.whatsappEnCamino) setWaEnCamino(data.whatsappEnCamino);
@@ -31,12 +31,11 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
 
   const handleSaveTemplates = async () => {
     try {
-      const settingsDocId = groupId || uid;
       const settings: Record<string, string> = {};
       if (waEnCamino.trim()) settings.whatsappEnCamino = waEnCamino.trim();
       if (waDeuda.trim()) settings.whatsappDeuda = waDeuda.trim();
       if (waRecordatorio.trim()) settings.whatsappRecordatorio = waRecordatorio.trim();
-      await db.collection('settings').doc(settingsDocId).set(settings, { merge: true });
+      await db.collection('settings').doc(settingsDocId(uid, groupId)).set(settings, { merge: true });
       Alert.alert(t('settings.templatesSaved'), t('settings.templatesSavedMsg'));
     } catch (e) {
       reportError(e, 'Error saving templates');
@@ -48,8 +47,7 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
     setWaEnCamino('');
     setWaDeuda('');
     setWaRecordatorio('');
-    const settingsDocId = groupId || uid;
-    db.collection('settings').doc(settingsDocId).set(
+    db.collection('settings').doc(settingsDocId(uid, groupId)).set(
       { whatsappEnCamino: null, whatsappDeuda: null, whatsappRecordatorio: null },
       { merge: true },
     ).catch((e) => reportError(e, 'Error resetting templates'));

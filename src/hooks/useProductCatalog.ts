@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../config/firebase';
 import { reportError } from '../lib/crashReporting';
 import { Product, PRODUCTS } from '../constants/products';
+import { settingsDocId } from '../utils/helpers';
 
 /**
  * Loads and mutates the editable product catalog stored in the shared
@@ -23,10 +24,9 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
 
   useEffect(() => {
     if (!uid) return;
-    const docId = groupId || uid;
     const unsub = db
       .collection('settings')
-      .doc(docId)
+      .doc(settingsDocId(uid, groupId))
       .onSnapshot(
         (doc) => {
           const data = doc.data() || {};
@@ -78,7 +78,7 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
       try {
         await db
           .collection('settings')
-          .doc(groupId || uid)
+          .doc(settingsDocId(uid, groupId))
           .set(patch, { merge: true });
       } catch (e) {
         reportError(e, 'Error saving product catalog');

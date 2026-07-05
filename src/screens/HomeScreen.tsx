@@ -21,7 +21,7 @@ import DraggableFlatList, {
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
-import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString, parseDate } from '../utils/helpers';
+import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString, parseDate, settingsDocId } from '../utils/helpers';
 import { hapticLight, hapticMedium, hapticSelection, hapticError } from '../utils/haptics';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
@@ -329,8 +329,8 @@ const HomeScreen = () => {
   // Load WhatsApp templates (real-time listener)
   useEffect(() => {
     if (!user?.uid) return;
-    const settingsDocId = groupData?.groupId || user.uid;
-    const unsubscribe = db.collection('settings').doc(settingsDocId).onSnapshot((doc) => {
+    const docId = settingsDocId(user.uid, groupData?.groupId);
+    const unsubscribe = db.collection('settings').doc(docId).onSnapshot((doc) => {
       if (doc.exists) setAppSettings(doc.data() as Record<string, string>);
     }, () => {});
     return () => unsubscribe();

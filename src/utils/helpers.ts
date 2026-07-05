@@ -112,6 +112,14 @@ export const parseDate = (val: any): Date | null => {
   return isNaN(date.getTime()) ? null : date;
 };
 
+// Doc compartido settings/{groupId || uid} (plantillas de WhatsApp + catálogo
+// de productos). Se resuelve SIEMPRE por grupo familiar primario o usuario:
+// NO cambia con el reparto/perfil activo, a propósito — son configuración de
+// la cuenta, y las reglas de Firestore solo autorizan uid o groupId como id
+// de settings. Todo lector/escritor debe usar este helper para que la
+// fórmula no diverja entre pantallas.
+export const settingsDocId = (uid: string, groupId?: string | null): string => groupId || uid;
+
 // yyyy-mm-dd of a date in LOCAL time. new Date().toISOString() uses UTC and in
 // UTC-3 already belongs to tomorrow from 21:00 — never use it for "today".
 export const toLocalDateString = (d: Date): string => {

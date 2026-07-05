@@ -17,7 +17,11 @@ export const FREE_CLIENT_LIMIT = 60;
 export const PRODUCT_ID_MONTHLY = 'rw_premium_monthly';
 export const PRODUCT_ID_ANNUAL = 'rw_premium_annual';
 
-// Promo codes that grant free premium (add codes here)
+// Promo codes that grant free premium (add codes here).
+// ⚠️ ACOPLADO A firestore.rules: las reglas de premiumOverrides validan el
+// MISMO listado ("code in [...]"). Si agregás/quitás un código acá tenés que
+// actualizar y desplegar las reglas también; si no, la app lo da por válido
+// y Firestore rechaza el canje (el usuario ve "Codigo invalido").
 export const PROMO_CODES: Record<string, string> = {
   RUTAFAMILIA: 'lifetime',   // Para familia
   RUTAAMIGOS: 'lifetime',    // Para amigos

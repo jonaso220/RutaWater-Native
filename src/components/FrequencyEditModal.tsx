@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { FREQUENCIES, Frequency, getFreqLabel } from '../constants/products';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
@@ -89,27 +89,25 @@ const FrequencyEditModal: React.FC<FrequencyEditModalProps> = ({
 
           <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
             <View style={styles.freqGrid}>
-              {(Object.entries(FREQUENCY_LABELS) as [Frequency, string][]).map(
-                ([key, label]) => (
-                  <TouchableOpacity
-                    key={key}
-                    onPress={() => setFreq(key)}
+              {FREQUENCIES.map((key) => (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => setFreq(key)}
+                  style={[
+                    styles.freqChip,
+                    freq === key && styles.freqChipSelected,
+                  ]}
+                >
+                  <Text
                     style={[
-                      styles.freqChip,
-                      freq === key && styles.freqChipSelected,
+                      styles.freqChipText,
+                      freq === key && styles.freqChipTextSelected,
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.freqChipText,
-                        freq === key && styles.freqChipTextSelected,
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ),
-              )}
+                    {getFreqLabel(key)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
 
             {needsDate && (

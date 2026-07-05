@@ -1,4 +1,5 @@
 import i18n from '../i18n';
+import { getDayIndex } from '../utils/helpers';
 
 // Productos - mismos IDs que la web app para compatibilidad con Firestore
 export interface Product {
@@ -29,14 +30,24 @@ export const getProductShort = (id: string): string => {
   return i18n.t(`productShort.${id}`, { defaultValue: id });
 };
 
-export const getTranslatedDays = (): string[] => {
-  return i18n.t('allDays', { returnObjects: true }) as string[];
-};
-
+// Los datos (Firestore, visitDay/visitDays) guardan siempre el valor canónico
+// en español; getDayLabel es solo para display.
 export const ALL_DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+export const getDayLabel = (day: string): string => {
+  const idx = getDayIndex(day);
+  if (idx === -1) return day;
+  const dayNames = i18n.t('dayNames', { returnObjects: true }) as string[];
+  return dayNames?.[idx] || day;
+};
 
 export type Frequency = 'weekly' | 'biweekly' | 'triweekly' | 'monthly' | 'once' | 'on_demand';
 
+// Orden de los chips en los selectores de frecuencia.
+export const FREQUENCIES: Frequency[] = ['weekly', 'biweekly', 'triweekly', 'monthly', 'once', 'on_demand'];
+
+// Etiquetas fijas en español: solo para el export CSV (compatibilidad con la
+// webapp). Para UI usar getFreqLabel, que traduce vía i18n.
 export const FREQUENCY_LABELS: Record<Frequency, string> = {
   weekly: 'Semanal',
   biweekly: 'Quincenal',

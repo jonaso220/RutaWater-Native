@@ -16,7 +16,7 @@ import ModalOverlay from './ModalOverlay';
 import { ProductLabel } from './ProductIcon';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
-import { ALL_DAYS, FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { ALL_DAYS, Frequency, getDayLabel } from '../constants/products';
 import { useProducts } from '../stores/productCatalogStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
@@ -31,6 +31,8 @@ const ALL_DAYS_BY_INDEX = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves',
 interface ScheduleModalProps {
   visible: boolean;
   client: Client | null;
+  // Devuelve false cuando el write a Firestore falló (scheduleFromDirectory
+  // reporta el error así en vez de lanzar).
   onSave: (
     client: Client,
     days: string[],
@@ -38,7 +40,7 @@ interface ScheduleModalProps {
     date: string,
     notes: string,
     products: Record<string, number>,
-  ) => void;
+  ) => boolean | void | Promise<boolean | void>;
   onClose: () => void;
 }
 
@@ -192,29 +194,32 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     Object.entries(localProducts).forEach(([key, val]) => {
       if (val > 0) cleanProducts[key] = val;
     });
-    let saveError: unknown = null;
+    let saveFailed = false;
     try {
       // Periódico: la fecha (si se eligió) va como ancla de inicio de la frecuencia.
       const dateArg = localFreq === 'once' ? localDate : startDate;
-      await onSave(client, localDays, localFreq, dateArg, localNotes, cleanProducts);
+      const ok = await onSave(client, localDays, localFreq, dateArg, localNotes, cleanProducts);
+      saveFailed = ok === false;
     } catch (e) {
-      saveError = e;
+      saveFailed = true;
       reportError(e, 'Schedule save error');
     } finally {
       setSaving(false);
       onClose();
     }
-    if (saveError) {
+    if (saveFailed) {
       Alert.alert(t('error'), t('scheduleModal.errorSave'));
     }
   };
 
+  // Mismas etiquetas freq.* que el resto de la app (Directorio, Editar Cliente)
+  // para que la misma frecuencia no se llame distinto según la pantalla.
   const freqOptions: { key: Frequency; label: string }[] = [
-    { key: 'once', label: t('scheduleModal.freqOnce') },
-    { key: 'weekly', label: t('scheduleModal.freqWeekly') },
-    { key: 'biweekly', label: t('scheduleModal.freqBiweekly') },
-    { key: 'triweekly', label: t('scheduleModal.freqTriweekly') },
-    { key: 'monthly', label: t('scheduleModal.freqMonthly') },
+    { key: 'once', label: t('freq.once') },
+    { key: 'weekly', label: t('freq.weekly') },
+    { key: 'biweekly', label: t('freq.biweekly') },
+    { key: 'triweekly', label: t('freq.triweekly') },
+    { key: 'monthly', label: t('freq.monthly') },
   ];
 
   // Format today's date as YYYY-MM-DD for the default
@@ -334,7 +339,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                           localDays.includes(day) && styles.dayChipTextSelected,
                         ]}
                       >
-                        {day.slice(0, 3)}
+                        {getDayLabel(day).slice(0, 3)}
                       </Text>
                     </TouchableOpacity>
                   ))}

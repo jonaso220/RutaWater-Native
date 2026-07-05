@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { ProductLabel } from './ProductIcon';
-import { ALL_DAYS } from '../constants/products';
+import { ALL_DAYS, getDayLabel } from '../constants/products';
 import { useProducts } from '../stores/productCatalogStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
@@ -374,7 +374,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                         onPress={() => setSelectedDay(d)}
                       >
                         <Text style={[styles.dayChipText, selectedDay === d && styles.dayChipTextSelected]}>
-                          {d.slice(0, 3)}
+                          {getDayLabel(d).slice(0, 3)}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -388,7 +388,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                   onPress={() => setDestination('day')}
                 >
                   <Text style={[styles.destChipText, destination === 'day' && styles.destChipTextSelected]}>
-                    {day}
+                    {getDayLabel(day)}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity

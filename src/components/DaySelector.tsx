@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { Text, StyleSheet } from 'react-native';
 import { ScrollView as GHScrollView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
-import { ALL_DAYS } from '../constants/products';
+import { useTranslation } from 'react-i18next';
+import { ALL_DAYS, getDayLabel } from '../constants/products';
 import { getTodayDayName } from '../utils/helpers';
 import { ThemeColors } from '../theme/colors';
 
@@ -26,6 +27,9 @@ const DaySelector = React.memo<DaySelectorProps>(({
   fontScale,
   onSelectDay,
 }) => {
+  // Suscribe el componente (memoizado) a los cambios de idioma para que las
+  // etiquetas de getDayLabel se actualicen.
+  useTranslation();
   const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
   const todayName = useMemo(() => getTodayDayName(), []);
 
@@ -58,7 +62,7 @@ const DaySelector = React.memo<DaySelectorProps>(({
                 isSelected && styles.dayChipTextSelected,
               ]}
             >
-              {isWide ? day : day.slice(0, 3)}
+              {isWide ? getDayLabel(day) : getDayLabel(day).slice(0, 3)}
             </Text>
             <Text
               style={[

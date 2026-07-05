@@ -18,7 +18,7 @@ import FrequencyEditModal from './FrequencyEditModal';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Client } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
-import { FREQUENCY_LABELS, Frequency } from '../constants/products';
+import { FREQUENCIES, Frequency, getFreqLabel } from '../constants/products';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -516,27 +516,25 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                   {t('editModal.frequency')}
                 </Text>
                 <View style={styles.freqGrid}>
-                  {(Object.entries(FREQUENCY_LABELS) as [Frequency, string][]).map(
-                    ([key, label]) => (
-                      <TouchableOpacity
-                        key={key}
-                        onPress={() => setFreq(key)}
+                  {FREQUENCIES.map((key) => (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setFreq(key)}
+                      style={[
+                        styles.freqChip,
+                        freq === key && styles.freqChipSelected,
+                      ]}
+                    >
+                      <Text
                         style={[
-                          styles.freqChip,
-                          freq === key && styles.freqChipSelected,
+                          styles.freqChipText,
+                          freq === key && styles.freqChipTextSelected,
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.freqChipText,
-                            freq === key && styles.freqChipTextSelected,
-                          ]}
-                        >
-                          {label}
-                        </Text>
-                      </TouchableOpacity>
-                    ),
-                  )}
+                        {getFreqLabel(key)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
 
                 {needsDate && (
@@ -601,7 +599,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
               >
                 <Ionicons name="calendar-outline" size={18} color={colors.primary} />
                 <Text style={styles.linkBtnText}>
-                  {FREQUENCY_LABELS[freq]}
+                  {getFreqLabel(freq)}
                   {needsDate && startDate ? ` · ${formatDisplayDate(startDate)}` : ''}
                 </Text>
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />

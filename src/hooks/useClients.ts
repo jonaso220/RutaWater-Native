@@ -3,7 +3,7 @@ import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firest
 import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
 import { Client, RELATIONSHIP_INVERSE } from '../types';
-import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, getWeekNumber, normalizePhoneForComparison, toLocalDateString, parseDate } from '../utils/helpers';
+import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, normalizePhoneForComparison, toLocalDateString, parseDate } from '../utils/helpers';
 import { ALL_DAYS, Frequency } from '../constants/products';
 import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
@@ -377,7 +377,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     mode: 'add' | 'replace' = 'add',
   ) => {
     try {
-      const currentWeek = getWeekNumber(new Date());
       const scope = groupId ? { groupId, userId } : { userId };
       const newData: Record<string, any> = {
         name: clientData.name,
@@ -428,7 +427,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         newData.visitDay = dayName;
         newData.visitDays = [dayName];
         newData.specificDate = newDate;
-        newData.startWeek = currentWeek;
         newData.listOrder = newOrder;
         newData.listOrders = { [dayName]: newOrder };
       } else {
@@ -438,7 +436,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         // or after it, and the first Listo clears it so the cycle continues.
         newData.visitDays = newDays;
         newData.visitDay = newDays[0];
-        newData.startWeek = currentWeek;
         // '' (no null): la convención de "sin fecha" en todo el resto del
         // código es cadena vacía (addClient, aiCreateClient, EditClientModal).
         newData.specificDate = newDate || '';
@@ -579,7 +576,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
       const dayName = dayNames[d.getDay()];
 
-      const currentWeek = getWeekNumber(new Date());
       const scope = groupId ? { groupId, userId } : { userId };
 
       // Place at beginning of day
@@ -616,7 +612,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         isCompleted: false,
         isStarred: false,
         isPinned: false,
-        startWeek: currentWeek,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -638,7 +633,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     mapsLink?: string,
   ) => {
     try {
-      const currentWeek = getWeekNumber(new Date());
       const scope = groupId ? { groupId, userId } : { userId };
 
       const cleanProducts: Record<string, number> = {};
@@ -692,7 +686,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         isPinned: false,
         isNote: false,
         alarm: '',
-        startWeek: currentWeek,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -716,7 +709,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     specificDate: string;
   }) => {
     try {
-      const currentWeek = getWeekNumber(new Date());
       const scope = groupId ? { groupId, userId } : { userId };
 
       const cleanProducts: Record<string, number> = {};
@@ -793,7 +785,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         isPinned: false,
         isNote: false,
         alarm: '',
-        startWeek: currentWeek,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -1202,7 +1193,6 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         isPinned: false,
         isNote: false,
         alarm: '',
-        startWeek: getWeekNumber(new Date()),
         createdAt: new Date(),
         updatedAt: new Date(),
       };

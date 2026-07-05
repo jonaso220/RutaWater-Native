@@ -2,7 +2,7 @@ import { useCallback, useRef, useMemo } from 'react';
 import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 import { Debt, Client } from '../types';
-import { getClientMatchKey, normalizePhoneForComparison } from '../utils/helpers';
+import { getClientMatchKey } from '../utils/helpers';
 import { useDebtsQuery } from './queries/useDebtsQuery';
 
 interface UseDebtsProps {
@@ -47,17 +47,6 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
       return ids && ids.length > 0 ? ids : [clientId];
     },
     [matchIndex],
-  );
-
-  // Devuelve solo los clientIds que existen actualmente en el directorio.
-  // Evita que batch.update intente escribir sobre docs borrados y haga rollback.
-  const getExistingMatchingIds = useCallback(
-    (clientId: string): string[] => {
-      const ids = getMatchingIds(clientId);
-      const existing = new Set(clientsRef.current.map((c) => c.id));
-      return ids.filter((id) => existing.has(id));
-    },
-    [getMatchingIds],
   );
 
   // Get debts for a specific client (agrega duplicados por nombre+teléfono)
@@ -117,100 +106,40 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
       busyRef.current.add(key);
       try {
         const scope = groupId ? { groupId, userId } : { userId };
-
-        const batch = db.batch();
-        const newDebtRef = db.collection('debts').doc();
-        batch.set(newDebtRef, {
+        await db.collection('debts').add({
           ...scope,
           clientId: client.id,
           clientName: client.name,
           clientAddress: client.address || '',
           amount,
           createdAt: new Date(),
-          // LEGACY webapp: esta app nunca lee `paid` — pagar una deuda BORRA
-          // el documento (markDebtPaid/markAllDebtsPaid). Se mantiene por
-          // compatibilidad con datos existentes.
-          paid: false,
         });
-        // Marca hasDebt=true en todas las instancias duplicadas (filtrando docs inexistentes)
-        const matchingIds = getExistingMatchingIds(client.id);
-        matchingIds.forEach((id) => {
-          batch.update(db.collection('clients').doc(id), { hasDebt: true });
-        });
-        await batch.commit();
       } catch (e) {
         reportError(e, 'Error adding debt');
       } finally {
         busyRef.current.delete(key);
       }
     },
-    [groupId, userId, getMatchingIds],
+    [groupId, userId],
   );
 
-  // Mark a debt as paid (guarded + uses ref to avoid stale closure)
+  // Mark a debt as paid: pagar BORRA el documento; el estado "tiene deuda"
+  // se deriva siempre en vivo de la colección (getClientDebtTotal), no de
+  // ningún flag persistido.
   const markDebtPaid = useCallback(
     async (debt: Debt) => {
       const key = `paid-${debt.id}`;
       if (busyRef.current.has(key)) return;
       busyRef.current.add(key);
       try {
-        // Instancias del mismo cliente humano. Si la deuda quedó huérfana (su
-        // clientId ya no está en el directorio), caer a las instancias vivas
-        // con el mismo nombre — igual que el agrupado de DebtsSheet — para que
-        // hasDebt no quede prendido para siempre en ellas.
-        let candidateIds = getMatchingIds(debt.clientId);
-        let existingIds = getExistingMatchingIds(debt.clientId);
-        if (existingIds.length === 0 && debt.clientName) {
-          const norm = (s: string) => (s || '').toLowerCase().trim();
-          const candidates = clientsRef.current.filter(
-            (c) => !c.isNote && norm(c.name || '') === norm(debt.clientName),
-          );
-          // Solo cuando el nombre es inequívoco: con homónimos de teléfonos
-          // distintos, apagarle hasDebt a la persona equivocada es peor que
-          // dejar el flag como está.
-          const distinctPhones = new Set(
-            candidates.map((c) => normalizePhoneForComparison(c.phone || '')).filter(Boolean),
-          );
-          if (distinctPhones.size <= 1) {
-            existingIds = candidates.map((c) => c.id);
-            candidateIds = [...new Set([...candidateIds, ...existingIds])];
-          }
-        }
-
         await db.collection('debts').doc(debt.id).delete();
-
-        // Releer desde Firestore: la copia local puede no reflejar todavía un
-        // pago anterior (dos pagos seguidos del mismo cliente) y dejaría
-        // hasDebt prendido para siempre. La query lleva el campo de scope
-        // para que las reglas puedan autorizarla.
-        if (existingIds.length > 0) {
-          const scopeField = groupId ? 'groupId' : 'userId';
-          const scopeValue = groupId || userId;
-          let remaining = 0;
-          for (let i = 0; i < candidateIds.length && remaining === 0; i += 10) {
-            const chunk = candidateIds.slice(i, i + 10);
-            const snap = await db
-              .collection('debts')
-              .where(scopeField, '==', scopeValue)
-              .where('clientId', 'in', chunk)
-              .get();
-            remaining += snap.size;
-          }
-          if (remaining === 0) {
-            const batch = db.batch();
-            existingIds.forEach((id) => {
-              batch.update(db.collection('clients').doc(id), { hasDebt: false });
-            });
-            await batch.commit();
-          }
-        }
       } catch (e) {
         reportError(e, 'Error marking debt paid');
       } finally {
         busyRef.current.delete(key);
       }
     },
-    [getMatchingIds, getExistingMatchingIds, groupId, userId],
+    [],
   );
 
   // Edit debt amount (guarded)
@@ -235,12 +164,8 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
       if (busyRef.current.has(key)) return;
       busyRef.current.add(key);
       try {
-        const matchingIds = getExistingMatchingIds(clientId);
         const batch = db.batch();
         debtIds.forEach((id) => batch.delete(db.collection('debts').doc(id)));
-        matchingIds.forEach((id) => {
-          batch.update(db.collection('clients').doc(id), { hasDebt: false });
-        });
         await batch.commit();
       } catch (e) {
         reportError(e, 'Error marking all debts paid');
@@ -248,7 +173,7 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
         busyRef.current.delete(key);
       }
     },
-    [getExistingMatchingIds],
+    [],
   );
 
   return {

@@ -136,8 +136,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
       if (!grouped[key]) {
         grouped[key] = {
           matchKey: key,
-          // Usar el id del cliente activo cuando exista, así operaciones como
-          // markAllDebtsPaid pueden actualizar hasDebt en el cliente correcto.
+          // Usar el id del cliente activo cuando exista, así las acciones de
+          // la tarjeta (agregar deuda, WhatsApp) apuntan al cliente correcto.
           clientId: client?.id || debt.clientId,
           clientName: name,
           clientPhone: phone,

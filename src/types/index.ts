@@ -28,19 +28,14 @@ export interface Client {
                     // del día de visita (ver getNextVisitDate). Vacío/ausente = usar heurística.
   completedAt: FirebaseFirestoreTypes.Timestamp | null;
   updatedAt: FirebaseFirestoreTypes.Timestamp | null;
-  // LEGACY webapp: la app lo escribe por compatibilidad pero nunca lo lee
-  // (la lógica de ciclos usa lastVisited/doneFor). No usar para lógica nueva.
-  startWeek: number;
   userId: string;
   groupId?: string;
   relationships?: Record<string, string>; // clientId → relationship type
   isInactive?: boolean; // "ya no es cliente": se mantiene en el directorio pero
                         // fuera de los filtros de trabajo (solo en Todos / Inactivos / Deuda)
-  // Flags DENORMALIZADOS: la app los escribe al crear/pagar deudas y
-  // transferencias (compat con la webapp), pero pueden quedar desactualizados
-  // (deuda creada desde otra app, instancia duplicada posterior a la deuda).
-  // Dentro de la app NO leerlos: derivar el estado en vivo de las colecciones
-  // (getClientDebtTotal / hasPendingTransfer de los stores).
+  // LEGACY (webapp retirada): ya no se escriben ni se leen; pueden seguir
+  // existiendo en documentos viejos. El estado real se deriva en vivo de las
+  // colecciones (getClientDebtTotal / hasPendingTransfer de los stores).
   hasDebt?: boolean;
   hasPendingTransfer?: boolean;
 }
@@ -101,7 +96,6 @@ export interface Transfer {
   clientLat?: string | null;
   clientLng?: string | null;
   clientMapsLink?: string | null;
-  reviewed: boolean;
   createdAt: FirebaseFirestoreTypes.Timestamp | null;
   userId: string;
   groupId?: string;

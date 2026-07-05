@@ -376,13 +376,6 @@ export const getDayIndex = (dayName: string): number => {
   return map[normalized] !== undefined ? map[normalized] : -1;
 };
 
-export const getWeekNumber = (d: Date): number => {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-};
-
 // Días que una visita no entregada sigue figurando como pendiente ("Hoy")
 // antes de saltar sola al próximo ciclo, como si se hubiera marcado Listo.
 const LATE_GRACE_DAYS = 2;

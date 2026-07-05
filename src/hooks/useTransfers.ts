@@ -45,16 +45,6 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
     [matchIndex],
   );
 
-  // Solo IDs que existen en el directorio actual (evita rollback por docs borrados)
-  const getExistingMatchingIds = useCallback(
-    (clientId: string): string[] => {
-      const ids = getMatchingIds(clientId);
-      const existing = new Set(clientsRef.current.map((c) => c.id));
-      return ids.filter((id) => existing.has(id));
-    },
-    [getMatchingIds],
-  );
-
   // Agrega transferencias de todas las instancias duplicadas del mismo cliente humano
   const getClientTransfers = useCallback(
     (clientId: string): Transfer[] => {
@@ -84,9 +74,7 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
         if (existing) return false;
 
         const scope = groupId ? { groupId, userId } : { userId };
-        const batch = db.batch();
-        const newRef = db.collection('transfers').doc();
-        batch.set(newRef, {
+        await db.collection('transfers').add({
           ...scope,
           clientId: client.id,
           clientName: client.name,
@@ -95,14 +83,7 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
           clientLng: client.lng || null,
           clientMapsLink: client.mapsLink || null,
           createdAt: new Date(),
-          reviewed: false,
         });
-        // Marca flag en todas las instancias duplicadas que existan
-        const existingIds = getExistingMatchingIds(client.id);
-        existingIds.forEach((id) => {
-          batch.update(db.collection('clients').doc(id), { hasPendingTransfer: true });
-        });
-        await batch.commit();
         return true;
       } catch (e) {
         reportError(e, 'Error adding transfer');
@@ -111,51 +92,26 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
         busyRef.current.delete(key);
       }
     },
-    [groupId, userId, getMatchingIds, getExistingMatchingIds],
+    [groupId, userId, getMatchingIds],
   );
 
+  // Revisar una transferencia BORRA el documento; el estado "tiene transferencia
+  // pendiente" se deriva siempre en vivo de la colección (hasPendingTransfer),
+  // no de ningún flag persistido.
   const markTransferReviewed = useCallback(
     async (transfer: Transfer) => {
       const key = `review-${transfer.id}`;
       if (busyRef.current.has(key)) return;
       busyRef.current.add(key);
       try {
-        const candidateIds = getMatchingIds(transfer.clientId);
-        const existingIds = getExistingMatchingIds(transfer.clientId);
-
         await db.collection('transfers').doc(transfer.id).delete();
-
-        // Releer desde Firestore: la copia local puede no reflejar todavía una
-        // revisión anterior (dos seguidas del mismo cliente) y dejaría
-        // hasPendingTransfer prendido para siempre.
-        if (existingIds.length > 0) {
-          const scopeField = groupId ? 'groupId' : 'userId';
-          const scopeValue = groupId || userId;
-          let remaining = 0;
-          for (let i = 0; i < candidateIds.length && remaining === 0; i += 10) {
-            const chunk = candidateIds.slice(i, i + 10);
-            const snap = await db
-              .collection('transfers')
-              .where(scopeField, '==', scopeValue)
-              .where('clientId', 'in', chunk)
-              .get();
-            remaining += snap.size;
-          }
-          if (remaining === 0) {
-            const batch = db.batch();
-            existingIds.forEach((id) => {
-              batch.update(db.collection('clients').doc(id), { hasPendingTransfer: false });
-            });
-            await batch.commit();
-          }
-        }
       } catch (e) {
         reportError(e, 'Error reviewing transfer');
       } finally {
         busyRef.current.delete(key);
       }
     },
-    [getMatchingIds, getExistingMatchingIds, groupId, userId],
+    [],
   );
 
   return {

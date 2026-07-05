@@ -95,7 +95,8 @@
       "Bash(rmdir /Volumes/OLIVERA/RutaWater/.claude)",
       "mcp__Claude_Preview__preview_start",
       "Bash(cd /Users/jonathanolivera 2>/dev/null; echo \"=== uso de whatsappRecordatorio \\(qué acción lo envía\\) ===\" && grep -rn \"whatsappRecordatorio\\\\|Recordatorio\\\\|recordatorio\" src/screens src/hooks src/components | grep -vi \"TemplatesModal\\\\|useWhatsAppTemplates\" | head -20 && echo \"\" && echo \"=== etiquetas i18n es ===\" && grep -rnE \"enCaminoLabel|debtLabel|debtHint|reminderLabel|whatsappSubtitle|whatsappMessages|sendReminder|reminder\" src/i18n src/locales 2>/dev/null | grep -i \"es\\\\b\\\\|español\\\\|: '\" | head -30)",
-      "mcp__Claude_Code_Remote__send_later"
+      "mcp__Claude_Code_Remote__send_later",
+      "mcp__Claude_Code_Remote__delete_trigger"
     ],
     "deny": [
       "Bash(git push --force:*)",

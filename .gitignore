@@ -5,7 +5,9 @@ node_modules/
 .metro-health-check*
 
 # iOS
+# **/Pods también cubre scaffolds anidados (un ios/ios/Pods llegó a colarse al repo)
 ios/Pods/
+**/Pods/
 ios/build/
 ios/build-release/
 ios/build-mac/

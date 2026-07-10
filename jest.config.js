@@ -8,8 +8,6 @@ module.exports = {
   transform: {
     '^.+\\.(ts|tsx|js|jsx)$': ['babel-jest', { presets: ['module:@react-native/babel-preset'] }],
   },
-  // Reanimated's babel plugin doesn't work outside the RN runtime — skip it
-  // for these pure-logic tests so babel-jest can transform without errors.
   transformIgnorePatterns: ['/node_modules/'],
   // Ignore stale agent worktrees that share package.json with the root.
   modulePathIgnorePatterns: ['<rootDir>/.claude/worktrees/'],

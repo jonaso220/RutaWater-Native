@@ -6,23 +6,19 @@ import {
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  ActivityIndicator,
   ScrollView,
   Alert,
   Platform,
   RefreshControl,
   FlatList,
+  Linking,
 } from 'react-native';
 import ModalOverlay from '../components/ModalOverlay';
-import DraggableFlatList, {
-  ScaleDecorator,
-  RenderItemParams,
-} from 'react-native-draggable-flatlist';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString, parseDate, settingsDocId } from '../utils/helpers';
-import { hapticLight, hapticMedium, hapticSelection, hapticError } from '../utils/haptics';
+import { hapticLight, hapticSelection } from '../utils/haptics';
 import { db } from '../config/firebase';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
@@ -52,11 +48,18 @@ import { useProfileStore } from '../stores/profileStore';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
+import {
+  RouteMapStop,
+  buildGoogleMapsDirectionsUrl,
+  coordinatesFromClient,
+} from '../utils/mapsRoute';
 
 type ListItem =
   | { type: 'header'; key: string; title: string; count: number; isToday: boolean }
-  | { type: 'client'; key: string; client: Client; sectionDateKey: string }
+  | { type: 'client'; key: string; client: Client }
   | { type: 'gridrow'; key: string; clients: Client[]; sectionDateKey: string };
+
+type RouteSession = { stops: RouteMapStop[]; currentIndex: number };
 
 // --- Memoized SectionHeader to avoid re-renders ---
 interface SectionHeaderProps {
@@ -96,7 +99,6 @@ interface ClientItemProps {
   hasDebt: boolean;
   hasPendingTransfer: boolean;
   hasRelationships: boolean;
-  isDragEnabled: boolean;
   enCaminoMessage?: string;
   fontScale?: number;
   wideLayout?: boolean;
@@ -110,8 +112,6 @@ interface ClientItemProps {
   onAlarm: (client: Client) => void;
   onRelationships: (client: Client) => void;
   onChangePosition: (clientId: string, newPos: number, day: string) => void;
-  drag?: () => void;
-  draggable?: boolean;
 }
 
 const ClientItem = React.memo<ClientItemProps>(({
@@ -121,7 +121,6 @@ const ClientItem = React.memo<ClientItemProps>(({
   hasDebt,
   hasPendingTransfer,
   hasRelationships,
-  isDragEnabled,
   enCaminoMessage,
   fontScale,
   wideLayout,
@@ -135,8 +134,6 @@ const ClientItem = React.memo<ClientItemProps>(({
   onAlarm,
   onRelationships,
   onChangePosition,
-  drag,
-  draggable = true,
 }) => {
   const handleMarkDone = useCallback(() => onMarkDone(client), [onMarkDone, client]);
   const handleEdit = useCallback(() => onEdit(client), [onEdit, client]);
@@ -151,7 +148,7 @@ const ClientItem = React.memo<ClientItemProps>(({
     [onChangePosition, client.id, selectedDay],
   );
 
-  const card = (
+  return (
     <ClientCard
       client={client}
       index={globalIndex}
@@ -168,17 +165,11 @@ const ClientItem = React.memo<ClientItemProps>(({
       onAlarm={handleAlarm}
       onRelationships={handleRelationships}
       onChangePosition={handleChangePosition}
-      onDrag={draggable && isDragEnabled ? drag : undefined}
       enCaminoMessage={enCaminoMessage}
       fontScale={fontScale}
       wideLayout={wideLayout}
     />
   );
-
-  // On wide screens the cards live in a grid (no drag), so we skip the
-  // ScaleDecorator wrapper which only makes sense inside a DraggableFlatList.
-  if (!draggable) return card;
-  return <ScaleDecorator activeScale={1.03}>{card}</ScaleDecorator>;
 });
 
 const HomeScreen = () => {
@@ -202,7 +193,6 @@ const HomeScreen = () => {
   const setProfileSwitcherVisible = useProfileStore((s) => s.setSwitcherVisible);
   const clients = useClientsStore((s) => s.clients);
   const loading = useClientsStore((s) => s.loading);
-  const getAllDayClients = useClientsStore((s) => s.getAllDayClients);
   const getVisibleClients = useClientsStore((s) => s.getVisibleClients);
   const getCompletedClients = useClientsStore((s) => s.getCompletedClients);
   const markAsDone = useClientsStore((s) => s.markAsDone);
@@ -251,6 +241,7 @@ const HomeScreen = () => {
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [routeSession, setRouteSession] = useState<RouteSession | null>(null);
 
   // Pull-to-refresh: force a server-side read of clients so the user can
   // get a fresh copy even if the realtime listener is temporarily quiet
@@ -299,6 +290,13 @@ const HomeScreen = () => {
   // Refs to access state without adding as dependencies (stabilizes callbacks)
   const selectedDayRef = useRef(selectedDay);
   selectedDayRef.current = selectedDay;
+  const routeSessionRef = useRef<RouteSession | null>(routeSession);
+  routeSessionRef.current = routeSession;
+
+  const updateRouteSession = useCallback((session: RouteSession | null) => {
+    routeSessionRef.current = session;
+    setRouteSession(session);
+  }, []);
 
   // Fix 3: Detect cross-midnight day change
   useEffect(() => {
@@ -464,7 +462,81 @@ const HomeScreen = () => {
     return clientSections[0].data;
   }, [clientSections]);
 
-  // Flatten sections into a single array for DraggableFlatList
+  // Route preparation must ignore temporary search/product filters. Otherwise
+  // starting a route while a search is active would silently omit clients.
+  const nearestRouteClients = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayKey = toLocalDateString(today);
+    let nearestKey: string | null = null;
+    const keyed = allVisibleClients.map((client) => {
+      const nextDate = getNextVisitDate(client, deferredDay);
+      let dateKey = nextDate ? toLocalDateString(nextDate) : todayKey;
+      if (dateKey < todayKey) dateKey = todayKey;
+      if (nearestKey === null || dateKey < nearestKey) nearestKey = dateKey;
+      return { client, dateKey };
+    });
+    return keyed.filter((item) => item.dateKey === nearestKey).map((item) => item.client);
+  }, [allVisibleClients, deferredDay]);
+
+  const openRouteStop = useCallback(async (stop: RouteMapStop) => {
+    const directionsUrl = stop.coordinates
+      ? buildGoogleMapsDirectionsUrl(stop.coordinates)
+      : null;
+    const url = stop.mapsLink || directionsUrl;
+    if (!url) {
+      Alert.alert(t('home.routeOpenFailedTitle'), t('home.routeOpenFailedMsg'));
+      return false;
+    }
+    try {
+      await Linking.openURL(url);
+      return true;
+    } catch (e) {
+      reportError(e, 'Error opening guided route stop');
+      Alert.alert(t('home.routeOpenFailedTitle'), t('home.routeOpenFailedMsg'));
+      return false;
+    }
+  }, [t]);
+
+  const handleStartRoute = useCallback(async () => {
+    const routeClients = nearestRouteClients.filter((client) =>
+      !client.isNote && (!!client.mapsLink || !!coordinatesFromClient(client.lat, client.lng)),
+    );
+    if (routeClients.length === 0) {
+      Alert.alert(t('home.routeNoClientsTitle'), t('home.routeNoClientsMsg'));
+      return;
+    }
+
+    const stops = routeClients.map((client): RouteMapStop => ({
+      clientId: client.id,
+      name: client.name || '',
+      mapsLink: client.mapsLink || '',
+      coordinates: coordinatesFromClient(client.lat, client.lng),
+    }));
+    const session: RouteSession = { stops, currentIndex: 0 };
+    updateRouteSession(session);
+    await openRouteStop(stops[0]);
+  }, [nearestRouteClients, openRouteStop, t, updateRouteSession]);
+
+  const advanceGuidedRoute = useCallback(async (completedClientId?: string) => {
+    const session = routeSessionRef.current;
+    if (!session) return;
+    const current = session.stops[session.currentIndex];
+    if (completedClientId && current.clientId !== completedClientId) return;
+
+    const nextIndex = session.currentIndex + 1;
+    if (nextIndex >= session.stops.length) {
+      updateRouteSession(null);
+      Alert.alert(t('home.routeFinishedTitle'), t('home.routeFinishedMsg'));
+      return;
+    }
+
+    const nextSession: RouteSession = { ...session, currentIndex: nextIndex };
+    updateRouteSession(nextSession);
+    await openRouteStop(nextSession.stops[nextIndex]);
+  }, [openRouteStop, t, updateRouteSession]);
+
+  // Flatten sections into a single array for FlatList
   const flatListData = useMemo(() => {
     const items: ListItem[] = [];
     clientSections.forEach((section) => {
@@ -480,14 +552,11 @@ const HomeScreen = () => {
           type: 'client',
           key: client.id,
           client,
-          sectionDateKey: section.dateKey,
         });
       });
     });
     return items;
   }, [clientSections]);
-
-  const isDragEnabled = debouncedSearchTerm.trim().length === 0 && activeFilters.size === 0;
 
   // Scroll to top on day change for instant feel
   useEffect(() => {
@@ -517,7 +586,11 @@ const HomeScreen = () => {
       // bloquear); si el servidor rechaza el write, avisar — el listener ya
       // habrá vuelto a mostrar el cliente.
       markAsDone(client.id, client, selectedDayRef.current).then((ok) => {
-        if (!ok) Alert.alert(t('error'), t('home.markDoneFailed'));
+        if (!ok) {
+          Alert.alert(t('error'), t('home.markDoneFailed'));
+          return;
+        }
+        void advanceGuidedRoute(client.id);
       });
       // Las notas se BORRAN al marcarlas listas — no hay doc que restaurar,
       // así que ofrecer "deshacer" sería mentirle al usuario (el update
@@ -530,7 +603,7 @@ const HomeScreen = () => {
         });
       }
     },
-    [markAsDone, pushUndo, t],
+    [advanceGuidedRoute, markAsDone, pushUndo, t],
   );
 
   const handleDelete = useCallback(
@@ -611,8 +684,7 @@ const HomeScreen = () => {
 
   const pendingTransferCount = transfers.length;
 
-  // Map client ID to its global position among ALL clients for the day
-  // Reuse allVisibleClients instead of calling getAllDayClients again
+  // Map client ID to its global position among ALL clients for the day.
   const globalPositionMap = useMemo(() => {
     const map: Record<string, number> = {};
     allVisibleClients.forEach((c, idx) => {
@@ -651,7 +723,7 @@ const HomeScreen = () => {
   const handleDebtCb = useCallback((client: Client) => setDebtClient(client), []);
   const handleRelationshipsCb = useCallback((client: Client) => setRelationshipClient(client), []);
 
-  // Stable handler wrappers — read from a ref so renderDraggableItem
+  // Stable handler wrappers — read from a ref so renderListItem
   // doesn't have to depend on individual handler identities. Without this,
   // any change to addTransfer / saveAlarm / hasPendingTransfer (which the
   // handlers depend on) recreates handleTransfer/handleAlarm and triggers
@@ -695,8 +767,8 @@ const HomeScreen = () => {
     [],
   );
 
-  const renderDraggableItem = useCallback(
-    ({ item, drag }: RenderItemParams<ListItem>) => {
+  const renderListItem = useCallback(
+    ({ item }: { item: ListItem }) => {
       if (item.type === 'header') {
         return (
           <SectionHeader
@@ -723,7 +795,6 @@ const HomeScreen = () => {
           hasDebt={debtMap[client.id] ?? false}
           hasPendingTransfer={transferMap[client.id] ?? false}
           hasRelationships={relationshipMap[client.id] ?? false}
-          isDragEnabled={isDragEnabled}
           enCaminoMessage={appSettings?.whatsappEnCamino}
           fontScale={fontScale}
           wideLayout={wideCard}
@@ -737,7 +808,6 @@ const HomeScreen = () => {
           onAlarm={stableHandlers.onAlarm}
           onRelationships={stableHandlers.onRelationships}
           onChangePosition={stableHandlers.onChangePosition}
-          drag={drag}
         />
       );
     },
@@ -748,7 +818,6 @@ const HomeScreen = () => {
       isWide,
       wideCard,
       isAdmin,
-      isDragEnabled,
       selectedDay,
       appSettings,
       globalPositionMap,
@@ -758,91 +827,9 @@ const HomeScreen = () => {
     ],
   );
 
-  const flatListDataRef = useRef(flatListData);
-  flatListDataRef.current = flatListData;
-
-  const handleDragEnd = useCallback(
-    ({ data, from, to }: { data: ListItem[]; from: number; to: number }) => {
-      if (from === to) return;
-
-      const movedItem = flatListDataRef.current[from];
-      if (!movedItem || movedItem.type !== 'client') return;
-
-      // Find which section the item landed in (walk backward in reordered data)
-      let landedSectionKey: string | null = null;
-      for (let i = to; i >= 0; i--) {
-        if (data[i].type === 'header') {
-          landedSectionKey = data[i].key.replace('header-', '');
-          break;
-        }
-      }
-
-      // Reject cross-section drag with feedback (UI animated the move
-      // optimistically; without feedback the item would silently snap
-      // back to its origin and the user wouldn't understand why).
-      if (landedSectionKey !== movedItem.sectionDateKey) {
-        hapticError();
-        Alert.alert(
-          t('home.dragSameDayTitle'),
-          t('home.dragSameDayMsg'),
-        );
-        return;
-      }
-
-      hapticMedium();
-
-      // Find neighbor clients at the drop position in the reordered array
-      let prevClientId: string | null = null;
-      let nextClientId: string | null = null;
-
-      for (let i = to - 1; i >= 0; i--) {
-        if (data[i].type === 'header') break;
-        if (data[i].type === 'client' && data[i].key !== movedItem.key) {
-          prevClientId = data[i].key;
-          break;
-        }
-      }
-      for (let i = to + 1; i < data.length; i++) {
-        if (data[i].type === 'header') break;
-        if (data[i].type === 'client' && data[i].key !== movedItem.key) {
-          nextClientId = data[i].key;
-          break;
-        }
-      }
-
-      // Map neighbor to position in the full day client list.
-      // changePosition espera la posición FINAL (con el arrastrado ya
-      // removido de la lista): si el arrastrado venía ANTES que el vecino
-      // (drag hacia abajo), el índice del vecino en la lista original está
-      // corrido +1 y hay que descontarlo — sin esto toda caída hacia abajo
-      // terminaba un lugar más abajo de donde se soltó.
-      const day = selectedDayRef.current;
-      const allDayClients = getAllDayClients(day);
-      const movedIdx = allDayClients.findIndex((c) => c.id === movedItem.client.id);
-      let targetPos: number;
-
-      if (prevClientId) {
-        const prevIdx = allDayClients.findIndex((c) => c.id === prevClientId);
-        const draggedDown = movedIdx >= 0 && prevIdx >= 0 && movedIdx < prevIdx;
-        targetPos = prevIdx >= 0 ? prevIdx + (draggedDown ? 1 : 2) : 1;
-      } else if (nextClientId) {
-        const nextIdx = allDayClients.findIndex((c) => c.id === nextClientId);
-        const draggedDown = movedIdx >= 0 && nextIdx >= 0 && movedIdx < nextIdx;
-        targetPos = nextIdx >= 0 ? nextIdx + (draggedDown ? 0 : 1) : 1;
-      } else {
-        targetPos = 1;
-      }
-
-      changePosition(movedItem.client.id, targetPos, day);
-    },
-    [changePosition, getAllDayClients, t],
-  );
-
   // --- Wide-screen grid (Mac / iPad landscape) ---
-  // On narrow screens numColumns === 1 (computed near the top) and we keep the
-  // single-column DraggableFlatList untouched (the daily phone path). On wide
-  // screens we lay the cards out in 2-3 columns to fill the width; reordering
-  // there is done by tapping the position number (drag stays on the phone).
+  // On wide screens we lay the cards out in 2-3 columns to fill the width.
+  // Reordering is done by tapping the position number on every screen size.
   //
   // Font scale tuned to the column width rather than the whole screen, so a
   // 2-column card isn't sized as if it owned the full window. A wide column
@@ -906,8 +893,6 @@ const HomeScreen = () => {
                 hasDebt={debtMap[client.id] ?? false}
                 hasPendingTransfer={transferMap[client.id] ?? false}
                 hasRelationships={relationshipMap[client.id] ?? false}
-                isDragEnabled={false}
-                draggable={false}
                 enCaminoMessage={appSettings?.whatsappEnCamino}
                 fontScale={gridFontScale}
                 selectedDay={selectedDay}
@@ -958,7 +943,7 @@ const HomeScreen = () => {
     );
   }
 
-  // Shared between the phone (DraggableFlatList) and wide-screen (FlatList grid) lists.
+  // Shared between the phone and wide-screen FlatList layouts.
   const listEmptyComponent = (
     <View style={styles.emptyContainer}>
       <Text style={{ fontSize: 40, marginBottom: 8 }}>{searchTerm || activeFilters.size > 0 ? '🔍' : '📋'}</Text>
@@ -1049,6 +1034,13 @@ const HomeScreen = () => {
         contentContainerStyle={styles.actionBarContent}
       >
         <TouchableOpacity
+          style={[styles.actionBtn, styles.actionBtnRoute]}
+          onPress={() => void handleStartRoute()}
+          accessibilityLabel={t('home.startRoute')}
+        >
+          <Text style={[styles.actionBtnText, styles.actionBtnRouteText]}>🧭 {t('home.startRoute')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.actionBtn, styles.actionBtnAi]}
           onPress={() => setShowSmartModal(true)}
         >
@@ -1107,6 +1099,45 @@ const HomeScreen = () => {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {routeSession && (
+        <View style={styles.routeSessionBar}>
+          <View style={styles.routeSessionInfo}>
+            <Text style={styles.routeSessionTitle} numberOfLines={1}>
+              {t('home.routeGuidedProgress', {
+                current: routeSession.currentIndex + 1,
+                total: routeSession.stops.length,
+                name: routeSession.stops[routeSession.currentIndex].name,
+              })}
+            </Text>
+            <Text style={styles.routeSessionHint} numberOfLines={1}>
+              {t('home.routeGuidedHint')}
+            </Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.routeSessionActions}>
+            <TouchableOpacity
+              style={styles.routeSessionButton}
+              onPress={() => void openRouteStop(routeSession.stops[routeSession.currentIndex])}
+            >
+              <Text style={styles.routeSessionButtonText}>🗺️ {t('home.routeOpenCurrent')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.routeSessionButton} onPress={() => void advanceGuidedRoute()}>
+              <Text style={styles.routeSessionButtonText}>{t('home.routeSkip')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.routeSessionButton, styles.routeSessionStopButton]}
+              onPress={() => {
+                Alert.alert(t('home.routeStopTitle'), t('home.routeStopMsg'), [
+                  { text: t('cancel'), style: 'cancel' },
+                  { text: t('home.routeStop'), style: 'destructive', onPress: () => updateRouteSession(null) },
+                ]);
+              }}
+            >
+              <Text style={[styles.routeSessionButtonText, styles.routeSessionStopText]}>{t('home.routeStop')}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
 
       {/* Search bar + Filters */}
       <View style={styles.searchSection}>
@@ -1199,7 +1230,7 @@ const HomeScreen = () => {
           </View>
         )}
       </View>
-      {/* Client list — single-column draggable on phones, multi-column grid on wide screens */}
+      {/* Client list — single-column on phones, multi-column grid on wide screens */}
       {numColumns > 1 ? (
         <FlatList
           ref={scrollRef}
@@ -1225,23 +1256,16 @@ const HomeScreen = () => {
           ListFooterComponent={listFooterComponent}
         />
       ) : (
-      <DraggableFlatList
+      <FlatList
         ref={scrollRef}
         data={flatListData}
         extraData={`${debts.length}-${transfers.length}`}
         keyExtractor={keyExtractor}
-        renderItem={renderDraggableItem}
-        onDragEnd={handleDragEnd}
+        renderItem={renderListItem}
         onScrollBeginDrag={() => showFilters && setShowFilters(false)}
-        activationDistance={15}
-        autoscrollThreshold={30}
-        autoscrollSpeed={40}
-        containerStyle={{ flex: 1 }}
+        style={{ flex: 1 }}
         contentContainerStyle={styles.listContent}
         initialNumToRender={15}
-        // Wider render buffer so long-distance drags (e.g. moving a client
-        // from position 1 to 67 in a 100+ client day) don't surface blank
-        // cells while the list autoscrolls past dozens of rows.
         maxToRenderPerBatch={15}
         windowSize={11}
         updateCellsBatchingPeriod={30}
@@ -1413,6 +1437,14 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     fontWeight: '700',
     color: colors.textSecondary,
   },
+  actionBtnRoute: {
+    backgroundColor: colors.successDark,
+    borderWidth: 1,
+    borderColor: colors.success,
+  },
+  actionBtnRouteText: {
+    color: colors.textWhite,
+  },
   actionBtnAdd: {
     backgroundColor: colors.primaryLight,
     borderWidth: 1,
@@ -1460,6 +1492,48 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
   },
   actionBtnAiText: {
     color: colors.textWhite,
+  },
+  routeSessionBar: {
+    backgroundColor: colors.successLighter,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.successLight,
+    paddingHorizontal: s(12),
+    paddingVertical: s(8),
+    gap: s(8),
+  },
+  routeSessionInfo: {
+    gap: s(2),
+  },
+  routeSessionTitle: {
+    color: colors.successDark,
+    fontSize: s(15),
+    fontWeight: '800',
+  },
+  routeSessionHint: {
+    color: colors.textMuted,
+    fontSize: s(12),
+  },
+  routeSessionActions: {
+    gap: s(6),
+  },
+  routeSessionButton: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.successLight,
+    borderRadius: s(8),
+    paddingHorizontal: s(10),
+    paddingVertical: s(6),
+  },
+  routeSessionButtonText: {
+    color: colors.successDark,
+    fontSize: s(12),
+    fontWeight: '700',
+  },
+  routeSessionStopButton: {
+    borderColor: colors.dangerBorder,
+  },
+  routeSessionStopText: {
+    color: colors.danger,
   },
   searchSection: {
     backgroundColor: colors.card,

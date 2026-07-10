@@ -41,8 +41,8 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
           // object reference for any doc that didn't change. Reusing references
           // keeps the React.memo on ClientCard intact so a single write (our
           // own reorder echo, or another device's edit) only re-renders the
-          // card that actually changed — not all 100+ — which is what fixed
-          // the drag "jitter".
+          // card that actually changed — not all 100+ — which keeps reorder
+          // updates smooth.
           //
           // We must rebuild from snapshot.docs (not merge docChanges into the
           // old cache) because when this listener RE-SUBSCRIBES — e.g. after

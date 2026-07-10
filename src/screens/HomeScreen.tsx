@@ -12,6 +12,11 @@ import {
   RefreshControl,
   FlatList,
   Linking,
+  Animated,
+  Easing,
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import ModalOverlay from '../components/ModalOverlay';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
@@ -242,6 +247,73 @@ const HomeScreen = () => {
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [routeSession, setRouteSession] = useState<RouteSession | null>(null);
+  const collapsibleHeaderProgress = useRef(new Animated.Value(1)).current;
+  const collapsibleHeaderVisibleRef = useRef(true);
+  const lastListOffsetRef = useRef(0);
+  const lastScrollDirectionRef = useRef<-1 | 0 | 1>(0);
+  const scrollDirectionDistanceRef = useRef(0);
+  const [collapsibleHeaderHeight, setCollapsibleHeaderHeight] = useState(0);
+
+  const setCollapsibleHeaderVisible = useCallback((visible: boolean, animate = true) => {
+    if (collapsibleHeaderVisibleRef.current === visible) {
+      if (!animate) collapsibleHeaderProgress.setValue(visible ? 1 : 0);
+      return;
+    }
+
+    collapsibleHeaderVisibleRef.current = visible;
+    collapsibleHeaderProgress.stopAnimation();
+    if (!animate) {
+      collapsibleHeaderProgress.setValue(visible ? 1 : 0);
+      return;
+    }
+
+    Animated.timing(collapsibleHeaderProgress, {
+      toValue: visible ? 1 : 0,
+      duration: visible ? 220 : 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [collapsibleHeaderProgress]);
+
+  const resetHeaderScrollTracking = useCallback(() => {
+    lastListOffsetRef.current = 0;
+    lastScrollDirectionRef.current = 0;
+    scrollDirectionDistanceRef.current = 0;
+  }, []);
+
+  const handleClientListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const offset = Math.max(0, event.nativeEvent.contentOffset.y);
+    const delta = offset - lastListOffsetRef.current;
+    lastListOffsetRef.current = offset;
+
+    if (offset <= 8) {
+      lastScrollDirectionRef.current = 0;
+      scrollDirectionDistanceRef.current = 0;
+      setCollapsibleHeaderVisible(true);
+      return;
+    }
+    if (Math.abs(delta) < 1) return;
+
+    const direction: -1 | 1 = delta > 0 ? 1 : -1;
+    if (lastScrollDirectionRef.current !== direction) {
+      lastScrollDirectionRef.current = direction;
+      scrollDirectionDistanceRef.current = 0;
+    }
+    scrollDirectionDistanceRef.current += Math.abs(delta);
+
+    const distanceToToggle = direction === 1 ? 24 : 12;
+    if (scrollDirectionDistanceRef.current >= distanceToToggle) {
+      setCollapsibleHeaderVisible(direction === -1);
+      scrollDirectionDistanceRef.current = 0;
+    }
+  }, [setCollapsibleHeaderVisible]);
+
+  const handleCollapsibleHeaderLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = Math.round(event.nativeEvent.layout.height);
+    if (nextHeight > 0) {
+      setCollapsibleHeaderHeight((currentHeight) => currentHeight === nextHeight ? currentHeight : nextHeight);
+    }
+  }, []);
 
   // Pull-to-refresh: force a server-side read of clients so the user can
   // get a fresh copy even if the realtime listener is temporarily quiet
@@ -560,10 +632,12 @@ const HomeScreen = () => {
 
   // Scroll to top on day change for instant feel
   useEffect(() => {
+    resetHeaderScrollTracking();
+    setCollapsibleHeaderVisible(true, false);
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
     });
-  }, [deferredDay]);
+  }, [deferredDay, resetHeaderScrollTracking, setCollapsibleHeaderVisible]);
 
   const handleMarkDone = useCallback(
     (client: Client) => {
@@ -1013,18 +1087,39 @@ const HomeScreen = () => {
   return (
     <View style={styles.container}>
       <View style={{ flex: 1 }}>
-      {/* Day selector */}
-      <DaySelector
-        selectedDay={selectedDay}
-        dayCounts={dayCounts}
-        isWide={isWide}
-        colors={colors}
-        fontScale={fontScale}
-        onSelectDay={handleSelectDay}
-      />
+      <Animated.View
+        style={[
+          styles.collapsibleTopHeader,
+          collapsibleHeaderHeight > 0 && {
+            height: collapsibleHeaderProgress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, collapsibleHeaderHeight],
+            }),
+            opacity: collapsibleHeaderProgress,
+            transform: [{
+              translateY: collapsibleHeaderProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-Math.min(collapsibleHeaderHeight, 40), 0],
+              }),
+            }],
+          },
+        ]}
+      >
+        <View onLayout={handleCollapsibleHeaderLayout}>
+          {/* Day selector */}
+          <DaySelector
+            selectedDay={selectedDay}
+            dayCounts={dayCounts}
+            isWide={isWide}
+            colors={colors}
+            fontScale={fontScale}
+            onSelectDay={handleSelectDay}
+          />
 
-      {/* Product counter — only nearest date */}
-      <ProductCounter clients={nearestDateClients} fontScale={fontScale} />
+          {/* Product counter — only nearest date */}
+          <ProductCounter clients={nearestDateClients} fontScale={fontScale} />
+        </View>
+      </Animated.View>
 
       {/* Action bar */}
       <ScrollView
@@ -1240,6 +1335,8 @@ const HomeScreen = () => {
           renderItem={renderGridItem}
           style={{ flex: 1 }}
           contentContainerStyle={styles.listContent}
+          onScroll={handleClientListScroll}
+          scrollEventThrottle={16}
           onScrollBeginDrag={() => showFilters && setShowFilters(false)}
           initialNumToRender={12}
           maxToRenderPerBatch={12}
@@ -1262,6 +1359,8 @@ const HomeScreen = () => {
         extraData={`${debts.length}-${transfers.length}`}
         keyExtractor={keyExtractor}
         renderItem={renderListItem}
+        onScroll={handleClientListScroll}
+        scrollEventThrottle={16}
         onScrollBeginDrag={() => showFilters && setShowFilters(false)}
         style={{ flex: 1 }}
         contentContainerStyle={styles.listContent}
@@ -1406,6 +1505,10 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.background,
+  },
+  collapsibleTopHeader: {
+    flexShrink: 0,
+    overflow: 'hidden',
   },
   loadingText: {
     marginTop: 12,

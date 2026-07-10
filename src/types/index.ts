@@ -31,6 +31,7 @@ export interface Client {
   userId: string;
   groupId?: string;
   relationships?: Record<string, string>; // clientId → relationship type
+  backupSourceId?: string; // id original del JSON; evita duplicar al restaurar el mismo respaldo
   isInactive?: boolean; // "ya no es cliente": se mantiene en el directorio pero
                         // fuera de los filtros de trabajo (solo en Todos / Inactivos / Deuda)
   // LEGACY (webapp retirada): ya no se escriben ni se leen; pueden seguir
@@ -85,6 +86,7 @@ export interface Debt {
   createdAt: FirebaseFirestoreTypes.Timestamp | null;
   userId: string;
   groupId?: string;
+  backupSourceId?: string;
 }
 
 // Transfer document in Firestore 'transfers' collection
@@ -99,6 +101,7 @@ export interface Transfer {
   createdAt: FirebaseFirestoreTypes.Timestamp | null;
   userId: string;
   groupId?: string;
+  backupSourceId?: string;
 }
 
 // Group document in Firestore 'groups' collection

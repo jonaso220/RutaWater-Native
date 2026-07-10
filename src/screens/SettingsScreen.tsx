@@ -25,6 +25,7 @@ import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { useSubscriptionStore } from '../stores/subscriptionStore';
 import { useGroupManagement } from '../hooks/useGroupManagement';
 import { useDataExport } from '../hooks/useDataExport';
+import { useDataRestore } from '../hooks/useDataRestore';
 import ProductCatalogModal from '../components/ProductCatalogModal';
 import ProfilesModal from '../components/ProfilesModal';
 import WhatsAppTemplatesModal from '../components/WhatsAppTemplatesModal';
@@ -82,7 +83,17 @@ const SettingsScreen = () => {
     setLoading,
   );
 
-  const { handleExportCSV, handleExportJSON } = useDataExport({ uid, email: userEmail });
+  const activeProfileName = activeProfile?.name || t('settings.defaultPrimaryProfile');
+  const { handleExportCSV, handleExportJSON } = useDataExport({
+    uid,
+    email: userEmail,
+    profileName: activeProfileName,
+  });
+  const { handleRestoreJSON, restoring } = useDataRestore({
+    userId: uid,
+    groupId: activeProfile?.scopeGroupId,
+    profileName: activeProfileName,
+  });
 
   if (!firebaseUser) return null;
   const user = {
@@ -528,6 +539,21 @@ const SettingsScreen = () => {
                 <Ionicons name="save-outline" size={18} color={colors.primary} />
                 <Text style={styles.exportBtnText}>{t('settings.exportJSON')}</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleRestoreJSON}
+                style={[styles.exportBtn, restoring && { opacity: 0.6 }]}
+                disabled={restoring}
+              >
+                {restoring ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name="cloud-upload-outline" size={18} color={colors.primary} />
+                )}
+                <Text style={styles.exportBtnText}>
+                  {restoring ? t('settings.restoreWorking') : t('settings.restoreJSON')}
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.cardGroupHint}>{t('settings.restoreHint')}</Text>
             </View>
           ) : (
             <View style={styles.lockedCard}>

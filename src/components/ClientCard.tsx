@@ -49,7 +49,6 @@ interface ClientCardProps {
   onAlarm?: () => void;
   onRelationships?: () => void;
   onChangePosition?: (newPosition: number) => void;
-  onDrag?: () => void;
   fontScale?: number;
   wideLayout?: boolean;
 }
@@ -70,7 +69,6 @@ const ClientCard: React.FC<ClientCardProps> = ({
   onAlarm,
   onRelationships,
   onChangePosition,
-  onDrag,
   enCaminoMessage,
   fontScale = 1,
   wideLayout = false,
@@ -157,9 +155,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
           }}
           onCancel={() => setShowPositionPrompt(false)}
         />
-        <TouchableOpacity style={styles.orderBadge} onPress={handleOrderTap} onLongPress={onDrag} activeOpacity={0.6}>
+        <TouchableOpacity style={styles.orderBadge} onPress={handleOrderTap} activeOpacity={0.6}>
           <Text style={styles.orderText}>{index + 1}</Text>
-          {onDrag && <Text style={styles.dragGrip}>≡</Text>}
         </TouchableOpacity>
         <View style={[styles.cardBody, wideLayout && styles.cardBodyWide]}>
           <View style={styles.headerRow}>
@@ -218,9 +215,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
         }}
         onCancel={() => setShowPositionPrompt(false)}
       />
-      <TouchableOpacity style={styles.orderBadge} onPress={handleOrderTap} onLongPress={onDrag} activeOpacity={0.6}>
+      <TouchableOpacity style={styles.orderBadge} onPress={handleOrderTap} activeOpacity={0.6}>
         <Text style={styles.orderText}>{index + 1}</Text>
-        {onDrag && <Text style={styles.dragGrip}>≡</Text>}
       </TouchableOpacity>
       <View style={[styles.cardBody, wideLayout && styles.cardBodyWide]}>
         {/* Toolbar */}
@@ -431,12 +427,6 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       fontSize: s(14),
       fontWeight: '700',
       color: colors.textMuted,
-    },
-    dragGrip: {
-      fontSize: s(16),
-      color: colors.textHint,
-      marginTop: s(2),
-      lineHeight: s(16),
     },
     cardBody: {
       flex: 1,

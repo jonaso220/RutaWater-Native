@@ -12,6 +12,7 @@ import { parseDate } from '../utils/helpers';
 interface ExportUser {
   uid: string;
   email: string;
+  profileName?: string;
 }
 
 const escapeCsv = (val: string | number | boolean | undefined | null): string => {
@@ -110,14 +111,17 @@ export const useDataExport = (user: ExportUser) => {
       }
 
       const backup = {
+        schemaVersion: 1,
         exportDate: new Date().toISOString().split('T')[0],
         exportedBy: user.email || user.uid,
+        profileName: user.profileName || '',
         clients: allClients.map((c) => ({
           id: c.id, name: c.name, phone: c.phone || '', address: c.address || '',
           lat: c.lat || '', lng: c.lng || '', freq: c.freq || '',
           visitDay: c.visitDay || '', visitDays: c.visitDays || [],
           specificDate: c.specificDate || '', notes: c.notes || '',
           products: c.products || {}, isStarred: c.isStarred || false,
+          isPinned: c.isPinned || false,
           alarm: c.alarm || '', mapsLink: c.mapsLink || '', isNote: c.isNote || false,
           hasDebt: getClientDebtTotal(c.id) > 0,
           // Estado de ciclo y orden de ruta: sin estos campos el backup no
@@ -139,6 +143,8 @@ export const useDataExport = (user: ExportUser) => {
         transfers: transfers.map((t) => ({
           id: t.id, clientId: t.clientId, clientName: t.clientName || '',
           clientAddress: (t as any).clientAddress || '',
+          clientLat: t.clientLat || '', clientLng: t.clientLng || '',
+          clientMapsLink: t.clientMapsLink || '',
           createdAt: parseDate(t.createdAt)?.toISOString() || '',
         })),
       };

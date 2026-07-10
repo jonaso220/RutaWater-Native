@@ -28,13 +28,6 @@ export const hapticSelection = () => trigger(HapticFeedbackTypes.selection);
 // Subtle confirmation — small action took effect (mark done, save alarm)
 export const hapticLight = () => trigger(HapticFeedbackTypes.impactLight);
 
-// Stronger confirmation — destructive or significant action
-export const hapticMedium = () => trigger(HapticFeedbackTypes.impactMedium);
-
-// Drop / drag end — most pronounced tactile feedback
-export const hapticHeavy = () => trigger(HapticFeedbackTypes.impactHeavy);
-
 // Multi-tap notification haptics
 export const hapticSuccess = () => trigger(HapticFeedbackTypes.notificationSuccess);
 export const hapticWarning = () => trigger(HapticFeedbackTypes.notificationWarning);
-export const hapticError = () => trigger(HapticFeedbackTypes.notificationError);

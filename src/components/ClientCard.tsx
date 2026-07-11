@@ -79,6 +79,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
   const [showPositionPrompt, setShowPositionPrompt] = useState(false);
   const allProducts = useAllProducts();
+  const relationshipCount = Object.keys(client.relationships || {}).length;
 
   const productList = React.useMemo(() => {
     if (!client.products) return [] as { id: string; qty: number; emoji: string; short: string }[];
@@ -271,7 +272,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
           ) : null}
           {hasRelationships && onRelationships && (
             <TouchableOpacity onPress={onRelationships}>
-              <Text style={styles.familyBadge}><Ionicons name="people" size={s(12)} /> {t('relationships.badge')}</Text>
+              <Text style={styles.familyBadge}><Ionicons name="people" size={s(12)} /> {t('relationships.badge')} · {relationshipCount}</Text>
             </TouchableOpacity>
           )}
         </View>

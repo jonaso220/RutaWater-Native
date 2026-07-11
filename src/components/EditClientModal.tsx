@@ -23,7 +23,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
-import { getModalWidth } from '../utils/helpers';
+import { getModalWidth, getNextVisitDate } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import { scheduleClientAlarm } from '../services/notifications';
 
@@ -40,6 +40,9 @@ interface EditClientModalProps {
   // Removes the client from the current day's list (keeps it in the directory).
   // Used from the Inicio flow; not destructive.
   onRemoveFromDay?: (client: Client) => void;
+  // Day whose card was opened in Inicio. This lets the frequency calendar
+  // point at that card's actual pending occurrence (also for multi-day clients).
+  scheduledDay?: string;
   showClientInfo?: boolean;
 }
 
@@ -51,6 +54,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   onClose,
   onDelete,
   onRemoveFromDay,
+  scheduledDay,
   showClientInfo = false,
 }) => {
   const { colors, isDark } = useTheme();
@@ -98,21 +102,28 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       setNotes(client.notes || '');
       setFreq(client.freq || 'weekly');
       setStartDate(client.specificDate || '');
-      // Always start the calendar from today so it doesn't show old dates
+      // When opened from Inicio, point the calendar at the occurrence
+      // represented by that card instead of at today. Keep the Directory flow
+      // unchanged. This is deliberately separate from startDate: merely
+      // opening Edit must not create/change the persisted frequency anchor.
       const today = new Date();
       today.setHours(12, 0, 0, 0);
-      if (client.specificDate) {
+      const scheduledDate = scheduledDay
+        ? getNextVisitDate(client, scheduledDay)
+        : null;
+      let initialPickerDate = scheduledDate;
+      if (!initialPickerDate && client.specificDate) {
         const clientDate = new Date(client.specificDate + 'T12:00:00');
-        // Use client date only if it's today or in the future, otherwise use today
-        setPickerDate(clientDate >= today ? clientDate : today);
-      } else {
-        setPickerDate(today);
+        initialPickerDate = clientDate >= today ? clientDate : today;
       }
+      initialPickerDate = initialPickerDate || today;
+      initialPickerDate.setHours(12, 0, 0, 0);
+      setPickerDate(initialPickerDate);
       setShowDatePicker(false);
       setInfoModalVisible(false);
       setFreqModalVisible(false);
     }
-  }, [client?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [client?.id, scheduledDay]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset sub-modal state when the parent modal is hidden, so reopening
   // with the same client doesn't flash a stale sub-modal.

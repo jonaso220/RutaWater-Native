@@ -24,6 +24,7 @@ import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
 import { getModalWidth, getDayIndex, toLocalDateString } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
+import { sharesHouseholdWith } from '../utils/recency';
 
 // Nombres de día indexados por Date.getDay() (0 = Domingo).
 const ALL_DAYS_BY_INDEX = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -42,6 +43,7 @@ interface ScheduleModalProps {
     products: Record<string, number>,
   ) => boolean | void | Promise<boolean | void>;
   onClose: () => void;
+  allClients?: Client[];
 }
 
 const ScheduleModal: React.FC<ScheduleModalProps> = ({
@@ -49,6 +51,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   client,
   onSave,
   onClose,
+  allClients = [],
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
@@ -70,11 +73,25 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const [localNotes, setLocalNotes] = useState('');
   const [localProducts, setLocalProducts] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
+  const [selectedHouseholdIds, setSelectedHouseholdIds] = useState<string[]>([]);
   const catalogProducts = useProducts();
+
+  const householdMembers = React.useMemo(() => {
+    if (!client?.relationships) return [];
+    const relatedIds = new Set(Object.keys(client.relationships));
+    return allClients.filter((candidate) =>
+      relatedIds.has(candidate.id) &&
+      sharesHouseholdWith(client, candidate.id) &&
+      !candidate.isNote &&
+      !candidate.isInactive &&
+      (candidate.freq === 'on_demand' || candidate.visitDay === 'Sin Asignar'),
+    );
+  }, [client, allClients]);
 
   useEffect(() => {
     if (client) {
       setSaving(false);
+      setSelectedHouseholdIds([]);
       // Reset notes and products so each new scheduling starts clean
       setLocalNotes('');
       // Always default to 'once' when scheduling from the directory: the
@@ -123,6 +140,14 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       ...prev,
       [productId]: Math.max(0, (prev[productId] || 0) + delta),
     }));
+  };
+
+  const toggleHouseholdMember = (clientId: string) => {
+    setSelectedHouseholdIds((prev) =>
+      prev.includes(clientId)
+        ? prev.filter((id) => id !== clientId)
+        : [...prev, clientId],
+    );
   };
 
   const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
@@ -195,11 +220,28 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       if (val > 0) cleanProducts[key] = val;
     });
     let saveFailed = false;
+    let familySaveFailed = false;
     try {
       // Periódico: la fecha (si se eligió) va como ancla de inicio de la frecuencia.
       const dateArg = localFreq === 'once' ? localDate : startDate;
       const ok = await onSave(client, localDays, localFreq, dateArg, localNotes, cleanProducts);
       saveFailed = ok === false;
+      // La selección es explícita y solo contiene familiares sin agenda activa.
+      // Cada uno empieza vacío para evitar copiar por error el pedido del titular.
+      if (!saveFailed) {
+        const selectedMembers = householdMembers.filter((member) =>
+          selectedHouseholdIds.includes(member.id),
+        );
+        for (const member of selectedMembers) {
+          try {
+            const memberOk = await onSave(member, localDays, localFreq, dateArg, '', {});
+            if (memberOk === false) familySaveFailed = true;
+          } catch (e) {
+            familySaveFailed = true;
+            reportError(e, 'Household member schedule error');
+          }
+        }
+      }
     } catch (e) {
       saveFailed = true;
       reportError(e, 'Schedule save error');
@@ -207,7 +249,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       setSaving(false);
       onClose();
     }
-    if (saveFailed) {
+    if (familySaveFailed) {
+      Alert.alert(t('error'), t('scheduleModal.errorFamilySave'));
+    } else if (saveFailed) {
       Alert.alert(t('error'), t('scheduleModal.errorSave'));
     }
   };
@@ -407,6 +451,35 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
               </View>
             )}
 
+            {householdMembers.length > 0 && (
+              <View style={{ marginTop: 20 }}>
+                <Text style={styles.sectionTitle}>{t('scheduleModal.householdMembers')}</Text>
+                <Text style={styles.householdHint}>{t('scheduleModal.householdMembersHint')}</Text>
+                {householdMembers.map((member) => {
+                  const selected = selectedHouseholdIds.includes(member.id);
+                  return (
+                    <TouchableOpacity
+                      key={member.id}
+                      style={[styles.householdMemberRow, selected && styles.householdMemberRowSelected]}
+                      onPress={() => toggleHouseholdMember(member.id)}
+                    >
+                      <Ionicons
+                        name={selected ? 'checkbox' : 'square-outline'}
+                        size={22}
+                        color={selected ? colors.primary : colors.textMuted}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.householdMemberName}>{member.name}</Text>
+                        {member.address ? (
+                          <Text style={styles.householdMemberAddress} numberOfLines={1}>{member.address}</Text>
+                        ) : null}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
             {/* Products */}
             <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
               {t('scheduleModal.products')}
@@ -467,7 +540,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           {/* Save button */}
           <View style={styles.footer}>
             <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSubmit} disabled={saving}>
-              <Text style={styles.saveBtnText}>{t('scheduleModal.scheduleBtn')}</Text>
+              <Text style={styles.saveBtnText}>
+                {t('scheduleModal.scheduleBtn')}
+                {selectedHouseholdIds.length > 0 ? ` (${selectedHouseholdIds.length + 1})` : ''}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -543,6 +619,37 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     fontWeight: '400',
     color: colors.textHint,
     textTransform: 'none',
+  },
+  householdHint: {
+    fontSize: s(12),
+    color: colors.textMuted,
+    lineHeight: s(17),
+    marginBottom: s(10),
+  },
+  householdMemberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(10),
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.sectionBackground,
+    borderRadius: s(10),
+    padding: s(10),
+    marginBottom: s(7),
+  },
+  householdMemberRowSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLighter,
+  },
+  householdMemberName: {
+    fontSize: s(14),
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  householdMemberAddress: {
+    fontSize: s(11),
+    color: colors.textMuted,
+    marginTop: s(2),
   },
   freqGrid: {
     flexDirection: 'row',

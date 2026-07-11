@@ -134,6 +134,7 @@ export const useDataExport = (user: ExportUser) => {
           listOrder: c.listOrder ?? 0,
           listOrders: c.listOrders || {},
           relationships: c.relationships || {},
+          sameHousehold: c.sameHousehold || {},
         })),
         debts: debts.map((d) => ({
           id: d.id, clientId: d.clientId, clientName: d.clientName || '',

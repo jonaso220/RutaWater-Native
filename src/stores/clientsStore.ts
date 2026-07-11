@@ -55,7 +55,7 @@ interface ClientsStore {
   cloneClient: (client: Client) => Promise<void>;
   findDuplicateClients: () => { staleIds: string[], details: Array<{ name: string, activeId: string, staleId: string }> };
   cleanupDuplicates: () => Promise<number>;
-  addRelationship: (clientId: string, targetId: string, type: string) => Promise<void>;
+  addRelationship: (clientId: string, targetId: string, type: string, sameHousehold: boolean) => Promise<void>;
   removeRelationship: (clientId: string, targetId: string) => Promise<void>;
   dayCounts: Record<string, number>;
   canAddClient: boolean;

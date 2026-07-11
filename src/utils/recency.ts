@@ -7,8 +7,14 @@ export const getLastActivityDate = (client: Client): Date | null => {
 
 // Solo visitas reales (entrega marcada como hecha), sin el fallback de updatedAt:
 // editar la ficha de un familiar no debe contar como haberlo visitado.
-const getVisitDate = (client: Client): Date | null => {
+export const getLastVisitDate = (client: Client): Date | null => {
   return parseDate(client.completedAt) || parseDate(client.lastVisited);
+};
+
+// Los vínculos creados antes de que existiera sameHousehold representaban una
+// "familia/casa" sin distinción. Solo un false explícito significa otra casa.
+export const sharesHouseholdWith = (client: Client, relatedId: string): boolean => {
+  return !!client.relationships?.[relatedId] && client.sameHousehold?.[relatedId] !== false;
 };
 
 // Última actividad "del hogar": la visita más reciente entre el cliente y todos sus
@@ -24,9 +30,10 @@ export const getEffectiveLastActivityDate = (
   const rel = client.relationships;
   if (rel && clientsById) {
     for (const famId of Object.keys(rel)) {
+      if (!sharesHouseholdWith(client, famId)) continue;
       const fam = clientsById.get(famId);
       if (!fam) continue;
-      const d = getVisitDate(fam);
+      const d = getLastVisitDate(fam);
       if (d && (!best || d.getTime() > best.getTime())) best = d;
     }
   }

@@ -1,4 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const { repairOrRetryDecision } = require('./orderHeuristics');
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -342,7 +343,7 @@ PRIMER FILTRO (leer ANTES de elegir tool):
 - SÍ menciona cliente → seguir con las reglas QUÉ TOOL USAR de abajo.
 
 QUÉ TOOL USAR (cuando hay cliente mencionado):
-1. **create_new_client**: el texto da datos de alta de alguien que NO está en la LISTA DE CLIENTES.
+1. **create_new_client**: el texto da datos de alta de alguien que NO está en la LISTA DE CLIENTES. Una ficha completa pegada desde WhatsApp (nombre opcional + dirección + teléfono + URL de Maps), sin verbos explícitos, IMPLICA "guardar este cliente": si no hay match en la LISTA, usar create_new_client aunque el usuario no haya escrito "guardar" o "crear". NO se requieren productos, día, fecha ni frecuencia; en ese caso usar on_demand. Si NO hay un nombre separado pero sí una dirección clara, usar esa dirección tanto en name como en address. NO responder report_not_found cuando la propia ficha ya contiene datos suficientes para el alta.
 2. **merge_products_into_order**: el texto pide CAMBIAR los productos (agregar y/o quitar) de un pedido YA AGENDADO sin tocar día/fecha/frecuencia. Verbos clave de agregar: "agregale", "sumale", "añadile", "más", "también", "y de paso". Verbos clave de quitar: "quítale", "quitale", "sacale", "removeé", "borrale", "ya no lleva", "menos". Si el texto pide ambos a la vez (ej: "quitale la bombita y agregale 2 sifones"), usar este tool con add_products Y remove_products poblados a la vez. Solo aplica si el cliente tiene pedido pendiente Y el texto NO cambia día/fecha/freq.
 3. **schedule_existing_client**: única tool que toca día/fecha/frecuencia. Usar en estos casos: (a) el cliente está como on_demand y se le agenda un pedido por primera vez, (b) se mueve/cambia el día, fecha o frecuencia (verbos: "movélo", "pasalo a", "cambialo para", "agendalo el [día]", "para el [fecha]"), o (c) el usuario pide explícitamente un pedido aparte (verbos: "extra", "aparte", "además", "otro pedido"). Para distinguir entre mover (default) y pedido extra, usá schedule_mode: 'replace' por default, 'add' SOLO si el texto lo indica explícitamente. Esta tool ACEPTA notes + notes_mode, así que si el texto pide "movélo y borrale las notas", combiná todo acá en una sola llamada (no llames update_client_data ni merge aparte).
 4. **update_client_data**: actualizar SOLO datos del cliente (mapsLink, address, phone, notes) sin tocar agenda ni productos. PROHIBIDO usar si el texto menciona cambio de día/fecha/freq o de productos.
@@ -467,24 +468,51 @@ async function parseOrder({ text, clients, todayIso }) {
 
   const userMessage = `${buildTodayBlock(todayIso)}\n\nTEXTO A PARSEAR:\n"""\n${text}\n"""`;
 
-  const response = await client.messages.create({
+  const request = {
     model: MODEL,
     max_tokens: 1024,
     system: systemBlocks,
     tools: TOOLS,
     tool_choice: { type: 'any' },
     messages: [{ role: 'user', content: userMessage }],
-  });
+  };
 
-  const toolUse = response.content.find((b) => b.type === 'tool_use');
+  const response = await client.messages.create(request);
+
+  let toolUse = response.content.find((b) => b.type === 'tool_use');
   if (!toolUse) {
     throw new Error('Modelo no devolvió tool_use');
+  }
+
+  // Defensa determinística contra dos fallos del LLM:
+  // 1) si inventa/perfila mal un id pero el nombre identifica a un único
+  //    cliente real, corregimos el id antes de devolverlo a la app;
+  // 2) si una ficha completa de WhatsApp no corresponde a nadie y el modelo
+  //    responde "no encontrado", repetimos forzando create_new_client para
+  //    extraer todos los campos, en vez de perder la ficha.
+  const decision = repairOrRetryDecision(toolUse, text, clients);
+  toolUse = decision.toolUse;
+  let finalUsage = response.usage;
+  if (decision.retryAsCreate) {
+    const retry = await client.messages.create({
+      ...request,
+      tool_choice: { type: 'tool', name: 'create_new_client' },
+    });
+    const createTool = retry.content.find((b) => b.type === 'tool_use');
+    if (!createTool || createTool.name !== 'create_new_client') {
+      throw new Error('Modelo no pudo convertir la ficha en cliente nuevo');
+    }
+    toolUse = createTool;
+    finalUsage = {
+      input_tokens: (response.usage?.input_tokens || 0) + (retry.usage?.input_tokens || 0),
+      output_tokens: (response.usage?.output_tokens || 0) + (retry.usage?.output_tokens || 0),
+    };
   }
 
   return {
     tool: toolUse.name,
     input: toolUse.input,
-    usage: response.usage,
+    usage: finalUsage,
   };
 }
 

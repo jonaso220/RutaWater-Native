@@ -1392,6 +1392,7 @@ const HomeScreen = () => {
         onSave={updateClient}
         onClose={() => setEditingClient(null)}
         onRemoveFromDay={handleDelete}
+        scheduledDay={deferredDay}
       />
 
       {/* Debt Modal */}

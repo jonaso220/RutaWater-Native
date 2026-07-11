@@ -5,13 +5,11 @@ import { Client } from '../types';
 import { normalizePhone } from '../utils/helpers';
 import { formatMoney } from '../utils/format';
 import { getDayLabel } from '../constants/products';
-import { useAllProducts } from '../stores/productCatalogStore';
 import { getLastActivityDate, getEffectiveLastActivityDate, getDaysSince } from '../utils/recency';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { useTranslation } from 'react-i18next';
-import { ProductLabel } from './ProductIcon';
 
 const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
 
@@ -53,7 +51,6 @@ const DirectoryClientCard = ({
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const { fontScale } = useLayout();
-  const allProducts = useAllProducts();
   const styles = React.useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
 
   const sendWhatsApp = (client: Client) => {
@@ -140,21 +137,13 @@ const DirectoryClientCard = ({
   };
 
   const hasRelationships = !!(item.relationships && Object.keys(item.relationships).length > 0);
+  const relationshipCount = Object.keys(item.relationships || {}).length;
   const isOnDemand = item.freq === 'on_demand' || !item.visitDays?.length;
   const hasLocation = !!(item.lat && item.lng) || !!item.mapsLink;
   const avatarColor = AVATAR_COLORS[(item.name || '').charCodeAt(0) % AVATAR_COLORS.length];
   const initial = (item.name || '?').charAt(0).toUpperCase();
   const freqStyle = getFreqStyle(item.freq, colors);
   const recencyBadge = showRecency ? getRecencyBadge(item) : null;
-
-  const prodChips = item.products
-    ? Object.keys(item.products)
-        .filter((k) => parseInt(String(item.products[k] || 0), 10) > 0)
-        .map((k) => {
-          const p = allProducts.find((prod) => prod.id === k);
-          return { qty: item.products[k], emoji: p ? p.emoji : '📦', label: p ? p.short : k };
-        })
-    : [];
 
   return (
     <View style={[styles.card, debtTotal > 0 && styles.cardDebt]}>
@@ -235,26 +224,10 @@ const DirectoryClientCard = ({
           )}
           {hasRelationships && (
             <TouchableOpacity onPress={() => onRelationship(item)}>
-              <Text style={styles.familyBadge}><Ionicons name="people" size={12} /> {t('relationships.badge')}</Text>
+              <Text style={styles.familyBadge}><Ionicons name="people" size={12} /> {t('relationships.badge')} · {relationshipCount}</Text>
             </TouchableOpacity>
           )}
         </View>
-
-        {/* PRODUCT CHIPS */}
-        {prodChips.length > 0 && (
-          <View style={styles.prodChipsRow}>
-            {prodChips.map((p, i) => (
-              <ProductLabel
-                key={i}
-                value={p.emoji}
-                label={`${p.qty}x ${p.label}`}
-                size={Math.round(13 * fontScale)}
-                containerStyle={styles.prodChip}
-                style={styles.prodChipText}
-              />
-            ))}
-          </View>
-        )}
 
         {/* ACTION BUTTONS */}
         <View style={styles.actionsRow}>
@@ -462,30 +435,6 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     paddingVertical: s(4),
     borderRadius: s(12),
     overflow: 'hidden',
-  },
-  prodChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: s(6),
-    marginTop: s(2),
-  },
-  prodChip: {
-    fontSize: s(11),
-    fontWeight: '500',
-    color: colors.textSecondary,
-    backgroundColor: colors.sectionBackground,
-    paddingHorizontal: s(8),
-    paddingVertical: s(3),
-    borderRadius: s(12),
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  // Text-only style for the sticker case (chip background lives on prodChip).
-  prodChipText: {
-    fontSize: s(11),
-    fontWeight: '500',
-    color: colors.textSecondary,
   },
   actionsRow: {
     flexDirection: 'row',

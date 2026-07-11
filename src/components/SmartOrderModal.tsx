@@ -20,8 +20,9 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { Frequency, getDayLabel, getFreqLabel } from '../constants/products';
 import { useAllProducts } from '../stores/productCatalogStore';
-import { getModalWidth, getDayIndex, sanitizePhone, isSafeUrl } from '../utils/helpers';
+import { getModalWidth, getDayIndex, sanitizePhone } from '../utils/helpers';
 import { formatShortDate } from '../utils/format';
+import { hasGoogleLocationLinkText, normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { useLayout } from '../hooks/useLayout';
 import { useAiParse, ParseResult, NotesMode } from '../hooks/useAiParse';
 import { useAiUsageStore } from '../stores/aiUsageStore';
@@ -145,7 +146,16 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
     }
     setResult(null);
     const r = await parse(text.trim());
-    if (r) setResult(r);
+    if (r) {
+      // La preview y el guardado deben usar exactamente el mismo link válido.
+      // Si Claude lo omitió o añadió puntuación, recuperarlo del texto pegado.
+      if (r.tool === 'create_new_client' || r.tool === 'update_client_data') {
+        const mapsLink = normalizeGoogleMapsLink(r.input.mapsLink, text);
+        setResult({ ...r, input: { ...r.input, mapsLink } } as ParseResult);
+      } else {
+        setResult(r);
+      }
+    }
   }, [text, parse, t]);
 
   const handleConfirm = useCallback(async () => {
@@ -175,11 +185,17 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
+        const mapsLink = normalizeGoogleMapsLink(i.mapsLink, text);
+        if (hasGoogleLocationLinkText(text) && !mapsLink) {
+          Alert.alert(t('error'), t('smartOrder.invalidMapsLink'));
+          setSaving(false);
+          return;
+        }
         const created = await aiCreateClient({
           name: i.name,
           phone: sanitizePhone(i.phone || ''),
           address: i.address || '',
-          mapsLink: i.mapsLink && isSafeUrl(i.mapsLink) ? i.mapsLink : '',
+          mapsLink,
           notes: i.notes || '',
           products: cleanProductSet(i.products),
           freq: i.freq as Frequency,
@@ -250,7 +266,13 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           return;
         }
         const updates: Record<string, string> = {};
-        if (i.mapsLink && isSafeUrl(i.mapsLink)) updates.mapsLink = i.mapsLink;
+        const mapsLink = normalizeGoogleMapsLink(i.mapsLink, text);
+        if (hasGoogleLocationLinkText(text) && !mapsLink) {
+          Alert.alert(t('error'), t('smartOrder.invalidMapsLink'));
+          setSaving(false);
+          return;
+        }
+        if (mapsLink) updates.mapsLink = mapsLink;
         if (i.address) updates.address = i.address;
         if (i.phone) updates.phone = sanitizePhone(i.phone);
         const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
@@ -498,7 +520,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
             )}
 
             {/* Result preview */}
-            {result && <ResultPreview result={result} colors={colors} styles={styles} />}
+            {result && <ResultPreview result={result} sourceText={text} colors={colors} styles={styles} />}
           </ScrollView>
 
           {/* Footer with confirm/cancel */}
@@ -541,11 +563,12 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
 
 interface PreviewProps {
   result: ParseResult;
+  sourceText: string;
   colors: ThemeColors;
   styles: ReturnType<typeof getStyles>;
 }
 
-const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
+const ResultPreview: React.FC<PreviewProps> = ({ result, sourceText, colors, styles }) => {
   const { t } = useTranslation();
   if (result.tool === 'report_not_found') {
     return (
@@ -628,13 +651,14 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
 
   if (result.tool === 'update_client_data') {
     const i = result.input;
+    const mapsLink = normalizeGoogleMapsLink(i.mapsLink, sourceText);
     return (
       <View style={[styles.resultBox, { borderColor: colors.primary }]}>
         <View style={styles.resultHeader}>
           <Ionicons name="create" size={20} color={colors.primary} />
           <Text style={styles.resultTitle}>{t('smartOrder.updateTitle', { name: i.matched_client_name })}</Text>
         </View>
-        {i.mapsLink ? <Field label="Maps" value={i.mapsLink} styles={styles} /> : null}
+        {mapsLink ? <Field label="Maps" value={mapsLink} styles={styles} /> : null}
         {i.address ? <Field label={t('smartOrder.fieldAddress')} value={i.address} styles={styles} /> : null}
         {i.phone ? <Field label={t('smartOrder.fieldPhone')} value={i.phone} styles={styles} /> : null}
         {i.notes_mode === 'clear' ? (
@@ -648,6 +672,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
 
   if (result.tool === 'create_new_client') {
     const i = result.input;
+    const mapsLink = normalizeGoogleMapsLink(i.mapsLink, sourceText);
     return (
       <View style={[styles.resultBox, { borderColor: colors.primary }]}>
         <View style={styles.resultHeader}>
@@ -655,7 +680,7 @@ const ResultPreview: React.FC<PreviewProps> = ({ result, colors, styles }) => {
           <Text style={styles.resultTitle}>{t('smartOrder.newClientTitle', { name: i.name })}</Text>
         </View>
         {i.address ? <Field label={t('smartOrder.fieldAddress')} value={i.address} styles={styles} /> : null}
-        {i.mapsLink ? <Field label="Maps" value={i.mapsLink} styles={styles} /> : null}
+        {mapsLink ? <Field label="Maps" value={mapsLink} styles={styles} /> : null}
         {i.phone ? <Field label={t('smartOrder.fieldPhone')} value={i.phone} styles={styles} /> : null}
         <Field label={t('smartOrder.fieldFreq')} value={getFreqLabel(i.freq)} styles={styles} />
         {i.visitDay ? <Field label={t('smartOrder.fieldDay')} value={getDayLabel(i.visitDay)} styles={styles} /> : null}

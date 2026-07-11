@@ -397,6 +397,7 @@ const DirectoryScreen = () => {
       <ScheduleModal
         visible={!!scheduleClient}
         client={scheduleClient}
+        allClients={clients}
         onSave={scheduleFromDirectory}
         onClose={() => setScheduleClient(null)}
       />

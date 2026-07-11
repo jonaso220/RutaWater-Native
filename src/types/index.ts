@@ -31,6 +31,10 @@ export interface Client {
   userId: string;
   groupId?: string;
   relationships?: Record<string, string>; // clientId → relationship type
+  // clientId → whether both clients belong to the same household. Missing
+  // entries are treated as true for backwards compatibility with links made
+  // before this distinction existed; every newly edited link writes a value.
+  sameHousehold?: Record<string, boolean>;
   backupSourceId?: string; // id original del JSON; evita duplicar al restaurar el mismo respaldo
   isInactive?: boolean; // "ya no es cliente": se mantiene en el directorio pero
                         // fuera de los filtros de trabajo (solo en Todos / Inactivos / Deuda)

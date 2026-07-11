@@ -503,6 +503,9 @@ export default {
     startThisWeek: 'Esta semana',
     firstVisit: 'Primera visita: {{date}}',
     clearStartDate: 'Quitar fecha',
+    householdMembers: 'Familiares de este domicilio',
+    householdMembersHint: 'Opcional. Se agendarán en la misma fecha, sin productos ni notas, para que completes cada pedido por separado.',
+    errorFamilySave: 'Algunas visitas se agendaron, pero otra no pudo guardarse. Revisa la lista antes de intentarlo otra vez.',
   },
 
   // Smart Order Modal (pedido por IA)
@@ -526,6 +529,7 @@ export default {
     invalidDate: 'La IA devolvió una fecha inválida ("{{date}}"). Reformulá el pedido con la fecha clara.',
     invalidDateNote: 'La IA devolvió una fecha inválida ("{{date}}"). Reformulá la nota con la fecha clara.',
     invalidDay: 'La IA devolvió un día inválido ("{{day}}"). Reformulá el pedido con el día claro.',
+    invalidMapsLink: 'Se detectó un enlace de Google Maps, pero no se pudo validar. El cliente no se guardó para evitar perder la ubicación.',
     createFailed: 'No se pudo crear el cliente. Verificá la conexión e intentá de nuevo.',
     clientCreated: 'Cliente "{{name}}" creado.',
     clientNotFound: 'No se encontró el cliente.',
@@ -733,6 +737,14 @@ export default {
     searchClient: 'Buscar cliente...',
     call: 'Llamar',
     whatsapp: 'WhatsApp',
+    sameHousehold: 'Mismo domicilio',
+    differentHousehold: 'Otro domicilio',
+    sameHouseholdQuestion: '¿Viven en el mismo domicilio?',
+    sameHouseholdHint: 'Solo los familiares del mismo domicilio compartirán la fecha de última visita y podrán agendarse juntos.',
+    lastVisit: 'Última visita: {{date}}',
+    saveChanges: 'Guardar cambios',
+    saveError: 'No se pudo guardar el parentesco. Verifica la conexión e inténtalo otra vez.',
+    removeError: 'No se pudo desvincular el familiar. Verifica la conexión e inténtalo otra vez.',
     // Types
     conyuge: 'Cónyuge',
     padre_madre: 'Padre/Madre',

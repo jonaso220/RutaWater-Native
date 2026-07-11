@@ -4,6 +4,7 @@ import { useAiUsageStore } from '../stores/aiUsageStore';
 import { API_ENDPOINTS } from '../config/api';
 import { toLocalDateString } from '../utils/helpers';
 import { fbAuth } from '../config/firebase';
+import { looksLikeCompleteClientCardText, parseDirectoryContactCard } from '../utils/googleMapsLink';
 
 export interface CreateNewClientInput {
   name: string;
@@ -106,6 +107,27 @@ export const useAiParse = (): UseAiParseReturn => {
         return null;
       }
 
+      // Una ficha sin nombre separado no necesita interpretación semántica:
+      // dirección + Maps + teléfono ya determinan exactamente el alta pedida.
+      // Resolverla antes del fetch evita que un backend publicado con un prompt
+      // anterior vuelva a responder "cliente no encontrado". Además no consume
+      // un parseo de IA porque en este camino no se consulta ningún modelo.
+      const localCard = parseDirectoryContactCard(text);
+      if (localCard?.usedAddressAsName) {
+        const { usedAddressAsName: _usedAddressAsName, ...contact } = localCard;
+        return {
+          tool: 'create_new_client',
+          input: {
+            ...contact,
+            notes: '',
+            products: {},
+            freq: 'on_demand',
+            visitDay: '',
+            specificDate: '',
+          },
+        };
+      }
+
       // 2) Construir lista de clientes con estado del pedido pendiente.
       //    Un mismo cliente puede aparecer en MÚLTIPLES filas: una por cada pedido
       //    activo (ej: "Farmacia Central" puede tener un pedido semanal de lunes Y
@@ -158,18 +180,64 @@ export const useAiParse = (): UseAiParseReturn => {
       if (idToken) headers.Authorization = `Bearer ${idToken}`;
 
       // 3) Llamar al servidor local / Netlify
-      const res = await fetch(API_ENDPOINTS.parseOrder, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ text, clients, todayIso }),
-      });
+      const requestParse = async (requestText: string): Promise<Response> => {
+        const requestInit = {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ text: requestText, clients, todayIso }),
+        };
+        try {
+          let response = await fetch(API_ENDPOINTS.parseOrder, requestInit);
+          // Un servidor local levantado pero mal configurado (sin API key, por
+          // ejemplo) tampoco debe inutilizar Pedido IA en el simulador.
+          if (response.status >= 500 && API_ENDPOINTS.parseOrderFallback) {
+            response = await fetch(API_ENDPOINTS.parseOrderFallback, requestInit);
+          }
+          return response;
+        } catch (localError) {
+          if (!API_ENDPOINTS.parseOrderFallback) throw localError;
+          return fetch(API_ENDPOINTS.parseOrderFallback, requestInit);
+        }
+      };
+
+      let res = await requestParse(text);
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({} as any));
         throw new Error(body.error || `HTTP ${res.status}`);
       }
 
-      const data = (await res.json()) as ParseResult;
+      let data = (await res.json()) as ParseResult;
+
+      // Compatibilidad inmediata con backends anteriores al fix: una ficha
+      // completa que cayó en report_not_found se reintenta una sola vez con
+      // intención de alta explícita. El backend igualmente recibe la lista y
+      // debe matchear existentes antes de crear, por lo que no duplica.
+      if (data.tool === 'report_not_found' && looksLikeCompleteClientCardText(text)) {
+        const retryText = `Guardá como cliente nuevo en el directorio la siguiente ficha completa, pero si el nombre ya existe usá ese cliente y no lo dupliques. Si no hay un nombre separado, usá la dirección tanto como nombre como dirección; no exijas productos, día ni frecuencia:\n\n${text}`;
+        const retry = await requestParse(retryText);
+        if (retry.ok) data = (await retry.json()) as ParseResult;
+        // Un backend viejo puede insistir con report_not_found incluso ante la
+        // instrucción explícita. La ficha ya está suficientemente estructurada,
+        // así que completamos el alta localmente sin inventar ningún dato.
+        if (data.tool === 'report_not_found') {
+          const card = parseDirectoryContactCard(text);
+          if (card) {
+            const { usedAddressAsName: _usedAddressAsName, ...contact } = card;
+            data = {
+              tool: 'create_new_client',
+              input: {
+                ...contact,
+                notes: '',
+                products: {},
+                freq: 'on_demand',
+                visitDay: '',
+                specificDate: '',
+              },
+            };
+          }
+        }
+      }
 
       // Consumir 1 uso recién ahora, con el resultado en mano. Best-effort:
       // si la transacción falla (o el límite se alcanzó en paralelo desde

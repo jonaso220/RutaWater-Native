@@ -13,6 +13,7 @@ const validBackup = {
     visitDays: ['Lunes'],
     products: { b20: 2, custom_hielo: '3', '../bad': 9 },
     relationships: { 'client-2': 'hermano_a', invalid: 'not-a-type' },
+    sameHousehold: { 'client-2': false, invalid: 'yes' },
   }],
   debts: [{ id: 'debt-1', clientId: 'client-1', amount: 350 }],
   transfers: [{ id: 'transfer-1', clientId: 'client-1' }],
@@ -25,6 +26,7 @@ describe('backup validation', () => {
     expect(backup.clients).toHaveLength(1);
     expect(backup.clients[0].products).toEqual({ b20: '2', custom_hielo: '3' });
     expect(backup.clients[0].relationships).toEqual({ 'client-2': 'hermano_a' });
+    expect(backup.clients[0].sameHousehold).toEqual({ 'client-2': false });
     expect(backup.debts[0].amount).toBe(350);
     expect(backup.schemaVersion).toBe(1);
   });

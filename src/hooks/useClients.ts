@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
 import { Client, RELATIONSHIP_INVERSE } from '../types';
 import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, normalizePhoneForComparison, toLocalDateString, parseDate } from '../utils/helpers';
+import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { ALL_DAYS, Frequency } from '../constants/products';
 import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
@@ -474,18 +475,34 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       // The 'add' mode is meant for one-time extras (freq='once' with a date),
       // not for changing visitDays of an already-active recurring client.
       const isRecurringScheduleEdit = newFreq !== 'once' && newFreq !== 'on_demand';
+      // Keep the synchronous scheduling source current between consecutive
+      // household writes. Firestore snapshots arrive later; without this,
+      // several relatives scheduled in one tap could receive the same order.
+      const syncScheduledClientRef = (id: string, base: Client) => {
+        const scheduled = { ...base, ...newData, id } as Client;
+        const index = clientsRef.current.findIndex((candidate) => candidate.id === id);
+        if (index === -1) {
+          clientsRef.current = [...clientsRef.current, scheduled];
+        } else {
+          clientsRef.current = clientsRef.current.map((candidate, i) =>
+            i === index ? scheduled : candidate,
+          );
+        }
+      };
 
       if (clientData.freq === 'on_demand' || clientData.visitDay === 'Sin Asignar') {
         // Reactivate existing client. newData pisa alarm:'' → cancelar también
         // el trigger programado para que no suene una alarma vieja.
         void cancelClientAlarm(clientData.id);
         await db.collection('clients').doc(clientData.id).update(newData);
+        syncScheduledClientRef(clientData.id, clientData);
       } else if (mode === 'replace' || isRecurringScheduleEdit) {
         // Move/replace: update the existing pending-order doc in place
         // (e.g. user said "movélo del 29-4 al 6 de mayo"), or the user is
         // editing the recurring schedule of an already-active client.
         void cancelClientAlarm(clientData.id);
         await db.collection('clients').doc(clientData.id).update(newData);
+        syncScheduledClientRef(clientData.id, clientData);
       } else {
         // Add: keep the existing order and add a new one (only reached for
         // freq='once' with a date — a one-time extra pedido).
@@ -503,9 +520,11 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           // Reuse the on_demand document instead of creating a new one
           void cancelClientAlarm(existingOnDemand.id);
           await db.collection('clients').doc(existingOnDemand.id).update(newData);
+          syncScheduledClientRef(existingOnDemand.id, existingOnDemand);
         } else {
           newData.createdAt = new Date();
-          await db.collection('clients').add(newData);
+          const created = await db.collection('clients').add(newData);
+          syncScheduledClientRef(created.id, clientData);
         }
       }
       return true;
@@ -772,7 +791,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         notes: data.notes,
         lat: '',
         lng: '',
-        mapsLink: data.mapsLink || '',
+        mapsLink: normalizeGoogleMapsLink(data.mapsLink),
         freq: isOnDemand ? 'on_demand' : data.freq,
         visitDay,
         visitDays,
@@ -1062,13 +1081,16 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           const inverseType = target.relationships?.[staleId];
           const targetUpdates: Record<string, any> = {
             [`relationships.${staleId}`]: FieldValue.delete(),
+            [`sameHousehold.${staleId}`]: FieldValue.delete(),
           };
           if (inverseType && !target.relationships?.[activeId]) {
             targetUpdates[`relationships.${activeId}`] = inverseType;
+            targetUpdates[`sameHousehold.${activeId}`] = target.sameHousehold?.[staleId] !== false;
           }
           migrationOps.push({ ref: db.collection('clients').doc(targetId), data: targetUpdates });
           if (!keeper.relationships?.[targetId]) {
             keeperUpdates[`relationships.${targetId}`] = type;
+            keeperUpdates[`sameHousehold.${targetId}`] = stale.sameHousehold?.[targetId] !== false;
           }
         });
         if ((!keeper.notes || !keeper.notes.trim()) && stale.notes && stale.notes.trim()) {
@@ -1106,19 +1128,27 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   }, [findDuplicateClients]);
 
   // Add a family relationship between two clients (bidirectional)
-  const addRelationship = useCallback(async (clientId: string, targetId: string, type: string) => {
+  const addRelationship = useCallback(async (
+    clientId: string,
+    targetId: string,
+    type: string,
+    sameHousehold: boolean,
+  ) => {
     try {
       const inverse = RELATIONSHIP_INVERSE[type] || 'otro';
       const batch = db.batch();
       batch.update(db.collection('clients').doc(clientId), {
         [`relationships.${targetId}`]: type,
+        [`sameHousehold.${targetId}`]: sameHousehold,
       });
       batch.update(db.collection('clients').doc(targetId), {
         [`relationships.${clientId}`]: inverse,
+        [`sameHousehold.${clientId}`]: sameHousehold,
       });
       await batch.commit();
     } catch (e) {
       reportError(e, 'Error adding relationship');
+      throw e;
     }
   }, []);
 
@@ -1129,13 +1159,16 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       const batch = db.batch();
       batch.update(db.collection('clients').doc(clientId), {
         [`relationships.${targetId}`]: FieldValue.delete(),
+        [`sameHousehold.${targetId}`]: FieldValue.delete(),
       });
       batch.update(db.collection('clients').doc(targetId), {
         [`relationships.${clientId}`]: FieldValue.delete(),
+        [`sameHousehold.${clientId}`]: FieldValue.delete(),
       });
       await batch.commit();
     } catch (e) {
       reportError(e, 'Error removing relationship');
+      throw e;
     }
   }, []);
 
@@ -1156,6 +1189,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         existingRelatedIds.forEach((relatedId) => {
           batch.update(db.collection('clients').doc(relatedId), {
             [`relationships.${clientId}`]: FieldValue.delete(),
+            [`sameHousehold.${clientId}`]: FieldValue.delete(),
           });
         });
         await batch.commit();

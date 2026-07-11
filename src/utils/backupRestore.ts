@@ -27,6 +27,7 @@ export interface BackupClientRecord {
   completedAt: Date | null;
   doneFor: string;
   relationships: Record<string, string>;
+  sameHousehold: Record<string, boolean>;
 }
 
 export interface BackupDebtRecord {
@@ -113,6 +114,15 @@ const sanitizeRelationships = (value: unknown): Record<string, string> => {
   return relationships;
 };
 
+const sanitizeSameHousehold = (value: unknown): Record<string, boolean> => {
+  if (!isObject(value)) return {};
+  const result: Record<string, boolean> = {};
+  Object.entries(value).slice(0, 500).forEach(([clientId, same]) => {
+    if (validId(clientId) && typeof same === 'boolean') result[clientId] = same;
+  });
+  return result;
+};
+
 const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
   if (!isObject(value) || !validId(value.id)) {
     throw new Error(`INVALID_CLIENT_${index}`);
@@ -158,6 +168,7 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
     completedAt: parseDate(value.completedAt),
     doneFor,
     relationships: sanitizeRelationships(value.relationships),
+    sameHousehold: sanitizeSameHousehold(value.sameHousehold),
   };
 };
 

@@ -11,6 +11,7 @@ import {
   Linking,
   KeyboardAvoidingView,
   Platform,
+  Switch,
   useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
@@ -20,13 +21,19 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
+import { getDaysSince, getLastVisitDate, sharesHouseholdWith } from '../utils/recency';
 
 interface RelationshipsModalProps {
   visible: boolean;
   client: Client | null;
   allClients: Client[];
   onClose: () => void;
-  onAddRelationship: (clientId: string, targetId: string, type: string) => Promise<void>;
+  onAddRelationship: (
+    clientId: string,
+    targetId: string,
+    type: string,
+    sameHousehold: boolean,
+  ) => Promise<void>;
   onRemoveRelationship: (clientId: string, targetId: string) => Promise<void>;
 }
 
@@ -49,6 +56,8 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTarget, setSelectedTarget] = useState<Client | null>(null);
   const [selectedType, setSelectedType] = useState('');
+  const [sameHousehold, setSameHousehold] = useState(false);
+  const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const relationships = client?.relationships || {};
@@ -89,8 +98,10 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
     if (!selectedTarget || !selectedType || saving) return;
     setSaving(true);
     try {
-      await onAddRelationship(client.id, selectedTarget.id, selectedType);
+      await onAddRelationship(client.id, selectedTarget.id, selectedType, sameHousehold);
       resetAddState();
+    } catch {
+      Alert.alert(t('error'), t('relationships.saveError'));
     } finally {
       setSaving(false);
     }
@@ -109,6 +120,8 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
             setSaving(true);
             try {
               await onRemoveRelationship(client.id, relatedClient.id);
+            } catch {
+              Alert.alert(t('error'), t('relationships.removeError'));
             } finally {
               setSaving(false);
             }
@@ -132,6 +145,30 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
     setSearchTerm('');
     setSelectedTarget(null);
     setSelectedType('');
+    setSameHousehold(false);
+    setEditingTargetId(null);
+  };
+
+  const selectNewTarget = (target: Client) => {
+    setSelectedTarget(target);
+    const currentAddress = (client.address || '').trim().toLocaleLowerCase();
+    const targetAddress = (target.address || '').trim().toLocaleLowerCase();
+    setSameHousehold(!!currentAddress && currentAddress === targetAddress);
+  };
+
+  const startEdit = (target: Client, type: string) => {
+    setMode('add');
+    setEditingTargetId(target.id);
+    setSelectedTarget(target);
+    setSelectedType(type);
+    setSameHousehold(sharesHouseholdWith(client, target.id));
+  };
+
+  const visitLabel = (target: Client): string => {
+    const days = getDaysSince(getLastVisitDate(target));
+    if (days === null) return t('directory.noHistory');
+    if (days === 0) return t('directory.today');
+    return t('directory.daysAgo', { count: days });
   };
 
   const handleClose = () => {
@@ -173,6 +210,12 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
                         <Text style={styles.relType}>
                           {t(`relationships.${type}`, { defaultValue: type })}
                         </Text>
+                        <Text style={styles.relMeta}>
+                          {sharesHouseholdWith(client, rel.id)
+                            ? t('relationships.sameHousehold')
+                            : t('relationships.differentHousehold')}
+                          {' · '}{t('relationships.lastVisit', { date: visitLabel(rel) })}
+                        </Text>
                       </View>
                       <View style={styles.relActions}>
                         {rel.phone ? (
@@ -191,6 +234,12 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
                             </TouchableOpacity>
                           </>
                         ) : null}
+                        <TouchableOpacity
+                          onPress={() => startEdit(rel, type)}
+                          style={styles.actionIconBtn}
+                        >
+                          <Ionicons name="pencil" size={17} color={colors.primary} />
+                        </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => handleRemove(rel)}
                           style={styles.actionIconBtn}
@@ -224,7 +273,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
                       <TouchableOpacity
                         key={c.id}
                         style={styles.searchResultItem}
-                        onPress={() => setSelectedTarget(c)}
+                        onPress={() => selectNewTarget(c)}
                       >
                         <Text style={styles.searchResultName}>{c.name}</Text>
                         {c.address ? (
@@ -243,9 +292,11 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
                     {/* Step 2: Select relationship type */}
                     <View style={styles.selectedClientBanner}>
                       <Text style={styles.selectedClientName}>{selectedTarget.name}</Text>
-                      <TouchableOpacity onPress={() => setSelectedTarget(null)}>
-                        <Ionicons name="close-circle" size={20} color={colors.textMuted} />
-                      </TouchableOpacity>
+                      {!editingTargetId && (
+                        <TouchableOpacity onPress={() => setSelectedTarget(null)}>
+                          <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      )}
                     </View>
                     <Text style={styles.sectionLabel}>{t('relationships.selectType')}</Text>
                     <View style={styles.typeGrid}>
@@ -269,6 +320,18 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
                         </TouchableOpacity>
                       ))}
                     </View>
+                    <View style={styles.householdRow}>
+                      <View style={styles.householdTextWrap}>
+                        <Text style={styles.householdTitle}>{t('relationships.sameHouseholdQuestion')}</Text>
+                        <Text style={styles.householdHint}>{t('relationships.sameHouseholdHint')}</Text>
+                      </View>
+                      <Switch
+                        value={sameHousehold}
+                        onValueChange={setSameHousehold}
+                        trackColor={{ false: colors.cardBorder, true: colors.primaryLight }}
+                        thumbColor={sameHousehold ? colors.primary : colors.textMuted}
+                      />
+                    </View>
                   </>
                 )}
               </>
@@ -291,7 +354,9 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
                 style={[styles.confirmBtn, saving && { opacity: 0.5 }]}
                 disabled={saving}
               >
-                <Text style={styles.confirmBtnText}>{t('relationships.add')}</Text>
+                <Text style={styles.confirmBtnText}>
+                  {editingTargetId ? t('relationships.saveChanges') : t('relationships.add')}
+                </Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -379,6 +444,11 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     fontWeight: '600',
     marginTop: s(2),
   },
+  relMeta: {
+    fontSize: s(11),
+    color: colors.textMuted,
+    marginTop: s(3),
+  },
   relActions: {
     flexDirection: 'row',
     gap: s(4),
@@ -455,6 +525,29 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: s(8),
+  },
+  householdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(12),
+    backgroundColor: colors.sectionBackground,
+    borderRadius: s(12),
+    padding: s(12),
+    marginTop: s(18),
+  },
+  householdTextWrap: {
+    flex: 1,
+  },
+  householdTitle: {
+    fontSize: s(14),
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  householdHint: {
+    fontSize: s(11),
+    color: colors.textMuted,
+    marginTop: s(3),
+    lineHeight: s(15),
   },
   typeChip: {
     paddingHorizontal: s(14),

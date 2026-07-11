@@ -108,9 +108,17 @@ export const useDataRestore = ({ userId, groupId, profileName }: UseDataRestoreA
       const operations: WriteOperation[] = [];
       backup.clients.forEach((client) => {
         const relationships: Record<string, string> = {};
+        const sameHousehold: Record<string, boolean> = {};
         Object.entries(client.relationships).forEach(([oldRelatedId, type]) => {
           const relatedId = clientIdMap.get(oldRelatedId) || currentClients.get(oldRelatedId)?.id;
-          if (relatedId) relationships[relatedId] = type;
+          if (relatedId) {
+            relationships[relatedId] = type;
+            // Missing values come from legacy backups and intentionally stay
+            // absent so the backwards-compatible default (same home) applies.
+            if (typeof client.sameHousehold[oldRelatedId] === 'boolean') {
+              sameHousehold[relatedId] = client.sameHousehold[oldRelatedId];
+            }
+          }
         });
         const { id, ...clientData } = client;
         operations.push({
@@ -118,6 +126,7 @@ export const useDataRestore = ({ userId, groupId, profileName }: UseDataRestoreA
           data: {
             ...clientData,
             relationships,
+            sameHousehold,
             ...scope,
             backupSourceId: id,
             updatedAt: new Date(),

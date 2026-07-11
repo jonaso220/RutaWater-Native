@@ -28,6 +28,11 @@ export const API_ENDPOINTS = {
   parseOrder: __DEV__
     ? `${API_BASE_URL}/parse-order`
     : `${API_BASE_URL}/api/parse-order`,
+  // En Debug preferimos el servidor local para desarrollar prompts, pero el
+  // simulador sigue siendo utilizable si no está instalado/configurado.
+  parseOrderFallback: __DEV__
+    ? `${PROD_BASE_URL}/api/parse-order`
+    : null,
   health: __DEV__
     ? `${API_BASE_URL}/health`
     : `${API_BASE_URL}/api/health`,

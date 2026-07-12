@@ -17,6 +17,8 @@ import {
   LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
 import ModalOverlay from '../components/ModalOverlay';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
@@ -94,6 +96,12 @@ const SectionHeader = React.memo<SectionHeaderProps>(({ title, count, isToday, c
 
 // Stable keyExtractor — defined outside component to avoid re-creation
 const keyExtractor = (item: ListItem) => item.key;
+
+const REORDER_ANIMATION_MS = 240;
+const reorderLayoutAnimation = {
+  duration: REORDER_ANIMATION_MS,
+  update: { type: LayoutAnimation.Types.easeInEaseOut },
+};
 
 import DaySelector from '../components/DaySelector';
 import { ProductLabel } from '../components/ProductIcon';
@@ -255,6 +263,17 @@ const HomeScreen = () => {
   const lastScrollDirectionRef = useRef<-1 | 0 | 1>(0);
   const scrollDirectionDistanceRef = useRef(0);
   const [collapsibleHeaderHeight, setCollapsibleHeaderHeight] = useState(0);
+  const reorderAnimationActiveRef = useRef(false);
+  const reorderAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      UIManager.setLayoutAnimationEnabledExperimental?.(true);
+    }
+    return () => {
+      if (reorderAnimationTimerRef.current) clearTimeout(reorderAnimationTimerRef.current);
+    };
+  }, []);
 
   const setCollapsibleHeaderVisible = useCallback((visible: boolean, animate = true) => {
     if (collapsibleHeaderVisibleRef.current === visible) {
@@ -853,6 +872,17 @@ const HomeScreen = () => {
     changePosition,
   };
 
+  const reorderContextRef = useRef({
+    day: deferredDay,
+    positions: globalPositionMap,
+    clientCount: allVisibleClients.length,
+  });
+  reorderContextRef.current = {
+    day: deferredDay,
+    positions: globalPositionMap,
+    clientCount: allVisibleClients.length,
+  };
+
   const stableHandlers = useMemo(
     () => ({
       onMarkDone: (c: Client) => handlersRef.current.handleMarkDone(c),
@@ -863,8 +893,30 @@ const HomeScreen = () => {
       onTransfer: (c: Client) => handlersRef.current.handleTransfer(c),
       onAlarm: (c: Client) => handlersRef.current.handleAlarm(c),
       onRelationships: (c: Client) => handlersRef.current.handleRelationshipsCb(c),
-      onChangePosition: (id: string, pos: number, day: string) =>
-        handlersRef.current.changePosition(id, pos, day),
+      onChangePosition: (id: string, pos: number, day: string) => {
+        const context = reorderContextRef.current;
+        if (!Number.isFinite(pos) || context.positions[id] === undefined) return;
+        const boundedPosition = Math.max(1, Math.min(Math.trunc(pos), context.clientCount));
+        const currentPosition = context.positions[id] + 1;
+        if (
+          context.clientCount === 0 ||
+          day !== context.day ||
+          currentPosition === boundedPosition ||
+          reorderAnimationActiveRef.current
+        ) return;
+
+        // Animate the layout produced by the optimistic local reorder. The
+        // short guard only prevents overlapping visual transitions; Firestore
+        // persistence and rollback remain owned by changePosition.
+        reorderAnimationActiveRef.current = true;
+        LayoutAnimation.configureNext(reorderLayoutAnimation);
+        void handlersRef.current.changePosition(id, boundedPosition, day);
+
+        reorderAnimationTimerRef.current = setTimeout(() => {
+          reorderAnimationActiveRef.current = false;
+          reorderAnimationTimerRef.current = null;
+        }, REORDER_ANIMATION_MS + 40);
+      },
     }),
     [],
   );
@@ -900,7 +952,7 @@ const HomeScreen = () => {
           enCaminoMessage={appSettings?.whatsappEnCamino}
           fontScale={fontScale}
           wideLayout={wideCard}
-          selectedDay={selectedDay}
+          selectedDay={deferredDay}
           onMarkDone={stableHandlers.onMarkDone}
           onEdit={stableHandlers.onEdit}
           onDelete={stableHandlers.onDelete}
@@ -920,7 +972,7 @@ const HomeScreen = () => {
       isWide,
       wideCard,
       isAdmin,
-      selectedDay,
+      deferredDay,
       appSettings,
       globalPositionMap,
       debtMap,
@@ -997,7 +1049,7 @@ const HomeScreen = () => {
                 hasRelationships={relationshipMap[client.id] ?? false}
                 enCaminoMessage={appSettings?.whatsappEnCamino}
                 fontScale={gridFontScale}
-                selectedDay={selectedDay}
+                selectedDay={deferredDay}
                 onMarkDone={stableHandlers.onMarkDone}
                 onEdit={stableHandlers.onEdit}
                 onDelete={stableHandlers.onDelete}
@@ -1023,7 +1075,7 @@ const HomeScreen = () => {
       isWide,
       gridFontScale,
       isAdmin,
-      selectedDay,
+      deferredDay,
       appSettings,
       globalPositionMap,
       debtMap,

@@ -9,6 +9,7 @@ import { ALL_DAYS, Frequency } from '../constants/products';
 import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
 import { reportError } from '../lib/crashReporting';
+import { moveItemToPosition } from '../utils/clientOrder';
 
 interface UseClientsProps {
   userId: string;
@@ -861,17 +862,12 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
   const changePosition = useCallback(async (clientId: string, newPos: number, day: string) => {
     // Read from the synchronous ref so we always see the latest positions.
-    const allClients = [...getDayClientsFromSource(day, clientsRef.current)];
-    const currentIndex = allClients.findIndex((c) => c.id === clientId);
+    const sourceClients = getDayClientsFromSource(day, clientsRef.current);
+    const move = moveItemToPosition(sourceClients, clientId, newPos);
+    const { currentIndex, newIndex } = move;
     if (currentIndex === -1) return;
-
-    // Move the client in the local array to compute neighbors at the target.
-    const [movedClient] = allClients.splice(currentIndex, 1);
-    const insertIndex = Math.max(0, Math.min(newPos - 1, allClients.length));
-    allClients.splice(insertIndex, 0, movedClient);
-
-    const newIndex = allClients.indexOf(movedClient);
-    if (newIndex === currentIndex) return;
+    if (!move.changed) return;
+    const allClients = move.items;
 
     const prevNeighbor = newIndex > 0 ? allClients[newIndex - 1] : null;
     const nextNeighbor = newIndex < allClients.length - 1 ? allClients[newIndex + 1] : null;

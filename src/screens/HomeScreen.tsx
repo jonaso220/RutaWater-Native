@@ -55,8 +55,10 @@ import { useTranslation } from 'react-i18next';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import {
   RouteMapStop,
+  RouteSession as RouteSessionState,
   buildGoogleMapsDirectionsUrl,
   coordinatesFromClient,
+  reconcileRouteSession,
 } from '../utils/mapsRoute';
 
 type ListItem =
@@ -64,7 +66,7 @@ type ListItem =
   | { type: 'client'; key: string; client: Client }
   | { type: 'gridrow'; key: string; clients: Client[]; sectionDateKey: string };
 
-type RouteSession = { stops: RouteMapStop[]; currentIndex: number };
+type RouteSession = RouteSessionState & { routeDay: string };
 
 // --- Memoized SectionHeader to avoid re-renders ---
 interface SectionHeaderProps {
@@ -551,6 +553,27 @@ const HomeScreen = () => {
     return keyed.filter((item) => item.dateKey === nearestKey).map((item) => item.client);
   }, [allVisibleClients, deferredDay]);
 
+  const orderedRouteStops = useMemo(() => nearestRouteClients
+    .filter((client) => !client.isNote && (!!client.mapsLink || !!coordinatesFromClient(client.lat, client.lng)))
+    .map((client): RouteMapStop => ({
+      clientId: client.id,
+      name: client.name || '',
+      mapsLink: client.mapsLink || '',
+      coordinates: coordinatesFromClient(client.lat, client.lng),
+    })), [nearestRouteClients]);
+
+  const orderedRouteStopsRef = useRef({ day: deferredDay, stops: orderedRouteStops });
+  orderedRouteStopsRef.current = { day: deferredDay, stops: orderedRouteStops };
+
+  // A guided route used to be a fixed snapshot created at start time. Keep
+  // its pending portion aligned with live position/location changes instead.
+  useEffect(() => {
+    const session = routeSessionRef.current;
+    if (!session || session.routeDay !== deferredDay) return;
+    const reconciled = reconcileRouteSession(session, orderedRouteStops);
+    if (reconciled !== session) updateRouteSession(reconciled);
+  }, [deferredDay, orderedRouteStops, updateRouteSession]);
+
   const openRouteStop = useCallback(async (stop: RouteMapStop) => {
     const directionsUrl = stop.coordinates
       ? buildGoogleMapsDirectionsUrl(stop.coordinates)
@@ -571,30 +594,35 @@ const HomeScreen = () => {
   }, [t]);
 
   const handleStartRoute = useCallback(async () => {
-    const routeClients = nearestRouteClients.filter((client) =>
-      !client.isNote && (!!client.mapsLink || !!coordinatesFromClient(client.lat, client.lng)),
-    );
-    if (routeClients.length === 0) {
+    if (orderedRouteStops.length === 0) {
       Alert.alert(t('home.routeNoClientsTitle'), t('home.routeNoClientsMsg'));
       return;
     }
 
-    const stops = routeClients.map((client): RouteMapStop => ({
-      clientId: client.id,
-      name: client.name || '',
-      mapsLink: client.mapsLink || '',
-      coordinates: coordinatesFromClient(client.lat, client.lng),
-    }));
-    const session: RouteSession = { stops, currentIndex: 0 };
+    const session: RouteSession = { stops: orderedRouteStops, currentIndex: 0, routeDay: deferredDay };
     updateRouteSession(session);
-    await openRouteStop(stops[0]);
-  }, [nearestRouteClients, openRouteStop, t, updateRouteSession]);
+    await openRouteStop(orderedRouteStops[0]);
+  }, [deferredDay, orderedRouteStops, openRouteStop, t, updateRouteSession]);
 
   const advanceGuidedRoute = useCallback(async (completedClientId?: string) => {
-    const session = routeSessionRef.current;
-    if (!session) return;
-    const current = session.stops[session.currentIndex];
+    const storedSession = routeSessionRef.current;
+    if (!storedSession) return;
+    const current = storedSession.stops[storedSession.currentIndex];
     if (completedClientId && current.clientId !== completedClientId) return;
+
+    const latestRoute = orderedRouteStopsRef.current;
+    const session = latestRoute.day === storedSession.routeDay
+      ? reconcileRouteSession(storedSession, latestRoute.stops)
+      : storedSession;
+
+    // The completed client can disappear from the live list before this
+    // callback runs. In that case reconciliation has already selected the
+    // next stop, so open it without advancing a second time.
+    if (completedClientId && session.stops[session.currentIndex]?.clientId !== completedClientId) {
+      updateRouteSession(session);
+      await openRouteStop(session.stops[session.currentIndex]);
+      return;
+    }
 
     const nextIndex = session.currentIndex + 1;
     if (nextIndex >= session.stops.length) {

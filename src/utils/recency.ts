@@ -17,9 +17,47 @@ export const sharesHouseholdWith = (client: Client, relatedId: string): boolean 
   return !!client.relationships?.[relatedId] && client.sameHousehold?.[relatedId] !== false;
 };
 
+// Resuelve el hogar como un grafo, no como una lista guardada únicamente en la
+// ficha que se está mostrando. Esto cubre datos legados/asimétricos (A apunta a
+// B pero B no apunta a A) y hogares encadenados (A-B-C). Un `false` explícito en
+// cualquiera de los dos lados siempre corta el vínculo de domicilio.
+const sharesHouseholdInEitherDirection = (a: Client, b: Client): boolean => {
+  const aLinksB = !!a.relationships?.[b.id];
+  const bLinksA = !!b.relationships?.[a.id];
+  if (!aLinksB && !bLinksA) return false;
+  if (aLinksB && a.sameHousehold?.[b.id] === false) return false;
+  if (bLinksA && b.sameHousehold?.[a.id] === false) return false;
+  return true;
+};
+
+export const getHouseholdMembers = (
+  client: Client,
+  clientsById?: Map<string, Client> | null,
+): Client[] => {
+  if (!clientsById) return [];
+
+  const household: Client[] = [];
+  const visited = new Set<string>([client.id]);
+  const queue: Client[] = [client];
+  const allClients = Array.from(clientsById.values());
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const candidate of allClients) {
+      if (visited.has(candidate.id)) continue;
+      if (!sharesHouseholdInEitherDirection(current, candidate)) continue;
+      visited.add(candidate.id);
+      household.push(candidate);
+      queue.push(candidate);
+    }
+  }
+
+  return household;
+};
+
 // Última actividad "del hogar": la visita más reciente entre el cliente y todos sus
-// familiares vinculados. Visitar a un familiar directo (misma casa) cuenta como haber
-// visitado al cliente, así no aparece como "viejo" en el filtro de Recurrencia.
+// familiares del mismo hogar. Visitar a cualquier integrante de la casa cuenta como
+// haber visitado al cliente, así no aparece como "viejo" en el filtro de Recurrencia.
 // Es un cálculo derivado en lectura: NO modifica el registro de nadie; si se desvincula
 // el familiar, se revierte solo.
 export const getEffectiveLastActivityDate = (
@@ -27,15 +65,9 @@ export const getEffectiveLastActivityDate = (
   clientsById?: Map<string, Client> | null,
 ): Date | null => {
   let best = getLastActivityDate(client);
-  const rel = client.relationships;
-  if (rel && clientsById) {
-    for (const famId of Object.keys(rel)) {
-      if (!sharesHouseholdWith(client, famId)) continue;
-      const fam = clientsById.get(famId);
-      if (!fam) continue;
-      const d = getLastVisitDate(fam);
-      if (d && (!best || d.getTime() > best.getTime())) best = d;
-    }
+  for (const familyMember of getHouseholdMembers(client, clientsById)) {
+    const d = getLastVisitDate(familyMember);
+    if (d && (!best || d.getTime() > best.getTime())) best = d;
   }
   return best;
 };

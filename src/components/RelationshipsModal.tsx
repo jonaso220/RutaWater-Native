@@ -21,7 +21,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
-import { getDaysSince, getLastVisitDate, sharesHouseholdWith } from '../utils/recency';
+import { getDaysSince, getEffectiveLastActivityDate, sharesHouseholdWith } from '../utils/recency';
 
 interface RelationshipsModalProps {
   visible: boolean;
@@ -62,6 +62,10 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
 
   const relationships = client?.relationships || {};
   const relatedIds = Object.keys(relationships);
+  const clientsById = useMemo(
+    () => new Map(allClients.map((candidate) => [candidate.id, candidate])),
+    [allClients],
+  );
 
   // Linked clients with their relationship type
   const linkedClients = useMemo(() => {
@@ -165,7 +169,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   };
 
   const visitLabel = (target: Client): string => {
-    const days = getDaysSince(getLastVisitDate(target));
+    const days = getDaysSince(getEffectiveLastActivityDate(target, clientsById));
     if (days === null) return t('directory.noHistory');
     if (days === 0) return t('directory.today');
     return t('directory.daysAgo', { count: days });

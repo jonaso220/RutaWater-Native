@@ -24,7 +24,7 @@ import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
 import { getModalWidth, getDayIndex, toLocalDateString } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
-import { sharesHouseholdWith } from '../utils/recency';
+import { getHouseholdMembers } from '../utils/recency';
 
 // Nombres de día indexados por Date.getDay() (0 = Domingo).
 const ALL_DAYS_BY_INDEX = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -77,11 +77,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const catalogProducts = useProducts();
 
   const householdMembers = React.useMemo(() => {
-    if (!client?.relationships) return [];
-    const relatedIds = new Set(Object.keys(client.relationships));
-    return allClients.filter((candidate) =>
-      relatedIds.has(candidate.id) &&
-      sharesHouseholdWith(client, candidate.id) &&
+    if (!client) return [];
+    const clientsById = new Map(allClients.map((candidate) => [candidate.id, candidate]));
+    return getHouseholdMembers(client, clientsById).filter((candidate) =>
       !candidate.isNote &&
       !candidate.isInactive &&
       (candidate.freq === 'on_demand' || candidate.visitDay === 'Sin Asignar'),

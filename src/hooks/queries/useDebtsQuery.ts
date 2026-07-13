@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Debt } from '../../types';
 import { parseDate } from '../../utils/helpers';
+import { belongsToProfileScope } from '../../utils/profileScope';
 
 interface UseDebtsQueryArgs {
   userId: string;
@@ -36,10 +37,12 @@ export const useDebtsQuery = ({ userId, groupId }: UseDebtsQueryArgs) => {
       .where(scopeField, '==', scopeValue)
       .onSnapshot(
         (snapshot) => {
-          const loaded: Debt[] = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })) as Debt[];
+          const loaded: Debt[] = snapshot.docs
+            .filter((doc) => belongsToProfileScope(doc.data(), userId, groupId))
+            .map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            })) as Debt[];
           loaded.sort((a, b) => {
             const dateA = parseDate(a.createdAt)?.getTime() || 0;
             const dateB = parseDate(b.createdAt)?.getTime() || 0;

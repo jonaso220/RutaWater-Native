@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Transfer } from '../../types';
 import { parseDate } from '../../utils/helpers';
+import { belongsToProfileScope } from '../../utils/profileScope';
 
 interface UseTransfersQueryArgs {
   userId: string;
@@ -30,10 +31,12 @@ export const useTransfersQuery = ({ userId, groupId }: UseTransfersQueryArgs) =>
       .where(scopeField, '==', scopeValue)
       .onSnapshot(
         (snapshot) => {
-          const loaded: Transfer[] = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          })) as Transfer[];
+          const loaded: Transfer[] = snapshot.docs
+            .filter((doc) => belongsToProfileScope(doc.data(), userId, groupId))
+            .map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            })) as Transfer[];
           loaded.sort((a, b) => {
             const dateA = parseDate(a.createdAt)?.getTime() || 0;
             const dateB = parseDate(b.createdAt)?.getTime() || 0;

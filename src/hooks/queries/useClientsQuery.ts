@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Client } from '../../types';
 import { withDefaults } from '../../utils/clientDefaults';
+import { belongsToProfileScope } from '../../utils/profileScope';
 
 interface UseClientsQueryArgs {
   userId: string;
@@ -51,6 +52,12 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
           // reports every doc as "added" and never emits "removed" for docs
           // deleted while it was detached. Merging would resurrect those as
           // ghost clients. Rebuilding from snapshot.docs avoids that.
+          // Sin grupo familiar, Reparto 1 consulta por userId. Los repartos
+          // personalizados también guardan ese userId, pero tienen groupId y
+          // deben quedar fuera para que cada reparto sea realmente aislado.
+          const visibleDocs = snapshot.docs.filter((doc) =>
+            belongsToProfileScope(doc.data(), userId, groupId),
+          );
           const prev = queryClient.getQueryData<Client[]>(queryKey);
           const prevById = new Map((prev ?? []).map((c) => [c.id, c]));
           // Docs added/modified in this snapshot must get a fresh object.
@@ -60,7 +67,7 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
               .filter((ch) => ch.type !== 'removed')
               .map((ch) => ch.doc.id),
           );
-          const next = snapshot.docs.map((doc) => {
+          const next = visibleDocs.map((doc) => {
             const existing = prevById.get(doc.id);
             return existing && !changedIds.has(doc.id)
               ? existing

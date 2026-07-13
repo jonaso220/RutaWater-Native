@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   TextInput,
+  Keyboard,
   ScrollView,
   StyleSheet,
   KeyboardAvoidingView,
@@ -99,6 +100,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   const [text, setText] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
   const [saving, setSaving] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   const { parsing, parse, error, limitReached, reset } = useAiParse();
   const usage = useAiUsageStore();
@@ -140,6 +142,10 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   }, [onClose, reset]);
 
   const handleInterpret = useCallback(async () => {
+    // La vista previa aparece debajo del editor: al interpretar, liberar ese
+    // espacio y dejar que el usuario vuelva a abrir el teclado tocando el texto.
+    inputRef.current?.blur();
+    Keyboard.dismiss();
     if (!text.trim()) {
       Alert.alert(t('smartOrder.missingTextTitle'), t('smartOrder.missingTextMsg'));
       return;
@@ -458,7 +464,12 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            style={styles.body}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          >
             {/* Usage banner */}
             <View style={styles.usageBanner}>
               <Ionicons name="flash" size={14} color={colors.textMuted} />
@@ -473,6 +484,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
             <Text style={styles.sectionTitle}>{t('smartOrder.orderSection')}</Text>
             <View style={styles.inputBox}>
               <TextInput
+                ref={inputRef}
                 style={styles.input}
                 value={text}
                 onChangeText={setText}
@@ -489,6 +501,8 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
               style={[styles.primaryBtn, (parsing || !text.trim()) && styles.primaryBtnDisabled]}
               onPress={handleInterpret}
               disabled={parsing || !text.trim()}
+              accessibilityRole="button"
+              accessibilityLabel={t('smartOrder.interpretBtn')}
             >
               {parsing ? (
                 <ActivityIndicator color={colors.textWhite} />

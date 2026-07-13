@@ -10,6 +10,23 @@ const isGoogleMapsHost = (hostname: string, pathname: string): boolean => {
     || (/^(?:www\.)?google\.[a-z.]+$/.test(host) && pathname.toLowerCase().startsWith('/maps'));
 };
 
+// React Native 0.76 reemplaza URL por un polyfill cuyas propiedades protocol,
+// hostname y pathname lanzan "not implemented". Por eso parseamos solamente
+// las partes que necesitamos, sin depender del constructor global de URL.
+const parseHttpUrl = (value: string): { protocol: string; hostname: string; pathname: string } | null => {
+  const match = value.match(/^(https?):\/\/([^/?#]+)(\/[^?#]*)?(?:\?[^#]*)?(?:#.*)?$/i);
+  if (!match) return null;
+  const hostname = match[2].toLowerCase();
+  // No aceptamos credenciales ni puertos: ninguno forma parte de un enlace
+  // compartido legítimo de Google Maps y complicarían la validación del host.
+  if (hostname.includes('@') || hostname.includes(':')) return null;
+  return {
+    protocol: `${match[1].toLowerCase()}:`,
+    hostname,
+    pathname: match[3] || '/',
+  };
+};
+
 export const hasGoogleLocationLinkText = (text: string): boolean => MAPS_URL_RE.test(text || '');
 
 // Normaliza links copiados desde WhatsApp/Claude. Acepta links sin protocolo,
@@ -24,14 +41,11 @@ export const normalizeGoogleMapsLink = (candidate?: string, sourceText?: string)
     if (!match) continue;
     let value = match.replace(/[\])}>.;]+$/g, '');
     if (!/^https?:\/\//i.test(value)) value = `https://${value}`;
-    try {
-      const parsed = new URL(value);
-      if ((parsed.protocol === 'http:' || parsed.protocol === 'https:')
-        && isGoogleMapsHost(parsed.hostname, parsed.pathname)) {
-        return parsed.toString();
-      }
-    } catch {
-      // Try the next source (normally the original pasted WhatsApp text).
+    const parsed = parseHttpUrl(value);
+    if (parsed
+      && (parsed.protocol === 'http:' || parsed.protocol === 'https:')
+      && isGoogleMapsHost(parsed.hostname, parsed.pathname)) {
+      return value;
     }
   }
   return '';
@@ -55,6 +69,15 @@ export interface DirectoryContactCard {
 }
 
 const ADDRESS_CUE_RE = /\b(?:direcci[oó]n|domicilio|calle|avenida|av\.?|ruta|esq\.?|esquina|manzana|solar)\b/i;
+const CARD_FIELD_RE = '(?:nombre|direcci[oó]n|domicilio|esquina|detalle|tel[eé]fono|tel|producto|bid[oó]n|dispensador|soda)';
+
+const extractCardField = (text: string, field: string): string => {
+  const match = text.match(new RegExp(
+    `\\b(?:${field})\\s*:\\s*(.+?)(?=\\s+\\b${CARD_FIELD_RE}\\s*:|$)`,
+    'i',
+  ));
+  return (match?.[1] || '').trim().replace(/^[\s,;-]+|[\s,;-]+$/g, '');
+};
 
 // Fallback determinístico para fichas de directorio sin pedido. Si el primer
 // tramo ya parece una dirección, no inventa un nombre: reutiliza la dirección
@@ -67,6 +90,32 @@ export const parseDirectoryContactCard = (text: string): DirectoryContactCard | 
   const phoneMatch = withoutUrl.match(/(?:^|\D)(\+?\d[\d\s().-]{6,}\d)(?:\D|$)/m);
   const phone = (phoneMatch?.[1] || '').trim();
   if (!mapsLink || !phone) return null;
+
+  // Las fichas copiadas del sistema suelen venir con campos explícitos. Se
+  // deben resolver antes del fallback por guiones: de lo contrario todo el
+  // pedido (incluidos productos y notas) termina usado como nombre/dirección.
+  // WhatsApp conserva a veces el Markdown de una ficha copiada
+  // (`*Nombre:*`, `**Dirección:**`). Quitamos solo esos marcadores para que
+  // no oculten los límites entre campos etiquetados.
+  const compact = withoutUrl.replace(/[*_`~]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const labeledName = extractCardField(compact, 'nombre');
+  const labeledAddress = extractCardField(compact, 'direcci[oó]n|domicilio');
+  if (labeledName && labeledAddress) {
+    const corner = extractCardField(compact, 'esquina');
+    const detail = extractCardField(compact, 'detalle');
+    const address = [
+      labeledAddress,
+      corner ? `Esquina ${corner}` : '',
+      detail,
+    ].filter(Boolean).join(', ');
+    return {
+      name: labeledName,
+      address,
+      phone,
+      mapsLink,
+      usedAddressAsName: false,
+    };
+  }
 
   let identity = withoutUrl.replace(phoneMatch?.[0] || '', ' ')
     .replace(/\s+/g, ' ')

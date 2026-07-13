@@ -11,6 +11,22 @@ describe('normalizeGoogleMapsLink', () => {
       .toBe('https://maps.app.goo.gl/AbC123');
   });
 
+  test('valida el enlace real en React Native sin depender del polyfill URL', () => {
+    const runtime = globalThis as any;
+    const originalUrl = runtime.URL;
+    runtime.URL = class ReactNativeUrlPolyfill {
+      get protocol(): string {
+        throw new Error('URL.protocol is not implemented');
+      }
+    };
+    try {
+      expect(normalizeGoogleMapsLink('https://maps.app.goo.gl/REDvKKVAReRLe3fXA'))
+        .toBe('https://maps.app.goo.gl/REDvKKVAReRLe3fXA');
+    } finally {
+      runtime.URL = originalUrl;
+    }
+  });
+
   test('recupera del texto original un enlace omitido por la IA', () => {
     const pasted = 'Nombre: Ana\nDirección: Calle 1\nhttps://goo.gl/maps/Test99';
     expect(normalizeGoogleMapsLink('', pasted)).toBe('https://goo.gl/maps/Test99');
@@ -31,6 +47,7 @@ describe('normalizeGoogleMapsLink', () => {
 
   test('rechaza URLs ajenas aunque sean seguras', () => {
     expect(normalizeGoogleMapsLink('https://example.com/maps/cliente')).toBe('');
+    expect(normalizeGoogleMapsLink('https://maps.app.goo.gl.evil.example/cliente')).toBe('');
   });
 });
 
@@ -58,6 +75,55 @@ describe('looksLikeCompleteClientCardText', () => {
 });
 
 describe('parseDirectoryContactCard', () => {
+  test('extrae una ficha etiquetada sin convertir todo el pedido en nombre', () => {
+    const card = parseDirectoryContactCard(`Pedido de cliente:
+
+Nombre: MELISA FARIÑA
+
+Dirección: CRUZ DEL SUR (DEL CANAL) M. 51 SOL. 14
+Esquina: JUAN ZORRILLA DE SAN MARTIN
+Detalle: SAN JOSE DE CARRASCO
+
+https://maps.app.goo.gl/REDvKKVAReRLe3fXA
+
+Teléfono: 098116892
+
+Producto:
+Bidon: 12Lts 2   Dispensador: NAT 1
+
+Soda: 0
+Detalle: NUEVO... TE ESPERA MARTES CASA ESQUINA.`);
+
+    expect(card).toEqual({
+      name: 'MELISA FARIÑA',
+      address: 'CRUZ DEL SUR (DEL CANAL) M. 51 SOL. 14, Esquina JUAN ZORRILLA DE SAN MARTIN, SAN JOSE DE CARRASCO',
+      phone: '098116892',
+      mapsLink: 'https://maps.app.goo.gl/REDvKKVAReRLe3fXA',
+      usedAddressAsName: false,
+    });
+  });
+
+  test('extrae la misma ficha cuando las etiquetas llegan en Markdown', () => {
+    const card = parseDirectoryContactCard(`*Pedido de cliente:*
+*Nombre:* MELISA FARIÑA
+*Dirección:* CRUZ DEL SUR (DEL CANAL) M. 51 SOL. 14
+*Esquina:* JUAN ZORRILLA DE SAN MARTIN
+*Detalle:* SAN JOSE DE CARRASCO
+https://maps.app.goo.gl/REDvKKVAReRLe3fXA
+*Teléfono:* 098116892
+*Producto:* Bidon: 12Lts 2 Dispensador: NAT 1
+*Soda:* 0
+*Detalle:* NUEVO... TE ESPERA MARTES CASA ESQUINA.`);
+
+    expect(card).toEqual({
+      name: 'MELISA FARIÑA',
+      address: 'CRUZ DEL SUR (DEL CANAL) M. 51 SOL. 14, Esquina JUAN ZORRILLA DE SAN MARTIN, SAN JOSE DE CARRASCO',
+      phone: '098116892',
+      mapsLink: 'https://maps.app.goo.gl/REDvKKVAReRLe3fXA',
+      usedAddressAsName: false,
+    });
+  });
+
   test('usa la dirección como nombre cuando la ficha no trae nombre', () => {
     const card = parseDirectoryContactCard(
       'Demir Esq Indiana - https://goo.gl/maps/wpLs84gXrssF96mWA +598 95 624 748',

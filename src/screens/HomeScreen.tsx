@@ -1218,6 +1218,8 @@ const HomeScreen = () => {
         <TouchableOpacity
           style={[styles.actionBtn, styles.actionBtnAi]}
           onPress={() => setShowSmartModal(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Pedido IA"
         >
           <Text style={[styles.actionBtnText, styles.actionBtnAiText]}>✨ Pedido IA</Text>
         </TouchableOpacity>

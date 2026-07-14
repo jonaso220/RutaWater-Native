@@ -36,7 +36,7 @@ const dataScore = (client: Client): number => {
   if ((client.lat && client.lng) || client.mapsLink) score += 5;
   if (client.address?.trim()) score += 3;
   score += Object.keys(client.relationships || {}).length * 15;
-  if (client.lastVisited || client.completedAt) score += 10;
+  if (client.lastDeliveredAt || client.lastVisited || client.completedAt) score += 10;
   if (client.alarm) score += 2;
   if (client.updatedAt) {
     const timestamp = (parseDate(client.updatedAt)?.getTime() || 0) / 1000;

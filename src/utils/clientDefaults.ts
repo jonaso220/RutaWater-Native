@@ -25,9 +25,12 @@ export const withDefaults = (id: string, data: any): Client => ({
   isNote: false,
   alarm: '',
   lastVisited: null,
+  lastDeliveredAt: null,
+  previousDeliveredAt: null,
   completedAt: null,
   updatedAt: null,
   userId: '',
   isInactive: false,
   ...data,
+  customerId: data.customerId || id,
 });

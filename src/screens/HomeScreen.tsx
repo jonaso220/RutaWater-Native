@@ -696,6 +696,8 @@ const HomeScreen = () => {
         isCompleted: client.isCompleted ?? false,
         completedAt: parseDate(client.completedAt),
         lastVisited: parseDate(client.lastVisited),
+        lastDeliveredAt: parseDate(client.lastDeliveredAt),
+        previousDeliveredAt: parseDate(client.previousDeliveredAt),
         doneFor: client.doneFor ?? '',
         specificDate: client.specificDate ?? '',
         alarm: client.alarm ?? '',
@@ -746,7 +748,7 @@ const HomeScreen = () => {
 
   const handleUndoComplete = useCallback(
     (client: Client) => {
-      undoComplete(client.id);
+      undoComplete(client);
     },
     [undoComplete],
   );

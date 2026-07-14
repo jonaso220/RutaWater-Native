@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 import { Client } from '../types';
+import { getDirectoryDeliveryHistoryUpdate } from '../utils/recency';
 
 /**
  * One-shot maintenance pass that runs the first time a scope's clients are
@@ -65,12 +66,15 @@ export const useClientsAutoCleanup = (clients: Client[], scopeKey: string, ready
         if (c.isNote) {
           batch.delete(ref);
         } else {
+          const historyUpdate = getDirectoryDeliveryHistoryUpdate(c);
           batch.update(ref, {
             freq: 'on_demand',
             visitDay: 'Sin Asignar',
             visitDays: [],
             isCompleted: false,
             completedAt: null,
+            previousDeliveredAt: null,
+            ...historyUpdate,
             updatedAt: new Date(),
           });
         }

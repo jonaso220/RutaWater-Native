@@ -3,6 +3,7 @@ import { parseDate, sanitizePhone, sanitizeProductQty, sanitizeString } from './
 
 export interface BackupClientRecord {
   id: string;
+  customerId: string;
   name: string;
   phone: string;
   address: string;
@@ -24,6 +25,8 @@ export interface BackupClientRecord {
   isInactive: boolean;
   alarm: string;
   lastVisited: Date | null;
+  lastDeliveredAt: Date | null;
+  previousDeliveredAt: Date | null;
   completedAt: Date | null;
   doneFor: string;
   relationships: Record<string, string>;
@@ -142,6 +145,7 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
 
   return {
     id: value.id,
+    customerId: validId(value.customerId) ? value.customerId : value.id,
     name,
     phone: sanitizePhone(value.phone),
     address: sanitizeString(value.address, 200),
@@ -165,6 +169,8 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
     isInactive: value.isInactive === true,
     alarm: sanitizeString(value.alarm, 10),
     lastVisited: parseDate(value.lastVisited),
+    lastDeliveredAt: parseDate(value.lastDeliveredAt),
+    previousDeliveredAt: parseDate(value.previousDeliveredAt),
     completedAt: parseDate(value.completedAt),
     doneFor,
     relationships: sanitizeRelationships(value.relationships),

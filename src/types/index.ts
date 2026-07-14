@@ -3,6 +3,9 @@ import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 // Client document in Firestore 'clients' collection
 export interface Client {
   id: string;
+  // Identidad estable del cliente humano. Los pedidos extra conservan un id
+  // de documento propio, pero comparten customerId con la ficha original.
+  customerId?: string;
   name: string;
   phone: string;
   address: string;
@@ -23,6 +26,13 @@ export interface Client {
   isNote: boolean;
   alarm: string;
   lastVisited: FirebaseFirestoreTypes.Timestamp | null;
+  // Fecha canónica de la última entrega REAL. A diferencia de lastVisited,
+  // nunca se usa como estado interno para calcular/reiniciar la agenda.
+  // Opcional para compatibilidad con documentos creados antes de este campo.
+  lastDeliveredAt?: FirebaseFirestoreTypes.Timestamp | null;
+  // Snapshot temporal usado para que deshacer un pedido "once" restaure la
+  // entrega anterior incluso después de cerrar el banner rápido de deshacer.
+  previousDeliveredAt?: FirebaseFirestoreTypes.Timestamp | null;
   doneFor?: string; // yyyy-mm-dd de la ocurrencia agendada que completó el último "Listo".
                     // Permite reagendar exacto aunque la entrega sea días antes/después
                     // del día de visita (ver getNextVisitDate). Vacío/ausente = usar heurística.

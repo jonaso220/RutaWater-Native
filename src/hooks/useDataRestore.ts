@@ -91,6 +91,20 @@ export const useDataRestore = ({ userId, groupId, profileName }: UseDataRestoreA
         clientRefs.set(client.id, ref);
       });
 
+      // customerId puede ser una identidad lógica cuyo documento original ya
+      // no existe (por ejemplo, después de limpiar un duplicado). Al restaurar,
+      // todas sus agendas deben converger al mismo identificador nuevo.
+      const customerIdMap = new Map<string, string>();
+      backup.clients.forEach((client) => {
+        if (customerIdMap.has(client.customerId)) return;
+        customerIdMap.set(
+          client.customerId,
+          clientIdMap.get(client.customerId) ||
+            currentClients.get(client.customerId)?.id ||
+            clientIdMap.get(client.id)!,
+        );
+      });
+
       const orphanClientIds = new Map<string, string>();
       const resolveClientId = (oldId: string, existingRecord?: any): string => {
         const restored = clientIdMap.get(oldId);
@@ -120,11 +134,13 @@ export const useDataRestore = ({ userId, groupId, profileName }: UseDataRestoreA
             }
           }
         });
-        const { id, ...clientData } = client;
+        const { id, customerId, ...clientData } = client;
+        const restoredCustomerId = customerIdMap.get(customerId) || clientIdMap.get(id)!;
         operations.push({
           ref: clientRefs.get(id),
           data: {
             ...clientData,
+            customerId: restoredCustomerId,
             relationships,
             sameHousehold,
             ...scope,

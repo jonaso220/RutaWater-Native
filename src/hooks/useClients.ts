@@ -3,9 +3,10 @@ import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firest
 import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
 import { Client, RELATIONSHIP_INVERSE } from '../types';
-import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, toLocalDateString } from '../utils/helpers';
+import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, toLocalDateString, parseDate } from '../utils/helpers';
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { findExactClientMatch, planDuplicateClientCleanup } from '../utils/clientDuplicates';
+import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../utils/recency';
 import { ALL_DAYS, Frequency } from '../constants/products';
 import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
@@ -192,10 +193,14 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         await db.collection('clients').doc(clientId).delete();
       } else if (client.freq === 'once') {
         // Once: mark as completed permanently
+        const deliveredAt = new Date();
+        const previousDeliveredAt = getLastVisitDate(client);
         await db.collection('clients').doc(clientId).update({
           isCompleted: true,
-          completedAt: new Date(),
-          updatedAt: new Date(),
+          completedAt: deliveredAt,
+          lastDeliveredAt: deliveredAt,
+          previousDeliveredAt,
+          updatedAt: deliveredAt,
           alarm: '',
           isStarred: false,
         });
@@ -205,8 +210,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         // the card was displayed under), so getNextVisitDate reschedules by
         // one full cycle from it even when the delivery happens days away
         // from the visit day (e.g. a Saturday client marked done on Monday).
+        const deliveredAt = new Date();
         const updates: Record<string, any> = {
-          lastVisited: new Date(),
+          lastVisited: deliveredAt,
+          lastDeliveredAt: deliveredAt,
           alarm: '',
         };
 
@@ -248,11 +255,15 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   }, []);
 
   // Undo a completed client (only for 'once' freq)
-  const undoComplete = useCallback(async (clientId: string) => {
+  const undoComplete = useCallback(async (client: Client) => {
     try {
-      await db.collection('clients').doc(clientId).update({
+      // previousDeliveredAt se guarda al completar para que este deshacer siga
+      // siendo exacto aunque la ficha haya limpiado su estado de agenda.
+      await db.collection('clients').doc(client.id).update({
         isCompleted: false,
         completedAt: null,
+        lastDeliveredAt: parseDate(client.previousDeliveredAt),
+        previousDeliveredAt: null,
         updatedAt: new Date(),
       });
     } catch (e) {
@@ -279,6 +290,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
             batch.delete(ref);
           } else {
             // Real clients: move to directory instead of deleting
+            const historyUpdate = getDirectoryDeliveryHistoryUpdate(c);
             batch.update(ref, {
               freq: 'on_demand',
               visitDay: 'Sin Asignar',
@@ -288,6 +300,8 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
               listOrder: 0,
               isCompleted: false,
               completedAt: null,
+              previousDeliveredAt: null,
+              ...historyUpdate,
               alarm: '',
               updatedAt: new Date(),
             });
@@ -319,6 +333,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         // Last (or only) day — move to directory. Sale de la ruta: su alarma
         // pendiente ya no corresponde (se cancela el trigger y el campo).
         void cancelClientAlarm(clientId);
+        const historyUpdate = client
+          ? getDirectoryDeliveryHistoryUpdate(client)
+          : { lastDeliveredAt: null, lastVisited: null };
         await db.collection('clients').doc(clientId).update({
           freq: 'on_demand',
           visitDay: 'Sin Asignar',
@@ -328,6 +345,8 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           listOrder: 0,
           isCompleted: false,
           completedAt: null,
+          previousDeliveredAt: null,
+          ...historyUpdate,
           alarm: '',
         });
       }
@@ -382,6 +401,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     try {
       const scope = groupId ? { groupId, userId } : { userId };
       const newData: Record<string, any> = {
+        customerId: clientData.customerId || clientData.id,
         name: clientData.name,
         phone: clientData.phone,
         address: clientData.address,
@@ -402,7 +422,23 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         isInactive: false,
         alarm: '',
         products: newProducts || {},
+        // completedAt pertenece al estado de un pedido once ya entregado. Al
+        // abrir una agenda nueva se promueve al historial canónico y se limpia.
+        completedAt: null,
+        previousDeliveredAt: null,
       };
+
+      const sourceLastDelivery = getLastVisitDate(clientData);
+      if (sourceLastDelivery) newData.lastDeliveredAt = sourceLastDelivery;
+
+      const wasInDirectory = clientData.freq === 'on_demand' || clientData.visitDay === 'Sin Asignar';
+      const isPeriodic = newFreq !== 'once' && newFreq !== 'on_demand';
+      if (wasInDirectory && isPeriodic) {
+        // Activar una ficha empieza un ciclo nuevo, pero nunca borra la última
+        // entrega real que usa Recurrencia para todo el hogar.
+        newData.lastVisited = null;
+        newData.doneFor = '';
+      }
 
       if (newDate && newFreq === 'once') {
         // One-time order - place at the beginning
@@ -492,7 +528,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         }
       };
 
-      if (clientData.freq === 'on_demand' || clientData.visitDay === 'Sin Asignar') {
+      if (wasInDirectory) {
         // Reactivate existing client. newData pisa alarm:'' → cancelar también
         // el trigger programado para que no suene una alarma vieja.
         void cancelClientAlarm(clientData.id);
@@ -519,13 +555,28 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
 
         if (existingOnDemand) {
           // Reuse the on_demand document instead of creating a new one
+          const existingDelivery = getLastVisitDate(existingOnDemand);
+          if (
+            existingDelivery &&
+            (!newData.lastDeliveredAt || existingDelivery.getTime() > newData.lastDeliveredAt.getTime())
+          ) {
+            newData.lastDeliveredAt = existingDelivery;
+          }
           void cancelClientAlarm(existingOnDemand.id);
           await db.collection('clients').doc(existingOnDemand.id).update(newData);
           syncScheduledClientRef(existingOnDemand.id, existingOnDemand);
         } else {
+          // El pedido extra es otro documento del mismo cliente humano. La
+          // identidad estable permite sumar su entrega al hogar sin copiar
+          // parentescos (evita que la copia aparezca como otro familiar).
+          newData.lastDeliveredAt = getLastVisitDate(clientData);
           newData.createdAt = new Date();
           const created = await db.collection('clients').add(newData);
-          syncScheduledClientRef(created.id, clientData);
+          syncScheduledClientRef(created.id, {
+            ...clientData,
+            relationships: {},
+            sameHousehold: {},
+          });
         }
       }
       return true;
@@ -1203,6 +1254,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       const newData: Record<string, any> = {
         ...scope,
         userId,
+        customerId: client.customerId || client.id,
         name: client.name,
         phone: client.phone || '',
         address: client.address || '',
@@ -1222,6 +1274,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         isPinned: false,
         isNote: false,
         alarm: '',
+        // La copia representa otra agenda del mismo cliente humano, pero no
+        // hereda parentescos: eso haría aparecer la copia como otro familiar.
+        lastDeliveredAt: getLastVisitDate(client),
         createdAt: new Date(),
         updatedAt: new Date(),
       };

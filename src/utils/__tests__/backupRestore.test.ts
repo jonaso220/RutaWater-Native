@@ -12,6 +12,7 @@ const validBackup = {
     visitDay: 'Lunes',
     visitDays: ['Lunes'],
     products: { b20: 2, custom_hielo: '3', '../bad': 9 },
+    lastDeliveredAt: '2026-07-09T12:00:00.000Z',
     relationships: { 'client-2': 'hermano_a', invalid: 'not-a-type' },
     sameHousehold: { 'client-2': false, invalid: 'yes' },
   }],
@@ -27,6 +28,8 @@ describe('backup validation', () => {
     expect(backup.clients[0].products).toEqual({ b20: '2', custom_hielo: '3' });
     expect(backup.clients[0].relationships).toEqual({ 'client-2': 'hermano_a' });
     expect(backup.clients[0].sameHousehold).toEqual({ 'client-2': false });
+    expect(backup.clients[0].customerId).toBe('client-1');
+    expect(backup.clients[0].lastDeliveredAt?.toISOString()).toBe('2026-07-09T12:00:00.000Z');
     expect(backup.debts[0].amount).toBe(350);
     expect(backup.schemaVersion).toBe(1);
   });

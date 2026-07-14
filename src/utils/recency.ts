@@ -1,15 +1,36 @@
 import { Client } from '../types';
-import { parseDate } from './helpers';
+import { getClientMatchKey, parseDate } from './helpers';
+
+// Solo visitas reales (entrega marcada como hecha). lastDeliveredAt es el
+// historial canónico nuevo; completedAt/lastVisited mantienen compatibilidad
+// con documentos anteriores. updatedAt nunca es una entrega: puede cambiar al
+// editar teléfono, frecuencia, notas o cualquier otro dato.
+export const getLastVisitDate = (client: Client): Date | null => {
+  const candidates = [
+    parseDate(client.lastDeliveredAt),
+    parseDate(client.completedAt),
+    parseDate(client.lastVisited),
+  ].filter((date): date is Date => !!date);
+  if (candidates.length === 0) return null;
+  return candidates.reduce((latest, date) =>
+    date.getTime() > latest.getTime() ? date : latest,
+  );
+};
 
 export const getLastActivityDate = (client: Client): Date | null => {
-  return parseDate(client.completedAt) || parseDate(client.lastVisited) || parseDate(client.updatedAt);
+  return getLastVisitDate(client);
 };
 
-// Solo visitas reales (entrega marcada como hecha), sin el fallback de updatedAt:
-// editar la ficha de un familiar no debe contar como haberlo visitado.
-export const getLastVisitDate = (client: Client): Date | null => {
-  return parseDate(client.completedAt) || parseDate(client.lastVisited);
-};
+// Transición canónica al volver una ficha al Directorio: promueve primero la
+// entrega real más reciente (incluidos campos legados) y luego libera
+// lastVisited para que no siga actuando como estado de una agenda inexistente.
+export const getDirectoryDeliveryHistoryUpdate = (client: Client): {
+  lastDeliveredAt: Date | null;
+  lastVisited: null;
+} => ({
+  lastDeliveredAt: getLastVisitDate(client),
+  lastVisited: null,
+});
 
 // Los vínculos creados antes de que existiera sameHousehold representaban una
 // "familia/casa" sin distinción. Solo un false explícito significa otra casa.
@@ -64,10 +85,36 @@ export const getEffectiveLastActivityDate = (
   client: Client,
   clientsById?: Map<string, Client> | null,
 ): Date | null => {
-  let best = getLastActivityDate(client);
-  for (const familyMember of getHouseholdMembers(client, clientsById)) {
-    const d = getLastVisitDate(familyMember);
-    if (d && (!best || d.getTime() > best.getTime())) best = d;
+  if (!clientsById) return getLastActivityDate(client);
+
+  // Un cliente humano puede tener varios documentos por pedidos extra. El
+  // parentesco suele vivir en la ficha original, mientras la entrega reciente
+  // puede quedar en otra instancia. Consideramos todas las instancias con el
+  // mismo nombre+teléfono sin mostrarlas como familiares separados.
+  const household = [client, ...getHouseholdMembers(client, clientsById)];
+  const householdIds = new Set(household.map((member) => member.id));
+  const householdCustomerIds = new Set(
+    household.map((member) => member.customerId || member.id),
+  );
+  const householdMatchKeys = new Set(
+    household
+      .map((member) => getClientMatchKey(member.name || '', member.phone || '', member.id))
+      .filter((key) => !key.startsWith('__id_')),
+  );
+
+  let best: Date | null = getLastActivityDate(client);
+  for (const candidate of clientsById.values()) {
+    const key = getClientMatchKey(candidate.name || '', candidate.phone || '', candidate.id);
+    const belongsToHouseholdCustomer = householdCustomerIds.has(
+      candidate.customerId || candidate.id,
+    );
+    if (
+      !householdIds.has(candidate.id) &&
+      !belongsToHouseholdCustomer &&
+      !householdMatchKeys.has(key)
+    ) continue;
+    const delivery = getLastVisitDate(candidate);
+    if (delivery && (!best || delivery.getTime() > best.getTime())) best = delivery;
   }
   return best;
 };

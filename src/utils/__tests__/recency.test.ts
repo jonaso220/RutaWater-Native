@@ -1,5 +1,5 @@
 import { Client } from '../../types';
-import { getEffectiveLastActivityDate, getHouseholdMembers, sharesHouseholdWith } from '../recency';
+import { getDirectoryDeliveryHistoryUpdate, getEffectiveLastActivityDate, getHouseholdMembers, getLastActivityDate, sharesHouseholdWith } from '../recency';
 
 const client = (over: Partial<Client>): Client => ({
   id: 'a',
@@ -30,6 +30,49 @@ const client = (over: Partial<Client>): Client => ({
 } as Client);
 
 describe('recencia del hogar', () => {
+  test('una edición sin entrega real no inventa historial', () => {
+    const edited = client({ id: 'a', updatedAt: new Date('2026-07-09T12:00:00') as any });
+    expect(getLastActivityDate(edited)).toBeNull();
+  });
+
+  test('lastDeliveredAt sobrevive aunque la agenda haya limpiado lastVisited', () => {
+    const delivery = new Date('2026-06-01T12:00:00');
+    const scheduled = client({
+      id: 'a',
+      freq: 'monthly',
+      lastDeliveredAt: delivery as any,
+      lastVisited: null,
+      updatedAt: new Date('2026-07-13T12:00:00') as any,
+    });
+    expect(getLastActivityDate(scheduled)?.getTime()).toBe(delivery.getTime());
+  });
+
+  test('archivar un pedido único conserva completedAt como entrega real', () => {
+    const delivery = new Date('2026-07-09T12:00:00');
+    const completedOnce = client({
+      id: 'a',
+      freq: 'once',
+      isCompleted: true,
+      completedAt: delivery as any,
+      lastVisited: new Date('2026-05-01T12:00:00') as any,
+    });
+    expect(getDirectoryDeliveryHistoryUpdate(completedOnce)).toEqual({
+      lastDeliveredAt: delivery,
+      lastVisited: null,
+    });
+  });
+
+  test('un campo canónico antiguo no oculta una entrega legacy más nueva', () => {
+    const oldCanonical = new Date('2026-04-01T12:00:00');
+    const recentCompletion = new Date('2026-07-10T12:00:00');
+    const completed = client({
+      id: 'a',
+      lastDeliveredAt: oldCanonical as any,
+      completedAt: recentCompletion as any,
+    });
+    expect(getLastActivityDate(completed)?.getTime()).toBe(recentCompletion.getTime());
+  });
+
   test('un vínculo legado sin indicador conserva el comportamiento anterior', () => {
     const owner = client({ id: 'a', relationships: { b: 'hermano_a' } });
     expect(sharesHouseholdWith(owner, 'b')).toBe(true);
@@ -54,6 +97,92 @@ describe('recencia del hogar', () => {
     });
     const relative = client({ id: 'b', lastVisited: visit as any });
     expect(getEffectiveLastActivityDate(owner, new Map([['b', relative]]))?.getTime()).toBe(visit.getTime());
+  });
+
+  test('un familiar comparte la fecha canónica aunque su agenda se haya reiniciado', () => {
+    const visit = new Date('2026-05-29T12:00:00');
+    const owner = client({
+      id: 'a',
+      relationships: { b: 'conyuge' },
+      sameHousehold: { b: true },
+      lastDeliveredAt: new Date('2026-03-01T12:00:00') as any,
+    });
+    const relative = client({
+      id: 'b',
+      freq: 'monthly',
+      lastDeliveredAt: visit as any,
+      lastVisited: null,
+      updatedAt: new Date('2026-07-13T12:00:00') as any,
+    });
+    expect(getEffectiveLastActivityDate(owner, new Map([['a', owner], ['b', relative]]))?.getTime())
+      .toBe(visit.getTime());
+  });
+
+  test('una entrega en otro documento del mismo cliente actualiza a su hogar', () => {
+    const visit = new Date('2026-07-11T12:00:00');
+    const wife = client({
+      id: 'wife',
+      name: 'Laura',
+      phone: '099111222',
+      relationships: { husband: 'conyuge' },
+      sameHousehold: { husband: true },
+    });
+    const husband = client({
+      id: 'husband',
+      name: 'Carlos',
+      phone: '098123456',
+      relationships: { wife: 'conyuge' },
+      sameHousehold: { wife: true },
+    });
+    const husbandExtraOrder = client({
+      id: 'husband-extra',
+      name: 'Carlos',
+      phone: '+598 98 123 456',
+      freq: 'once',
+      lastDeliveredAt: visit as any,
+    });
+    const clientsById = new Map([
+      [wife.id, wife],
+      [husband.id, husband],
+      [husbandExtraOrder.id, husbandExtraOrder],
+    ]);
+
+    expect(getEffectiveLastActivityDate(wife, clientsById)?.getTime()).toBe(visit.getTime());
+  });
+
+  test('customerId conecta un pedido extra sin teléfono con el hogar', () => {
+    const visit = new Date('2026-07-12T12:00:00');
+    const wife = client({
+      id: 'wife',
+      customerId: 'wife',
+      name: 'Laura',
+      relationships: { husband: 'conyuge' },
+      sameHousehold: { husband: true },
+    });
+    const husband = client({
+      id: 'husband',
+      customerId: 'husband',
+      name: 'Carlos',
+      phone: '',
+      relationships: { wife: 'conyuge' },
+      sameHousehold: { wife: true },
+    });
+    const husbandExtraOrder = client({
+      id: 'husband-extra',
+      customerId: 'husband',
+      name: 'Carlos',
+      phone: '',
+      freq: 'once',
+      lastDeliveredAt: visit as any,
+    });
+    const clientsById = new Map([
+      [wife.id, wife],
+      [husband.id, husband],
+      [husbandExtraOrder.id, husbandExtraOrder],
+    ]);
+
+    expect(getEffectiveLastActivityDate(wife, clientsById)?.getTime()).toBe(visit.getTime());
+    expect(getHouseholdMembers(wife, clientsById).map((member) => member.id)).toEqual(['husband']);
   });
 
   test('un vínculo asimétrico legado comparte la visita en ambos sentidos', () => {

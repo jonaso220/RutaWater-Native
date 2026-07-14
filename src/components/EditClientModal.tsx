@@ -26,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { getModalWidth, getNextVisitDate } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import { scheduleClientAlarm } from '../services/notifications';
+import { getLastVisitDate } from '../utils/recency';
 
 interface EditClientModalProps {
   visible: boolean;
@@ -179,13 +180,20 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       notes,
       freq,
     };
+    const dateChanged = needsDate && (startDate || '') !== (client.specificDate || '');
+    const scheduleChanged = freq !== client.freq || dateChanged;
+    const lastDelivery = getLastVisitDate(client);
+    if (scheduleChanged && lastDelivery) {
+      // Antes de reiniciar campos internos de agenda, promover cualquier
+      // historial legado a la fecha canónica de entrega.
+      (data as any).lastDeliveredAt = lastDelivery;
+    }
     // Re-scheduling an active client (frequency or date actually changed)
     // clears any stale "completed" flag. Otherwise a re-scheduled order (e.g.
     // a weekly client moved to a one-time day) stays marked as delivered and
     // never shows in the route. Editing unrelated fields (phone, notes) must
     // NOT clear it, or a delivered one-time order pops back into today's route.
     if (freq !== 'on_demand') {
-      const dateChanged = needsDate && (startDate || '') !== (client.specificDate || '');
       if (freq !== client.freq || dateChanged) {
         (data as any).isCompleted = false;
         (data as any).completedAt = null;
@@ -195,7 +203,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       if (client.isInactive) (data as any).isInactive = false;
     }
     // Reset lastVisited when frequency changes so getNextVisitDate recalculates correctly
-    if (freq !== client.freq) {
+    if (freq !== client.freq && freq !== 'once') {
       (data as any).lastVisited = null;
       (data as any).doneFor = '';
     }

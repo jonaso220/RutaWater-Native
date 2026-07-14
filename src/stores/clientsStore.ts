@@ -12,7 +12,7 @@ interface ClientsStore {
   directoryCounts: Record<string, number>;
   // Devuelve false si el write falló (la UI avisa en vez de asumir éxito).
   markAsDone: (clientId: string, client: Client, forDay?: string) => Promise<boolean>;
-  undoComplete: (clientId: string) => Promise<void>;
+  undoComplete: (client: Client) => Promise<void>;
   deleteAllCompleted: (day: string) => Promise<void>;
   deleteFromDay: (clientId: string, day: string) => Promise<void>;
   // Devuelven true si el write llegó a Firestore (la IA los usa para no

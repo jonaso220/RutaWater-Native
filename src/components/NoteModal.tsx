@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -19,16 +19,23 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
-import { getModalWidth, toLocalDateString } from '../utils/helpers';
+import { getModalWidth, getNextVisitDate, toLocalDateString } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
+import { Client } from '../types';
+import { Frequency, getFreqLabel } from '../constants/products';
+
+type NoteFrequency = Exclude<Frequency, 'on_demand'>;
+
+const NOTE_FREQUENCIES: NoteFrequency[] = ['once', 'weekly', 'biweekly', 'triweekly', 'monthly'];
 
 interface NoteModalProps {
   visible: boolean;
-  onSave: (notes: string, date: string) => void;
+  note?: Client | null;
+  onSave: (notes: string, date: string, freq: NoteFrequency) => boolean | void | Promise<boolean | void>;
   onClose: () => void;
 }
 
-const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
+const NoteModal: React.FC<NoteModalProps> = ({ visible, note, onSave, onClose }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
@@ -40,12 +47,29 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
   const [notes, setNotes] = useState('');
   const [pickerDate, setPickerDate] = useState(new Date());
   const [date, setDate] = useState(toLocalDateString(new Date()));
+  const [freq, setFreq] = useState<NoteFrequency>('once');
   const [showAndroidPicker, setShowAndroidPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    const nextDate = note ? getNextVisitDate(note, note.visitDay) : null;
+    const initialDate = note?.specificDate || (nextDate ? toLocalDateString(nextDate) : toLocalDateString(new Date()));
+    const parsedDate = new Date(initialDate + 'T12:00:00');
+    setNotes(note?.notes || '');
+    setDate(initialDate);
+    setPickerDate(isNaN(parsedDate.getTime()) ? new Date() : parsedDate);
+    setFreq(note?.freq && note.freq !== 'on_demand' ? note.freq : 'once');
+    setShowAndroidPicker(false);
+    setSaving(false);
+  }, [visible, note?.id, note?.notes, note?.specificDate, note?.freq, note?.visitDay]);
 
   const handleClose = () => {
     setNotes('');
     setPickerDate(new Date());
     setDate(toLocalDateString(new Date()));
+    setFreq('once');
+    setSaving(false);
     onClose();
   };
 
@@ -73,7 +97,8 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
     return `${dayNames[d.getDay()]} ${d.getDate()} de ${monthNames[d.getMonth()]}`;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
     if (!notes.trim()) {
       Alert.alert(t('error'), t('noteModal.noteRequired'));
       return;
@@ -82,11 +107,19 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
       Alert.alert(t('error'), t('noteModal.dateRequired'));
       return;
     }
-    onSave(notes.trim(), date);
-    setNotes('');
-    setPickerDate(new Date());
-    setDate(toLocalDateString(new Date()));
-    onClose();
+    setSaving(true);
+    try {
+      const saved = await onSave(notes.trim(), date, freq);
+      if (saved === false) {
+        Alert.alert(t('error'), t('noteModal.saveError'));
+        return;
+      }
+      handleClose();
+    } catch {
+      Alert.alert(t('error'), t('noteModal.saveError'));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -98,7 +131,9 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.modal}>
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>{t('noteModal.title')}</Text>
+              <Text style={styles.headerTitle}>
+                {note ? t('noteModal.editTitle') : t('noteModal.title')}
+              </Text>
               <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
                 <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
@@ -135,7 +170,24 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
               </View>
 
               <Text style={[styles.label, { marginTop: 16 }]}>
-                {t('noteModal.dateLabel')}
+                {t('noteModal.frequencyLabel')}
+              </Text>
+              <View style={styles.freqGrid}>
+                {NOTE_FREQUENCIES.map((key) => (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => setFreq(key)}
+                    style={[styles.freqChip, freq === key && styles.freqChipSelected]}
+                  >
+                    <Text style={[styles.freqChipText, freq === key && styles.freqChipTextSelected]}>
+                      {getFreqLabel(key)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.label, { marginTop: 16 }]}>
+                {freq === 'once' ? t('noteModal.dateLabel') : t('noteModal.startDateLabel')}
               </Text>
               {date ? (
                 <TouchableOpacity
@@ -190,8 +242,14 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, onSave, onClose }) => {
             </ScrollView>
 
             <View style={styles.footer}>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-                <Text style={styles.saveBtnText}>{t('noteModal.addNote')}</Text>
+              <TouchableOpacity
+                style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                <Text style={styles.saveBtnText}>
+                  {note ? t('noteModal.saveNote') : t('noteModal.addNote')}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -271,6 +329,32 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     textAlignVertical: 'top',
     minHeight: s(80),
   },
+  freqGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: s(8),
+  },
+  freqChip: {
+    backgroundColor: colors.sectionBackground,
+    borderRadius: s(18),
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: s(13),
+    paddingVertical: s(9),
+  },
+  freqChipSelected: {
+    backgroundColor: colors.warningAmberBg,
+    borderColor: colors.warningAmber,
+  },
+  freqChipText: {
+    color: colors.textMuted,
+    fontSize: s(14),
+    fontWeight: '600',
+  },
+  freqChipTextSelected: {
+    color: colors.warningAmber,
+    fontWeight: '700',
+  },
   selectedDateRow: {
     backgroundColor: colors.primaryLighter,
     borderRadius: s(10),
@@ -321,6 +405,9 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     paddingVertical: s(14),
     borderRadius: s(12),
     alignItems: 'center',
+  },
+  saveBtnDisabled: {
+    opacity: 0.6,
   },
   saveBtnText: {
     color: colors.textWhite,

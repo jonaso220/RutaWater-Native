@@ -9,9 +9,10 @@ import { getDirectoryDeliveryHistoryUpdate } from '../utils/recency';
  * loaded. Removes/converts entries that should no longer be active in the
  * directory:
  *
- *   1. Notes (`isNote=true`) that are either completed or whose
- *      specificDate is in the past — kept only while they describe
- *      today's work.
+ *   1. One-time notes (`isNote=true`, `freq=once`) that are either completed
+ *      or whose specificDate is in the past, plus legacy notes accidentally
+ *      moved to `on_demand`. Recurring notes use lastVisited and remain
+ *      available for their next cycle.
  *
  *   2. Completed one-shot clients (`freq === 'once'`, `isCompleted`,
  *      `specificDate` in the past) — flipped back to `on_demand` with
@@ -39,6 +40,8 @@ export const useClientsAutoCleanup = (clients: Client[], scopeKey: string, ready
 
     const staleNotes = clients.filter((c) => {
       if (!c.isNote) return false;
+      if (c.freq === 'on_demand') return true;
+      if (c.freq !== 'once') return false;
       if (c.isCompleted) return true;
       if (c.specificDate && new Date(c.specificDate + 'T23:59:59') < today) return true;
       return false;

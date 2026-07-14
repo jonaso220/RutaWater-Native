@@ -55,6 +55,7 @@ import { useProfileStore } from '../stores/profileStore';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
+import { Frequency } from '../constants/products';
 import {
   RouteMapStop,
   RouteSession as RouteSessionState,
@@ -218,6 +219,7 @@ const HomeScreen = () => {
   const toggleStar = useClientsStore((s) => s.toggleStar);
   const saveAlarm = useClientsStore((s) => s.saveAlarm);
   const addNote = useClientsStore((s) => s.addNote);
+  const updateNote = useClientsStore((s) => s.updateNote);
   const addClient = useClientsStore((s) => s.addClient);
   const changePosition = useClientsStore((s) => s.changePosition);
   const addRelationship = useClientsStore((s) => s.addRelationship);
@@ -715,10 +717,9 @@ const HomeScreen = () => {
         }
         void advanceGuidedRoute(client.id);
       });
-      // Las notas se BORRAN al marcarlas listas — no hay doc que restaurar,
-      // así que ofrecer "deshacer" sería mentirle al usuario (el update
-      // fallaría en silencio).
-      if (!client.isNote) {
+      // Las notas de una sola vez se borran definitivamente. Las recurrentes
+      // avanzan al próximo ciclo y sí pueden deshacerse como cualquier agenda.
+      if (!client.isNote || client.freq !== 'once') {
         pushUndo({
           client,
           previousData,
@@ -732,12 +733,13 @@ const HomeScreen = () => {
   const handleDelete = useCallback(
     (client: Client) => {
       Alert.alert(
-        t('home.removeFromList'),
-        t('home.removeFromListMsg'),
+        client.isNote ? t('noteModal.deleteTitle') : t('home.removeFromList'),
+        client.isNote ? t('noteModal.deleteMessage') : t('home.removeFromListMsg'),
         [
           { text: t('cancel'), style: 'cancel' },
           {
-            text: t('home.remove'),
+            text: client.isNote ? t('noteModal.deleteAction') : t('home.remove'),
+            style: client.isNote ? 'destructive' : 'default',
             onPress: () => deleteFromDay(client.id, selectedDayRef.current),
           },
         ],
@@ -843,6 +845,21 @@ const HomeScreen = () => {
 
   // Stable callbacks that accept client as parameter (won't change on day switch)
   const handleEditCb = useCallback((client: Client) => setEditingClient(client), []);
+
+  const handleSaveNote = useCallback(
+    (notes: string, date: string, freq: Exclude<Frequency, 'on_demand'>) => {
+      if (editingClient?.isNote) {
+        return updateNote(editingClient.id, notes, date, freq);
+      }
+      return addNote(notes, date, freq);
+    },
+    [addNote, editingClient?.id, editingClient?.isNote, updateNote],
+  );
+
+  const handleCloseNote = useCallback(() => {
+    setShowNoteModal(false);
+    setEditingClient((current) => current?.isNote ? null : current);
+  }, []);
   const handleDebtCb = useCallback((client: Client) => setDebtClient(client), []);
   const handleRelationshipsCb = useCallback((client: Client) => setRelationshipClient(client), []);
 
@@ -1470,8 +1487,8 @@ const HomeScreen = () => {
 
       {/* Edit Client Modal */}
       <EditClientModal
-        visible={!!editingClient}
-        client={editingClient}
+        visible={!!editingClient && !editingClient.isNote}
+        client={editingClient?.isNote ? null : editingClient}
         allClients={clients}
         onSave={updateClient}
         onClose={() => setEditingClient(null)}
@@ -1496,9 +1513,10 @@ const HomeScreen = () => {
 
       {/* Note Modal */}
       <NoteModal
-        visible={showNoteModal}
-        onSave={addNote}
-        onClose={() => setShowNoteModal(false)}
+        visible={showNoteModal || !!editingClient?.isNote}
+        note={editingClient?.isNote ? editingClient : null}
+        onSave={handleSaveNote}
+        onClose={handleCloseNote}
       />
 
       {/* Add Client Modal */}

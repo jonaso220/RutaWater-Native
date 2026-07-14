@@ -29,7 +29,13 @@ interface ClientsStore {
   ) => Promise<boolean>;
   toggleStar: (clientId: string, currentValue: boolean) => Promise<void>;
   saveAlarm: (clientId: string, time: string, targetDay?: string) => Promise<Date | null>;
-  addNote: (notesText: string, date: string) => Promise<boolean>;
+  addNote: (notesText: string, date: string, freq?: Exclude<Frequency, 'on_demand'>) => Promise<boolean>;
+  updateNote: (
+    noteId: string,
+    notesText: string,
+    date: string,
+    freq: Exclude<Frequency, 'on_demand'>,
+  ) => Promise<boolean>;
   addClient: (
     name: string,
     address: string,
@@ -81,6 +87,7 @@ export const useClientsStore = create<ClientsStore>()(() => ({
   toggleStar: noop,
   saveAlarm: async () => null,
   addNote: async () => false,
+  updateNote: async () => false,
   addClient: noop as any,
   aiCreateClient: noop as any,
   changePosition: noop,

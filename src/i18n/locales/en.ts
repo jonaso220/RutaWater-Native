@@ -698,14 +698,22 @@ export default {
   // Note Modal
   noteModal: {
     title: 'New Note',
+    editTitle: 'Edit Note',
     noteLabel: 'Note',
     notePlaceholder: 'Write your note here...',
+    frequencyLabel: 'Frequency',
     dateLabel: 'Delivery date',
+    startDateLabel: 'Starts on',
     selectDate: 'Select date',
     tapToChange: 'Tap to change date',
     addNote: 'Add Note',
+    saveNote: 'Save Note',
     noteRequired: 'Write a note.',
     dateRequired: 'Select a date.',
+    saveError: 'Could not save the note. Check your connection and try again.',
+    deleteTitle: 'Delete note?',
+    deleteMessage: 'The note will be permanently deleted.',
+    deleteAction: 'Delete',
     errorSunday: 'Cannot schedule on Sunday',
   },
 

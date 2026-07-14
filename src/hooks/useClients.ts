@@ -188,8 +188,8 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       // alarm:'' solo limpia el campo, el trigger de notifee sonaría igual
       // después de entregar. (cancelClientAlarm nunca rechaza.)
       void cancelClientAlarm(clientId);
-      if (client.isNote) {
-        // Notes: delete permanently (they don't belong in the directory)
+      if (client.isNote && client.freq === 'once') {
+        // One-time notes are finished forever and do not belong in the directory.
         await db.collection('clients').doc(clientId).delete();
       } else if (client.freq === 'once') {
         // Once: mark as completed permanently
@@ -320,6 +320,12 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   const deleteFromDay = useCallback(async (clientId: string, day: string) => {
     try {
       const client = clientsRef.current.find((c) => c.id === clientId);
+      // Notes never belong in the directory. Removing their only route entry
+      // must delete them instead of turning them into invisible on-demand docs.
+      if (client?.isNote) {
+        await db.collection('clients').doc(clientId).delete();
+        return;
+      }
       const currentDays = client?.visitDays || [];
 
       if (currentDays.length > 1) {
@@ -641,7 +647,11 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   }, []);
 
   // Add a note (special client with isNote: true)
-  const addNote = useCallback(async (notesText: string, date: string) => {
+  const addNote = useCallback(async (
+    notesText: string,
+    date: string,
+    freq: Exclude<Frequency, 'on_demand'> = 'once',
+  ) => {
     try {
       const d = new Date(date + 'T12:00:00');
       const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -673,7 +683,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         phone: '',
         address: '',
         notes: notesText,
-        freq: 'once',
+        freq,
         specificDate: date,
         visitDays: [dayName],
         visitDay: dayName,
@@ -692,6 +702,73 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       return false;
     }
   }, [groupId, userId]);
+
+  // Update a standalone note without routing it through the full client editor.
+  // Date remains the scheduling anchor for both one-time and recurring notes.
+  const updateNote = useCallback(async (
+    noteId: string,
+    notesText: string,
+    date: string,
+    freq: Exclude<Frequency, 'on_demand'>,
+  ): Promise<boolean> => {
+    try {
+      const note = clientsRef.current.find((c) => c.id === noteId);
+      if (!note?.isNote) return false;
+
+      const scheduledDate = new Date(date + 'T12:00:00');
+      if (isNaN(scheduledDate.getTime())) return false;
+      const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const newDay = dayNames[scheduledDate.getDay()];
+      const oldDay = note.visitDay;
+      const scheduleChanged = freq !== note.freq || date !== (note.specificDate || '') || newDay !== oldDay;
+
+      let listOrder = note.listOrders?.[newDay] ?? note.listOrder ?? 0;
+      let listOrders = { ...(note.listOrders || {}) };
+      if (newDay !== oldDay) {
+        if (oldDay) delete listOrders[oldDay];
+        const existingInDay = clientsRef.current.filter(
+          (c) =>
+            c.id !== noteId &&
+            c.freq !== 'on_demand' &&
+            !c.isCompleted &&
+            ((c.visitDays && c.visitDays.includes(newDay)) || c.visitDay === newDay),
+        );
+        const minOrder = existingInDay.reduce((min, c) => {
+          const order = c.listOrders?.[newDay] ?? c.listOrder ?? 0;
+          const normalized = order > 100000 ? 0 : order;
+          return Math.min(min, normalized);
+        }, 0);
+        listOrder = minOrder - 1;
+        listOrders[newDay] = listOrder;
+      } else if (typeof listOrders[newDay] !== 'number') {
+        listOrders[newDay] = listOrder;
+      }
+
+      const updates: Partial<Client> = {
+        notes: notesText,
+        freq,
+        specificDate: date,
+        visitDay: newDay,
+        visitDays: [newDay],
+        products: {},
+        listOrder,
+        listOrders,
+        updatedAt: new Date() as any,
+      };
+      if (scheduleChanged) {
+        updates.isCompleted = false;
+        updates.completedAt = null;
+        updates.lastVisited = null;
+        updates.doneFor = '';
+      }
+
+      await db.collection('clients').doc(noteId).update(updates);
+      return true;
+    } catch (e) {
+      reportError(e, 'Error updating note');
+      return false;
+    }
+  }, []);
 
   // Add a new client to a day's route or directory only
   const addClient = useCallback(async (
@@ -1303,6 +1380,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     toggleStar,
     saveAlarm,
     addNote,
+    updateNote,
     addClient,
     aiCreateClient,
     changePosition,

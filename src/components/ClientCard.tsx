@@ -11,6 +11,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import PromptModal from './PromptModal';
 import { ProductIcon } from './ProductIcon';
+import { getFreqLabel } from '../constants/products';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
 
@@ -134,6 +135,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
 
   // --- NOTE CARD ---
   if (client.isNote) {
+    const noteScheduleLabel = client.freq === 'once'
+      ? (client.specificDate || t('clientCard.onceLabel'))
+      : getFreqLabel(client.freq);
     const noteDoneBtn = (
       <TouchableOpacity style={[styles.doneButton, wideLayout && styles.doneButtonWide]} onPress={onMarkDone}>
         <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> {t('done')}</Text>
@@ -176,11 +180,11 @@ const ClientCard: React.FC<ClientCardProps> = ({
           </Text>
           {wideLayout ? (
             <View style={styles.freqRow}>
-              <Text style={styles.badge}>{client.specificDate || t('clientCard.onceLabel')}</Text>
+              <Text style={styles.badge}>{noteScheduleLabel}</Text>
             </View>
           ) : (
             <View style={styles.actionBar}>
-              <Text style={styles.badge}>{client.specificDate || t('clientCard.onceLabel')}</Text>
+              <Text style={styles.badge}>{noteScheduleLabel}</Text>
               <View style={{ flex: 1 }} />
               {noteDoneBtn}
             </View>

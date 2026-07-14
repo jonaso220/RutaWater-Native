@@ -698,14 +698,22 @@ export default {
   // Note Modal
   noteModal: {
     title: 'Nueva Nota',
+    editTitle: 'Editar Nota',
     noteLabel: 'Nota',
     notePlaceholder: 'Escribe tu nota aqui...',
+    frequencyLabel: 'Frecuencia',
     dateLabel: 'Fecha de entrega',
+    startDateLabel: 'Comienza el',
     selectDate: 'Seleccionar fecha',
     tapToChange: 'Toca para cambiar fecha',
     addNote: 'Agregar Nota',
+    saveNote: 'Guardar Nota',
     noteRequired: 'Escribe una nota.',
     dateRequired: 'Selecciona una fecha.',
+    saveError: 'No se pudo guardar la nota. Verificá la conexión e intentá de nuevo.',
+    deleteTitle: '¿Eliminar nota?',
+    deleteMessage: 'La nota se eliminará definitivamente.',
+    deleteAction: 'Eliminar',
     errorSunday: 'No se puede agendar en Domingo',
   },
 

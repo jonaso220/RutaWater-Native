@@ -60,6 +60,9 @@ const SettingsScreen = () => {
   const [whatsappModalVisible, setWhatsappModalVisible] = useState(false);
   const [groupModalVisible, setGroupModalVisible] = useState(false);
   const activeProfile = useProfileStore((s) => s.activeProfile);
+  const canManageActiveProfile = activeProfile && !activeProfile.isPrimary
+    ? !!activeProfile.isOwner
+    : isAdmin;
   // ALL hooks must be called before any early return (Rules of Hooks)
   const [loading, setLoading] = useState(false);
 
@@ -571,17 +574,21 @@ const SettingsScreen = () => {
             </View>
           )}
 
-          <View style={styles.templateDivider} />
+          {canManageActiveProfile && (
+            <>
+              <View style={styles.templateDivider} />
 
-          {/* Maintenance */}
-          <Text style={styles.cardGroupTitle}>{t('settings.maintenance')}</Text>
-          <TouchableOpacity onPress={handleCleanupDuplicates} style={styles.exportBtn}>
-            <Ionicons name="copy-outline" size={18} color={colors.primary} />
-            <Text style={styles.exportBtnText}>{t('settings.cleanDuplicates')}</Text>
-          </TouchableOpacity>
-          <Text style={styles.cardGroupHint}>
-            {t('settings.cleanDuplicatesHint')}
-          </Text>
+              {/* Maintenance */}
+              <Text style={styles.cardGroupTitle}>{t('settings.maintenance')}</Text>
+              <TouchableOpacity onPress={handleCleanupDuplicates} style={styles.exportBtn}>
+                <Ionicons name="copy-outline" size={18} color={colors.primary} />
+                <Text style={styles.exportBtnText}>{t('settings.cleanDuplicates')}</Text>
+              </TouchableOpacity>
+              <Text style={styles.cardGroupHint}>
+                {t('settings.cleanDuplicatesHint')}
+              </Text>
+            </>
+          )}
         </View>
       </View>
 

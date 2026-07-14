@@ -3,8 +3,9 @@ import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firest
 import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
 import { Client, RELATIONSHIP_INVERSE } from '../types';
-import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, normalizePhoneForComparison, toLocalDateString, parseDate } from '../utils/helpers';
+import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, toLocalDateString } from '../utils/helpers';
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
+import { findExactClientMatch, planDuplicateClientCleanup } from '../utils/clientDuplicates';
 import { ALL_DAYS, Frequency } from '../constants/products';
 import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
@@ -508,13 +509,12 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         // Add: keep the existing order and add a new one (only reached for
         // freq='once' with a date — a one-time extra pedido).
         // Check if there's an existing on_demand duplicate to reuse (match by name + phone)
-        const schedNormName = (clientData.name || '').toLowerCase().trim();
-        const schedNormPhone = normalizePhoneForComparison(clientData.phone);
-        const existingOnDemand = clientsRef.current.find(
-          c => c.id !== clientData.id &&
-               c.freq === 'on_demand' &&
-               (c.name || '').toLowerCase().trim() === schedNormName &&
-               (schedNormPhone ? normalizePhoneForComparison(c.phone) === schedNormPhone : true)
+        const existingOnDemand = findExactClientMatch(
+          clientsRef.current.filter(
+            (candidate) => candidate.id !== clientData.id && candidate.freq === 'on_demand',
+          ),
+          clientData.name,
+          clientData.phone,
         );
 
         if (existingOnDemand) {
@@ -684,7 +684,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         listOrders = { [day]: maxOrder + 1 };
       }
 
-      await db.collection('clients').add({
+      const newClientData = {
         ...scope,
         userId,
         name,
@@ -708,7 +708,29 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         alarm: '',
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      };
+
+      const exactMatch = findExactClientMatch(clientsRef.current, name, phone);
+      if (exactMatch?.freq === 'on_demand') {
+        // Scheduling or re-saving the same directory contact must keep the
+        // existing document id instead of creating another client document.
+        const { createdAt: _createdAt, ...updates } = newClientData;
+        await db.collection('clients').doc(exactMatch.id).update(updates);
+        return;
+      }
+      if (exactMatch && isDirectoryOnly) {
+        // The person already has an order. Preserve its order fields and only
+        // fill contact data supplied by this directory-only intake.
+        const contactUpdates: Record<string, any> = { updatedAt: new Date() };
+        if (address.trim()) contactUpdates.address = address;
+        if (phone.trim()) contactUpdates.phone = phone;
+        if (notes.trim()) contactUpdates.notes = notes;
+        if (mapsLink?.trim()) contactUpdates.mapsLink = mapsLink;
+        await db.collection('clients').doc(exactMatch.id).update(contactUpdates);
+        return;
+      }
+
+      await db.collection('clients').add(newClientData);
     } catch (e) {
       reportError(e, 'Error adding client');
     }
@@ -783,7 +805,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         listOrder = listOrders[visitDays[0]] ?? 0;
       }
 
-      await db.collection('clients').add({
+      const newClientData = {
         ...scope,
         userId,
         name: data.name,
@@ -807,7 +829,32 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         alarm: '',
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      };
+
+      const exactMatch = findExactClientMatch(
+        clientsRef.current,
+        data.name,
+        data.phone,
+      );
+      if (exactMatch?.freq === 'on_demand') {
+        const { createdAt: _createdAt, ...updates } = newClientData;
+        await db.collection('clients').doc(exactMatch.id).update(updates);
+        return true;
+      }
+      if (exactMatch && isOnDemand) {
+        // A directory-only AI intake for an existing scheduled client is an
+        // update of its contact card, never a second on-demand document.
+        const contactUpdates: Record<string, any> = { updatedAt: new Date() };
+        if (data.address.trim()) contactUpdates.address = data.address;
+        if (data.phone.trim()) contactUpdates.phone = data.phone;
+        if (data.notes.trim()) contactUpdates.notes = data.notes;
+        const mapsLink = normalizeGoogleMapsLink(data.mapsLink);
+        if (mapsLink) contactUpdates.mapsLink = mapsLink;
+        await db.collection('clients').doc(exactMatch.id).update(contactUpdates);
+        return true;
+      }
+
+      await db.collection('clients').add(newClientData);
       return true;
     } catch (e) {
       reportError(e, 'Error in aiCreateClient');
@@ -949,79 +996,10 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, [getDayClientsFromSource, setClientsCache]);
 
-  // Find duplicate clients: groups by normalized name + phone, identifies stale copies
+  // Find directory-only duplicates. Scheduled docs participate as keepers so
+  // their contact/debt/family data is preserved, but are never deletable.
   const findDuplicateClients = useCallback((): { staleIds: string[], details: Array<{ name: string, activeId: string, staleId: string }> } => {
-    const ACTIVE_FREQS: Set<string> = new Set(['weekly', 'biweekly', 'triweekly', 'monthly']);
-
-    // Build groups by composite key: normalized name + normalized phone
-    const groups: Record<string, Client[]> = {};
-    clients.filter(c => !c.isNote).forEach(c => {
-      // Los pedidos "una vez" PENDIENTES no son duplicados: la propia app los
-      // crea a propósito sobre el mismo cliente (pedido extra desde Agendar,
-      // clonar para visita adicional). Borrarlos = perder una entrega.
-      if (c.freq === 'once' && !c.isCompleted) return;
-      const normName = (c.name || '').toLowerCase().trim();
-      if (!normName) return;
-      const normPhone = normalizePhoneForComparison(c.phone);
-      // Key requires both name AND phone to match (phone must be non-empty)
-      const key = normPhone ? `${normName}::${normPhone}` : `${normName}::__no_phone_${c.id}`;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(c);
-    });
-
-    const staleIds: string[] = [];
-    const details: Array<{ name: string, activeId: string, staleId: string }> = [];
-
-    Object.values(groups).forEach(group => {
-      if (group.length < 2) return;
-
-      // Score each client to determine which one to keep
-      // Higher score = more valuable / should be kept
-      const scored = group.map(c => {
-        let score = 0;
-        // Active frequency is most important
-        if (ACTIVE_FREQS.has(c.freq)) score += 1000;
-        // 'once' with visitDays is somewhat active
-        if (c.freq === 'once' && c.visitDays && c.visitDays.length > 0) score += 500;
-        // Has products
-        const productCount = c.products ? Object.values(c.products).filter(v => v && Number(v) > 0).length : 0;
-        score += productCount * 10;
-        // Has notes
-        if (c.notes && c.notes.trim()) score += 5;
-        // Has location
-        if ((c.lat && c.lng) || c.mapsLink) score += 5;
-        // Has address
-        if (c.address && c.address.trim()) score += 3;
-        // Vínculos familiares e historial de visitas: el doc "master" con
-        // años de datos no debe perder contra un duplicado recién creado
-        // que solo tiene productos cargados.
-        if (c.relationships) score += Object.keys(c.relationships).length * 15;
-        if (c.lastVisited || c.completedAt) score += 10;
-        if (c.alarm) score += 2;
-        // More recently updated
-        if (c.updatedAt) {
-          const ts = (parseDate(c.updatedAt)?.getTime() || 0) / 1000;
-          score += Math.min(ts / 1e10, 1); // tiny tiebreaker from timestamp
-        }
-        return { client: c, score };
-      });
-
-      // Sort descending by score: best client first
-      scored.sort((a, b) => b.score - a.score);
-
-      const keeper = scored[0].client;
-      // Everything except the keeper is stale
-      for (let i = 1; i < scored.length; i++) {
-        staleIds.push(scored[i].client.id);
-        details.push({
-          name: scored[i].client.name,
-          activeId: keeper.id,
-          staleId: scored[i].client.id,
-        });
-      }
-    });
-
-    return { staleIds, details };
+    return planDuplicateClientCleanup(clients);
   }, [clients]);
 
   // Delete stale duplicate clients in batches, migrating their data to the
@@ -1036,32 +1014,43 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     const FieldValue = firestore.FieldValue;
 
     try {
-      const migrationOps: Array<{ ref: FirebaseFirestoreTypes.DocumentReference; data: Record<string, any> }> = [];
+      const migrationOps = new Map<string, {
+        ref: FirebaseFirestoreTypes.DocumentReference;
+        data: Record<string, any>;
+      }>();
+      const addMigration = (
+        ref: FirebaseFirestoreTypes.DocumentReference,
+        data: Record<string, any>,
+      ) => {
+        const existing = migrationOps.get(ref.path);
+        migrationOps.set(ref.path, {
+          ref,
+          data: { ...(existing?.data || {}), ...data },
+        });
+      };
 
       // 1) Reasignar deudas y transferencias del duplicado al que sobrevive.
-      //    Firestore limita `in` a 10 valores por consulta.
+      //    La consulta DEBE incluir el reparto/usuario: las reglas de Firestore
+      //    no pueden autorizar un query global limitado solo por clientId.
       const staleToKeeper = new Map(details.map((d) => [d.staleId, d.activeId]));
+      const scopeField = groupId ? 'groupId' : 'userId';
+      const scopeValue = groupId || userId;
       for (const collection of ['debts', 'transfers'] as const) {
-        for (let i = 0; i < staleIds.length; i += 10) {
-          const chunk = staleIds.slice(i, i + 10);
-          const snap = await db.collection(collection).where('clientId', 'in', chunk).get();
-          snap.docs.forEach((docSnap) => {
-            const staleId = (docSnap.data() as any).clientId as string;
-            const keeperId = staleToKeeper.get(staleId);
-            const keeper = keeperId ? byId.get(keeperId) : undefined;
-            if (!keeper) return;
-            migrationOps.push({
-              ref: docSnap.ref,
-              data: {
-                clientId: keeper.id,
-                clientName: keeper.name || (docSnap.data() as any).clientName || '',
-              },
-            });
+        const snap = await db.collection(collection).where(scopeField, '==', scopeValue).get();
+        snap.docs.forEach((docSnap) => {
+          const staleId = (docSnap.data() as any).clientId as string;
+          const keeperId = staleToKeeper.get(staleId);
+          const keeper = keeperId ? byId.get(keeperId) : undefined;
+          if (!keeper) return;
+          addMigration(docSnap.ref, {
+            clientId: keeper.id,
+            clientName: keeper.name || (docSnap.data() as any).clientName || '',
           });
-        }
+        });
       }
 
-      // 2) Mover vínculos familiares y completar notas faltantes del keeper.
+      // 2) Mover vínculos familiares y completar datos de contacto faltantes
+      //    en el keeper sin tocar frecuencia, fecha, productos ni posición.
       details.forEach(({ staleId, activeId }) => {
         const stale = byId.get(staleId);
         const keeper = byId.get(activeId);
@@ -1083,24 +1072,34 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
             targetUpdates[`relationships.${activeId}`] = inverseType;
             targetUpdates[`sameHousehold.${activeId}`] = target.sameHousehold?.[staleId] !== false;
           }
-          migrationOps.push({ ref: db.collection('clients').doc(targetId), data: targetUpdates });
+          addMigration(db.collection('clients').doc(targetId), targetUpdates);
           if (!keeper.relationships?.[targetId]) {
             keeperUpdates[`relationships.${targetId}`] = type;
             keeperUpdates[`sameHousehold.${targetId}`] = stale.sameHousehold?.[targetId] !== false;
           }
         });
-        if ((!keeper.notes || !keeper.notes.trim()) && stale.notes && stale.notes.trim()) {
-          keeperUpdates.notes = stale.notes;
-        }
+        const copyIfMissing = (field: 'phone' | 'address' | 'notes' | 'lat' | 'lng' | 'mapsLink') => {
+          const alreadyQueued = migrationOps.get(db.collection('clients').doc(activeId).path)?.data[field];
+          if (!keeper[field]?.trim() && !alreadyQueued && stale[field]?.trim()) {
+            keeperUpdates[field] = stale[field];
+          }
+        };
+        copyIfMissing('phone');
+        copyIfMissing('address');
+        copyIfMissing('notes');
+        copyIfMissing('lat');
+        copyIfMissing('lng');
+        copyIfMissing('mapsLink');
         if (Object.keys(keeperUpdates).length > 0) {
-          migrationOps.push({ ref: db.collection('clients').doc(activeId), data: keeperUpdates });
+          addMigration(db.collection('clients').doc(activeId), keeperUpdates);
         }
       });
 
       const OPS_PER_BATCH = 450;
-      for (let i = 0; i < migrationOps.length; i += OPS_PER_BATCH) {
+      const migrationList = Array.from(migrationOps.values());
+      for (let i = 0; i < migrationList.length; i += OPS_PER_BATCH) {
         const batch = db.batch();
-        migrationOps.slice(i, i + OPS_PER_BATCH).forEach(({ ref, data }) => batch.update(ref, data));
+        migrationList.slice(i, i + OPS_PER_BATCH).forEach(({ ref, data }) => batch.update(ref, data));
         await batch.commit();
       }
     } catch (e) {
@@ -1121,7 +1120,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       await Promise.all(chunk.map((id) => cancelClientAlarm(id)));
     }
     return staleIds.length;
-  }, [findDuplicateClients]);
+  }, [findDuplicateClients, groupId, userId]);
 
   // Add a family relationship between two clients (bidirectional)
   const addRelationship = useCallback(async (

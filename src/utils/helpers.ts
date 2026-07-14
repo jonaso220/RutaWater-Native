@@ -600,7 +600,7 @@ export const getClientMatchKey = (
   phone: string,
   fallbackId: string,
 ): string => {
-  const normName = (name || '').toLowerCase().trim();
+  const normName = normalizeText(name || '').trim().replace(/\s+/g, ' ');
   if (!normName) return `__id_${fallbackId}`;
   const normPhone = normalizePhoneForComparison(phone);
   return normPhone ? `${normName}::${normPhone}` : `__id_${fallbackId}`;

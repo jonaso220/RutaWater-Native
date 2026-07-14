@@ -5,7 +5,7 @@ import { Client } from '../types';
 import { normalizePhone } from '../utils/helpers';
 import { formatMoney } from '../utils/format';
 import { getDayLabel } from '../constants/products';
-import { getLastActivityDate, getEffectiveLastActivityDate, getDaysSince } from '../utils/recency';
+import { getLastActivityDate, getDaysSince } from '../utils/recency';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
@@ -17,7 +17,7 @@ interface Props {
   client: Client;
   debtTotal: number;
   showRecency: boolean;
-  clientsById?: Map<string, Client> | null;
+  effectiveLastActivityDate: Date | null;
   isAdmin: boolean;
   onSchedule: (client: Client) => void;
   onDebt: (client: Client) => void;
@@ -41,7 +41,7 @@ const DirectoryClientCard = ({
   client: item,
   debtTotal,
   showRecency,
-  clientsById,
+  effectiveLastActivityDate,
   isAdmin,
   onSchedule,
   onDebt,
@@ -88,7 +88,7 @@ const DirectoryClientCard = ({
 
   const getRecencyBadge = (client: Client): { label: string; bgColor: string; textColor: string } => {
     const ownDate = getLastActivityDate(client);
-    const lastDate = getEffectiveLastActivityDate(client, clientsById);
+    const lastDate = effectiveLastActivityDate;
     // La fecha efectiva vino de un familiar (no del cliente): lo marcamos con 👪 para
     // que se entienda por qué aparece como visitado recientemente.
     const fromFamily = !!lastDate && (!ownDate || lastDate.getTime() > ownDate.getTime());

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Client } from '../types';
 import { getClientMatchKey } from '../utils/helpers';
-import { getEffectiveLastActivityDate } from '../utils/recency';
+import { buildEffectiveLastActivityDates } from '../utils/recency';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
@@ -137,14 +137,14 @@ const DirectoryScreen = () => {
     with_debt: withDebtCount,
   }), [directoryCounts, withDebtCount]);
 
-  // Lookup por id para resolver familiares vinculados (relationships) sin recorrer
-  // el array completo por cada cliente. Incluye a TODOS los clientes (no solo el
-  // directorio), así un familiar periódico también se encuentra.
-  const clientsById = useMemo(() => {
-    const m = new Map<string, Client>();
-    for (const c of clients) m.set(c.id, c);
-    return m;
-  }, [clients]);
+  // El índice se construye una sola vez al entrar en Recurrencia. Incluye
+  // clientes periódicos y pedidos extra aunque no aparezcan en este filtro.
+  const effectiveRecencyById = useMemo(
+    () => isFocused && activeFilter === 'recurrencia'
+      ? buildEffectiveLastActivityDates(clients)
+      : new Map<string, Date | null>(),
+    [activeFilter, clients, isFocused],
+  );
 
   // Apply with_debt and recurrencia filters at screen level
   const filteredClients = useMemo(() => {
@@ -163,8 +163,8 @@ const DirectoryScreen = () => {
         .sort((a, b) => {
           // "Visita del hogar": si visitaste a un familiar, el cliente cuenta como
           // visitado y baja en el orden de antigüedad.
-          const dateA = getEffectiveLastActivityDate(a, clientsById);
-          const dateB = getEffectiveLastActivityDate(b, clientsById);
+          const dateA = effectiveRecencyById.get(a.id) || null;
+          const dateB = effectiveRecencyById.get(b.id) || null;
           // No date = most stale, appears first
           if (!dateA && !dateB) return (a.name || '').localeCompare(b.name || '');
           if (!dateA) return -1;
@@ -178,7 +178,7 @@ const DirectoryScreen = () => {
 
     filteredClientsRef.current = result;
     return result;
-  }, [isFocused, search, activeFilter, getFilteredDirectory, debts, clients, clientsById, clientHasDebt]);
+  }, [isFocused, search, activeFilter, getFilteredDirectory, debts, clients, effectiveRecencyById, clientHasDebt]);
 
   // Reset scroll to top when the search term or filter changes — otherwise
   // FlashList keeps the previous offset and the user has to scroll up to
@@ -239,14 +239,14 @@ const DirectoryScreen = () => {
       client={item}
       debtTotal={getClientDebtTotal(item.id)}
       showRecency={isRecurrenciaMode}
-      clientsById={clientsById}
+      effectiveLastActivityDate={effectiveRecencyById.get(item.id) || null}
       isAdmin={canManage}
       onSchedule={setScheduleClient}
       onDebt={setDebtClient}
       onRelationship={setRelationshipClient}
       onEdit={setEditClient}
     />
-  ), [canManage, isRecurrenciaMode, clientsById, getClientDebtTotal]);
+  ), [canManage, isRecurrenciaMode, effectiveRecencyById, getClientDebtTotal]);
 
   // FlashList v2 can stall on grow transitions (empty→populated), painting
   // nothing until the user scrolls. We remount on filter change and on first

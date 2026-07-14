@@ -1,5 +1,13 @@
 import { Client } from '../../types';
-import { getDirectoryDeliveryHistoryUpdate, getEffectiveLastActivityDate, getHouseholdMembers, getLastActivityDate, sharesHouseholdWith } from '../recency';
+import {
+  buildEffectiveLastActivityDates,
+  getDirectoryDeliveryHistoryUpdate,
+  getEffectiveLastActivityDate,
+  getHouseholdMembers,
+  getLastActivityDate,
+  getLastVisitDate,
+  sharesHouseholdWith,
+} from '../recency';
 
 const client = (over: Partial<Client>): Client => ({
   id: 'a',
@@ -30,9 +38,26 @@ const client = (over: Partial<Client>): Client => ({
 } as Client);
 
 describe('recencia del hogar', () => {
-  test('una edición sin entrega real no inventa historial', () => {
+  test('una ficha legacy usa su edición como referencia sin inventar una entrega', () => {
+    const legacyDate = new Date('2026-07-09T12:00:00');
     const edited = client({ id: 'a', updatedAt: new Date('2026-07-09T12:00:00') as any });
-    expect(getLastActivityDate(edited)).toBeNull();
+    expect(getLastVisitDate(edited)).toBeNull();
+    expect(getLastActivityDate(edited)?.getTime()).toBe(legacyDate.getTime());
+  });
+
+  test('la fecha aproximada legacy no se comparte con familiares', () => {
+    const owner = client({
+      id: 'a',
+      relationships: { b: 'conyuge' },
+      sameHousehold: { b: true },
+    });
+    const editedRelative = client({
+      id: 'b',
+      updatedAt: new Date('2026-07-09T12:00:00') as any,
+    });
+    const clientsById = new Map([['a', owner], ['b', editedRelative]]);
+
+    expect(getEffectiveLastActivityDate(owner, clientsById)).toBeNull();
   });
 
   test('lastDeliveredAt sobrevive aunque la agenda haya limpiado lastVisited', () => {
@@ -236,5 +261,56 @@ describe('recencia del hogar', () => {
 
     expect(getHouseholdMembers(a, clientsById)).toEqual([]);
     expect(getEffectiveLastActivityDate(a, clientsById)).toBeNull();
+  });
+
+  test('el índice precalculado reúne hogar, identidad y fallback legacy', () => {
+    const householdVisit = new Date('2026-07-12T12:00:00');
+    const legacyDate = new Date('2026-06-01T12:00:00');
+    const wife = client({
+      id: 'wife',
+      customerId: 'wife',
+      relationships: { husband: 'conyuge' },
+      sameHousehold: { husband: true },
+    });
+    const husband = client({
+      id: 'husband',
+      customerId: 'husband',
+      relationships: { wife: 'conyuge' },
+      sameHousehold: { wife: true },
+    });
+    const extra = client({
+      id: 'extra',
+      customerId: 'husband',
+      lastDeliveredAt: householdVisit as any,
+    });
+    const legacy = client({ id: 'legacy', updatedAt: legacyDate as any });
+
+    const index = buildEffectiveLastActivityDates([wife, husband, extra, legacy]);
+
+    expect(index.get(wife.id)?.getTime()).toBe(householdVisit.getTime());
+    expect(index.get(husband.id)?.getTime()).toBe(householdVisit.getTime());
+    expect(index.get(extra.id)?.getTime()).toBe(householdVisit.getTime());
+    expect(index.get(legacy.id)?.getTime()).toBe(legacyDate.getTime());
+  });
+
+  test('indexa un hogar grande encadenado sin recursión ni recorridos cruzados', () => {
+    const visit = new Date('2026-07-13T12:00:00');
+    const total = 2000;
+    const household = Array.from({ length: total }, (_, position) => {
+      const id = `client-${position}`;
+      const nextId = `client-${position + 1}`;
+      return client({
+        id,
+        customerId: id,
+        relationships: position < total - 1 ? { [nextId]: 'otro' } : {},
+        sameHousehold: position < total - 1 ? { [nextId]: true } : {},
+        lastDeliveredAt: position === total - 1 ? visit as any : null,
+      });
+    });
+
+    const index = buildEffectiveLastActivityDates(household);
+
+    expect(index.size).toBe(total);
+    expect(index.get('client-0')?.getTime()).toBe(visit.getTime());
   });
 });

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking, Pressable } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -10,10 +10,16 @@ import { formatShortDate } from '../utils/format';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import PromptModal from './PromptModal';
+import ModalOverlay from './ModalOverlay';
 import { ProductIcon } from './ProductIcon';
 import { getFreqLabel } from '../constants/products';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
+
+const formatClientName = (name: string) => name
+  .trim()
+  .toLocaleLowerCase()
+  .replace(/(^|[\s'-])\S/g, (letter) => letter.toLocaleUpperCase());
 
 const parseTextWithLinks = (text: string, linkColor: string) => {
   const parts = text.split(URL_REGEX);
@@ -79,6 +85,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   const s = (v: number) => Math.round(v * fontScale);
   const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
   const [showPositionPrompt, setShowPositionPrompt] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
   const allProducts = useAllProducts();
   const relationshipCount = Object.keys(client.relationships || {}).length;
 
@@ -132,6 +139,118 @@ const ClientCard: React.FC<ClientCardProps> = ({
   };
 
   const hasLocation = !!(client.lat && client.lng) || !!client.mapsLink;
+
+  const runMenuAction = (action?: () => void) => {
+    setShowActionsMenu(false);
+    action?.();
+  };
+
+  const actionsMenu = (
+    <ModalOverlay
+      visible={showActionsMenu}
+      onClose={() => setShowActionsMenu(false)}
+      animationType="fade"
+    >
+      <View style={styles.menuOverlay}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => setShowActionsMenu(false)}
+          accessibilityRole="button"
+          accessibilityLabel={t('close')}
+        />
+        <View style={styles.menuSheet}>
+          <View style={styles.menuHandle} />
+          <View style={styles.menuHeader}>
+            <View style={styles.menuHeaderText}>
+              <Text style={styles.menuTitle}>{formatClientName(client.name || '')}</Text>
+              <Text style={styles.menuSubtitle}>{t('clientCard.moreActions')}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.menuCloseButton}
+              onPress={() => setShowActionsMenu(false)}
+              accessibilityRole="button"
+              accessibilityLabel={t('close')}
+            >
+              <Ionicons name="close" size={s(20)} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.menuItems}>
+            {onDebt && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => runMenuAction(onDebt)}
+                accessibilityRole="button"
+                accessibilityLabel={hasDebt ? t('clientCard.manageDebt') : t('clientCard.addDebt')}
+              >
+                <View style={[styles.menuItemIcon, hasDebt && styles.menuItemIconDanger]}>
+                  <Ionicons name="cash-outline" size={s(20)} color={hasDebt ? colors.danger : colors.textSecondary} />
+                </View>
+                <Text style={styles.menuItemText}>
+                  {hasDebt ? t('clientCard.manageDebt') : t('clientCard.addDebt')}
+                </Text>
+                <Ionicons name="chevron-forward" size={s(18)} color={colors.textHint} />
+              </TouchableOpacity>
+            )}
+            {onTransfer && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => runMenuAction(onTransfer)}
+                accessibilityRole="button"
+                accessibilityLabel={t('clientCard.manageTransfer')}
+              >
+                <View style={[styles.menuItemIcon, hasPendingTransfer && styles.menuItemIconSuccess]}>
+                  <Ionicons name="swap-horizontal-outline" size={s(20)} color={hasPendingTransfer ? colors.successText : colors.textSecondary} />
+                </View>
+                <Text style={styles.menuItemText}>{t('clientCard.manageTransfer')}</Text>
+                <Ionicons name="chevron-forward" size={s(18)} color={colors.textHint} />
+              </TouchableOpacity>
+            )}
+            {onAlarm && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => runMenuAction(onAlarm)}
+                accessibilityRole="button"
+                accessibilityLabel={t('clientCard.manageAlarm')}
+              >
+                <View style={[styles.menuItemIcon, client.alarm && styles.menuItemIconWarning]}>
+                  <Ionicons name="notifications-outline" size={s(20)} color={client.alarm ? colors.warningDark : colors.textSecondary} />
+                </View>
+                <Text style={styles.menuItemText}>{t('clientCard.manageAlarm')}</Text>
+                <Ionicons name="chevron-forward" size={s(18)} color={colors.textHint} />
+              </TouchableOpacity>
+            )}
+            {onRelationships && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => runMenuAction(onRelationships)}
+                accessibilityRole="button"
+                accessibilityLabel={t('clientCard.manageFamily')}
+              >
+                <View style={[styles.menuItemIcon, hasRelationships && styles.menuItemIconPrimary]}>
+                  <Ionicons name="people-outline" size={s(20)} color={hasRelationships ? colors.primary : colors.textSecondary} />
+                </View>
+                <Text style={styles.menuItemText}>{t('clientCard.manageFamily')}</Text>
+                <Ionicons name="chevron-forward" size={s(18)} color={colors.textHint} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => runMenuAction(onEdit)}
+              accessibilityRole="button"
+              accessibilityLabel={t('clientCard.editClient')}
+            >
+              <View style={styles.menuItemIcon}>
+                <Ionicons name="create-outline" size={s(20)} color={colors.textSecondary} />
+              </View>
+              <Text style={styles.menuItemText}>{t('clientCard.editClient')}</Text>
+              <Ionicons name="chevron-forward" size={s(18)} color={colors.textHint} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </ModalOverlay>
+  );
 
   // --- NOTE CARD ---
   if (client.isNote) {
@@ -220,63 +339,73 @@ const ClientCard: React.FC<ClientCardProps> = ({
         }}
         onCancel={() => setShowPositionPrompt(false)}
       />
-      <TouchableOpacity style={styles.orderBadge} onPress={handleOrderTap} activeOpacity={0.6}>
-        <Text style={styles.orderText}>{index + 1}</Text>
-      </TouchableOpacity>
+      {showActionsMenu && actionsMenu}
       <View style={[styles.cardBody, wideLayout && styles.cardBodyWide]}>
-        {/* Toolbar */}
-        <View style={styles.toolbar}>
+        {/* Client identity and high-priority controls */}
+        <View style={styles.clientHeader}>
+          <TouchableOpacity
+            style={styles.orderCircle}
+            onPress={handleOrderTap}
+            activeOpacity={onChangePosition ? 0.65 : 1}
+            accessibilityRole="button"
+            accessibilityLabel={t('clientCard.position', { position: index + 1 })}
+          >
+            <Text style={styles.orderCircleText}>{index + 1}</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.clientName} numberOfLines={1}>
+            {formatClientName(client.name || '')}
+          </Text>
+
           {onToggleStar && (
-            <TouchableOpacity onPress={onToggleStar} style={styles.iconBtn}>
-              <Text style={{ fontSize: s(16) }}>{client.isStarred ? '⭐' : '☆'}</Text>
+            <TouchableOpacity
+              onPress={onToggleStar}
+              style={[styles.headerIconButton, client.isStarred && styles.headerIconButtonStarred]}
+              accessibilityRole="button"
+              accessibilityLabel={client.isStarred ? t('clientCard.removeFavorite') : t('clientCard.addFavorite')}
+            >
+              <Ionicons
+                name={client.isStarred ? 'star' : 'star-outline'}
+                size={s(20)}
+                color={client.isStarred ? colors.warningAmber : colors.textMuted}
+              />
             </TouchableOpacity>
           )}
-          {onDebt && (
-            <TouchableOpacity onPress={onDebt} style={styles.iconBtn}>
-              <Text style={{ fontSize: s(16) }}>{hasDebt ? '💰' : '💵'}</Text>
-            </TouchableOpacity>
-          )}
-          {onTransfer && (
-            <TouchableOpacity onPress={onTransfer} style={styles.iconBtn}>
-              <Text style={{ fontSize: s(16) }}>{hasPendingTransfer ? '📩' : '🏦'}</Text>
-            </TouchableOpacity>
-          )}
-          {onAlarm && (
-            <TouchableOpacity onPress={onAlarm} style={styles.iconBtn}>
-              <Text style={{ fontSize: s(16) }}>{client.alarm ? '🔔' : '🔕'}</Text>
-            </TouchableOpacity>
-          )}
-          {onRelationships && (
-            <TouchableOpacity onPress={onRelationships} style={styles.iconBtn}>
-              <Text style={{ fontSize: s(16) }}>{hasRelationships ? '👨‍👩‍👧' : '👥'}</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={onEdit} style={styles.iconBtn}>
-            <Text style={{ fontSize: s(16) }}>✏️</Text>
+
+          <TouchableOpacity
+            onPress={() => setShowActionsMenu(true)}
+            style={styles.headerIconButton}
+            accessibilityRole="button"
+            accessibilityLabel={t('clientCard.moreActions')}
+          >
+            <Ionicons name="ellipsis-horizontal" size={s(21)} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
-        {/* Client info */}
-        <Text style={styles.clientName}>
-          {(client.name || '').toUpperCase()}
-        </Text>
-
-        {/* Badges row */}
+        {/* Only active states remain visible and actionable. */}
         <View style={styles.badgesRow}>
           {hasDebt && (
-            <TouchableOpacity onPress={onDebt}>
-              <Text style={styles.debtBadge}><Ionicons name="cash" size={s(12)} /> {t('clientCard.debt')}</Text>
+            <TouchableOpacity onPress={onDebt} style={[styles.statusBadge, styles.debtBadge]}>
+              <Ionicons name="cash-outline" size={s(13)} color={colors.danger} />
+              <Text style={[styles.statusBadgeText, styles.debtBadgeText]}>{t('clientCard.debt')}</Text>
             </TouchableOpacity>
           )}
-          {hasPendingTransfer && (
-            <Text style={styles.transferBadge}><MaterialCommunityIcons name="bank" size={s(12)} /> {t('clientCard.transfer')}</Text>
+          {hasPendingTransfer && onTransfer && (
+            <TouchableOpacity onPress={onTransfer} style={[styles.statusBadge, styles.transferBadge]}>
+              <MaterialCommunityIcons name="bank-transfer" size={s(14)} color={colors.successText} />
+              <Text style={[styles.statusBadgeText, styles.transferBadgeText]}>{t('clientCard.transfer')}</Text>
+            </TouchableOpacity>
           )}
-          {client.alarm ? (
-            <Text style={styles.alarmBadge}><Ionicons name="notifications" size={s(12)} /> {client.alarm}</Text>
+          {client.alarm && onAlarm ? (
+            <TouchableOpacity onPress={onAlarm} style={[styles.statusBadge, styles.alarmBadge]}>
+              <Ionicons name="notifications-outline" size={s(13)} color={colors.warningDark} />
+              <Text style={[styles.statusBadgeText, styles.alarmBadgeText]} numberOfLines={1}>{client.alarm}</Text>
+            </TouchableOpacity>
           ) : null}
           {hasRelationships && onRelationships && (
-            <TouchableOpacity onPress={onRelationships}>
-              <Text style={styles.familyBadge}><Ionicons name="people" size={s(12)} /> {t('relationships.badge')} · {relationshipCount}</Text>
+            <TouchableOpacity onPress={onRelationships} style={[styles.statusBadge, styles.familyBadge]}>
+              <Ionicons name="people-outline" size={s(13)} color={colors.primaryText} />
+              <Text style={[styles.statusBadgeText, styles.familyBadgeText]}>{t('relationships.badge')} · {relationshipCount}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -292,6 +421,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
             >
               <Ionicons name="location-sharp" size={s(18)} color={colors.primary} />
               <Text style={styles.clientAddressLink} numberOfLines={1}>{client.address}</Text>
+              <Ionicons name="chevron-forward" size={s(16)} color={colors.textHint} />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity onPress={onEdit} style={styles.addressRow} activeOpacity={0.6}>
@@ -336,14 +466,31 @@ const ClientCard: React.FC<ClientCardProps> = ({
           <View style={styles.actionBar}>
             {client.phone ? (
               <>
-                <TouchableOpacity onPress={callClient} style={styles.actionBtnDark}>
-                  <Ionicons name="call" size={s(18)} color={colors.textSecondary} />
+                <TouchableOpacity
+                  onPress={callClient}
+                  style={styles.actionBtnDark}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('clientCard.call')}
+                >
+                  <Ionicons name="call-outline" size={s(19)} color={colors.textSecondary} />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={openWhatsAppCamera} style={styles.actionBtnDark}>
-                  <Ionicons name="camera" size={s(18)} color={colors.textSecondary} />
+                <TouchableOpacity
+                  onPress={openWhatsAppCamera}
+                  style={styles.actionBtnDark}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('clientCard.whatsapp')}
+                >
+                  <Ionicons name="logo-whatsapp" size={s(20)} color={colors.successMedium} />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={sendEnCamino} style={styles.enCaminoBtn} activeOpacity={0.7}>
-                  <Text style={styles.enCaminoText}><Ionicons name="chatbubble" size={s(14)} color={colors.textWhite} /> {t('clientCard.onTheWay')}</Text>
+                <TouchableOpacity
+                  onPress={sendEnCamino}
+                  style={styles.enCaminoBtn}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('clientCard.onTheWay')}
+                >
+                  <Ionicons name="navigate-outline" size={s(15)} color={colors.successText} />
+                  <Text style={styles.enCaminoText}>{t('clientCard.onTheWay')}</Text>
                 </TouchableOpacity>
               </>
             ) : (
@@ -352,8 +499,14 @@ const ClientCard: React.FC<ClientCardProps> = ({
                 <Text style={styles.addPhoneText}>{t('clientCard.addPhone')}</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={styles.doneButton} onPress={onMarkDone}>
-              <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> {t('done')}</Text>
+            <TouchableOpacity
+              style={styles.doneButton}
+              onPress={onMarkDone}
+              accessibilityRole="button"
+              accessibilityLabel={t('done')}
+            >
+              <Ionicons name="checkmark" size={s(17)} color={colors.textWhite} />
+              <Text style={styles.doneButtonText}>{t('done')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -365,14 +518,15 @@ const ClientCard: React.FC<ClientCardProps> = ({
             <>
               <View style={styles.wideIconRow}>
                 <TouchableOpacity onPress={callClient} style={styles.actionBtnDarkWide}>
-                  <Ionicons name="call" size={s(18)} color={colors.textSecondary} />
+                  <Ionicons name="call-outline" size={s(18)} color={colors.textSecondary} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={openWhatsAppCamera} style={styles.actionBtnDarkWide}>
-                  <Ionicons name="camera" size={s(18)} color={colors.textSecondary} />
+                  <Ionicons name="logo-whatsapp" size={s(19)} color={colors.successMedium} />
                 </TouchableOpacity>
               </View>
               <TouchableOpacity onPress={sendEnCamino} style={styles.enCaminoBtnWide} activeOpacity={0.7}>
-                <Text style={styles.enCaminoText}><Ionicons name="chatbubble" size={s(14)} color={colors.textWhite} /> {t('clientCard.onTheWay')}</Text>
+                <Ionicons name="navigate-outline" size={s(15)} color={colors.successText} />
+                <Text style={styles.enCaminoText}>{t('clientCard.onTheWay')}</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -382,7 +536,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.doneButtonWide} onPress={onMarkDone}>
-            <Text style={styles.doneButtonText}><Ionicons name="checkmark" size={s(15)} /> {t('done')}</Text>
+            <Ionicons name="checkmark" size={s(17)} color={colors.textWhite} />
+            <Text style={styles.doneButtonText}>{t('done')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -395,15 +550,17 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   return StyleSheet.create({
     card: {
       backgroundColor: colors.card,
-      borderRadius: s(12),
-      marginBottom: s(8),
+      borderRadius: s(16),
+      marginBottom: s(10),
       flexDirection: 'row',
       overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.05,
-      shadowRadius: 3,
-      elevation: 1,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 6,
+      elevation: 2,
       maxWidth: 800,
       width: '100%',
       alignSelf: 'center',
@@ -435,8 +592,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     },
     cardBody: {
       flex: 1,
-      padding: s(10),
-      gap: s(4),
+      padding: s(12),
+      gap: s(6),
     },
     headerRow: {
       flexDirection: 'row',
@@ -454,11 +611,40 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.textSecondary,
       lineHeight: s(20),
     },
-    toolbar: {
+    clientHeader: {
       flexDirection: 'row',
-      justifyContent: 'flex-end',
-      flexWrap: 'wrap',
+      alignItems: 'center',
       gap: s(8),
+      minHeight: s(36),
+    },
+    orderCircle: {
+      width: s(30),
+      height: s(30),
+      borderRadius: s(15),
+      backgroundColor: colors.sectionBackground,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    orderCircleText: {
+      fontSize: s(13),
+      fontWeight: '800',
+      color: colors.textSecondary,
+    },
+    headerIconButton: {
+      width: s(34),
+      height: s(34),
+      borderRadius: s(10),
+      backgroundColor: colors.sectionBackground,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerIconButtonStarred: {
+      backgroundColor: colors.warningAmberBg,
+      borderColor: colors.warningAmberBorder,
     },
     actions: {
       flexDirection: 'row',
@@ -469,54 +655,58 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       borderRadius: s(6),
     },
     clientName: {
-      fontSize: s(16),
-      fontWeight: '700',
+      flex: 1,
+      fontSize: s(17),
+      fontWeight: '800',
       color: colors.textPrimary,
     },
     badgesRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
+      gap: s(6),
+    },
+    statusBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: s(4),
+      minHeight: s(26),
+      paddingHorizontal: s(8),
+      borderRadius: s(8),
+      borderWidth: 1,
+    },
+    statusBadgeText: {
+      fontSize: s(12),
+      fontWeight: '700',
     },
     debtBadge: {
-      fontSize: s(12),
-      fontWeight: '700',
-      color: colors.danger,
       backgroundColor: colors.dangerLight,
-      paddingHorizontal: s(6),
-      paddingVertical: s(2),
-      borderRadius: s(6),
-      overflow: 'hidden',
+      borderColor: colors.dangerBorder,
+    },
+    debtBadgeText: {
+      color: colors.danger,
     },
     transferBadge: {
-      fontSize: s(12),
-      fontWeight: '700',
-      color: colors.successText,
       backgroundColor: colors.successLighter,
-      paddingHorizontal: s(6),
-      paddingVertical: s(2),
-      borderRadius: s(6),
-      overflow: 'hidden',
+      borderColor: colors.successBorder,
+    },
+    transferBadgeText: {
+      color: colors.successText,
     },
     alarmBadge: {
-      fontSize: s(12),
-      fontWeight: '700',
-      color: colors.warningDark,
       backgroundColor: colors.warningAmberBg,
-      paddingHorizontal: s(6),
-      paddingVertical: s(2),
-      borderRadius: s(6),
-      overflow: 'hidden',
+      borderColor: colors.warningAmberBorder,
+      maxWidth: '100%',
+    },
+    alarmBadgeText: {
+      color: colors.warningDark,
+      flexShrink: 1,
     },
     familyBadge: {
-      fontSize: s(12),
-      fontWeight: '700',
-      color: colors.primaryText,
       backgroundColor: colors.primaryLight,
-      paddingHorizontal: s(6),
-      paddingVertical: s(2),
-      borderRadius: s(6),
-      overflow: 'hidden',
+      borderColor: colors.primaryBorder,
+    },
+    familyBadgeText: {
+      color: colors.primaryText,
     },
     clientAddress: {
       fontSize: s(14),
@@ -531,12 +721,12 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       flexDirection: 'row',
       alignItems: 'center',
       gap: s(6),
-      backgroundColor: colors.primaryLight,
+      backgroundColor: colors.sectionBackground,
       borderWidth: 1,
-      borderColor: colors.primaryBorder,
-      borderRadius: s(10),
-      paddingVertical: s(10),
-      paddingHorizontal: s(12),
+      borderColor: colors.cardBorder,
+      borderRadius: s(12),
+      paddingVertical: s(9),
+      paddingHorizontal: s(10),
       marginTop: s(2),
       alignSelf: 'flex-start',
       maxWidth: '100%',
@@ -584,12 +774,12 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: s(6),
-      backgroundColor: colors.warningAmberBg,
-      borderRadius: s(8),
+      backgroundColor: colors.sectionBackground,
+      borderRadius: s(10),
       padding: s(8),
       marginTop: s(2),
-      borderLeftWidth: 3,
-      borderLeftColor: colors.warningDark,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
     },
     notesText: {
       flex: 1,
@@ -624,17 +814,19 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     actionBar: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: s(6),
-      marginTop: s(6),
-      paddingTop: s(8),
+      gap: s(7),
+      marginTop: s(8),
+      paddingTop: s(10),
       borderTopWidth: 1,
       borderTopColor: colors.sectionBackground,
     },
     actionBtnDark: {
-      width: s(36),
-      height: s(36),
-      borderRadius: s(8),
+      width: s(40),
+      height: s(40),
+      borderRadius: s(11),
       backgroundColor: colors.sectionBackground,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -642,18 +834,20 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       fontSize: s(18),
     },
     enCaminoBtn: {
-      flex: 1,
-      height: s(36),
-      borderRadius: s(8),
-      backgroundColor: colors.successBright,
+      flex: 1.2,
+      height: s(40),
+      borderRadius: s(11),
+      backgroundColor: colors.successLighter,
+      borderWidth: 1,
+      borderColor: colors.successBorder,
       flexDirection: 'row',
       justifyContent: 'center',
       alignItems: 'center',
       gap: s(4),
     },
     enCaminoText: {
-      color: colors.textWhite,
-      fontSize: s(16),
+      color: colors.successText,
+      fontSize: s(13),
       fontWeight: '700',
     },
     addPhoneBtn: {
@@ -675,10 +869,13 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       fontWeight: '600',
     },
     doneButton: {
-      height: s(36),
+      flex: 0.9,
+      height: s(40),
       backgroundColor: colors.primary,
-      paddingHorizontal: s(14),
-      borderRadius: s(8),
+      paddingHorizontal: s(10),
+      borderRadius: s(11),
+      flexDirection: 'row',
+      gap: s(4),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -686,6 +883,100 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.textWhite,
       fontSize: s(15),
       fontWeight: '700',
+    },
+    menuOverlay: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: colors.overlay,
+      padding: s(16),
+      paddingBottom: s(24),
+    },
+    menuSheet: {
+      width: '100%',
+      maxWidth: s(440),
+      alignSelf: 'center',
+      backgroundColor: colors.modalBackground,
+      borderRadius: s(20),
+      padding: s(14),
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -3 },
+      shadowOpacity: 0.16,
+      shadowRadius: 14,
+      elevation: 12,
+    },
+    menuHandle: {
+      width: s(38),
+      height: s(4),
+      borderRadius: s(2),
+      backgroundColor: colors.cardBorder,
+      alignSelf: 'center',
+      marginBottom: s(10),
+    },
+    menuHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: s(10),
+      paddingHorizontal: s(2),
+    },
+    menuHeaderText: {
+      flex: 1,
+    },
+    menuTitle: {
+      color: colors.textPrimary,
+      fontSize: s(17),
+      fontWeight: '800',
+    },
+    menuSubtitle: {
+      color: colors.textMuted,
+      fontSize: s(12),
+      marginTop: s(2),
+    },
+    menuCloseButton: {
+      width: s(34),
+      height: s(34),
+      borderRadius: s(17),
+      backgroundColor: colors.sectionBackground,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    menuItems: {
+      gap: s(4),
+    },
+    menuItem: {
+      minHeight: s(52),
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: s(10),
+      paddingHorizontal: s(8),
+      borderRadius: s(12),
+    },
+    menuItemIcon: {
+      width: s(36),
+      height: s(36),
+      borderRadius: s(10),
+      backgroundColor: colors.sectionBackground,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    menuItemIconDanger: {
+      backgroundColor: colors.dangerLight,
+    },
+    menuItemIconSuccess: {
+      backgroundColor: colors.successLighter,
+    },
+    menuItemIconWarning: {
+      backgroundColor: colors.warningAmberBg,
+    },
+    menuItemIconPrimary: {
+      backgroundColor: colors.primaryLight,
+    },
+    menuItemText: {
+      flex: 1,
+      color: colors.textPrimary,
+      fontSize: s(15),
+      fontWeight: '600',
     },
     // --- Wide-screen (Mac/iPad) horizontal layout ---
     // Wider card so a single full-width row uses the extra space; the action
@@ -721,8 +1012,10 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     },
     enCaminoBtnWide: {
       height: s(40),
-      borderRadius: s(8),
-      backgroundColor: colors.successBright,
+      borderRadius: s(10),
+      backgroundColor: colors.successLighter,
+      borderWidth: 1,
+      borderColor: colors.successBorder,
       flexDirection: 'row',
       justifyContent: 'center',
       alignItems: 'center',
@@ -731,7 +1024,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     doneButtonWide: {
       height: s(40),
       backgroundColor: colors.primary,
-      borderRadius: s(8),
+      borderRadius: s(10),
+      flexDirection: 'row',
+      gap: s(4),
       justifyContent: 'center',
       alignItems: 'center',
     },

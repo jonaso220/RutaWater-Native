@@ -36,19 +36,16 @@ export const reconcileRouteSession = <T extends RouteSession>(
 ): T => {
   const completedPrefix = session.stops.slice(0, session.currentIndex);
   const completedIds = new Set(completedPrefix.map((stop) => stop.clientId));
-  const pendingStops = orderedStops.filter((stop) => !completedIds.has(stop.clientId));
+  let pendingStops = orderedStops.filter((stop) => !completedIds.has(stop.clientId));
+  const currentStop = session.stops[session.currentIndex];
 
-  // Keep a valid current stop until the action that completed it advances the
-  // session. This avoids briefly rendering an empty route while Firestore's
-  // optimistic update removes the final client from the visible list.
-  if (pendingStops.length === 0) {
-    const currentStop = session.stops[session.currentIndex];
-    if (!currentStop) return session;
-    const stops = [...completedPrefix, currentStop];
-    if (stops.length === session.stops.length && stops.every((stop, index) => sameStop(stop, session.stops[index]))) {
-      return session;
-    }
-    return { ...session, stops, currentIndex: completedPrefix.length };
+  // A successful "Listo" write removes the current client from the live list
+  // before the completion callback advances the route. Keep that stop at the
+  // cursor until the callback runs; otherwise the session points at the next
+  // client early and the callback is rejected as if a different card had been
+  // completed.
+  if (currentStop && !pendingStops.some((stop) => stop.clientId === currentStop.clientId)) {
+    pendingStops = [currentStop, ...pendingStops];
   }
 
   const stops = [...completedPrefix, ...pendingStops];

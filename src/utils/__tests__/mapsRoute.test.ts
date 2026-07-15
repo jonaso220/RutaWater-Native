@@ -54,4 +54,23 @@ describe('guided route reconciliation', () => {
 
     expect(reconciled.stops[0].mapsLink).toBe(updated.mapsLink);
   });
+
+  test('keeps the current stop until Listo advances after the live update', () => {
+    const original = { stops: [stop('a'), stop('b'), stop('c')], currentIndex: 0 };
+
+    // Firestore removes "a" from the visible route before markAsDone resolves.
+    const reconciled = reconcileRouteSession(original, [stop('b'), stop('c')]);
+
+    expect(reconciled.stops.map((item) => item.clientId)).toEqual(['a', 'b', 'c']);
+    expect(reconciled.currentIndex).toBe(0);
+  });
+
+  test('still removes a non-current client completed from another card', () => {
+    const original = { stops: [stop('a'), stop('b'), stop('c')], currentIndex: 0 };
+
+    const reconciled = reconcileRouteSession(original, [stop('a'), stop('c')]);
+
+    expect(reconciled.stops.map((item) => item.clientId)).toEqual(['a', 'c']);
+    expect(reconciled.currentIndex).toBe(0);
+  });
 });

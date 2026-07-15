@@ -1219,12 +1219,10 @@ const HomeScreen = () => {
 
           {/* Product counter — only nearest date */}
           <ProductCounter clients={nearestDateClients} fontScale={fontScale} />
-        </View>
-      </Animated.View>
 
-      {/* Quick actions — all core actions stay visible without horizontal scrolling. */}
-      <View style={styles.actionPanel}>
-        <View style={styles.actionPanelContent}>
+          {/* Quick actions — collapse with the calendar and load summary. */}
+          <View style={styles.actionPanel}>
+            <View style={styles.actionPanelContent}>
           <View style={styles.actionPrimaryRow}>
             <TouchableOpacity
               style={[styles.actionPrimaryButton, styles.actionPrimaryRoute]}
@@ -1371,8 +1369,10 @@ const HomeScreen = () => {
               </View>
             </TouchableOpacity>
           )}
+            </View>
+          </View>
         </View>
-      </View>
+      </Animated.View>
 
       {routeSession && (
         <View style={styles.routeSessionBar}>

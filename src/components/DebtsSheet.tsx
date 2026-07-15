@@ -319,34 +319,19 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const renderGroup = ({ item }: { item: ClientDebtGroup }) => (
     <View style={[styles.card, { borderLeftColor: getBorderColor(item.maxAgeDays) }]}>
       <View style={styles.cardHeader}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.clientInfo}>
           <Text style={styles.clientName}>
             {(item.clientName || '').toUpperCase()}
           </Text>
           {item.clientAddress ? (
             <Text style={styles.clientAddress}>{item.clientAddress}</Text>
           ) : null}
+        </View>
+        <View style={styles.totalBlock}>
+          <Text style={styles.totalLabel}>{t('debtsSheet.owes')}</Text>
           <Text style={styles.totalAmount}>
             {formatMoney(item.total)}
           </Text>
-        </View>
-        <View style={styles.cardActions}>
-          {item.clientPhone ? (
-            <TouchableOpacity
-              onPress={() => openWhatsAppChat(item)}
-              style={styles.actionBtn}
-            >
-              <Ionicons name="chatbubble" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          ) : null}
-          {onTransferPayment && (
-            <TouchableOpacity
-              onPress={() => onTransferPayment(item.clientId)}
-              style={styles.transferBtn}
-            >
-              <Text style={styles.transferBtnText}><MaterialCommunityIcons name="bank" size={14} /> {t('clientCard.transfer')}</Text>
-            </TouchableOpacity>
-          )}
         </View>
       </View>
       {item.debts.map((debt, idx) => {
@@ -411,41 +396,91 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                       setEditAmount(String(debt.amount || ''));
                     }}
                     style={styles.editBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('debtsSheet.editDebt')}
                   >
                     <Ionicons name="pencil" size={16} color={colors.textMuted} />
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => handleMarkPaid(debt)}
-                    style={[styles.paidBtn, saving && { opacity: 0.5 }]}
-                    disabled={saving}
-                  >
-                    <Text style={styles.paidBtnText}>{t('debtModal.paid')}</Text>
-                  </TouchableOpacity>
+                  {item.debts.length > 1 ? (
+                    <TouchableOpacity
+                      onPress={() => handleMarkPaid(debt)}
+                      style={[styles.paidBtn, saving && { opacity: 0.5 }]}
+                      disabled={saving}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('debtsSheet.registerPayment')}
+                    >
+                      <Ionicons name="checkmark-circle-outline" size={16} color={colors.successText} />
+                      <Text style={styles.paidBtnText}>{t('debtsSheet.registerShort')}</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </>
             )}
           </View>
         );
       })}
-      {/* Pay all button - solo si hay más de 1 deuda */}
-      {item.debts.length > 1 && (
+
+      {(item.clientPhone || onTransferPayment) ? (
+        <View style={styles.secondaryActions}>
+          {item.clientPhone ? (
+            <TouchableOpacity
+              onPress={() => openWhatsAppChat(item)}
+              style={styles.secondaryActionBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t('debtsSheet.openChat')}
+            >
+              <Ionicons name="chatbubble-outline" size={17} color={colors.textSecondary} />
+              <Text style={styles.secondaryActionText}>{t('debtsSheet.chat')}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {item.clientPhone ? (
+            <TouchableOpacity
+              onPress={() => sendReminder(item)}
+              style={styles.secondaryActionBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t('debtModal.sendReminder')}
+            >
+              <Ionicons name="notifications-outline" size={17} color={colors.textSecondary} />
+              <Text style={styles.secondaryActionText}>{t('debtsSheet.remind')}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {onTransferPayment ? (
+            <TouchableOpacity
+              onPress={() => onTransferPayment(item.clientId)}
+              style={styles.secondaryActionBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t('clientCard.transfer')}
+            >
+              <MaterialCommunityIcons name="bank-outline" size={17} color={colors.textSecondary} />
+              <Text style={styles.secondaryActionText}>{t('debtsSheet.transfer')}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+
+      {item.debts.length > 1 ? (
         <TouchableOpacity
           onPress={() => handleMarkAllPaid(item)}
-          style={[styles.payAllBtn, saving && { opacity: 0.5 }]}
+          style={[styles.primaryPaymentBtn, saving && { opacity: 0.5 }]}
           disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel={t('debtsSheet.payAll', { count: item.debts.length })}
         >
-          <Text style={styles.payAllBtnText}><Ionicons name="checkmark" size={14} /> {t('debtsSheet.payAll', { count: item.debts.length })}</Text>
+          <Ionicons name="checkmark-circle" size={18} color={colors.textWhite} />
+          <Text style={styles.primaryPaymentText}>{t('debtsSheet.payAll', { count: item.debts.length })}</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          onPress={() => handleMarkPaid(item.debts[0])}
+          style={[styles.primaryPaymentBtn, saving && { opacity: 0.5 }]}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel={t('debtsSheet.registerPayment')}
+        >
+          <Ionicons name="checkmark-circle" size={18} color={colors.textWhite} />
+          <Text style={styles.primaryPaymentText}>{t('debtsSheet.registerPayment')}</Text>
         </TouchableOpacity>
       )}
-      {/* Reminder button */}
-      {item.clientPhone ? (
-        <TouchableOpacity
-          onPress={() => sendReminder(item)}
-          style={styles.reminderBtn}
-        >
-          <Text style={styles.reminderBtnText}><Ionicons name="chatbubble" size={14} /> {t('debtModal.sendReminder')}</Text>
-        </TouchableOpacity>
-      ) : null}
     </View>
   );
 
@@ -844,22 +879,29 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   // List
   list: { padding: s(12) },
   card: {
-    backgroundColor: colors.dangerLight,
-    borderRadius: s(12),
+    backgroundColor: colors.card,
+    borderRadius: s(14),
     padding: s(14),
-    marginBottom: s(8),
+    marginBottom: s(10),
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     borderLeftWidth: 4,
     borderLeftColor: colors.danger,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: s(8),
+    alignItems: 'flex-start',
+    gap: s(12),
+    paddingBottom: s(12),
+  },
+  clientInfo: {
+    flex: 1,
+    minWidth: 0,
   },
   clientName: {
     fontSize: s(16),
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.textPrimary,
   },
   clientAddress: {
@@ -868,45 +910,37 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     color: colors.textSecondary,
     marginTop: s(1),
   },
+  totalBlock: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
+  },
+  totalLabel: {
+    fontSize: s(11),
+    fontWeight: '700',
+    color: colors.textHint,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
   totalAmount: {
     fontSize: s(20),
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.danger,
-    marginTop: s(2),
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: s(8),
-    alignItems: 'center',
-  },
-  actionBtn: { padding: s(6) },
-  transferBtn: {
-    backgroundColor: colors.successLighter,
-    paddingHorizontal: s(10),
-    paddingVertical: s(6),
-    borderRadius: s(8),
-    borderWidth: 1,
-    borderColor: colors.successLight,
-  },
-  transferBtnText: {
-    fontSize: s(14),
-    fontWeight: '700',
-    color: colors.successDark,
+    marginTop: s(1),
   },
   // Debt rows
   debtRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: s(8),
+    paddingVertical: s(10),
   },
   debtRowFirst: {
     borderTopWidth: 1,
-    borderTopColor: colors.dangerBorder,
+    borderTopColor: colors.cardBorder,
   },
   debtRowDashed: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.dangerBorder,
+    borderTopColor: colors.cardBorder,
   },
   dateRow: {
     flexDirection: 'row',
@@ -937,8 +971,14 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     alignItems: 'center',
   },
   editBtn: {
-    padding: s(8),
-    borderRadius: s(8),
+    width: s(38),
+    height: s(38),
+    borderRadius: s(10),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.sectionBackground,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   editRow: {
     flexDirection: 'row',
@@ -976,41 +1016,63 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     fontWeight: '700',
   },
   paidBtn: {
-    backgroundColor: colors.success,
-    paddingHorizontal: s(12),
-    paddingVertical: s(8),
-    borderRadius: s(8),
+    minHeight: s(38),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(5),
+    backgroundColor: colors.successLighter,
+    paddingHorizontal: s(10),
+    borderRadius: s(10),
+    borderWidth: 1,
+    borderColor: colors.successBorder,
   },
   paidBtnText: {
-    color: colors.textWhite,
+    color: colors.successText,
     fontWeight: '700',
-    fontSize: s(15),
+    fontSize: s(13),
   },
-  // Pay all button
-  payAllBtn: {
-    backgroundColor: colors.success,
-    paddingVertical: s(10),
-    borderRadius: s(8),
+  secondaryActions: {
+    flexDirection: 'row',
+    gap: s(6),
+    paddingTop: s(10),
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.cardBorder,
+  },
+  secondaryActionBtn: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: s(44),
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: s(10),
-  },
-  payAllBtnText: {
-    color: colors.textWhite,
-    fontWeight: '800',
-    fontSize: s(14),
-  },
-  reminderBtn: {
-    paddingVertical: s(10),
-    borderRadius: s(8),
-    alignItems: 'center',
-    marginTop: s(6),
+    justifyContent: 'center',
+    gap: s(5),
+    paddingHorizontal: s(6),
+    borderRadius: s(10),
+    backgroundColor: colors.sectionBackground,
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  reminderBtnText: {
+  secondaryActionText: {
     color: colors.textSecondary,
-    fontWeight: '600',
-    fontSize: s(14),
+    fontWeight: '700',
+    fontSize: s(12),
+    flexShrink: 1,
+  },
+  primaryPaymentBtn: {
+    backgroundColor: colors.success,
+    minHeight: s(46),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: s(7),
+    paddingHorizontal: s(12),
+    borderRadius: s(11),
+    marginTop: s(8),
+  },
+  primaryPaymentText: {
+    color: colors.textWhite,
+    fontWeight: '800',
+    fontSize: s(15),
   },
   // Empty
   empty: {

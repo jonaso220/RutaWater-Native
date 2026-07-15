@@ -56,6 +56,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { Frequency } from '../constants/products';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
   RouteMapStop,
   RouteSession as RouteSessionState,
@@ -201,6 +202,7 @@ const HomeScreen = () => {
   // Chrome (day tabs, product counter, action bar, search) scales with the
   // global fontScale, which now ramps up on wide screens (see useLayout).
   const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
+  const chromeSize = (value: number) => Math.round(value * fontScale);
 
   const navigation = useNavigation<any>();
   const { isAdmin, user, groupData } = useAuthContext();
@@ -1220,81 +1222,157 @@ const HomeScreen = () => {
         </View>
       </Animated.View>
 
-      {/* Action bar */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.actionBar}
-        contentContainerStyle={styles.actionBarContent}
-      >
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnRoute]}
-          onPress={() => void handleStartRoute()}
-          accessibilityLabel={t('home.startRoute')}
-        >
-          <Text style={[styles.actionBtnText, styles.actionBtnRouteText]}>🧭 {t('home.startRoute')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnAi]}
-          onPress={() => setShowSmartModal(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Pedido IA"
-        >
-          <Text style={[styles.actionBtnText, styles.actionBtnAiText]}>✨ Pedido IA</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnAdd]}
-          onPress={() => {
-            if (!canAddClient) {
-              Alert.alert(
-                t('home.limitReached'),
-                t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
-                [
-                  { text: t('cancel'), style: 'cancel' },
-                  { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
-                ],
-              );
-              return;
-            }
-            setShowAddClientModal(true);
-          }}
-        >
-          <Text style={[styles.actionBtnText, styles.actionBtnAddText]}>+ {t('home.client')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnNote]}
-          onPress={() => setShowNoteModal(true)}
-        >
-          <Text style={[styles.actionBtnText, styles.actionBtnNoteText]}>+ {t('home.note')}</Text>
-        </TouchableOpacity>
-        {debts.length > 0 && (
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.actionBtnDebt]}
-            onPress={() => setShowDebtsSheet(true)}
-          >
-            <Text style={[styles.actionBtnText, styles.actionBtnDebtText]}>
-              {t('home.debts')} ({debts.length})
-            </Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnCalendar]}
-          onPress={() => setShowCalendar(true)}
-          accessibilityLabel={t('home.calendar')}
-        >
-          <Text style={[styles.actionBtnText, styles.actionBtnCalendarText]}>📅 {t('home.calendar')}</Text>
-        </TouchableOpacity>
-        {pendingTransferCount > 0 && (
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.actionBtnTransfer]}
-            onPress={() => setShowTransfersSheet(true)}
-          >
-            <Text style={[styles.actionBtnText, styles.actionBtnTransferText]}>
-              {t('home.transfers')} ({pendingTransferCount})
-            </Text>
-          </TouchableOpacity>
-        )}
-      </ScrollView>
+      {/* Quick actions — all core actions stay visible without horizontal scrolling. */}
+      <View style={styles.actionPanel}>
+        <View style={styles.actionPanelContent}>
+          <View style={styles.actionPrimaryRow}>
+            <TouchableOpacity
+              style={[styles.actionPrimaryButton, styles.actionPrimaryRoute]}
+              onPress={() => {
+                hapticSelection();
+                void handleStartRoute();
+              }}
+              activeOpacity={0.78}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.startRoute')}
+            >
+              <Ionicons name="navigate" size={chromeSize(19)} color={colors.textWhite} />
+              <Text style={styles.actionPrimaryText} numberOfLines={1}>
+                {t('home.startRoute')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionPrimaryButton, styles.actionPrimaryAi]}
+              onPress={() => {
+                hapticSelection();
+                setShowSmartModal(true);
+              }}
+              activeOpacity={0.78}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.aiOrder')}
+            >
+              <Ionicons name="sparkles" size={chromeSize(19)} color={colors.textWhite} />
+              <Text style={styles.actionPrimaryText} numberOfLines={1}>
+                {t('home.aiOrder')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.actionQuickRow}>
+            <TouchableOpacity
+              style={styles.actionQuickButton}
+              onPress={() => {
+                hapticSelection();
+                if (!canAddClient) {
+                  Alert.alert(
+                    t('home.limitReached'),
+                    t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
+                    [
+                      { text: t('cancel'), style: 'cancel' },
+                      { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
+                    ],
+                  );
+                  return;
+                }
+                setShowAddClientModal(true);
+              }}
+              activeOpacity={0.72}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.newClient')}
+            >
+              <View style={[styles.actionQuickIcon, styles.actionQuickIconClient]}>
+                <Ionicons name="person-add-outline" size={chromeSize(18)} color={colors.primary} />
+              </View>
+              <Text style={styles.actionQuickLabel} numberOfLines={1} adjustsFontSizeToFit>
+                {t('home.client')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionQuickButton}
+              onPress={() => {
+                hapticSelection();
+                setShowNoteModal(true);
+              }}
+              activeOpacity={0.72}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.newNote')}
+            >
+              <View style={[styles.actionQuickIcon, styles.actionQuickIconNote]}>
+                <Ionicons name="document-text-outline" size={chromeSize(18)} color={colors.warningDarker} />
+              </View>
+              <Text style={styles.actionQuickLabel} numberOfLines={1} adjustsFontSizeToFit>
+                {t('home.note')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionQuickButton}
+              onPress={() => {
+                hapticSelection();
+                setShowCalendar(true);
+              }}
+              activeOpacity={0.72}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.calendar')}
+            >
+              <View style={[styles.actionQuickIcon, styles.actionQuickIconCalendar]}>
+                <Ionicons name="calendar-outline" size={chromeSize(18)} color={colors.primary} />
+              </View>
+              <Text style={styles.actionQuickLabel} numberOfLines={1} adjustsFontSizeToFit>
+                {t('home.calendar')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionQuickButton}
+              onPress={() => {
+                hapticSelection();
+                setShowDebtsSheet(true);
+              }}
+              activeOpacity={0.72}
+              accessibilityRole="button"
+              accessibilityLabel={`${t('home.debts')}: ${debts.length}`}
+            >
+              <View style={[styles.actionQuickIcon, styles.actionQuickIconDebt]}>
+                <Ionicons name="cash-outline" size={chromeSize(19)} color={colors.danger} />
+              </View>
+              <Text style={styles.actionQuickLabel} numberOfLines={1} adjustsFontSizeToFit>
+                {t('home.debts')}
+              </Text>
+              {debts.length > 0 && (
+                <View style={styles.actionCountBadge}>
+                  <Text style={styles.actionCountBadgeText} numberOfLines={1}>
+                    {debts.length > 99 ? '99+' : debts.length}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {pendingTransferCount > 0 && (
+            <TouchableOpacity
+              style={styles.actionTransferNotice}
+              onPress={() => {
+                hapticSelection();
+                setShowTransfersSheet(true);
+              }}
+              activeOpacity={0.72}
+              accessibilityRole="button"
+              accessibilityLabel={`${t('home.transfers')}: ${pendingTransferCount}`}
+            >
+              <View style={styles.actionTransferInfo}>
+                <Ionicons name="swap-horizontal-outline" size={chromeSize(18)} color={colors.successText} />
+                <Text style={styles.actionTransferText}>{t('home.transfers')}</Text>
+              </View>
+              <View style={styles.actionTransferBadge}>
+                <Text style={styles.actionTransferBadgeText}>{pendingTransferCount}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
 
       {routeSession && (
         <View style={styles.routeSessionBar}>
@@ -1618,85 +1696,151 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     color: colors.textMuted,
     fontSize: s(16),
   },
-  actionBar: {
+  actionPanel: {
     flexGrow: 0,
     flexShrink: 0,
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
-  },
-  actionBarContent: {
     paddingHorizontal: s(12),
-    paddingVertical: s(6),
+    paddingTop: s(8),
+    paddingBottom: s(9),
+  },
+  actionPanelContent: {
+    width: '100%',
+    maxWidth: 1000,
+    alignSelf: 'center',
     gap: s(8),
-    alignItems: 'center',
   },
-  actionBtn: {
-    backgroundColor: colors.sectionBackground,
-    paddingHorizontal: s(12),
-    paddingVertical: isWide ? s(8) : s(6),
-    borderRadius: s(8),
+  actionPrimaryRow: {
+    flexDirection: 'row',
+    gap: s(8),
   },
-  actionBtnText: {
-    // Slightly larger on wide screens so the action buttons don't look small.
-    fontSize: isWide ? s(15) : s(14),
-    fontWeight: '700',
-    color: colors.textSecondary,
-  },
-  actionBtnRoute: {
-    backgroundColor: colors.successDark,
+  actionPrimaryButton: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: isWide ? s(48) : s(44),
+    borderRadius: s(12),
     borderWidth: 1,
+    paddingHorizontal: s(10),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: s(7),
+  },
+  actionPrimaryRoute: {
+    backgroundColor: colors.successDark,
     borderColor: colors.success,
   },
-  actionBtnRouteText: {
+  actionPrimaryAi: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primaryDark,
+  },
+  actionPrimaryText: {
+    flexShrink: 1,
+    fontSize: isWide ? s(15) : s(14),
+    fontWeight: '800',
     color: colors.textWhite,
+    letterSpacing: 0.1,
   },
-  actionBtnAdd: {
-    backgroundColor: colors.primaryLight,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
+  actionQuickRow: {
+    flexDirection: 'row',
+    gap: s(7),
   },
-  actionBtnAddText: {
-    color: colors.primary,
-  },
-  actionBtnNote: {
-    backgroundColor: colors.warningAmberBg,
-    borderWidth: 1,
-    borderColor: colors.warningAmberBorder,
-  },
-  actionBtnNoteText: {
-    color: colors.warningDarker,
-  },
-  actionBtnCalendar: {
+  actionQuickButton: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: isWide ? s(62) : s(55),
     backgroundColor: colors.sectionBackground,
     borderWidth: 1,
     borderColor: colors.cardBorder,
+    borderRadius: s(11),
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: s(3),
+    paddingVertical: s(5),
+    gap: s(3),
   },
-  actionBtnCalendarText: {
+  actionQuickIcon: {
+    width: isWide ? s(30) : s(27),
+    height: isWide ? s(30) : s(27),
+    borderRadius: s(9),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionQuickIconClient: {
+    backgroundColor: colors.primaryLight,
+  },
+  actionQuickIconNote: {
+    backgroundColor: colors.warningAmberBg,
+  },
+  actionQuickIconCalendar: {
+    backgroundColor: colors.primaryLighter,
+  },
+  actionQuickIconDebt: {
+    backgroundColor: colors.dangerLight,
+  },
+  actionQuickLabel: {
+    width: '100%',
+    textAlign: 'center',
+    fontSize: isWide ? s(13) : s(11),
+    lineHeight: isWide ? s(16) : s(13),
+    fontWeight: '700',
     color: colors.textSecondary,
   },
-  actionBtnDebt: {
-    backgroundColor: colors.dangerLight,
+  actionCountBadge: {
+    position: 'absolute',
+    top: s(4),
+    right: s(5),
+    minWidth: s(18),
+    height: s(18),
+    borderRadius: s(9),
+    paddingHorizontal: s(4),
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.dangerBorder,
+    borderColor: colors.card,
   },
-  actionBtnDebtText: {
-    color: colors.danger,
+  actionCountBadgeText: {
+    fontSize: s(10),
+    lineHeight: s(12),
+    fontWeight: '800',
+    color: colors.textWhite,
   },
-  actionBtnTransfer: {
+  actionTransferNotice: {
+    minHeight: s(34),
     backgroundColor: colors.successLighter,
     borderWidth: 1,
-    borderColor: colors.successLight,
+    borderColor: colors.successBorder,
+    borderRadius: s(10),
+    paddingHorizontal: s(10),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  actionBtnTransferText: {
-    color: colors.successDark,
+  actionTransferInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(6),
   },
-  actionBtnAi: {
-    backgroundColor: colors.primary,
-    borderWidth: 1,
-    borderColor: colors.primary,
+  actionTransferText: {
+    fontSize: s(13),
+    fontWeight: '700',
+    color: colors.successText,
   },
-  actionBtnAiText: {
+  actionTransferBadge: {
+    minWidth: s(22),
+    height: s(22),
+    borderRadius: s(11),
+    paddingHorizontal: s(5),
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionTransferBadgeText: {
+    fontSize: s(11),
+    fontWeight: '800',
     color: colors.textWhite,
   },
   routeSessionBar: {

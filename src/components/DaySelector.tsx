@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { ScrollView as GHScrollView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
 import { ALL_DAYS, getDayLabel } from '../constants/products';
@@ -35,70 +35,72 @@ const DaySelector = React.memo<DaySelectorProps>(({
   const todayName = useMemo(() => getTodayDayName(), []);
 
   return (
-    <GHScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.daySelector}
-      contentContainerStyle={styles.daySelectorContent}
-    >
-      {ALL_DAYS.map((day) => {
-        const isToday = day === todayName;
-        const isSelected = day === selectedDay;
-        const count = dayCounts[day] || 0;
+    <View style={styles.daySelectorWrapper}>
+      <GHScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.daySelector}
+        contentContainerStyle={styles.daySelectorContent}
+      >
+        {ALL_DAYS.map((day) => {
+          const isToday = day === todayName;
+          const isSelected = day === selectedDay;
+          const count = dayCounts[day] || 0;
 
-        return (
-          <GHTouchableOpacity
-            key={day}
-            onPress={() => onSelectDay(day)}
-            style={[
-              styles.dayChip,
-              isSelected && styles.dayChipSelected,
-              isToday && !isSelected && styles.dayChipToday,
-            ]}
-            activeOpacity={0.7}
-          >
-            <Text
+          return (
+            <GHTouchableOpacity
+              key={day}
+              onPress={() => onSelectDay(day)}
               style={[
-                styles.dayChipText,
-                isSelected && styles.dayChipTextSelected,
+                styles.dayChip,
+                isSelected && styles.dayChipSelected,
+                isToday && !isSelected && styles.dayChipToday,
               ]}
+              activeOpacity={0.7}
             >
-              {isWide ? getDayLabel(day) : getDayLabel(day).slice(0, 3)}
-            </Text>
-            <Text
-              style={[
-                styles.dayCount,
-                isSelected && styles.dayCountSelected,
-              ]}
-            >
-              {count}
-            </Text>
-          </GHTouchableOpacity>
-        );
-      })}
-    </GHScrollView>
+              <Text
+                style={[
+                  styles.dayChipText,
+                  isSelected && styles.dayChipTextSelected,
+                ]}
+              >
+                {isWide ? getDayLabel(day) : getDayLabel(day).slice(0, 3)}
+              </Text>
+              <Text
+                style={[
+                  styles.dayCount,
+                  isSelected && styles.dayCountSelected,
+                ]}
+              >
+                {count}
+              </Text>
+            </GHTouchableOpacity>
+          );
+        })}
+      </GHScrollView>
+    </View>
   );
 });
 
 const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = false) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
-    daySelector: {
-      flexGrow: 0,
-      flexShrink: 0,
+    daySelectorWrapper: {
       backgroundColor: colors.card,
       borderBottomWidth: 1,
       borderBottomColor: colors.cardBorder,
     },
-    daySelectorContent: {
+    daySelector: {
       width: '100%',
       maxWidth: WIDE_CONTENT_MAX_WIDTH,
       alignSelf: 'center',
+      flexGrow: 0,
+      flexShrink: 0,
+    },
+    daySelectorContent: {
       paddingHorizontal: s(12),
       paddingVertical: s(10),
       alignItems: 'center',
-      justifyContent: 'flex-start',
-      flexGrow: 1,
     },
     dayChip: {
       paddingHorizontal: s(14),

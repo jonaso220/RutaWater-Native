@@ -264,6 +264,7 @@ const HomeScreen = () => {
   const [showSmartModal, setShowSmartModal] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showQuickActions, setShowQuickActions] = useState(false);
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -276,6 +277,7 @@ const HomeScreen = () => {
   const [collapsibleHeaderHeight, setCollapsibleHeaderHeight] = useState(0);
   const reorderAnimationActiveRef = useRef(false);
   const reorderAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quickActionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -283,6 +285,7 @@ const HomeScreen = () => {
     }
     return () => {
       if (reorderAnimationTimerRef.current) clearTimeout(reorderAnimationTimerRef.current);
+      if (quickActionTimerRef.current) clearTimeout(quickActionTimerRef.current);
     };
   }, []);
 
@@ -817,6 +820,30 @@ const HomeScreen = () => {
   );
 
   const pendingTransferCount = transfers.length;
+  const quickActionsPendingCount = debts.length + pendingTransferCount;
+
+  const openAddClientFlow = useCallback(() => {
+    if (!canAddClient) {
+      Alert.alert(
+        t('home.limitReached'),
+        t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
+        [
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
+        ],
+      );
+      return;
+    }
+    setShowAddClientModal(true);
+  }, [canAddClient, navigation, t]);
+
+  const openFromQuickActions = useCallback((action: () => void) => {
+    hapticSelection();
+    setShowQuickActions(false);
+    if (quickActionTimerRef.current) clearTimeout(quickActionTimerRef.current);
+    // Let the native bottom sheet finish dismissing before presenting another modal.
+    quickActionTimerRef.current = setTimeout(action, Platform.OS === 'ios' ? 220 : 0);
+  }, []);
 
   // Map client ID to its global position among ALL clients for the day.
   const globalPositionMap = useMemo(() => {
@@ -1230,6 +1257,64 @@ const HomeScreen = () => {
           {/* Quick actions — collapse with the calendar and load summary. */}
           <View style={styles.actionPanel}>
             <View style={styles.actionPanelContent}>
+          {!isWide ? (
+            <View style={styles.actionCompactRow}>
+              <TouchableOpacity
+                style={[styles.actionCompactButton, styles.actionCompactRoute]}
+                onPress={() => {
+                  hapticSelection();
+                  void handleStartRoute();
+                }}
+                activeOpacity={0.78}
+                accessibilityRole="button"
+                accessibilityLabel={t('home.startRoute')}
+              >
+                <Ionicons name="navigate" size={chromeSize(18)} color={colors.textWhite} />
+                <Text style={styles.actionCompactPrimaryText} numberOfLines={1}>
+                  {t('home.startRoute')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionCompactButton, styles.actionCompactAi]}
+                onPress={() => {
+                  hapticSelection();
+                  setShowSmartModal(true);
+                }}
+                activeOpacity={0.78}
+                accessibilityRole="button"
+                accessibilityLabel={t('home.aiOrder')}
+              >
+                <Ionicons name="sparkles" size={chromeSize(17)} color={colors.textWhite} />
+                <Text style={styles.actionCompactAiText}>IA</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionCompactButton, styles.actionCompactMore]}
+                onPress={() => {
+                  hapticSelection();
+                  setShowQuickActions(true);
+                }}
+                activeOpacity={0.72}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('home.quickActions')}${quickActionsPendingCount > 0 ? `: ${quickActionsPendingCount}` : ''}`}
+                accessibilityState={{ expanded: showQuickActions }}
+              >
+                <Ionicons name="grid-outline" size={chromeSize(17)} color={colors.primary} />
+                <Text style={styles.actionCompactMoreText} numberOfLines={1}>
+                  {t('home.quickActions')}
+                </Text>
+                {quickActionsPendingCount > 0 && (
+                  <View style={styles.actionCompactBadge}>
+                    <Text style={styles.actionCompactBadgeText}>
+                      {quickActionsPendingCount > 99 ? '99+' : quickActionsPendingCount}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
           <View style={styles.actionPrimaryRow}>
             <TouchableOpacity
               style={[styles.actionPrimaryButton, styles.actionPrimaryRoute]}
@@ -1269,18 +1354,7 @@ const HomeScreen = () => {
               style={styles.actionQuickButton}
               onPress={() => {
                 hapticSelection();
-                if (!canAddClient) {
-                  Alert.alert(
-                    t('home.limitReached'),
-                    t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
-                    [
-                      { text: t('cancel'), style: 'cancel' },
-                      { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
-                    ],
-                  );
-                  return;
-                }
-                setShowAddClientModal(true);
+                openAddClientFlow();
               }}
               activeOpacity={0.72}
               accessibilityRole="button"
@@ -1376,6 +1450,8 @@ const HomeScreen = () => {
               </View>
             </TouchableOpacity>
           )}
+            </>
+          )}
             </View>
           </View>
         </View>
@@ -1442,6 +1518,9 @@ const HomeScreen = () => {
           <TouchableOpacity
             style={[styles.filterToggleBtn, showFilters && styles.filterToggleBtnActive]}
             onPress={() => setShowFilters(!showFilters)}
+            accessibilityRole="button"
+            accessibilityLabel={t('home.filters')}
+            accessibilityState={{ expanded: showFilters }}
           >
             <Text style={[styles.filterToggleText, showFilters && styles.filterToggleTextActive]}>
               {t('home.filters')}{activeFilters.size > 0 ? ` (${activeFilters.size})` : ''}
@@ -1450,64 +1529,118 @@ const HomeScreen = () => {
         </View>
         {showFilters && (
           <View style={styles.filtersPanel}>
-            <Text style={styles.filterSectionTitle}>{t('home.filterType')}</Text>
-            <View style={styles.filterChipsRow}>
-              <TouchableOpacity
-                style={[styles.filterChip, activeFilters.has('once_starred') && styles.filterChipActive]}
-                onPress={() => toggleFilter('once_starred')}
-              >
-                <Text style={[styles.filterChipText, activeFilters.has('once_starred') && styles.filterChipTextActive]}>
-                  ⭐ {t('home.filterOnceStarred')}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.filterChip, activeFilters.has('con_deuda') && styles.filterChipActive]}
-                onPress={() => toggleFilter('con_deuda')}
-              >
-                <Text style={[styles.filterChipText, activeFilters.has('con_deuda') && styles.filterChipTextActive]}>
-                  💰 {t('home.filterWithDebt')}
-                </Text>
-              </TouchableOpacity>
+            <View style={styles.filtersPanelHeader}>
+              <View style={styles.filtersPanelTitleRow}>
+                <Ionicons name="options-outline" size={chromeSize(18)} color={colors.primary} />
+                <Text style={styles.filtersPanelTitle}>{t('home.filters')}</Text>
+                {activeFilters.size > 0 && (
+                  <View style={styles.filtersActiveBadge}>
+                    <Text style={styles.filtersActiveBadgeText}>{activeFilters.size}</Text>
+                  </View>
+                )}
+              </View>
             </View>
-            <Text style={[styles.filterSectionTitle, { marginTop: 10 }]}>{t('home.filterFrequency')}</Text>
-            <View style={styles.filterChipsRow}>
-              <TouchableOpacity
-                style={[styles.filterChip, !hasFreqFilter && styles.filterChipActive]}
-                onPress={clearFreqFilters}
-              >
-                <Text style={[styles.filterChipText, !hasFreqFilter && styles.filterChipTextActive]}>
-                  {t('home.filterFreqAll')}
-                </Text>
-              </TouchableOpacity>
-              {(['weekly', 'biweekly', 'triweekly', 'monthly', 'once'] as const).map((freq) => (
-                <TouchableOpacity
-                  key={freq}
-                  style={[styles.filterChip, activeFilters.has(`freq_${freq}`) && styles.filterChipActive]}
-                  onPress={() => toggleFilter(`freq_${freq}`)}
-                >
-                  <Text style={[styles.filterChipText, activeFilters.has(`freq_${freq}`) && styles.filterChipTextActive]}>
-                    📆 {t(`freq.${freq}`)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={[styles.filterSectionTitle, { marginTop: 10 }]}>{t('home.filterProducts')}</Text>
-            <View style={styles.filterChipsRow}>
-              {catalogProducts.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  style={[styles.filterChip, activeFilters.has(p.id) && styles.filterChipActive]}
-                  onPress={() => toggleFilter(p.id)}
-                >
-                  <ProductLabel
-                    value={p.emoji}
-                    label={p.short}
-                    size={Math.round((isWide ? 15 : 14) * fontScale)}
-                    style={[styles.filterChipText, activeFilters.has(p.id) && styles.filterChipTextActive]}
-                  />
-                </TouchableOpacity>
-              ))}
-            </View>
+            <ScrollView
+              style={styles.filtersScroll}
+              contentContainerStyle={styles.filtersScrollContent}
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.filterGroup}>
+                <View style={styles.filterGroupHeader}>
+                  <Ionicons name="person-outline" size={chromeSize(15)} color={colors.textHint} />
+                  <Text style={styles.filterSectionTitle}>{t('home.filterType')}</Text>
+                </View>
+                <View style={styles.filterChipsRow}>
+                  <TouchableOpacity
+                    style={[styles.filterChip, activeFilters.has('once_starred') && styles.filterChipActive]}
+                    onPress={() => toggleFilter('once_starred')}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('home.filterOnceStarred')}
+                    accessibilityState={{ selected: activeFilters.has('once_starred') }}
+                  >
+                    <Text style={[styles.filterChipText, activeFilters.has('once_starred') && styles.filterChipTextActive]}>
+                      ⭐ {t('home.filterOnceStarred')}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.filterChip, activeFilters.has('con_deuda') && styles.filterChipActive]}
+                    onPress={() => toggleFilter('con_deuda')}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('home.filterWithDebt')}
+                    accessibilityState={{ selected: activeFilters.has('con_deuda') }}
+                  >
+                    <Text style={[styles.filterChipText, activeFilters.has('con_deuda') && styles.filterChipTextActive]}>
+                      💰 {t('home.filterWithDebt')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.filterGroup}>
+                <View style={styles.filterGroupHeader}>
+                  <Ionicons name="repeat-outline" size={chromeSize(15)} color={colors.textHint} />
+                  <Text style={styles.filterSectionTitle}>{t('home.filterFrequency')}</Text>
+                </View>
+                <View style={styles.filterChipsRow}>
+                  <TouchableOpacity
+                    style={[styles.filterChip, !hasFreqFilter && styles.filterChipActive]}
+                    onPress={clearFreqFilters}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('home.filterFreqAll')}
+                    accessibilityState={{ selected: !hasFreqFilter }}
+                  >
+                    <Text style={[styles.filterChipText, !hasFreqFilter && styles.filterChipTextActive]}>
+                      {t('home.filterFreqAll')}
+                    </Text>
+                  </TouchableOpacity>
+                  {(['weekly', 'biweekly', 'triweekly', 'monthly', 'once'] as const).map((freq) => (
+                    <TouchableOpacity
+                      key={freq}
+                      style={[styles.filterChip, activeFilters.has(`freq_${freq}`) && styles.filterChipActive]}
+                      onPress={() => toggleFilter(`freq_${freq}`)}
+                      accessibilityRole="button"
+                      accessibilityLabel={t(`freq.${freq}`)}
+                      accessibilityState={{ selected: activeFilters.has(`freq_${freq}`) }}
+                    >
+                      <Text style={[styles.filterChipText, activeFilters.has(`freq_${freq}`) && styles.filterChipTextActive]}>
+                        📆 {t(`freq.${freq}`)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.filterGroup}>
+                <View style={styles.filterGroupHeader}>
+                  <Ionicons name="cube-outline" size={chromeSize(15)} color={colors.textHint} />
+                  <Text style={styles.filterSectionTitle}>{t('home.filterProducts')}</Text>
+                  <View style={styles.filterGroupCountBadge}>
+                    <Text style={styles.filterGroupCountText}>{catalogProducts.length}</Text>
+                  </View>
+                </View>
+                <View style={styles.filterChipsRow}>
+                  {catalogProducts.map((p) => (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[styles.filterChip, activeFilters.has(p.id) && styles.filterChipActive]}
+                      onPress={() => toggleFilter(p.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={p.short}
+                      accessibilityState={{ selected: activeFilters.has(p.id) }}
+                    >
+                      <ProductLabel
+                        value={p.emoji}
+                        label={p.short}
+                        size={Math.round((isWide ? 15 : 14) * fontScale)}
+                        style={[styles.filterChipText, activeFilters.has(p.id) && styles.filterChipTextActive]}
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </ScrollView>
           </View>
         )}
       </View>
@@ -1567,6 +1700,134 @@ const HomeScreen = () => {
       />
       )}
       </View>
+
+      <ModalOverlay
+        visible={showQuickActions && !isWide}
+        onClose={() => setShowQuickActions(false)}
+        animationType="slide"
+      >
+        <View style={styles.quickActionsOverlay}>
+          <TouchableOpacity
+            style={styles.quickActionsBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowQuickActions(false)}
+            accessibilityRole="button"
+            accessibilityLabel={t('close')}
+          />
+          <View style={styles.quickActionsSheet}>
+            <TouchableOpacity
+              style={styles.quickActionsHandleButton}
+              onPress={() => setShowQuickActions(false)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t('close')}
+            >
+              <View style={styles.quickActionsHandle} />
+            </TouchableOpacity>
+
+            <View style={styles.quickActionsHeader}>
+              <View style={styles.quickActionsTitleRow}>
+                <View style={styles.quickActionsHeaderIcon}>
+                  <Ionicons name="grid-outline" size={chromeSize(18)} color={colors.primary} />
+                </View>
+                <View style={styles.quickActionsHeaderCopy}>
+                  <Text style={styles.quickActionsTitle}>{t('home.quickActionsTitle')}</Text>
+                  <Text style={styles.quickActionsSubtitle}>{t('home.quickActionsHint')}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.quickActionsGrid}>
+              <TouchableOpacity
+                style={styles.quickActionSheetButton}
+                onPress={() => openFromQuickActions(openAddClientFlow)}
+                activeOpacity={0.72}
+                accessibilityRole="button"
+                accessibilityLabel={t('home.newClient')}
+              >
+                <View style={[styles.quickActionSheetIcon, styles.actionQuickIconClient]}>
+                  <Ionicons name="person-add-outline" size={chromeSize(20)} color={colors.primary} />
+                </View>
+                <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
+                  {t('home.newClient')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.quickActionSheetButton}
+                onPress={() => openFromQuickActions(() => setShowNoteModal(true))}
+                activeOpacity={0.72}
+                accessibilityRole="button"
+                accessibilityLabel={t('home.newNote')}
+              >
+                <View style={[styles.quickActionSheetIcon, styles.actionQuickIconNote]}>
+                  <Ionicons name="document-text-outline" size={chromeSize(20)} color={colors.warningDarker} />
+                </View>
+                <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
+                  {t('home.newNote')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.quickActionSheetButton}
+                onPress={() => openFromQuickActions(() => setShowCalendar(true))}
+                activeOpacity={0.72}
+                accessibilityRole="button"
+                accessibilityLabel={t('home.calendar')}
+              >
+                <View style={[styles.quickActionSheetIcon, styles.actionQuickIconCalendar]}>
+                  <Ionicons name="calendar-outline" size={chromeSize(20)} color={colors.primary} />
+                </View>
+                <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
+                  {t('home.calendar')}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.quickActionSheetButton}
+                onPress={() => openFromQuickActions(() => setShowDebtsSheet(true))}
+                activeOpacity={0.72}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('home.debts')}: ${debts.length}`}
+              >
+                <View style={[styles.quickActionSheetIcon, styles.actionQuickIconDebt]}>
+                  <Ionicons name="cash-outline" size={chromeSize(21)} color={colors.danger} />
+                </View>
+                <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
+                  {t('home.debts')}
+                </Text>
+                {debts.length > 0 && (
+                  <View style={styles.quickActionSheetBadge}>
+                    <Text style={styles.quickActionSheetBadgeText}>{debts.length > 99 ? '99+' : debts.length}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.quickActionSheetButton, styles.quickActionSheetButtonWide]}
+                onPress={() => openFromQuickActions(() => setShowTransfersSheet(true))}
+                activeOpacity={0.72}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('home.transfers')}: ${pendingTransferCount}`}
+              >
+                <View style={[styles.quickActionSheetIcon, styles.quickActionSheetTransferIcon]}>
+                  <Ionicons name="swap-horizontal-outline" size={chromeSize(21)} color={colors.successText} />
+                </View>
+                <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
+                  {t('home.transfers')}
+                </Text>
+                {pendingTransferCount > 0 && (
+                  <View style={[styles.quickActionSheetBadge, styles.quickActionSheetTransferBadge]}>
+                    <Text style={styles.quickActionSheetBadgeText}>
+                      {pendingTransferCount > 99 ? '99+' : pendingTransferCount}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </ModalOverlay>
 
       <UndoBanner queue={undoQueue} selectedDay={selectedDay} onUndo={handleUndoMarkDone} />
 
@@ -1726,6 +1987,74 @@ const getStyles = (
     alignItems: 'stretch',
     gap: s(8),
   },
+  actionCompactRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: s(8),
+  },
+  actionCompactButton: {
+    minHeight: s(46),
+    borderRadius: s(12),
+    borderWidth: 1,
+    paddingHorizontal: s(9),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: s(6),
+  },
+  actionCompactRoute: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: colors.successDark,
+    borderColor: colors.success,
+  },
+  actionCompactPrimaryText: {
+    flexShrink: 1,
+    fontSize: s(14),
+    fontWeight: '800',
+    color: colors.textWhite,
+  },
+  actionCompactAi: {
+    width: s(66),
+    backgroundColor: colors.primary,
+    borderColor: colors.primaryDark,
+  },
+  actionCompactAiText: {
+    fontSize: s(13),
+    fontWeight: '800',
+    color: colors.textWhite,
+  },
+  actionCompactMore: {
+    width: s(102),
+    backgroundColor: colors.sectionBackground,
+    borderColor: colors.cardBorder,
+  },
+  actionCompactMoreText: {
+    flexShrink: 1,
+    fontSize: s(12),
+    fontWeight: '800',
+    color: colors.textSecondary,
+  },
+  actionCompactBadge: {
+    position: 'absolute',
+    top: s(-5),
+    right: s(-4),
+    minWidth: s(19),
+    height: s(19),
+    borderRadius: s(10),
+    paddingHorizontal: s(4),
+    backgroundColor: colors.danger,
+    borderWidth: 2,
+    borderColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionCompactBadgeText: {
+    fontSize: s(9),
+    lineHeight: s(11),
+    fontWeight: '900',
+    color: colors.textWhite,
+  },
   actionPrimaryRow: {
     flex: extraWideHeader ? 1.15 : undefined,
     flexDirection: 'row',
@@ -1861,6 +2190,125 @@ const getStyles = (
     fontWeight: '800',
     color: colors.textWhite,
   },
+  quickActionsOverlay: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: 'flex-end',
+  },
+  quickActionsBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  quickActionsSheet: {
+    width: '100%',
+    backgroundColor: colors.card,
+    borderTopLeftRadius: s(24),
+    borderTopRightRadius: s(24),
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: s(16),
+    paddingTop: s(7),
+    paddingBottom: Platform.OS === 'ios' ? s(28) : s(18),
+  },
+  quickActionsHandleButton: {
+    alignSelf: 'center',
+    width: s(68),
+    height: s(24),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionsHandle: {
+    width: s(38),
+    height: s(4),
+    borderRadius: s(2),
+    backgroundColor: colors.cardBorder,
+  },
+  quickActionsHeader: {
+    paddingBottom: s(13),
+    marginBottom: s(10),
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+  },
+  quickActionsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(10),
+  },
+  quickActionsHeaderIcon: {
+    width: s(38),
+    height: s(38),
+    borderRadius: s(12),
+    backgroundColor: colors.primaryLighter,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionsHeaderCopy: {
+    flex: 1,
+    gap: s(2),
+  },
+  quickActionsTitle: {
+    fontSize: s(18),
+    fontWeight: '900',
+    color: colors.textPrimary,
+  },
+  quickActionsSubtitle: {
+    fontSize: s(12),
+    color: colors.textMuted,
+  },
+  quickActionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: s(9),
+  },
+  quickActionSheetButton: {
+    width: '48.5%',
+    minHeight: s(66),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(9),
+    paddingHorizontal: s(10),
+    paddingVertical: s(10),
+    backgroundColor: colors.sectionBackground,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: s(14),
+  },
+  quickActionSheetButtonWide: {
+    width: '100%',
+  },
+  quickActionSheetIcon: {
+    width: s(38),
+    height: s(38),
+    borderRadius: s(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionSheetTransferIcon: {
+    backgroundColor: colors.successLighter,
+  },
+  quickActionSheetLabel: {
+    flex: 1,
+    fontSize: s(13),
+    fontWeight: '800',
+    color: colors.textSecondary,
+  },
+  quickActionSheetBadge: {
+    minWidth: s(22),
+    height: s(22),
+    borderRadius: s(11),
+    paddingHorizontal: s(5),
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionSheetTransferBadge: {
+    backgroundColor: colors.success,
+  },
+  quickActionSheetBadgeText: {
+    fontSize: s(10),
+    fontWeight: '900',
+    color: colors.textWhite,
+  },
   routeSessionBar: {
     width: '100%',
     maxWidth: WIDE_CONTENT_MAX_WIDTH,
@@ -1972,15 +2420,84 @@ const getStyles = (
     maxWidth: WIDE_CONTENT_MAX_WIDTH,
     alignSelf: 'center',
     marginTop: s(10),
-    paddingTop: s(10),
-    borderTopWidth: 1,
-    borderTopColor: colors.sectionBackground,
+    maxHeight: isWide ? s(460) : s(320),
+    backgroundColor: colors.sectionBackground,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: s(14),
+    padding: s(10),
+    overflow: 'hidden',
+  },
+  filtersPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: s(8),
+    marginBottom: s(8),
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+  },
+  filtersPanelTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(7),
+  },
+  filtersPanelTitle: {
+    fontSize: isWide ? s(17) : s(16),
+    fontWeight: '800',
+    color: colors.textPrimary,
+  },
+  filtersActiveBadge: {
+    minWidth: s(22),
+    height: s(22),
+    borderRadius: s(11),
+    paddingHorizontal: s(6),
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filtersActiveBadgeText: {
+    fontSize: s(12),
+    fontWeight: '800',
+    color: colors.textWhite,
+  },
+  filtersScroll: {
+    flexShrink: 1,
+  },
+  filtersScrollContent: {
+    gap: s(8),
+    paddingBottom: s(2),
+  },
+  filterGroup: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: s(12),
+    padding: s(10),
+  },
+  filterGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(6),
+    marginBottom: s(8),
   },
   filterSectionTitle: {
     fontSize: isWide ? s(14) : s(13),
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.textHint,
-    marginBottom: s(6),
+  },
+  filterGroupCountBadge: {
+    minWidth: s(20),
+    height: s(20),
+    paddingHorizontal: s(5),
+    borderRadius: s(10),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.sectionBackground,
+  },
+  filterGroupCountText: {
+    fontSize: s(11),
+    fontWeight: '800',
+    color: colors.textMuted,
   },
   filterChipsRow: {
     flexDirection: 'row',
@@ -1993,7 +2510,7 @@ const getStyles = (
     paddingVertical: isWide ? s(8) : s(6),
     borderRadius: s(20),
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: colors.cardBorder,
   },
   filterChipActive: {
     backgroundColor: colors.primaryLight,

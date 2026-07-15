@@ -37,53 +37,55 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1 
   if (!hasAny) return null;
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.container}
-      contentContainerStyle={styles.content}
-    >
-      {products.map((p) => {
-        if (totals[p.id] <= 0) return null;
-        const isSoda = p.id === 'soda';
-        // Soda is delivered by the crate (6 sifones), so the crate count is the
-        // number actually loaded onto the truck — show it big, sifones in parens.
-        const bigValue = isSoda ? Math.ceil(totals[p.id] / 6) : totals[p.id];
-        const bigLabel = isSoda ? t('productCounter.crate') : p.short;
-        return (
-          <View key={p.id} style={styles.item}>
-            <Text style={styles.qty}>{bigValue}</Text>
-            <Text style={styles.label}>{bigLabel}</Text>
-            {isSoda && (
-              <Text style={styles.crateLabel}>({totals[p.id]} {p.short})</Text>
-            )}
-          </View>
-        );
-      })}
-    </ScrollView>
+    <View style={styles.wrapper}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.container}
+        contentContainerStyle={styles.content}
+      >
+        {products.map((p) => {
+          if (totals[p.id] <= 0) return null;
+          const isSoda = p.id === 'soda';
+          // Soda is delivered by the crate (6 sifones), so the crate count is the
+          // number actually loaded onto the truck — show it big, sifones in parens.
+          const bigValue = isSoda ? Math.ceil(totals[p.id] / 6) : totals[p.id];
+          const bigLabel = isSoda ? t('productCounter.crate') : p.short;
+          return (
+            <View key={p.id} style={styles.item}>
+              <Text style={styles.qty}>{bigValue}</Text>
+              <Text style={styles.label}>{bigLabel}</Text>
+              {isSoda && (
+                <Text style={styles.crateLabel}>({totals[p.id]} {p.short})</Text>
+              )}
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
   );
 };
 
 const getStyles = (colors: ThemeColors, scale: number = 1) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
-  container: {
-    flexGrow: 0,
-    flexShrink: 0,
+  wrapper: {
     backgroundColor: colors.primaryLighter,
     borderBottomWidth: 1,
     borderBottomColor: colors.primaryLight,
   },
-  content: {
+  container: {
     width: '100%',
     maxWidth: WIDE_CONTENT_MAX_WIDTH,
     alignSelf: 'center',
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  content: {
     paddingHorizontal: s(14),
     paddingVertical: s(10),
     gap: s(10),
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    flexGrow: 1,
   },
   item: {
     flexDirection: 'row',

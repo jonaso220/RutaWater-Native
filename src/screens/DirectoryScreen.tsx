@@ -30,6 +30,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { FlashList } from '@shopify/flash-list';
 import { useLayout } from '../hooks/useLayout';
+import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 
 const DirectoryScreen = () => {
   const { colors } = useTheme();
@@ -264,6 +265,7 @@ const DirectoryScreen = () => {
       <View style={{ flex: 1 }}>
       {/* Search bar + Import */}
       <View style={styles.searchContainer}>
+        <View style={styles.searchContainerInner}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
             <TextInput
@@ -352,6 +354,7 @@ const DirectoryScreen = () => {
             );
           })}
         </ScrollView>
+        </View>
       </View>
 
       <View style={styles.countRow}>
@@ -365,7 +368,7 @@ const DirectoryScreen = () => {
           pipeline gets stuck on []→populated transitions, causing the list
           to look empty until the user types. */}
       {clientsLoading && clients.length === 0 ? (
-        <View>
+        <View style={styles.skeletonList}>
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <SkeletonCard key={i} />
           ))}
@@ -463,6 +466,11 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
   },
+  searchContainerInner: {
+    width: '100%',
+    maxWidth: WIDE_CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
+  },
   searchInput: {
     backgroundColor: colors.sectionBackground,
     borderRadius: s(12),
@@ -528,6 +536,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     backgroundColor: 'rgba(255,255,255,0.25)',
   },
   countRow: {
+    width: '100%',
+    maxWidth: WIDE_CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
     flexDirection: 'row',
     justifyContent: 'flex-end',
     paddingHorizontal: s(12),
@@ -544,8 +555,16 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     overflow: 'hidden',
   },
   listContent: {
+    width: '100%',
+    maxWidth: WIDE_CONTENT_MAX_WIDTH + 24,
+    alignSelf: 'center',
     padding: s(12),
     paddingBottom: 100,
+  },
+  skeletonList: {
+    width: '100%',
+    maxWidth: WIDE_CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
   },
   importBtn: {
     backgroundColor: colors.primary,

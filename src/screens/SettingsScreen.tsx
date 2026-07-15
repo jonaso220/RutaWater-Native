@@ -22,6 +22,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
+import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import { useSubscriptionStore } from '../stores/subscriptionStore';
 import { useGroupManagement } from '../hooks/useGroupManagement';
 import { useDataExport } from '../hooks/useDataExport';
@@ -686,9 +687,10 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isTablet: boolean = f
   groupModalCloseText: { fontSize: s(18), color: colors.textMuted },
   groupModalBody: { padding: s(16) },
   contentContainer: {
-    maxWidth: 800,
+    maxWidth: WIDE_CONTENT_MAX_WIDTH,
     width: '100%' as const,
     alignSelf: 'center' as const,
+    paddingBottom: s(32),
   },
   section: {
     paddingHorizontal: s(16),

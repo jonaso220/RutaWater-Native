@@ -10,6 +10,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { useTranslation } from 'react-i18next';
+import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 
 const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
 
@@ -50,7 +51,8 @@ const DirectoryClientCard = ({
 }: Props) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
-  const { fontScale } = useLayout();
+  const { fontScale, width } = useLayout();
+  const wideLayout = width >= 900;
   const styles = React.useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
 
   const sendWhatsApp = (client: Client) => {
@@ -147,7 +149,8 @@ const DirectoryClientCard = ({
 
   return (
     <View style={[styles.card, debtTotal > 0 && styles.cardDebt]}>
-      <View style={styles.cardContent}>
+      <View style={[styles.cardContent, wideLayout && styles.cardContentWide]}>
+        <View style={styles.infoColumn}>
         {/* HEADER: Avatar + Name + Phone */}
         <View style={styles.headerRow}>
           <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
@@ -228,10 +231,11 @@ const DirectoryClientCard = ({
             </TouchableOpacity>
           )}
         </View>
+        </View>
 
         {/* ACTION BUTTONS */}
-        <View style={styles.actionsRow}>
-          <View style={styles.actionButtonsGroup}>
+        <View style={[styles.actionsRow, wideLayout && styles.actionsRowWide]}>
+          <View style={[styles.actionButtonsGroup, wideLayout && styles.actionButtonsGroupWide]}>
             {item.phone ? (
               <TouchableOpacity onPress={() => callClient(item)} style={styles.actionBtn}>
                 <Text style={styles.actionBtnEmoji}>📞</Text>
@@ -254,9 +258,8 @@ const DirectoryClientCard = ({
               </TouchableOpacity>
             )}
           </View>
-          <View style={{ flex: 1 }} />
           <TouchableOpacity
-            style={styles.scheduleButton}
+            style={[styles.scheduleButton, wideLayout && styles.scheduleButtonWide]}
             onPress={() => onSchedule(item)}
             activeOpacity={0.7}
           >
@@ -285,7 +288,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     elevation: 2,
     borderLeftWidth: 4,
     borderLeftColor: 'transparent',
-    maxWidth: 800,
+    maxWidth: WIDE_CONTENT_MAX_WIDTH,
     width: '100%',
     alignSelf: 'center',
   },
@@ -294,6 +297,16 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     borderLeftColor: colors.danger,
   },
   cardContent: {
+    gap: s(6),
+  },
+  cardContentWide: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: s(14),
+  },
+  infoColumn: {
+    flex: 1,
+    minWidth: 0,
     gap: s(6),
   },
   headerRow: {
@@ -439,11 +452,24 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: s(8),
     marginTop: s(8),
     paddingTop: s(8),
     borderTopWidth: 1,
     borderTopColor: colors.sectionBackground,
+  },
+  actionsRowWide: {
+    width: s(300),
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    justifyContent: 'center',
+    marginTop: 0,
+    paddingTop: 0,
+    paddingLeft: s(14),
+    borderTopWidth: 0,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.sectionBackground,
   },
   actionButtonsGroup: {
     flexDirection: 'row',
@@ -453,6 +479,10 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     borderRadius: s(10),
     paddingHorizontal: s(6),
     paddingVertical: s(3),
+  },
+  actionButtonsGroupWide: {
+    width: '100%',
+    justifyContent: 'space-between',
   },
   actionBtn: {
     width: s(38),
@@ -469,6 +499,11 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     paddingHorizontal: s(14),
     paddingVertical: s(8),
     borderRadius: s(8),
+  },
+  scheduleButtonWide: {
+    width: '100%',
+    alignItems: 'center',
+    paddingVertical: s(10),
   },
   scheduleButtonText: {
     fontSize: s(14),

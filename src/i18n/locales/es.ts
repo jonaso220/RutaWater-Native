@@ -120,7 +120,7 @@ export default {
     completed: 'Completados',
     debts: 'Deudas',
     clientCompleted: '{{name}} completado',
-    tomorrow: 'Manana',
+    tomorrow: 'Mañana',
     today: 'Hoy',
     filterType: 'Tipo',
     filterOnceStarred: 'Pedidos/Fav',

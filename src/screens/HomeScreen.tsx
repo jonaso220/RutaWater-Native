@@ -56,6 +56,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { Frequency } from '../constants/products';
+import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
   RouteMapStop,
@@ -199,9 +200,15 @@ const HomeScreen = () => {
   const numColumns = 1;
   // Gate the card's horizontal (wide) layout: only on genuinely large screens.
   const wideCard = screenWidth >= 900;
+  // The single-row command deck needs desktop-class width. iPad portrait is
+  // considered wide for typography, but not wide enough to keep every label.
+  const extraWideHeader = screenWidth >= 1100;
   // Chrome (day tabs, product counter, action bar, search) scales with the
   // global fontScale, which now ramps up on wide screens (see useLayout).
-  const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
+  const styles = useMemo(
+    () => getStyles(colors, fontScale, isWide, extraWideHeader),
+    [colors, fontScale, isWide, extraWideHeader],
+  );
   const chromeSize = (value: number) => Math.round(value * fontScale);
 
   const navigation = useNavigation<any>();
@@ -1674,7 +1681,12 @@ const HomeScreen = () => {
   );
 };
 
-const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = false) => {
+const getStyles = (
+  colors: ThemeColors,
+  scale: number = 1,
+  isWide: boolean = false,
+  extraWideHeader: boolean = false,
+) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
   container: {
@@ -1708,11 +1720,14 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
   },
   actionPanelContent: {
     width: '100%',
-    maxWidth: 1000,
+    maxWidth: WIDE_CONTENT_MAX_WIDTH,
     alignSelf: 'center',
+    flexDirection: extraWideHeader ? 'row' : 'column',
+    alignItems: 'stretch',
     gap: s(8),
   },
   actionPrimaryRow: {
+    flex: extraWideHeader ? 1.15 : undefined,
     flexDirection: 'row',
     gap: s(8),
   },
@@ -1744,13 +1759,14 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     letterSpacing: 0.1,
   },
   actionQuickRow: {
+    flex: extraWideHeader ? 1 : undefined,
     flexDirection: 'row',
     gap: s(7),
   },
   actionQuickButton: {
     flex: 1,
     minWidth: 0,
-    minHeight: isWide ? s(62) : s(55),
+    minHeight: isWide ? s(52) : s(55),
     backgroundColor: colors.sectionBackground,
     borderWidth: 1,
     borderColor: colors.cardBorder,
@@ -1762,8 +1778,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     gap: s(3),
   },
   actionQuickIcon: {
-    width: isWide ? s(30) : s(27),
-    height: isWide ? s(30) : s(27),
+    width: isWide ? s(26) : s(27),
+    height: isWide ? s(26) : s(27),
     borderRadius: s(9),
     alignItems: 'center',
     justifyContent: 'center',
@@ -1809,6 +1825,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     color: colors.textWhite,
   },
   actionTransferNotice: {
+    flex: extraWideHeader ? 0.58 : undefined,
+    minWidth: extraWideHeader ? s(180) : undefined,
     minHeight: s(34),
     backgroundColor: colors.successLighter,
     borderWidth: 1,
@@ -1844,6 +1862,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     color: colors.textWhite,
   },
   routeSessionBar: {
+    width: '100%',
+    maxWidth: WIDE_CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
     backgroundColor: colors.successLighter,
     borderBottomWidth: 1,
     borderBottomColor: colors.successLight,
@@ -1893,6 +1914,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     paddingVertical: 8,
   },
   searchRow: {
+    width: '100%',
+    maxWidth: WIDE_CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
     flexDirection: 'row',
     gap: s(8),
     alignItems: 'center',
@@ -1944,6 +1968,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     color: colors.primary,
   },
   filtersPanel: {
+    width: '100%',
+    maxWidth: WIDE_CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
     marginTop: s(10),
     paddingTop: s(10),
     borderTopWidth: 1,
@@ -1981,6 +2008,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     color: colors.primaryText,
   },
   listContent: {
+    width: '100%',
+    maxWidth: WIDE_CONTENT_MAX_WIDTH + 24,
+    alignSelf: 'center',
     padding: 12,
     paddingBottom: 100,
   },

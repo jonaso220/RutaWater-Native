@@ -5,6 +5,7 @@ import { Client } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 
 interface ProductCounterProps {
   clients: Client[];
@@ -74,11 +75,14 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     borderBottomColor: colors.primaryLight,
   },
   content: {
+    width: '100%',
+    maxWidth: WIDE_CONTENT_MAX_WIDTH,
+    alignSelf: 'center',
     paddingHorizontal: s(14),
     paddingVertical: s(10),
     gap: s(10),
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     flexGrow: 1,
   },
   item: {

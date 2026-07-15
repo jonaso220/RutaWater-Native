@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ALL_DAYS, getDayLabel } from '../constants/products';
 import { getTodayDayName } from '../utils/helpers';
 import { ThemeColors } from '../theme/colors';
+import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 
 interface DaySelectorProps {
   selectedDay: string;
@@ -90,10 +91,13 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
       borderBottomColor: colors.cardBorder,
     },
     daySelectorContent: {
+      width: '100%',
+      maxWidth: WIDE_CONTENT_MAX_WIDTH,
+      alignSelf: 'center',
       paddingHorizontal: s(12),
       paddingVertical: s(10),
       alignItems: 'center',
-      justifyContent: 'center',
+      justifyContent: 'flex-start',
       flexGrow: 1,
     },
     dayChip: {

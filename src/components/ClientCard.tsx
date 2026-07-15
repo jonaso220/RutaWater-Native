@@ -13,6 +13,7 @@ import PromptModal from './PromptModal';
 import ModalOverlay from './ModalOverlay';
 import { ProductIcon } from './ProductIcon';
 import { getFreqLabel } from '../constants/products';
+import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
 
@@ -983,7 +984,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     // buttons move into a right-hand panel (rightPanel) instead of a bottom bar,
     // which also keeps the card short ("más fina").
     cardWide: {
-      maxWidth: 1280,
+      maxWidth: WIDE_CONTENT_MAX_WIDTH,
     },
     cardBodyWide: {
       paddingVertical: s(12),

@@ -30,9 +30,11 @@ service cloud.firestore {
     }
 
     // Borrar un cliente: usuario solo (sin grupo), admin del grupo (Reparto 1) o
-    // dueño del reparto. Un miembro NO puede borrar.
+    // dueño del reparto. Un miembro NO puede borrar clientes reales, pero sí
+    // notas dentro de su alcance: completar una nota puntual la elimina.
     function canDeleteClient(data) {
       return signedIn() && (
+        (data.isNote == true && inScope(data)) ||
         (data.userId == uid() && data.groupId == null) ||
         (data.groupId != null && data.groupId == myGroupId() && myRole() == 'admin') ||
         (data.groupId != null && data.groupId != myGroupId()

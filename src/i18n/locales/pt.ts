@@ -489,6 +489,10 @@ export default {
     manageAlarm: 'Gerenciar lembrete',
     manageFamily: 'Gerenciar familiares',
     editClient: 'Editar cliente',
+    addProducts: 'Adicionar produtos',
+    editProducts: 'Editar produtos',
+    addNote: 'Adicionar nota',
+    editNote: 'Editar nota',
     addFavorite: 'Adicionar aos favoritos',
     removeFavorite: 'Remover dos favoritos',
     position: 'Posição {{position}}. Toque para alterar',
@@ -496,6 +500,20 @@ export default {
     whatsapp: 'Abrir WhatsApp',
     onceLabel: 'Uma vez',
     onceWithDate: 'Uma vez: {{date}}',
+  },
+
+  clientProductsModal: {
+    save: 'Salvar produtos',
+    saveError: 'Não foi possível salvar os produtos.',
+  },
+
+  clientNotesModal: {
+    eyebrow: 'Nota do cliente',
+    label: 'Nota',
+    placeholder: 'Escreva uma nota para este cliente...',
+    clear: 'Limpar nota',
+    save: 'Salvar nota',
+    saveError: 'Não foi possível salvar a nota.',
   },
 
   // Schedule Modal

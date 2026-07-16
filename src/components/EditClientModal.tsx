@@ -45,6 +45,7 @@ interface EditClientModalProps {
   // point at that card's actual pending occurrence (also for multi-day clients).
   scheduledDay?: string;
   showClientInfo?: boolean;
+  hideOrderDetails?: boolean;
 }
 
 const EditClientModal: React.FC<EditClientModalProps> = ({
@@ -57,6 +58,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   onRemoveFromDay,
   scheduledDay,
   showClientInfo = false,
+  hideOrderDetails = false,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
@@ -171,15 +173,15 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       return;
     }
     setSaving(true);
-    const cleanProducts: Record<string, number> = {};
-    Object.entries(products).forEach(([key, val]) => {
-      if (val > 0) cleanProducts[key] = val;
-    });
-    const data: Partial<Client> = {
-      products: cleanProducts,
-      notes,
-      freq,
-    };
+    const data: Partial<Client> = { freq };
+    if (!hideOrderDetails) {
+      const cleanProducts: Record<string, number> = {};
+      Object.entries(products).forEach(([key, val]) => {
+        if (val > 0) cleanProducts[key] = val;
+      });
+      data.products = cleanProducts;
+      data.notes = notes;
+    }
     const dateChanged = needsDate && (startDate || '') !== (client.specificDate || '');
     const scheduleChanged = freq !== client.freq || dateChanged;
     const lastDelivery = getLastVisitDate(client);
@@ -478,55 +480,59 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
               </>
             )}
 
-            {/* Products */}
-            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('editModal.products')}</Text>
-            {catalogProducts.map((p) => (
-              <View key={p.id} style={styles.productRow}>
-                <ProductLabel
-                  value={p.emoji}
-                  label={p.label}
-                  size={Math.round(18 * fontScale)}
-                  style={styles.productLabel}
-                />
-                <View style={styles.qtyControls}>
-                  <TouchableOpacity
-                    onPress={() => adjustQty(p.id, -1)}
-                    style={styles.qtyBtn}
-                  >
-                    <Text style={styles.qtyBtnText}>-</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.qtyValue}>{products[p.id] || 0}</Text>
-                  <TouchableOpacity
-                    onPress={() => adjustQty(p.id, 1)}
-                    style={[styles.qtyBtn, styles.qtyBtnPlus]}
-                  >
-                    <Text style={[styles.qtyBtnText, styles.qtyBtnPlusText]}>+</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
+            {!hideOrderDetails && (
+              <>
+                {/* Products */}
+                <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('editModal.products')}</Text>
+                {catalogProducts.map((p) => (
+                  <View key={p.id} style={styles.productRow}>
+                    <ProductLabel
+                      value={p.emoji}
+                      label={p.label}
+                      size={Math.round(18 * fontScale)}
+                      style={styles.productLabel}
+                    />
+                    <View style={styles.qtyControls}>
+                      <TouchableOpacity
+                        onPress={() => adjustQty(p.id, -1)}
+                        style={styles.qtyBtn}
+                      >
+                        <Text style={styles.qtyBtnText}>-</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.qtyValue}>{products[p.id] || 0}</Text>
+                      <TouchableOpacity
+                        onPress={() => adjustQty(p.id, 1)}
+                        style={[styles.qtyBtn, styles.qtyBtnPlus]}
+                      >
+                        <Text style={[styles.qtyBtnText, styles.qtyBtnPlusText]}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
 
-            {/* Notes */}
-            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('editModal.notes')}</Text>
-            <View style={[styles.notesInput, { position: 'relative' }]}>
-              <TextInput
-                style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0, textAlignVertical: 'top', minHeight: 70 }}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder={t('editModal.notesPlaceholder')}
-                placeholderTextColor={colors.textHint}
-                multiline
-                numberOfLines={3}
-              />
-              {notes.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => setNotes('')}
-                  style={{ position: 'absolute', top: 4, right: 4, padding: 10 }}
-                >
-                  <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+                {/* Notes */}
+                <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('editModal.notes')}</Text>
+                <View style={[styles.notesInput, { position: 'relative' }]}>
+                  <TextInput
+                    style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0, textAlignVertical: 'top', minHeight: 70 }}
+                    value={notes}
+                    onChangeText={setNotes}
+                    placeholder={t('editModal.notesPlaceholder')}
+                    placeholderTextColor={colors.textHint}
+                    multiline
+                    numberOfLines={3}
+                  />
+                  {notes.length > 0 && (
+                    <TouchableOpacity
+                      onPress={() => setNotes('')}
+                      style={{ position: 'absolute', top: 4, right: 4, padding: 10 }}
+                    >
+                      <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </>
+            )}
 
             {/* Frequency: inline when editing client info, otherwise a link to sub-modal */}
             {showClientInfo ? (

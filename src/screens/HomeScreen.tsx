@@ -40,6 +40,8 @@ import AlarmPicker from '../components/AlarmPicker';
 import UndoBanner from '../components/UndoBanner';
 import { useUndoQueue } from '../hooks/useUndoQueue';
 import EditClientModal from '../components/EditClientModal';
+import ClientProductsModal from '../components/ClientProductsModal';
+import ClientNotesModal from '../components/ClientNotesModal';
 import DebtModal from '../components/DebtModal';
 import ProductCounter from '../components/ProductCounter';
 import NoteModal from '../components/NoteModal';
@@ -123,6 +125,8 @@ interface ClientItemProps {
   selectedDay: string;
   onMarkDone: (client: Client) => void;
   onEdit: (client: Client) => void;
+  onEditProducts: (client: Client) => void;
+  onEditNotes: (client: Client) => void;
   onDelete: (client: Client) => void;
   onDebt: (client: Client) => void;
   onToggleStar: (client: Client) => void;
@@ -145,6 +149,8 @@ const ClientItem = React.memo<ClientItemProps>(({
   selectedDay,
   onMarkDone,
   onEdit,
+  onEditProducts,
+  onEditNotes,
   onDelete,
   onDebt,
   onToggleStar,
@@ -155,6 +161,8 @@ const ClientItem = React.memo<ClientItemProps>(({
 }) => {
   const handleMarkDone = useCallback(() => onMarkDone(client), [onMarkDone, client]);
   const handleEdit = useCallback(() => onEdit(client), [onEdit, client]);
+  const handleEditProducts = useCallback(() => onEditProducts(client), [onEditProducts, client]);
+  const handleEditNotes = useCallback(() => onEditNotes(client), [onEditNotes, client]);
   const handleDelete = useCallback(() => onDelete(client), [onDelete, client]);
   const handleDebt = useCallback(() => onDebt(client), [onDebt, client]);
   const handleToggleStar = useCallback(() => onToggleStar(client), [onToggleStar, client]);
@@ -176,6 +184,8 @@ const ClientItem = React.memo<ClientItemProps>(({
       hasRelationships={hasRelationships}
       onMarkDone={handleMarkDone}
       onEdit={handleEdit}
+      onEditProducts={handleEditProducts}
+      onEditNotes={handleEditNotes}
       onDelete={handleDelete}
       onDebt={handleDebt}
       onToggleStar={handleToggleStar}
@@ -257,6 +267,8 @@ const HomeScreen = () => {
   const [, startTransition] = useTransition();
   const [showCompleted, setShowCompleted] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [productsClient, setProductsClient] = useState<Client | null>(null);
+  const [notesClient, setNotesClient] = useState<Client | null>(null);
   const [debtClient, setDebtClient] = useState<Client | null>(null);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showTransfersSheet, setShowTransfersSheet] = useState(false);
@@ -881,6 +893,8 @@ const HomeScreen = () => {
 
   // Stable callbacks that accept client as parameter (won't change on day switch)
   const handleEditCb = useCallback((client: Client) => setEditingClient(client), []);
+  const handleEditProductsCb = useCallback((client: Client) => setProductsClient(client), []);
+  const handleEditNotesCb = useCallback((client: Client) => setNotesClient(client), []);
 
   const handleSaveNote = useCallback(
     (notes: string, date: string, freq: Exclude<Frequency, 'on_demand'>) => {
@@ -907,6 +921,8 @@ const HomeScreen = () => {
   const handlersRef = useRef({
     handleMarkDone,
     handleEditCb,
+    handleEditProductsCb,
+    handleEditNotesCb,
     handleDelete,
     handleDebtCb,
     handleToggleStar,
@@ -918,6 +934,8 @@ const HomeScreen = () => {
   handlersRef.current = {
     handleMarkDone,
     handleEditCb,
+    handleEditProductsCb,
+    handleEditNotesCb,
     handleDelete,
     handleDebtCb,
     handleToggleStar,
@@ -942,6 +960,8 @@ const HomeScreen = () => {
     () => ({
       onMarkDone: (c: Client) => handlersRef.current.handleMarkDone(c),
       onEdit: (c: Client) => handlersRef.current.handleEditCb(c),
+      onEditProducts: (c: Client) => handlersRef.current.handleEditProductsCb(c),
+      onEditNotes: (c: Client) => handlersRef.current.handleEditNotesCb(c),
       onDelete: (c: Client) => handlersRef.current.handleDelete(c),
       onDebt: (c: Client) => handlersRef.current.handleDebtCb(c),
       onToggleStar: (c: Client) => handlersRef.current.handleToggleStar(c),
@@ -1010,6 +1030,8 @@ const HomeScreen = () => {
           selectedDay={deferredDay}
           onMarkDone={stableHandlers.onMarkDone}
           onEdit={stableHandlers.onEdit}
+          onEditProducts={stableHandlers.onEditProducts}
+          onEditNotes={stableHandlers.onEditNotes}
           onDelete={stableHandlers.onDelete}
           onDebt={stableHandlers.onDebt}
           onToggleStar={stableHandlers.onToggleStar}
@@ -1107,6 +1129,8 @@ const HomeScreen = () => {
                 selectedDay={deferredDay}
                 onMarkDone={stableHandlers.onMarkDone}
                 onEdit={stableHandlers.onEdit}
+                onEditProducts={stableHandlers.onEditProducts}
+                onEditNotes={stableHandlers.onEditNotes}
                 onDelete={stableHandlers.onDelete}
                 onDebt={stableHandlers.onDebt}
                 onToggleStar={stableHandlers.onToggleStar}
@@ -1831,6 +1855,21 @@ const HomeScreen = () => {
 
       <UndoBanner queue={undoQueue} selectedDay={selectedDay} onUndo={handleUndoMarkDone} />
 
+      {/* Focused order-detail editors opened directly from each card. */}
+      <ClientProductsModal
+        visible={!!productsClient}
+        client={productsClient}
+        onSave={updateClient}
+        onClose={() => setProductsClient(null)}
+      />
+
+      <ClientNotesModal
+        visible={!!notesClient}
+        client={notesClient}
+        onSave={updateClient}
+        onClose={() => setNotesClient(null)}
+      />
+
       {/* Edit Client Modal */}
       <EditClientModal
         visible={!!editingClient && !editingClient.isNote}
@@ -1840,6 +1879,8 @@ const HomeScreen = () => {
         onClose={() => setEditingClient(null)}
         onRemoveFromDay={handleDelete}
         scheduledDay={deferredDay}
+        showClientInfo
+        hideOrderDetails
       />
 
       {/* Debt Modal */}

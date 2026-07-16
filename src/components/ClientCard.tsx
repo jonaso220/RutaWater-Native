@@ -50,6 +50,8 @@ interface ClientCardProps {
   enCaminoMessage?: string;
   onMarkDone: () => void;
   onEdit: () => void;
+  onEditProducts?: () => void;
+  onEditNotes?: () => void;
   onDelete: () => void;
   onDebt?: () => void;
   onToggleStar?: () => void;
@@ -70,6 +72,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
   hasRelationships,
   onMarkDone,
   onEdit,
+  onEditProducts,
+  onEditNotes,
   onDelete,
   onDebt,
   onToggleStar,
@@ -432,24 +436,74 @@ const ClientCard: React.FC<ClientCardProps> = ({
           )
         ) : null}
 
-        {/* Products */}
+        {/* Products: the visible order is also its quickest edit affordance. */}
         {productList.length > 0 ? (
-          <View style={styles.productsRow}>
-            {productList.map((p) => (
-              <View key={p.id} style={styles.productChip}>
-                <ProductIcon value={p.emoji} size={s(15)} style={styles.productEmoji} />
-                <Text style={styles.productQty}>{p.qty}</Text>
-                <Text style={styles.productShort}>{p.short}</Text>
-              </View>
-            ))}
-          </View>
+          <TouchableOpacity
+            style={styles.editableProductsRow}
+            onPress={onEditProducts || onEdit}
+            activeOpacity={0.65}
+            accessibilityRole="button"
+            accessibilityLabel={t('clientCard.editProducts')}
+          >
+            <View style={styles.productsRow}>
+              {productList.map((p) => (
+                <View key={p.id} style={styles.productChip}>
+                  <ProductIcon value={p.emoji} size={s(15)} style={styles.productEmoji} />
+                  <Text style={styles.productQty}>{p.qty}</Text>
+                  <Text style={styles.productShort}>{p.short}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.quickEditIcon}>
+              <Ionicons name="pencil" size={s(14)} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
         ) : null}
 
         {/* Notes */}
         {client.notes ? (
-          <View style={styles.notesRow}>
+          <TouchableOpacity
+            style={styles.notesRow}
+            onPress={onEditNotes || onEdit}
+            activeOpacity={0.65}
+            accessibilityRole="button"
+            accessibilityLabel={t('clientCard.editNote')}
+          >
             <Ionicons name="document-text" size={s(14)} color={colors.warningDark} />
             <Text style={styles.notesText} numberOfLines={3}>{parseTextWithLinks(client.notes, colors.primary)}</Text>
+            <View style={styles.quickEditIconCompact}>
+              <Ionicons name="pencil" size={s(13)} color={colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
+
+        {/* Missing details remain discoverable without crowding populated cards. */}
+        {(productList.length === 0 || !client.notes) ? (
+          <View style={styles.quickAddRow}>
+            {productList.length === 0 && (
+              <TouchableOpacity
+                style={styles.quickAddButton}
+                onPress={onEditProducts || onEdit}
+                activeOpacity={0.65}
+                accessibilityRole="button"
+                accessibilityLabel={t('clientCard.addProducts')}
+              >
+                <Ionicons name="cube-outline" size={s(15)} color={colors.primary} />
+                <Text style={styles.quickAddText}>{t('clientCard.addProducts')}</Text>
+              </TouchableOpacity>
+            )}
+            {!client.notes && (
+              <TouchableOpacity
+                style={styles.quickAddButton}
+                onPress={onEditNotes || onEdit}
+                activeOpacity={0.65}
+                accessibilityRole="button"
+                accessibilityLabel={t('clientCard.addNote')}
+              >
+                <Ionicons name="document-text-outline" size={s(15)} color={colors.primary} />
+                <Text style={styles.quickAddText}>{t('clientCard.addNote')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : null}
 
@@ -741,11 +795,17 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.textPrimary,
       flex: 1,
     },
+    editableProductsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: s(8),
+      marginTop: s(4),
+    },
     productsRow: {
+      flex: 1,
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: s(6),
-      marginTop: s(4),
     },
     productChip: {
       flexDirection: 'row',
@@ -788,6 +848,48 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.textSecondary,
       fontWeight: '500',
       lineHeight: s(18),
+    },
+    quickEditIcon: {
+      width: s(28),
+      height: s(28),
+      borderRadius: s(9),
+      backgroundColor: colors.sectionBackground,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    quickEditIconCompact: {
+      width: s(24),
+      height: s(24),
+      borderRadius: s(8),
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: s(-3),
+      marginRight: s(-3),
+    },
+    quickAddRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: s(7),
+      marginTop: s(3),
+    },
+    quickAddButton: {
+      minHeight: s(34),
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: s(5),
+      paddingHorizontal: s(10),
+      borderRadius: s(10),
+      backgroundColor: colors.sectionBackground,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: colors.cardBorder,
+    },
+    quickAddText: {
+      fontSize: s(12),
+      fontWeight: '700',
+      color: colors.primary,
     },
     freqRow: {
       marginTop: s(2),

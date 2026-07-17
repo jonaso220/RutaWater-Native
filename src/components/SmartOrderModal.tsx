@@ -154,7 +154,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
     const r = await parse(text.trim());
     if (r) {
       // La preview y el guardado deben usar exactamente el mismo link válido.
-      // Si Claude lo omitió o añadió puntuación, recuperarlo del texto pegado.
+      // Si el modelo lo omitió o añadió puntuación, recuperarlo del texto pegado.
       if (r.tool === 'create_new_client' || r.tool === 'update_client_data') {
         const mapsLink = normalizeGoogleMapsLink(r.input.mapsLink, text);
         setResult({ ...r, input: { ...r.input, mapsLink } } as ParseResult);
@@ -213,7 +213,11 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        Alert.alert(t('done'), t('smartOrder.clientCreated', { name: i.name }));
+        const createdWithOrder = i.freq !== 'on_demand' && Boolean(i.visitDay || i.specificDate);
+        Alert.alert(
+          t('done'),
+          t(createdWithOrder ? 'smartOrder.clientAndOrderCreated' : 'smartOrder.clientCreated', { name: i.name }),
+        );
         handleClose();
         return;
       }
@@ -436,7 +440,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         return;
       }
 
-      // report_not_found nunca llega acá (no hay botón de confirmar)
+      // Los resultados informativos nunca llegan acá (no tienen botón de confirmar).
     } catch (e: any) {
       Alert.alert(t('error'), e?.message || t('smartOrder.saveFailed'));
     } finally {
@@ -538,7 +542,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           </ScrollView>
 
           {/* Footer with confirm/cancel */}
-          {result && result.tool !== 'report_not_found' && (
+          {result && result.tool !== 'report_not_found' && result.tool !== 'report_no_action' && (
             <View style={styles.footer}>
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setResult(null)} disabled={saving}>
                 <Text style={styles.secondaryBtnText}>{t('back')}</Text>
@@ -560,7 +564,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
             </View>
           )}
 
-          {result && result.tool === 'report_not_found' && (
+          {result && (result.tool === 'report_not_found' || result.tool === 'report_no_action') && (
             <View style={styles.footer}>
               <TouchableOpacity style={[styles.confirmBtn, { flex: 1 }]} onPress={handleClose}>
                 <Text style={styles.confirmBtnText}>{t('smartOrder.understoodBtn')}</Text>
@@ -584,6 +588,18 @@ interface PreviewProps {
 
 const ResultPreview: React.FC<PreviewProps> = ({ result, sourceText, colors, styles }) => {
   const { t } = useTranslation();
+  if (result.tool === 'report_no_action') {
+    return (
+      <View style={[styles.resultBox, { borderColor: colors.warning }]}>
+        <View style={styles.resultHeader}>
+          <Ionicons name="information-circle" size={20} color={colors.warning} />
+          <Text style={styles.resultTitle}>{t('smartOrder.noActionTitle')}</Text>
+        </View>
+        <Text style={styles.resultText}>{result.input.message}</Text>
+      </View>
+    );
+  }
+
   if (result.tool === 'report_not_found') {
     return (
       <View style={[styles.resultBox, { borderColor: colors.warning }]}>

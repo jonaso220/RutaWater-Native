@@ -1,4 +1,5 @@
-const { parseOrder } = require('./_shared/anthropic');
+const crypto = require('crypto');
+const { parseOrder } = require('./_shared/orderParser');
 const { authenticateEvent } = require('./_shared/firebaseAuth');
 
 const MAX_TEXT_LENGTH = 8000;
@@ -23,16 +24,17 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return json(405, { error: 'Method Not Allowed' });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(500, { error: 'Servidor mal configurado: falta ANTHROPIC_API_KEY' });
+  if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+    return json(500, { error: 'Servidor mal configurado: falta una API key de IA' });
   }
 
   // Auth SIEMPRE obligatoria: la condición vieja (env opcional || header
-  // presente) dejaba pasar cualquier request SIN header, exponiendo la
-  // API key de Anthropic a quien conociera la URL. La app manda el token
-  // de Firebase desde la versión 1.36.
+  // presente) dejaba pasar cualquier request SIN header, exponiendo las claves
+  // del proveedor de IA a quien conociera la URL. La app manda el token de
+  // Firebase desde la versión 1.36.
+  let authPayload;
   try {
-    await authenticateEvent(event);
+    authPayload = await authenticateEvent(event);
   } catch (err) {
     return json(401, { error: 'No autorizado.' });
   }
@@ -63,7 +65,14 @@ exports.handler = async (event) => {
   }
 
   try {
-    const result = await parseOrder({ text, clients, todayIso });
+    // OpenAI recomienda un identificador estable pero no identificable por
+    // usuario. Nunca enviamos el uid de Firebase en claro.
+    const safetyIdentifier = `rutawater_${crypto
+      .createHash('sha256')
+      .update(authPayload.sub)
+      .digest('hex')
+      .slice(0, 32)}`;
+    const result = await parseOrder({ text, clients, todayIso, safetyIdentifier });
     return json(200, result);
   } catch (err) {
     console.error('parse-order error:', err);

@@ -59,6 +59,10 @@ export interface ReportNotFoundInput {
   reason: string;
 }
 
+export interface ReportNoActionInput {
+  message: string;
+}
+
 export interface AddStandaloneNoteInput {
   notes: string;
   specificDate: string;
@@ -70,7 +74,8 @@ export type ParseResult =
   | { tool: 'merge_products_into_order'; input: MergeProductsInput }
   | { tool: 'update_client_data'; input: UpdateClientDataInput }
   | { tool: 'add_standalone_note'; input: AddStandaloneNoteInput }
-  | { tool: 'report_not_found'; input: ReportNotFoundInput };
+  | { tool: 'report_not_found'; input: ReportNotFoundInput }
+  | { tool: 'report_no_action'; input: ReportNoActionInput };
 
 interface UseAiParseReturn {
   parsing: boolean;

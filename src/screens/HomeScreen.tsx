@@ -1914,7 +1914,7 @@ const HomeScreen = () => {
         onClose={() => setShowAddClientModal(false)}
       />
 
-      {/* Smart Order Modal (Claude) */}
+      {/* Smart Order Modal (IA) */}
       <SmartOrderModal
         visible={showSmartModal}
         onClose={() => setShowSmartModal(false)}

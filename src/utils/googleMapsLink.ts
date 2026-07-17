@@ -29,7 +29,7 @@ const parseHttpUrl = (value: string): { protocol: string; hostname: string; path
 
 export const hasGoogleLocationLinkText = (text: string): boolean => MAPS_URL_RE.test(text || '');
 
-// Normaliza links copiados desde WhatsApp/Claude. Acepta links sin protocolo,
+// Normaliza links copiados desde WhatsApp/IA. Acepta links sin protocolo,
 // Markdown o con puntuación final, y devuelve '' si no es realmente Maps.
 export const normalizeGoogleMapsLink = (candidate?: string, sourceText?: string): string => {
   const sources = [candidate || '', sourceText || ''];

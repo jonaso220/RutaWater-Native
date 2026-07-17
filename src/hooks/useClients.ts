@@ -864,7 +864,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     }
   }, [groupId, userId]);
 
-  // Crear cliente desde el resultado de Claude (parseo de pedido en texto libre).
+  // Crear cliente desde el resultado de IA (parseo de pedido en texto libre).
   // A diferencia de addClient (que crea en directorio o en un día semanal),
   // este maneja todas las frecuencias incluyendo 'once' con specificDate.
   const aiCreateClient = useCallback(async (data: {

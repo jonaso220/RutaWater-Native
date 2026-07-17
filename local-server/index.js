@@ -2,7 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env'), override: true });
 const express = require('express');
 const cors = require('cors');
-const { parseOrder, MODEL } = require('./lib/anthropic');
+const { parseOrder, getModel } = require('./lib/orderParser');
 
 // Mismos límites que producción (netlify/functions/parse-order.js): un pedido
 // que funciona acá no debe fallar con 413 en prod. La diferencia que queda es
@@ -10,8 +10,8 @@ const { parseOrder, MODEL } = require('./lib/anthropic');
 const MAX_TEXT_LENGTH = 8000;
 const MAX_CLIENTS = 1200;
 
-if (!process.env.ANTHROPIC_API_KEY) {
-  console.error('ERROR: falta ANTHROPIC_API_KEY en .env');
+if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+  console.error('ERROR: falta OPENAI_API_KEY o ANTHROPIC_API_KEY en .env');
   process.exit(1);
 }
 
@@ -20,7 +20,7 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, model: MODEL });
+  res.json({ ok: true, model: getModel() });
 });
 
 app.post('/parse-order', async (req, res) => {

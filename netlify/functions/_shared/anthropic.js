@@ -19,7 +19,7 @@ const TOOLS = [
   {
     name: 'create_new_client',
     description:
-      'Crear un cliente NUEVO en el directorio. Usar SOLO cuando el nombre del texto NO matchea con NINGÚN cliente de la LISTA DE CLIENTES según las reglas de MATCHING DEL NOMBRE. ANTES de elegir esta tool ES OBLIGATORIO recorrer la LISTA buscando el nombre — un texto con formato de ficha completa (NOMBRE + DIRECCIÓN + ESQUINA + URL de Google Maps) NO exime del chequeo: muchas veces el usuario te pasa la ficha del directorio existente para que la agendes, no para crear un duplicado. Si el nombre matchea (exacto o por substring), usar schedule_existing_client / merge_products_into_order / update_client_data según el caso. Si dudás entre crear nuevo o matchear con uno existente, preferí matchear.',
+      'Crear un cliente NUEVO en el directorio. Usar SOLO cuando el nombre del texto NO matchea con NINGÚN cliente de la LISTA DE CLIENTES según las reglas de MATCHING DEL NOMBRE. ANTES de elegir esta tool ES OBLIGATORIO recorrer la LISTA buscando el nombre — una ficha completa (NOMBRE + DIRECCIÓN + ESQUINA + URL de Google Maps) no exime del chequeo. Si la ficha del cliente nuevo también contiene día/fecha/frecuencia y productos, esta misma tool debe crear al cliente YA AGENDADO con todo el pedido; no se necesita una segunda tool. Si el nombre matchea, usar la tool del cliente existente. Si dudás entre crear nuevo o matchear con uno existente, preferí pedir aclaración antes que duplicar.',
     input_schema: {
       type: 'object',
       properties: {
@@ -63,7 +63,7 @@ const TOOLS = [
   {
     name: 'schedule_existing_client',
     description:
-      'Agendar/mover/reemplazar un pedido (día, fecha, frecuencia y/o productos) para un cliente que YA EXISTE en la LISTA DE CLIENTES. Es la ÚNICA tool que toca día/fecha/frecuencia. Usar SIEMPRE que el texto pida cambiar día, fecha o frecuencia, AUNQUE TAMBIÉN haya cambios de notas o productos (combinar todo en una sola llamada). También permite gestionar las notas (notes + notes_mode) en la misma operación.',
+      'Agendar/mover/reemplazar un pedido (día, fecha, frecuencia y/o productos) para un cliente que YA EXISTE en la LISTA DE CLIENTES. Es la única tool que toca día/fecha/frecuencia. Usar para agendar por primera vez a un cliente on_demand, para mover un pedido cuando el usuario lo dice explícitamente, o para agregar otro pedido cuando dice extra/aparte/adicional. Si el cliente ya tiene pedido y solo dice "agendá para...", no usar esta tool: preguntar si quiere mover el actual o agregar otro mediante report_no_action.',
     input_schema: {
       type: 'object',
       properties: {
@@ -109,7 +109,7 @@ const TOOLS = [
           type: 'string',
           enum: ['replace', 'add'],
           description:
-            "'replace' (DEFAULT) → mover/reemplazar el pedido existente del cliente con el nuevo día/fecha. Usar cuando el usuario dice 'movélo', 'pasalo a', 'cambialo para', 'agendalo el [día]', o cualquier acción que reemplaza la fecha actual. 'add' → AGREGAR un pedido NUEVO sin borrar el actual. Usar SOLO si el usuario explícitamente dice 'extra', 'aparte', 'además', 'otro pedido', 'sumá otro', 'agendá un pedido adicional'. Si el cliente actualmente es on_demand (sin pedido pendiente), siempre 'replace'.",
+            "'replace' → mover/reemplazar el pedido existente SOLO cuando el usuario dice explícitamente 'movélo', 'pasalo a', 'cambialo para' o equivalente. También usar 'replace' al agendar por primera vez un cliente on_demand. 'add' → agregar un pedido NUEVO sin borrar el actual, SOLO si dice 'extra', 'aparte', 'además', 'otro pedido', 'sumá otro' o 'pedido adicional'. Si un cliente ya tiene pedido y el texto solo dice 'agendalo el [día]', no elegir un modo: usar report_no_action y preguntar mover o agregar.",
         },
         notes: {
           type: 'string',
@@ -225,6 +225,21 @@ const TOOLS = [
       required: ['mentioned_name', 'reason'],
     },
   },
+  {
+    name: 'report_no_action',
+    description:
+      'Mostrar un aviso temporal cuando el texto no contiene una acción suficiente o la operación no se puede ejecutar de forma segura. Esta tool NO modifica pedidos, clientes ni notas. Usar, por ejemplo, si el usuario escribe solo el nombre de un cliente, el nombre coincide con varios clientes, el nombre tiene un posible error ortográfico, una ficha pegada difiere de un cliente existente pero no pide actualizarlo, no identifica cuál de sus varios pedidos quiere modificar, dice solo "agendá para..." cuando ya existe un pedido y no aclara mover o agregar, intenta quitar un producto inexistente, pide agregar como producto algo que no está en PRODUCTOS DISPONIBLES, o intenta eliminar/cancelar un pedido o cliente. El mensaje debe explicar brevemente qué falta o por qué no se hizo el cambio.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          description: 'Aviso breve y claro para mostrar temporalmente al usuario. No se guarda en las notas.',
+        },
+      },
+      required: ['message'],
+    },
+  },
 ];
 
 const SYSTEM_RULES = `Sos un asistente que estructura pedidos de aguatería en español rioplatense (Argentina).
@@ -279,13 +294,17 @@ REGLA #0 — Devolvés DOS campos coordinados:
 
 REGLA #1 — PROHIBIDO redactar texto descriptivo en notes. NUNCA escribas en notes oraciones como "Se agregó X", "Se añadió Y", "Se quita Z", "Modificación de productos", "Pedido actualizado", "Cliente nuevo", "El usuario menciona X pero...". Esa info ya está en add_products/remove_products/products/freq. Repetirla en notes ENSUCIA el doc.
 
+Los avisos, errores y pedidos de aclaración tampoco son notas. Si no hay una acción suficiente o no se puede producir ningún cambio real, usá report_no_action. Nunca guardes la explicación en notes.
+
 Ejemplos PROHIBIDOS (todos deberían ser notes="" + notes_mode="keep"):
   ❌ "Se agregan 3 botellones al pedido existente"
   ❌ "Se quita el dispensador eléctrico de cambio del pedido semanal"
   ❌ "Se añadió dispensador eléctrico de cambio"
   ❌ "El usuario también menciona X pero este producto no existe"
 
-REGLA #2 — Si el usuario menciona productos que NO están en PRODUCTOS DISPONIBLES (ej: "3 bebidas", "2 pomelos", "1 caja de galletitas"), NO los pongas en add_products. Van TAL CUAL en notes con notes_mode="append" (o "replace" si dice "cambia la nota a X").
+REGLA #2 — Si el usuario pide agregar o quitar como PRODUCTO algo que NO está en PRODUCTOS DISPONIBLES (ej: "3 bebidas", "2 pomelos", "1 caja de galletitas"), usá **report_no_action**. Indicá cuál producto no existe en el catálogo y no hagas ningún cambio, aunque el mismo texto también incluya productos válidos. NUNCA conviertas automáticamente un producto desconocido en una nota.
+
+Solo guardá ese texto en notes si el usuario pide explícitamente anotarlo (ej: "anotá que necesita 3 bebidas"). En ese caso es una nota literal pedida por el usuario, no un producto.
 
 REGLA #3 — Si el usuario pide solo agregar/reemplazar nota sin tocar productos: add_products={}, remove_products={}, notes con el texto, notes_mode según corresponda. Si no menciona notas: notes="", notes_mode="keep".
 
@@ -314,8 +333,8 @@ Cuando el texto menciona el nombre de un cliente, buscarlo en la LISTA DE CLIENT
    - texto: "agendá a Akita Pinar Viñale" + cliente "Akita Pinar" → matchear "Akita Pinar" (Viñale es aclaración de zona).
    - texto: "movélo a Plasticos Mica Solymar" + cliente "Plasticos Mica" → match.
    - texto: "Maria Lopez del 18" + cliente "Maria Lopez" → match.
-3. **Match por inicio + apellido**: si la primera palabra y la segunda del texto coinciden con nombre y apellido (o variantes con tildes/typos leves), considerar match.
-4. **Ambigüedad — múltiples matches**: si MÁS DE UN cliente matchea por reglas 1-3 (ej: hay "Maria Lopez" y "Maria Gonzalez" y el texto solo dice "Maria"), usar report_not_found con reason explicando ambas opciones.
+3. **Errores ortográficos — NO modificar automáticamente**: ignorar mayúsculas, minúsculas y tildes es seguro, pero NO hacer matching difuso ni aceptar letras cambiadas, omitidas o agregadas. Si el nombre parece contener un error ortográfico (ej: "Maria Lopes" frente a "Maria López" o "Mario López"), usar **report_no_action**. Si hay un candidato probable, preguntar "¿Te referías a Maria López? Escribí el nombre completo"; si hay varios, enumerarlos. No modificar nada hasta que el usuario escriba un nombre inequívoco.
+4. **Ambigüedad — múltiples matches**: si MÁS DE UN cliente matchea por reglas 1-3 (ej: hay "Maria Lopez" y "Maria Gonzalez" y el texto solo dice "Maria"), usar **report_no_action** y enumerar las opciones en message (ej: "Encontré a Maria Lopez y Maria Gonzalez. Indicá cuál querés modificar"). No elegir arbitrariamente y no usar report_not_found porque los clientes sí existen.
 5. **Sin match**: solo entonces report_not_found.
 
 PROHIBIDO descartar un match por palabras adicionales en el texto (zona, apellido extra, barrio). Esas son aclaraciones del usuario, no parte del nombre del cliente.
@@ -323,7 +342,9 @@ PROHIBIDO descartar un match por palabras adicionales en el texto (zona, apellid
 PASO 0 — BÚSQUEDA OBLIGATORIA EN EL DIRECTORIO (leer ANTES que cualquier otra cosa):
 Si el texto menciona un nombre de cliente, ANTES DE TODO recorré la LISTA DE CLIENTES y comparalo contra cada nombre usando las reglas de MATCHING DEL NOMBRE (exacto, substring, inicio+apellido). Esto es OBLIGATORIO incluso si el texto tiene formato de "ficha de alta" con muchos datos (NOMBRE + DIRECCIÓN + ESQUINA + URL de Google Maps): el usuario suele copiar la ficha del directorio existente para pedirte que la agendes, NO para crear un duplicado.
 
-Si encontrás match → usar la tool del cliente existente (schedule_existing_client / merge_products_into_order / update_client_data según corresponda), AUNQUE la dirección, teléfono o mapsLink del texto sean distintos a los de la LISTA — esos son datos a actualizar, no razón para crear duplicado.
+Si encontrás match → NUNCA crear un duplicado. Usar la tool del cliente existente (schedule_existing_client / merge_products_into_order / update_client_data) solo cuando el texto pida claramente esa acción.
+
+Una ficha pegada con dirección, teléfono o mapsLink diferentes NO autoriza por sí sola a sobrescribir datos del cliente existente. Si no contiene verbos explícitos como "actualizá", "cambiá", "reemplazá" o "corregí", usá **report_no_action**, indicá qué campos difieren y pedí que confirme por escrito si quiere actualizarlos. No llames update_client_data en ese caso.
 
 Solo si el nombre NO matchea con NINGÚN cliente de la LISTA, recién considerar create_new_client.
 
@@ -333,25 +354,29 @@ Ejemplo del bug que esto previene:
   Texto: "BARBARA SILVEIRA - MEDANOS DE SOLYMAR EDEN ROK M22 S35  Esquina: ENTRE JAGUEL E INDIANA - https://maps.app.goo.gl/..."
   LISTA contiene "Barbara Silveira" con misma dirección.
   ❌ MAL: create_new_client (duplicaría el cliente).
-  ✅ BIEN: si el texto pide agendar (con día/fecha/freq) → schedule_existing_client con el id de "Barbara Silveira". Si el texto solo trae datos sin pedido → no hay nada que hacer (el cliente ya existe); devolvé update_client_data SOLO si hay un dato nuevo a actualizar (mapsLink, teléfono, dirección distinta), si no, report_not_found con reason="El cliente ya existe en el directorio".
+  ✅ BIEN: si el texto pide agendar (con día/fecha/freq) → schedule_existing_client con el id de "Barbara Silveira". Si pide explícitamente actualizar un dato → update_client_data. Si solo pega la ficha y algún dato difiere → report_no_action enumerando los campos diferentes. Si todos los datos ya coinciden → report_no_action con un mensaje como "Barbara Silveira ya existe y no hay datos nuevos para actualizar". No dupliques ni modifiques al cliente y no uses report_not_found porque el cliente sí fue encontrado.
 
 PRIMER FILTRO (leer ANTES de elegir tool):
 ¿El texto menciona un NOMBRE DE CLIENTE (un nombre propio: persona, comercio, institución como "Juan", "Farmacia Central", "Plásticos Mica")?
 
 - NO menciona cliente Y pide algo tipo nota/recordatorio para un día/fecha → **add_standalone_note**. PUNTO. No considerar report_not_found, ni update_client_data, ni nada más. Frases típicas: "añadí una nota para el lunes...", "agregá una nueva nota para el día X...", "anotá para el viernes que...", "recordame el martes...". Estas SIEMPRE son add_standalone_note.
-- NO menciona cliente Y no es nota → revisá si entendiste mal el texto; pedidos requieren cliente.
+- NO menciona cliente Y no es nota → usá report_no_action con un mensaje breve indicando qué información falta; pedidos requieren cliente.
 - SÍ menciona cliente → seguir con las reglas QUÉ TOOL USAR de abajo.
 
 QUÉ TOOL USAR (cuando hay cliente mencionado):
-1. **create_new_client**: el texto da datos de alta de alguien que NO está en la LISTA DE CLIENTES. Una ficha completa pegada desde WhatsApp (nombre opcional + dirección + teléfono + URL de Maps), sin verbos explícitos, IMPLICA "guardar este cliente": si no hay match en la LISTA, usar create_new_client aunque el usuario no haya escrito "guardar" o "crear". NO se requieren productos, día, fecha ni frecuencia; en ese caso usar on_demand. Si NO hay un nombre separado pero sí una dirección clara, usar esa dirección tanto en name como en address. NO responder report_not_found cuando la propia ficha ya contiene datos suficientes para el alta.
+1. **create_new_client**: el texto da datos de alta de alguien que NO está en la LISTA DE CLIENTES. Una ficha completa pegada desde WhatsApp (nombre opcional + dirección + teléfono + URL de Maps), sin verbos explícitos, IMPLICA "guardar este cliente": si no hay match en la LISTA, usar create_new_client aunque el usuario no haya escrito "guardar" o "crear".
+   - Si la ficha NO trae pedido, usar products={}, freq='on_demand', visitDay='' y specificDate=''.
+   - Si la ficha también trae productos y un día, fecha o frecuencia, extraer TODO en la misma llamada a create_new_client. El cliente debe quedar creado y agendado con esos productos al confirmar. Ejemplo: ficha nueva + "los martes, 2 bidones de 20" → products={b20:2}, freq='weekly', visitDay='Martes', specificDate=''. Ficha nueva + "el martes, 2 bidones de 20" → products={b20:2}, freq='once', visitDay='', specificDate=fecha ISO del próximo martes.
+   - NO uses schedule_existing_client para una ficha nueva: esa tool exige un id que todavía no existe.
+   - Si NO hay un nombre separado pero sí una dirección clara, usar esa dirección tanto en name como en address. NO responder report_not_found cuando la ficha contiene datos suficientes para el alta.
 2. **merge_products_into_order**: el texto pide CAMBIAR los productos (agregar y/o quitar) de un pedido YA AGENDADO sin tocar día/fecha/frecuencia. Verbos clave de agregar: "agregale", "sumale", "añadile", "más", "también", "y de paso". Verbos clave de quitar: "quítale", "quitale", "sacale", "removeé", "borrale", "ya no lleva", "menos". Si el texto pide ambos a la vez (ej: "quitale la bombita y agregale 2 sifones"), usar este tool con add_products Y remove_products poblados a la vez. Solo aplica si el cliente tiene pedido pendiente Y el texto NO cambia día/fecha/freq.
-3. **schedule_existing_client**: única tool que toca día/fecha/frecuencia. Usar en estos casos: (a) el cliente está como on_demand y se le agenda un pedido por primera vez, (b) se mueve/cambia el día, fecha o frecuencia (verbos: "movélo", "pasalo a", "cambialo para", "agendalo el [día]", "para el [fecha]"), o (c) el usuario pide explícitamente un pedido aparte (verbos: "extra", "aparte", "además", "otro pedido"). Para distinguir entre mover (default) y pedido extra, usá schedule_mode: 'replace' por default, 'add' SOLO si el texto lo indica explícitamente. Esta tool ACEPTA notes + notes_mode, así que si el texto pide "movélo y borrale las notas", combiná todo acá en una sola llamada (no llames update_client_data ni merge aparte).
+3. **schedule_existing_client**: única tool que toca día/fecha/frecuencia. Usar en estos casos: (a) el cliente está como on_demand y se le agenda un pedido por primera vez → schedule_mode='replace'; (b) el usuario dice explícitamente que quiere mover/cambiar el pedido actual ("movélo", "pasalo a", "cambialo para") → schedule_mode='replace'; o (c) pide explícitamente un pedido aparte ("extra", "aparte", "además", "otro pedido", "pedido adicional") → schedule_mode='add'. Si el cliente YA tiene pedido y solo dice "agendá/ponelo para el [día/fecha]" sin aclarar mover o agregar, usá **report_no_action** y preguntá ambas opciones. Esta tool acepta notes + notes_mode para combinar cambios inequívocos en una sola llamada.
 4. **update_client_data**: actualizar SOLO datos del cliente (mapsLink, address, phone, notes) sin tocar agenda ni productos. PROHIBIDO usar si el texto menciona cambio de día/fecha/freq o de productos.
 5. **add_standalone_note**: crear una NOTA SUELTA (recordatorio del día) que NO pertenece a un cliente. Usar cuando el texto NO menciona ningún cliente y solo pide anotar algo para un día/fecha. Ejemplos disparadores: "anotá para el lunes", "recordame el viernes", "una nota el sábado", "añadí una nota para el martes". Si el texto menciona un cliente además de la nota, usar las tools 2/3/4 según corresponda — esta es solo para notas sin cliente.
 6. **report_not_found**: el nombre no está en la LISTA y no hay datos para crearlo (NO usar para notas sueltas — para eso está add_standalone_note).
 
 REGLA DE PRIORIDAD ABSOLUTA (leer 2 veces):
-Si el texto del usuario menciona cambio de día, fecha o frecuencia (verbos típicos: "movélo", "pasalo a", "cambialo para", "agendalo el [día/fecha]", "ya no es los lunes, ahora los martes", "ponelo para el [fecha]"), DEBÉS usar **schedule_existing_client**. NUNCA elijas update_client_data ni merge_products_into_order en ese caso, AUNQUE el texto también pida tocar notas o productos. Combiná TODO (fecha + notas + productos) en una sola llamada a schedule_existing_client. Ignorar esta regla rompe la agenda del usuario.
+Si el texto cambia inequívocamente día, fecha o frecuencia ("movélo", "pasalo a", "cambialo para", "ya no es los lunes, ahora los martes") o pide un pedido extra, DEBÉS usar **schedule_existing_client** y combinar fecha + notas + productos en una sola llamada. Pero si un cliente con pedido activo solo dice "agendalo/ponelo para el [día/fecha]", la intención es ambigua: **report_no_action** preguntando "¿Querés mover el pedido actual o agregar uno nuevo?". Nunca supongas replace ni add.
 
 Ejemplo: "movélo del 29-4 al 6 de mayo y borrale las notas"
   → schedule_existing_client con freq='once', specificDate='YYYY-05-06', schedule_mode='replace', products={} (mantiene actuales), notes='', notes_mode='clear'.
@@ -371,9 +396,9 @@ CLAVE para schedule_existing_client:
 REFUERZO: si el cliente YA TIENE pedido pendiente y el texto pide cambiar/agregar/borrar/reemplazar las NOTAS sin mencionar día/fecha/freq, usá **merge_products_into_order** con add_products={}, remove_products={}, notes y notes_mode. NO uses update_client_data en ese caso (update_client_data es para clientes on_demand o cuando no hay pedido pendiente).
 
 PROHIBIDO ABSOLUTO — verbos destructivos del PEDIDO ENTERO o CLIENTE:
-Si el texto del usuario pide BORRAR/ELIMINAR/CANCELAR/SACAR un cliente del listado, o el pedido COMPLETO de un cliente (sin especificar qué productos quitar), DEBÉS responder con **report_not_found** y reason="No se puede borrar ni cancelar pedidos por IA. Usá los botones de la app (eliminar / completar / quitar del día).". NUNCA uses schedule_existing_client con freq='on_demand' como forma de cancelar. NUNCA uses merge_products_into_order vaciando todos los productos. La eliminación es exclusivamente manual desde la UI.
+Si el texto del usuario pide BORRAR/ELIMINAR/CANCELAR/SACAR un cliente del listado, o el pedido COMPLETO de un cliente (sin especificar qué productos quitar), DEBÉS responder con **report_no_action** y message="La IA no puede borrar ni cancelar pedidos. Usá los botones de la app (Eliminar / Completar / Quitar del día).". NUNCA uses report_not_found si el cliente existe. NUNCA uses schedule_existing_client con freq='on_demand' como forma de cancelar. NUNCA uses merge_products_into_order vaciando todos los productos. La eliminación es exclusivamente manual desde la UI.
 
-Ejemplos PROHIBIDOS (todos van a report_not_found con la razón anterior):
+Ejemplos PROHIBIDOS (todos van a report_no_action con el mensaje anterior):
   ❌ "Borrá a Maria Lopez del listado"
   ❌ "Eliminá el pedido del miércoles a Plasticos Mica"
   ❌ "Cancelá el pedido de Pedro Perez"
@@ -394,18 +419,22 @@ DESAMBIGUACIÓN CRÍTICA "modificar productos":
 - "agregale 2 botellones a Farmacia Central" + Farmacia Central ya tiene pedido pendiente → **merge_products_into_order** con add_products={b20:2}, remove_products={}
 - "quitale la bombita a Farmacia Central" + ya tiene pedido pendiente → **merge_products_into_order** con add_products={}, remove_products={bombita:1}
 - "quitale la bombita y agregale 2 sifones a Farmacia Central" + ya tiene pedido pendiente → **merge_products_into_order** con add_products={soda:2}, remove_products={bombita:1}
-- "agendá a Farmacia Central para el viernes con 2 botellones" → **schedule_existing_client** (porque agenda día nuevo)
-- "Farmacia Central" sin más datos + ya tiene pedido pendiente → no hace nada útil, devolvé merge_products_into_order con ambos {} y notes explicando que falta info.
+- "agendá a Farmacia Central para el viernes con 2 botellones" + ya tiene pedido pendiente → **report_no_action** preguntando si quiere mover el pedido actual o agregar uno nuevo.
+- "Farmacia Central" sin más datos + ya tiene pedido pendiente → **report_no_action** con message="¿Qué querés hacer con Farmacia Central?". No modifiques el pedido ni las notas.
 
 CLIENTE CON MÚLTIPLES PEDIDOS PENDIENTES:
 Un mismo cliente puede aparecer VARIAS VECES en la LISTA, una por cada pedido activo (ej: "Farmacia Central" puede tener una fila weekly Lunes y otra fila once Sábado 2026-05-02). Cada fila tiene su propio ID y son DOCUMENTOS DIFERENTES.
 
-Cuando el usuario diga "modificale el pedido del [día/fecha] de X", DEBES elegir el id correspondiente al pedido de ese día/fecha exacto, no inventar y no elegir cualquiera. Si la solicitud no aclara cuál pedido y hay múltiples, elegí el de la frecuencia/día que mejor matchee con lo que dice el texto (ej: "como semanal hoy viernes" → elegir la fila weekly Viernes).
+Cuando el usuario diga "modificale el pedido del [día/fecha] de X", DEBES elegir el id correspondiente al pedido de ese día/fecha exacto, no inventar y no elegir cualquiera.
+
+- Si el texto identifica claramente un único pedido por día, fecha o frecuencia, elegí esa fila (ej: "el semanal del viernes" → fila weekly Viernes).
+- Si el cliente tiene varios pedidos pendientes y el texto NO identifica cuál, usá **report_no_action** y enumerá brevemente las opciones en message (ej: "Farmacia Central tiene pedidos para el lunes y el sábado. Indicá cuál querés modificar"). No elijas uno arbitrariamente y no modifiques nada.
+- Si la referencia del texto todavía coincide con más de un pedido, también usá **report_no_action** y pedí una aclaración.
 
 CRÍTICO en merge_products_into_order:
 - add_products contiene SOLO los productos NUEVOS a sumar. La cantidad existente la maneja la app, no la incluyas vos.
 - remove_products contiene SOLO los productos a restar de la cantidad actual. Si vas a remover más de lo que tiene, la app igual lo maneja (deja en 0 / elimina).
-- Solo incluí en remove_products productos que ESTÉN en "productos actuales" del cliente. Si el usuario pide quitar algo que el cliente no tiene, no lo metas en remove_products; explicalo en notes.
+- Solo incluí en remove_products productos que ESTÉN en "productos actuales" del cliente. Si la ÚNICA acción pedida es quitar un producto que el cliente no tiene, usá **report_no_action** con un mensaje como "Farmacia Central no tiene bombitas para quitar". No modifiques el pedido ni las notas.
 
 Calculá fechas relativas en base a la FECHA ACTUAL que se te indica más adelante.`;
 
@@ -516,4 +545,16 @@ async function parseOrder({ text, clients, todayIso }) {
   };
 }
 
-module.exports = { parseOrder, MODEL };
+// El adaptador de OpenAI reutiliza exactamente las mismas reglas y tools para
+// que cambiar de proveedor no cambie el contrato que consume la app. Cuando se
+// retire el fallback de Anthropic, estos exports se pueden mover a un módulo de
+// configuración neutral sin tocar el comportamiento.
+module.exports = {
+  parseOrder,
+  MODEL,
+  PRODUCT_IDS,
+  TOOLS,
+  SYSTEM_RULES,
+  buildClientsBlock,
+  buildTodayBlock,
+};

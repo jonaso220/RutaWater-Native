@@ -11,6 +11,11 @@
   publish = "public"
   command = "echo 'Functions-only site, no static build required'"
 
+[build.environment]
+  # El SDK actual de OpenAI requiere Node 20 o posterior. Node 22 es LTS y
+  # mantiene el runtime de la Function dentro de las versiones soportadas.
+  NODE_VERSION = "22"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"

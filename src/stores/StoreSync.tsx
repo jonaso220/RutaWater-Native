@@ -57,7 +57,7 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   const isPremium = subscription.isPremium || promo.hasPromo;
   const subLoading = subscription.loading || promo.promoLoading;
 
-  // --- AI usage (parseo de pedidos con Claude) ---
+  // --- AI usage (parseo de pedidos con IA) ---
   // Promo cuenta como plan anual (más generoso). Resto: lo que diga RevenueCat.
   const aiPlan: 'free' | 'monthly' | 'annual' = promo.hasPromo
     ? 'annual'

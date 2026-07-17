@@ -483,7 +483,7 @@ export default {
     onTheWay: 'A caminho',
     addPhone: 'Adicionar telefone',
     moreActions: 'Mais ações',
-    addDebt: 'Registrar dívida',
+    addDebt: 'Adicionar dívida',
     manageDebt: 'Gerenciar dívida',
     manageTransfer: 'Gerenciar transferência',
     manageAlarm: 'Gerenciar lembrete',

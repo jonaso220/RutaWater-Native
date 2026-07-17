@@ -387,12 +387,23 @@ const ClientCard: React.FC<ClientCardProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Only active states remain visible and actionable. */}
+        {/* Debt stays one tap away; the remaining badges only show active states. */}
         <View style={styles.badgesRow}>
-          {hasDebt && (
-            <TouchableOpacity onPress={onDebt} style={[styles.statusBadge, styles.debtBadge]}>
-              <Ionicons name="cash-outline" size={s(13)} color={colors.danger} />
-              <Text style={[styles.statusBadgeText, styles.debtBadgeText]}>{t('clientCard.debt')}</Text>
+          {onDebt && (
+            <TouchableOpacity
+              onPress={onDebt}
+              style={[styles.statusBadge, hasDebt ? styles.debtBadge : styles.addDebtBadge]}
+              accessibilityRole="button"
+              accessibilityLabel={hasDebt ? t('clientCard.manageDebt') : t('clientCard.addDebt')}
+            >
+              <Ionicons
+                name={hasDebt ? 'cash-outline' : 'add-circle-outline'}
+                size={s(13)}
+                color={hasDebt ? colors.danger : colors.primary}
+              />
+              <Text style={[styles.statusBadgeText, hasDebt ? styles.debtBadgeText : styles.addDebtBadgeText]}>
+                {hasDebt ? t('clientCard.debt') : t('clientCard.addDebt')}
+              </Text>
             </TouchableOpacity>
           )}
           {hasPendingTransfer && onTransfer && (
@@ -739,6 +750,13 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     },
     debtBadgeText: {
       color: colors.danger,
+    },
+    addDebtBadge: {
+      backgroundColor: colors.primaryLight,
+      borderColor: colors.primaryBorder,
+    },
+    addDebtBadgeText: {
+      color: colors.primary,
     },
     transferBadge: {
       backgroundColor: colors.successLighter,

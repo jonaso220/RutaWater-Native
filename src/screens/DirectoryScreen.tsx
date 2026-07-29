@@ -76,6 +76,7 @@ const DirectoryScreen = () => {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
+  const [listFocusVersion, setListFocusVersion] = useState(0);
   const [scheduleClient, setScheduleClient] = useState<Client | null>(null);
   const [debtClient, setDebtClient] = useState<Client | null>(null);
   const [editClient, setEditClient] = useState<Client | null>(null);
@@ -95,6 +96,10 @@ const DirectoryScreen = () => {
   // Clear search when leaving this tab
   useFocusEffect(
     useCallback(() => {
+      // FlashList can keep an empty render stack when this tab regains focus
+      // after its data changed in the background. A clean mount makes the
+      // current rows paint immediately instead of waiting for the first swipe.
+      setListFocusVersion((version) => version + 1);
       return () => {
         setSearchInput('');
         setSearch('');
@@ -250,15 +255,15 @@ const DirectoryScreen = () => {
   ), [canManage, isRecurrenciaMode, effectiveRecencyById, getClientDebtTotal]);
 
   // FlashList v2 can stall on grow transitions (empty→populated), painting
-  // nothing until the user scrolls. We remount on filter change and on first
-  // data arrival so the list always starts from a clean render on those.
+  // nothing until the user scrolls. We remount on tab focus, filter change,
+  // and first data arrival so the list always starts from a clean render.
   // We deliberately DON'T key on the search toggle anymore: typing only shrinks
   // and clearing only grows the already-mounted list, and remounting all 600
   // rows on every search in/out was the heavy daily cost (FlashList 2.3.0
   // handles in-place data grow/shrink fine). If the blank-list-until-scroll
   // bug ever returns when CLEARING the search, restore the `search.length > 0`
   // segment to this key.
-  const listKey = `${activeFilter}|${clients.length > 0}`;
+  const listKey = `${listFocusVersion}|${activeFilter}|${clients.length > 0}`;
 
   return (
     <View style={styles.container}>

@@ -1282,80 +1282,109 @@ const HomeScreen = () => {
           <View style={styles.actionPanel}>
             <View style={styles.actionPanelContent}>
           {!isWide ? (
-            <View style={styles.actionCompactRow}>
-              <TouchableOpacity
-                style={[styles.actionCompactButton, styles.actionCompactRoute]}
-                onPress={() => {
-                  hapticSelection();
-                  void handleStartRoute();
-                }}
-                activeOpacity={0.78}
-                accessibilityRole="button"
-                accessibilityLabel={t('home.startRoute')}
-              >
-                <Ionicons name="navigate" size={chromeSize(18)} color={colors.textWhite} />
-                <Text style={styles.actionCompactPrimaryText} numberOfLines={1}>
-                  {t('home.startRoute')}
-                </Text>
-              </TouchableOpacity>
+            <View style={styles.actionCompactStack}>
+              <View style={styles.actionCompactRow}>
+                <TouchableOpacity
+                  style={[styles.actionCompactButton, styles.actionCompactAi]}
+                  onPress={() => {
+                    hapticSelection();
+                    setShowSmartModal(true);
+                  }}
+                  activeOpacity={0.78}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('home.aiOrder')}
+                >
+                  <Ionicons name="sparkles" size={chromeSize(17)} color={colors.textWhite} />
+                  <Text style={styles.actionCompactAiText} numberOfLines={1}>
+                    {t('home.aiOrder')}
+                  </Text>
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.actionCompactButton, styles.actionCompactAi]}
-                onPress={() => {
-                  hapticSelection();
-                  setShowSmartModal(true);
-                }}
-                activeOpacity={0.78}
-                accessibilityRole="button"
-                accessibilityLabel={t('home.aiOrder')}
-              >
-                <Ionicons name="sparkles" size={chromeSize(17)} color={colors.textWhite} />
-                <Text style={styles.actionCompactAiText}>IA</Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionCompactButton, styles.actionCompactMore]}
+                  onPress={() => {
+                    hapticSelection();
+                    setShowQuickActions(true);
+                  }}
+                  activeOpacity={0.72}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('home.quickActions')}${quickActionsPendingCount > 0 ? `: ${quickActionsPendingCount}` : ''}`}
+                  accessibilityState={{ expanded: showQuickActions }}
+                >
+                  <Ionicons name="grid-outline" size={chromeSize(17)} color={colors.primary} />
+                  <Text style={styles.actionCompactMoreText} numberOfLines={1}>
+                    {t('home.quickActions')}
+                  </Text>
+                  {quickActionsPendingCount > 0 && (
+                    <View style={styles.actionCompactBadge}>
+                      <Text style={styles.actionCompactBadgeText}>
+                        {quickActionsPendingCount > 99 ? '99+' : quickActionsPendingCount}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
 
-              <TouchableOpacity
-                style={[styles.actionCompactButton, styles.actionCompactMore]}
-                onPress={() => {
-                  hapticSelection();
-                  setShowQuickActions(true);
-                }}
-                activeOpacity={0.72}
-                accessibilityRole="button"
-                accessibilityLabel={`${t('home.quickActions')}${quickActionsPendingCount > 0 ? `: ${quickActionsPendingCount}` : ''}`}
-                accessibilityState={{ expanded: showQuickActions }}
-              >
-                <Ionicons name="grid-outline" size={chromeSize(17)} color={colors.primary} />
-                <Text style={styles.actionCompactMoreText} numberOfLines={1}>
-                  {t('home.quickActions')}
-                </Text>
-                {quickActionsPendingCount > 0 && (
-                  <View style={styles.actionCompactBadge}>
-                    <Text style={styles.actionCompactBadgeText}>
-                      {quickActionsPendingCount > 99 ? '99+' : quickActionsPendingCount}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+              <View style={styles.actionCompactShortcutRow}>
+                <TouchableOpacity
+                  style={styles.actionCompactShortcut}
+                  onPress={() => {
+                    hapticSelection();
+                    setShowNoteModal(true);
+                  }}
+                  activeOpacity={0.72}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('home.newNote')}
+                >
+                  <Ionicons name="document-text-outline" size={chromeSize(16)} color={colors.warningDarker} />
+                  <Text style={styles.actionCompactShortcutText} numberOfLines={1}>
+                    {t('home.note')}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionCompactShortcut}
+                  onPress={() => {
+                    hapticSelection();
+                    setShowCalendar(true);
+                  }}
+                  activeOpacity={0.72}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('home.calendar')}
+                >
+                  <Ionicons name="calendar-outline" size={chromeSize(16)} color={colors.primary} />
+                  <Text style={styles.actionCompactShortcutText} numberOfLines={1}>
+                    {t('home.calendar')}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionCompactShortcut}
+                  onPress={() => {
+                    hapticSelection();
+                    setShowDebtsSheet(true);
+                  }}
+                  activeOpacity={0.72}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('home.debts')}: ${debts.length}`}
+                >
+                  <Ionicons name="cash-outline" size={chromeSize(17)} color={colors.danger} />
+                  <Text style={styles.actionCompactShortcutText} numberOfLines={1}>
+                    {t('home.debts')}
+                  </Text>
+                  {debts.length > 0 && (
+                    <View style={styles.actionCountBadge}>
+                      <Text style={styles.actionCountBadgeText}>
+                        {debts.length > 99 ? '99+' : debts.length}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           ) : (
             <>
           <View style={styles.actionPrimaryRow}>
-            <TouchableOpacity
-              style={[styles.actionPrimaryButton, styles.actionPrimaryRoute]}
-              onPress={() => {
-                hapticSelection();
-                void handleStartRoute();
-              }}
-              activeOpacity={0.78}
-              accessibilityRole="button"
-              accessibilityLabel={t('home.startRoute')}
-            >
-              <Ionicons name="navigate" size={chromeSize(19)} color={colors.textWhite} />
-              <Text style={styles.actionPrimaryText} numberOfLines={1}>
-                {t('home.startRoute')}
-              </Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={[styles.actionPrimaryButton, styles.actionPrimaryAi]}
               onPress={() => {
@@ -1763,7 +1792,7 @@ const HomeScreen = () => {
 
             <View style={styles.quickActionsGrid}>
               <TouchableOpacity
-                style={styles.quickActionSheetButton}
+                style={[styles.quickActionSheetButton, styles.quickActionSheetButtonWide]}
                 onPress={() => openFromQuickActions(openAddClientFlow)}
                 activeOpacity={0.72}
                 accessibilityRole="button"
@@ -1775,56 +1804,6 @@ const HomeScreen = () => {
                 <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
                   {t('home.newClient')}
                 </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.quickActionSheetButton}
-                onPress={() => openFromQuickActions(() => setShowNoteModal(true))}
-                activeOpacity={0.72}
-                accessibilityRole="button"
-                accessibilityLabel={t('home.newNote')}
-              >
-                <View style={[styles.quickActionSheetIcon, styles.actionQuickIconNote]}>
-                  <Ionicons name="document-text-outline" size={chromeSize(20)} color={colors.warningDarker} />
-                </View>
-                <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
-                  {t('home.newNote')}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.quickActionSheetButton}
-                onPress={() => openFromQuickActions(() => setShowCalendar(true))}
-                activeOpacity={0.72}
-                accessibilityRole="button"
-                accessibilityLabel={t('home.calendar')}
-              >
-                <View style={[styles.quickActionSheetIcon, styles.actionQuickIconCalendar]}>
-                  <Ionicons name="calendar-outline" size={chromeSize(20)} color={colors.primary} />
-                </View>
-                <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
-                  {t('home.calendar')}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.quickActionSheetButton}
-                onPress={() => openFromQuickActions(() => setShowDebtsSheet(true))}
-                activeOpacity={0.72}
-                accessibilityRole="button"
-                accessibilityLabel={`${t('home.debts')}: ${debts.length}`}
-              >
-                <View style={[styles.quickActionSheetIcon, styles.actionQuickIconDebt]}>
-                  <Ionicons name="cash-outline" size={chromeSize(21)} color={colors.danger} />
-                </View>
-                <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
-                  {t('home.debts')}
-                </Text>
-                {debts.length > 0 && (
-                  <View style={styles.quickActionSheetBadge}>
-                    <Text style={styles.quickActionSheetBadgeText}>{debts.length > 99 ? '99+' : debts.length}</Text>
-                  </View>
-                )}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -2033,6 +2012,9 @@ const getStyles = (
     alignItems: 'stretch',
     gap: s(8),
   },
+  actionCompactStack: {
+    gap: s(7),
+  },
   actionCompactButton: {
     minHeight: s(46),
     borderRadius: s(12),
@@ -2056,7 +2038,8 @@ const getStyles = (
     color: colors.textWhite,
   },
   actionCompactAi: {
-    width: s(66),
+    flex: 1,
+    minWidth: 0,
     backgroundColor: colors.primary,
     borderColor: colors.primaryDark,
   },
@@ -2066,14 +2049,39 @@ const getStyles = (
     color: colors.textWhite,
   },
   actionCompactMore: {
-    width: s(102),
-    backgroundColor: colors.sectionBackground,
-    borderColor: colors.cardBorder,
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: colors.primaryLighter,
+    borderColor: colors.primaryLight,
   },
   actionCompactMoreText: {
     flexShrink: 1,
-    fontSize: s(12),
+    fontSize: s(13),
     fontWeight: '800',
+    color: colors.primary,
+  },
+  actionCompactShortcutRow: {
+    flexDirection: 'row',
+    gap: s(6),
+  },
+  actionCompactShortcut: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: s(38),
+    borderRadius: s(10),
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.sectionBackground,
+    paddingHorizontal: s(7),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: s(5),
+  },
+  actionCompactShortcutText: {
+    flexShrink: 1,
+    fontSize: s(11),
+    fontWeight: '700',
     color: colors.textSecondary,
   },
   actionCompactBadge: {

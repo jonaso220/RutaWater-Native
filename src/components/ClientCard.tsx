@@ -434,9 +434,13 @@ const ClientCard: React.FC<ClientCardProps> = ({
               style={styles.addressButton}
               activeOpacity={0.6}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              accessibilityRole="link"
+              accessibilityLabel={`${t('home.routeOpenCurrent')}: ${client.address}`}
             >
               <Ionicons name="location-sharp" size={s(18)} color={colors.primary} />
-              <Text style={styles.clientAddressLink} numberOfLines={1}>{client.address}</Text>
+              <Text style={styles.clientAddressLink} numberOfLines={wideLayout ? 1 : 2}>
+                {client.address}
+              </Text>
               <Ionicons name="chevron-forward" size={s(16)} color={colors.textHint} />
             </TouchableOpacity>
           ) : (

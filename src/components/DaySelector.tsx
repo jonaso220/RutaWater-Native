@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AppState, View, Text, StyleSheet } from 'react-native';
 import { ScrollView as GHScrollView, TouchableOpacity as GHTouchableOpacity } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
 import { ALL_DAYS, getDayLabel } from '../constants/products';
 import { getTodayDayName } from '../utils/helpers';
+import { millisecondsUntilNextLocalDay } from '../utils/localDayClock';
 import { ThemeColors } from '../theme/colors';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 
@@ -32,7 +33,39 @@ const DaySelector = React.memo<DaySelectorProps>(({
   // etiquetas de getDayLabel se actualicen.
   useTranslation();
   const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
-  const todayName = useMemo(() => getTodayDayName(), []);
+  const [todayName, setTodayName] = useState(getTodayDayName);
+
+  useEffect(() => {
+    let rolloverTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const syncToday = () => {
+      const currentToday = getTodayDayName();
+      setTodayName((previousToday) => (
+        previousToday === currentToday ? previousToday : currentToday
+      ));
+    };
+
+    const scheduleNextRollover = () => {
+      if (rolloverTimer) clearTimeout(rolloverTimer);
+      rolloverTimer = setTimeout(() => {
+        syncToday();
+        scheduleNextRollover();
+      }, millisecondsUntilNextLocalDay() + 50);
+    };
+
+    scheduleNextRollover();
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        syncToday();
+        scheduleNextRollover();
+      }
+    });
+
+    return () => {
+      if (rolloverTimer) clearTimeout(rolloverTimer);
+      appStateSubscription.remove();
+    };
+  }, []);
 
   return (
     <View style={styles.daySelectorWrapper}>

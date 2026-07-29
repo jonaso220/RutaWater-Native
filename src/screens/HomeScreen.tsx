@@ -1400,11 +1400,9 @@ const HomeScreen = () => {
                 {t('home.aiOrder')}
               </Text>
             </TouchableOpacity>
-          </View>
 
-          <View style={styles.actionQuickRow}>
             <TouchableOpacity
-              style={styles.actionQuickButton}
+              style={[styles.actionPrimaryButton, styles.actionPrimaryClient]}
               onPress={() => {
                 hapticSelection();
                 openAddClientFlow();
@@ -1413,14 +1411,14 @@ const HomeScreen = () => {
               accessibilityRole="button"
               accessibilityLabel={t('home.newClient')}
             >
-              <View style={[styles.actionQuickIcon, styles.actionQuickIconClient]}>
-                <Ionicons name="person-add-outline" size={chromeSize(18)} color={colors.primary} />
-              </View>
-              <Text style={styles.actionQuickLabel} numberOfLines={1} adjustsFontSizeToFit>
-                {t('home.client')}
+              <Ionicons name="person-add-outline" size={chromeSize(19)} color={colors.primary} />
+              <Text style={styles.actionPrimaryClientText} numberOfLines={1}>
+                {t('home.newClient')}
               </Text>
             </TouchableOpacity>
+          </View>
 
+          <View style={styles.actionQuickRow}>
             <TouchableOpacity
               style={styles.actionQuickButton}
               onPress={() => {
@@ -1481,11 +1479,9 @@ const HomeScreen = () => {
                 </View>
               )}
             </TouchableOpacity>
-          </View>
 
-          {pendingTransferCount > 0 && (
             <TouchableOpacity
-              style={styles.actionTransferNotice}
+              style={styles.actionQuickButton}
               onPress={() => {
                 hapticSelection();
                 setShowTransfersSheet(true);
@@ -1494,15 +1490,21 @@ const HomeScreen = () => {
               accessibilityRole="button"
               accessibilityLabel={`${t('home.transfers')}: ${pendingTransferCount}`}
             >
-              <View style={styles.actionTransferInfo}>
-                <Ionicons name="swap-horizontal-outline" size={chromeSize(18)} color={colors.successText} />
-                <Text style={styles.actionTransferText}>{t('home.transfers')}</Text>
+              <View style={[styles.actionQuickIcon, styles.actionQuickIconTransfer]}>
+                <Ionicons name="swap-horizontal-outline" size={chromeSize(19)} color={colors.successText} />
               </View>
-              <View style={styles.actionTransferBadge}>
-                <Text style={styles.actionTransferBadgeText}>{pendingTransferCount}</Text>
-              </View>
+              <Text style={styles.actionQuickLabel} numberOfLines={1} adjustsFontSizeToFit>
+                {t('home.transfers')}
+              </Text>
+              {pendingTransferCount > 0 && (
+                <View style={styles.actionTransferCountBadge}>
+                  <Text style={styles.actionCountBadgeText} numberOfLines={1}>
+                    {pendingTransferCount > 99 ? '99+' : pendingTransferCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
-          )}
+          </View>
             </>
           )}
             </View>
@@ -2129,11 +2131,22 @@ const getStyles = (
     backgroundColor: colors.primary,
     borderColor: colors.primaryDark,
   },
+  actionPrimaryClient: {
+    backgroundColor: colors.primaryLighter,
+    borderColor: colors.primaryLight,
+  },
   actionPrimaryText: {
     flexShrink: 1,
     fontSize: isWide ? s(15) : s(14),
     fontWeight: '800',
     color: colors.textWhite,
+    letterSpacing: 0.1,
+  },
+  actionPrimaryClientText: {
+    flexShrink: 1,
+    fontSize: isWide ? s(15) : s(14),
+    fontWeight: '800',
+    color: colors.primary,
     letterSpacing: 0.1,
   },
   actionQuickRow: {
@@ -2174,6 +2187,9 @@ const getStyles = (
   actionQuickIconDebt: {
     backgroundColor: colors.dangerLight,
   },
+  actionQuickIconTransfer: {
+    backgroundColor: colors.successLighter,
+  },
   actionQuickLabel: {
     width: '100%',
     textAlign: 'center',
@@ -2201,6 +2217,20 @@ const getStyles = (
     lineHeight: s(12),
     fontWeight: '800',
     color: colors.textWhite,
+  },
+  actionTransferCountBadge: {
+    position: 'absolute',
+    top: s(4),
+    right: s(5),
+    minWidth: s(18),
+    height: s(18),
+    borderRadius: s(9),
+    paddingHorizontal: s(4),
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.card,
   },
   actionTransferNotice: {
     flex: extraWideHeader ? 0.58 : undefined,

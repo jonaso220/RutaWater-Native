@@ -438,7 +438,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
               accessibilityLabel={`${t('home.routeOpenCurrent')}: ${client.address}`}
             >
               <Ionicons name="location-sharp" size={s(18)} color={colors.primary} />
-              <Text style={styles.clientAddressLink} numberOfLines={wideLayout ? 1 : 2}>
+              <Text style={styles.clientAddressLink} numberOfLines={wideLayout ? 1 : 3}>
                 {client.address}
               </Text>
               <Ionicons name="chevron-forward" size={s(16)} color={colors.textHint} />

@@ -103,6 +103,7 @@ const SectionHeader = React.memo<SectionHeaderProps>(({ title, count, isToday, c
 const keyExtractor = (item: ListItem) => item.key;
 
 const REORDER_ANIMATION_MS = 240;
+const REFRESH_TIMEOUT_MS = 10_000;
 const reorderLayoutAnimation = {
   duration: REORDER_ANIMATION_MS,
   update: { type: LayoutAnimation.Types.easeInEaseOut },
@@ -371,6 +372,7 @@ const HomeScreen = () => {
   const activeScopeGroupId = useProfileStore((s) => s.activeProfile?.scopeGroupId);
   const onRefresh = useCallback(async () => {
     if (!user?.uid) return;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     setRefreshing(true);
     hapticSelection();
     try {
@@ -379,13 +381,24 @@ const HomeScreen = () => {
       const scopeGroupId = activeScopeGroupId || groupData?.groupId;
       const scopeField = scopeGroupId ? 'groupId' : 'userId';
       const scopeValue = scopeGroupId || user.uid;
-      await db
+      const serverRead = db
         .collection('clients')
         .where(scopeField, '==', scopeValue)
         .get({ source: 'server' });
+
+      // Firestore can leave a forced server read pending indefinitely when
+      // connectivity drops. The realtime listener may still recover later,
+      // but the native RefreshControl must always be released.
+      await Promise.race([
+        serverRead,
+        new Promise<void>((resolve) => {
+          refreshTimer = setTimeout(resolve, REFRESH_TIMEOUT_MS);
+        }),
+      ]);
     } catch (e) {
       reportError(e, 'Refresh error');
     } finally {
+      if (refreshTimer) clearTimeout(refreshTimer);
       setRefreshing(false);
     }
   }, [user?.uid, activeScopeGroupId, groupData?.groupId]);
@@ -832,7 +845,7 @@ const HomeScreen = () => {
   );
 
   const pendingTransferCount = transfers.length;
-  const quickActionsPendingCount = debts.length + pendingTransferCount;
+  const quickActionsPendingCount = pendingTransferCount;
 
   const openAddClientFlow = useCallback(() => {
     if (!canAddClient) {

@@ -103,6 +103,10 @@ const SectionHeader = React.memo<SectionHeaderProps>(({ title, count, isToday, c
 const keyExtractor = (item: ListItem) => item.key;
 
 const REORDER_ANIMATION_MS = 240;
+const HEADER_HIDE_ANIMATION_MS = 240;
+const HEADER_SHOW_ANIMATION_MS = 280;
+const HEADER_HIDE_SCROLL_DISTANCE = 48;
+const HEADER_SHOW_SCROLL_DISTANCE = 28;
 const REFRESH_TIMEOUT_MS = 10_000;
 const reorderLayoutAnimation = {
   duration: REORDER_ANIMATION_MS,
@@ -284,6 +288,7 @@ const HomeScreen = () => {
   const [routeSession, setRouteSession] = useState<RouteSession | null>(null);
   const collapsibleHeaderProgress = useRef(new Animated.Value(1)).current;
   const collapsibleHeaderVisibleRef = useRef(true);
+  const [collapsibleHeaderVisible, setCollapsibleHeaderVisibleState] = useState(true);
   const lastListOffsetRef = useRef(0);
   const lastScrollDirectionRef = useRef<-1 | 0 | 1>(0);
   const scrollDirectionDistanceRef = useRef(0);
@@ -304,22 +309,28 @@ const HomeScreen = () => {
 
   const setCollapsibleHeaderVisible = useCallback((visible: boolean, animate = true) => {
     if (collapsibleHeaderVisibleRef.current === visible) {
-      if (!animate) collapsibleHeaderProgress.setValue(visible ? 1 : 0);
+      if (!animate) {
+        collapsibleHeaderProgress.setValue(visible ? 1 : 0);
+        setCollapsibleHeaderVisibleState(visible);
+      }
       return;
     }
 
     collapsibleHeaderVisibleRef.current = visible;
     collapsibleHeaderProgress.stopAnimation();
+    setCollapsibleHeaderVisibleState(visible);
     if (!animate) {
       collapsibleHeaderProgress.setValue(visible ? 1 : 0);
       return;
     }
 
+    const duration = visible ? HEADER_SHOW_ANIMATION_MS : HEADER_HIDE_ANIMATION_MS;
     Animated.timing(collapsibleHeaderProgress, {
       toValue: visible ? 1 : 0,
-      duration: visible ? 220 : 180,
-      easing: Easing.out(Easing.cubic),
+      duration,
+      easing: Easing.bezier(0.2, 0, 0, 1),
       useNativeDriver: false,
+      isInteraction: false,
     }).start();
   }, [collapsibleHeaderProgress]);
 
@@ -349,7 +360,9 @@ const HomeScreen = () => {
     }
     scrollDirectionDistanceRef.current += Math.abs(delta);
 
-    const distanceToToggle = direction === 1 ? 24 : 12;
+    const distanceToToggle = direction === 1
+      ? HEADER_HIDE_SCROLL_DISTANCE
+      : HEADER_SHOW_SCROLL_DISTANCE;
     if (scrollDirectionDistanceRef.current >= distanceToToggle) {
       setCollapsibleHeaderVisible(direction === -1);
       scrollDirectionDistanceRef.current = 0;
@@ -1267,17 +1280,22 @@ const HomeScreen = () => {
               inputRange: [0, 1],
               outputRange: [0, collapsibleHeaderHeight],
             }),
-            opacity: collapsibleHeaderProgress,
-            transform: [{
-              translateY: collapsibleHeaderProgress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [-Math.min(collapsibleHeaderHeight, 40), 0],
-              }),
-            }],
           },
         ]}
       >
-        <View onLayout={handleCollapsibleHeaderLayout}>
+        <View
+          onLayout={handleCollapsibleHeaderLayout}
+          style={collapsibleHeaderHeight > 0 ? {
+            // Keep the full header intact while its parent clips it, so every
+            // section travels together instead of receiving separate motion.
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: collapsibleHeaderHeight,
+          } : undefined}
+          pointerEvents={collapsibleHeaderVisible ? 'auto' : 'none'}
+        >
           {/* Day selector */}
           <DaySelector
             selectedDay={selectedDay}

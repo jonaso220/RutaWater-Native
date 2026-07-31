@@ -19,6 +19,7 @@ import {
   NativeSyntheticEvent,
   LayoutAnimation,
   UIManager,
+  AppState,
 } from 'react-native';
 import ModalOverlay from '../components/ModalOverlay';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
@@ -293,6 +294,7 @@ const HomeScreen = () => {
   const lastScrollDirectionRef = useRef<-1 | 0 | 1>(0);
   const scrollDirectionDistanceRef = useRef(0);
   const [collapsibleHeaderHeight, setCollapsibleHeaderHeight] = useState(0);
+  const headerAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const reorderAnimationActiveRef = useRef(false);
   const reorderAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quickActionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -302,6 +304,7 @@ const HomeScreen = () => {
       UIManager.setLayoutAnimationEnabledExperimental?.(true);
     }
     return () => {
+      headerAnimationRef.current?.stop();
       if (reorderAnimationTimerRef.current) clearTimeout(reorderAnimationTimerRef.current);
       if (quickActionTimerRef.current) clearTimeout(quickActionTimerRef.current);
     };
@@ -317,6 +320,8 @@ const HomeScreen = () => {
     }
 
     collapsibleHeaderVisibleRef.current = visible;
+    headerAnimationRef.current?.stop();
+    headerAnimationRef.current = null;
     collapsibleHeaderProgress.stopAnimation();
     setCollapsibleHeaderVisibleState(visible);
     if (!animate) {
@@ -325,14 +330,31 @@ const HomeScreen = () => {
     }
 
     const duration = visible ? HEADER_SHOW_ANIMATION_MS : HEADER_HIDE_ANIMATION_MS;
-    Animated.timing(collapsibleHeaderProgress, {
+    const animation = Animated.timing(collapsibleHeaderProgress, {
       toValue: visible ? 1 : 0,
       duration,
       easing: Easing.bezier(0.2, 0, 0, 1),
       useNativeDriver: false,
       isInteraction: false,
-    }).start();
+    });
+    headerAnimationRef.current = animation;
+    animation.start(({ finished }) => {
+      if (headerAnimationRef.current !== animation) return;
+      headerAnimationRef.current = null;
+      if (finished) collapsibleHeaderProgress.setValue(visible ? 1 : 0);
+    });
   }, [collapsibleHeaderProgress]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      // iOS can pause a JS-driven height animation while the app backgrounds.
+      // Restore its intended endpoint before the screen becomes interactive so
+      // the header can never remain permanently half-open.
+      setCollapsibleHeaderVisible(collapsibleHeaderVisibleRef.current, false);
+    });
+    return () => subscription.remove();
+  }, [setCollapsibleHeaderVisible]);
 
   const resetHeaderScrollTracking = useCallback(() => {
     lastListOffsetRef.current = 0;
@@ -372,7 +394,8 @@ const HomeScreen = () => {
   const handleCollapsibleHeaderLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);
     if (nextHeight > 0) {
-      setCollapsibleHeaderHeight((currentHeight) => currentHeight === nextHeight ? currentHeight : nextHeight);
+      // Never replace the complete measurement with a transient clipped one.
+      setCollapsibleHeaderHeight((currentHeight) => Math.max(currentHeight, nextHeight));
     }
   }, []);
 
@@ -1292,7 +1315,9 @@ const HomeScreen = () => {
             left: 0,
             right: 0,
             bottom: 0,
-            height: collapsibleHeaderHeight,
+            // Allow late layout changes (font metrics, data and device size) to
+            // grow the block; an exact height here could freeze it too short.
+            minHeight: collapsibleHeaderHeight,
           } : undefined}
           pointerEvents={collapsibleHeaderVisible ? 'auto' : 'none'}
         >

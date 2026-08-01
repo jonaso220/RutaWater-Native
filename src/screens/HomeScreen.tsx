@@ -323,13 +323,29 @@ const HomeScreen = () => {
     headerAnimationRef.current?.stop();
     headerAnimationRef.current = null;
     collapsibleHeaderProgress.stopAnimation();
+
+    const duration = visible ? HEADER_SHOW_ANIMATION_MS : HEADER_HIDE_ANIMATION_MS;
+    if (Platform.OS === 'android') {
+      // Animating height through Animated with the JS driver forces FlatList to
+      // relayout on every scroll frame on Android. Let the native layout system
+      // animate the single height change instead, which keeps scrolling smooth.
+      if (animate) {
+        LayoutAnimation.configureNext({
+          duration,
+          update: { type: LayoutAnimation.Types.easeInEaseOut },
+        });
+      }
+      collapsibleHeaderProgress.setValue(visible ? 1 : 0);
+      setCollapsibleHeaderVisibleState(visible);
+      return;
+    }
+
     setCollapsibleHeaderVisibleState(visible);
     if (!animate) {
       collapsibleHeaderProgress.setValue(visible ? 1 : 0);
       return;
     }
 
-    const duration = visible ? HEADER_SHOW_ANIMATION_MS : HEADER_HIDE_ANIMATION_MS;
     const animation = Animated.timing(collapsibleHeaderProgress, {
       toValue: visible ? 1 : 0,
       duration,
@@ -1299,10 +1315,12 @@ const HomeScreen = () => {
         style={[
           styles.collapsibleTopHeader,
           collapsibleHeaderHeight > 0 && {
-            height: collapsibleHeaderProgress.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, collapsibleHeaderHeight],
-            }),
+            height: Platform.OS === 'android'
+              ? (collapsibleHeaderVisible ? collapsibleHeaderHeight : 0)
+              : collapsibleHeaderProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, collapsibleHeaderHeight],
+              }),
           },
         ]}
       >

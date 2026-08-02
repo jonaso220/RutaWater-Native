@@ -108,6 +108,7 @@ const HEADER_HIDE_ANIMATION_MS = 240;
 const HEADER_SHOW_ANIMATION_MS = 280;
 const HEADER_HIDE_SCROLL_DISTANCE = 48;
 const HEADER_SHOW_SCROLL_DISTANCE = 28;
+const ANDROID_HEADER_TRANSITION_GRACE_MS = 48;
 const REFRESH_TIMEOUT_MS = 10_000;
 const reorderLayoutAnimation = {
   duration: REORDER_ANIMATION_MS,
@@ -283,6 +284,9 @@ const HomeScreen = () => {
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -295,6 +299,9 @@ const HomeScreen = () => {
   const scrollDirectionDistanceRef = useRef(0);
   const [collapsibleHeaderHeight, setCollapsibleHeaderHeight] = useState(0);
   const headerAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const androidHeaderDragActiveRef = useRef(false);
+  const androidPendingHeaderVisibleRef = useRef<boolean | null>(null);
+  const androidHeaderTransitionUntilRef = useRef(0);
   const reorderAnimationActiveRef = useRef(false);
   const reorderAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quickActionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -329,6 +336,11 @@ const HomeScreen = () => {
       // Animating height through Animated with the JS driver forces FlatList to
       // relayout on every scroll frame on Android. Let the native layout system
       // animate the single height change instead, which keeps scrolling smooth.
+      // Ignore the offset changes produced by that relayout so they cannot be
+      // mistaken for a reverse finger gesture and reopen/close the header.
+      androidHeaderTransitionUntilRef.current = animate
+        ? Date.now() + duration + ANDROID_HEADER_TRANSITION_GRACE_MS
+        : 0;
       if (animate) {
         LayoutAnimation.configureNext({
           duration,
@@ -378,15 +390,34 @@ const HomeScreen = () => {
     scrollDirectionDistanceRef.current = 0;
   }, []);
 
+  const requestCollapsibleHeaderVisible = useCallback((visible: boolean) => {
+    if (Platform.OS === 'android' && androidHeaderDragActiveRef.current) {
+      // Changing the list viewport while Android is tracking the finger makes
+      // slow drags jump. Apply only the final direction when the drag ends.
+      androidPendingHeaderVisibleRef.current = visible;
+      return;
+    }
+    setCollapsibleHeaderVisible(visible);
+  }, [setCollapsibleHeaderVisible]);
+
   const handleClientListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offset = Math.max(0, event.nativeEvent.contentOffset.y);
     const delta = offset - lastListOffsetRef.current;
     lastListOffsetRef.current = offset;
 
+    if (
+      Platform.OS === 'android' &&
+      Date.now() < androidHeaderTransitionUntilRef.current
+    ) {
+      lastScrollDirectionRef.current = 0;
+      scrollDirectionDistanceRef.current = 0;
+      return;
+    }
+
     if (offset <= 8) {
       lastScrollDirectionRef.current = 0;
       scrollDirectionDistanceRef.current = 0;
-      setCollapsibleHeaderVisible(true);
+      requestCollapsibleHeaderVisible(true);
       return;
     }
     if (Math.abs(delta) < 1) return;
@@ -402,8 +433,26 @@ const HomeScreen = () => {
       ? HEADER_HIDE_SCROLL_DISTANCE
       : HEADER_SHOW_SCROLL_DISTANCE;
     if (scrollDirectionDistanceRef.current >= distanceToToggle) {
-      setCollapsibleHeaderVisible(direction === -1);
+      requestCollapsibleHeaderVisible(direction === -1);
       scrollDirectionDistanceRef.current = 0;
+    }
+  }, [requestCollapsibleHeaderVisible]);
+
+  const handleClientListBeginDrag = useCallback(() => {
+    if (Platform.OS === 'android') {
+      androidHeaderDragActiveRef.current = true;
+      androidPendingHeaderVisibleRef.current = null;
+    }
+    if (showFilters) setShowFilters(false);
+  }, [showFilters]);
+
+  const handleClientListEndDrag = useCallback(() => {
+    if (Platform.OS !== 'android') return;
+    androidHeaderDragActiveRef.current = false;
+    const pendingVisibility = androidPendingHeaderVisibleRef.current;
+    androidPendingHeaderVisibleRef.current = null;
+    if (pendingVisibility !== null) {
+      setCollapsibleHeaderVisible(pendingVisibility);
     }
   }, [setCollapsibleHeaderVisible]);
 
@@ -454,9 +503,6 @@ const HomeScreen = () => {
       setRefreshing(false);
     }
   }, [user?.uid, activeScopeGroupId, groupData?.groupId]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [appSettings, setAppSettings] = useState<Record<string, string> | null>(null);
   // Queue of undo entries: each "Listo" tap pushes one. Banner shows the
   // newest; tapping Undo pops the newest. Each entry self-expires after 5s.
@@ -1785,7 +1831,8 @@ const HomeScreen = () => {
           contentContainerStyle={styles.listContent}
           onScroll={handleClientListScroll}
           scrollEventThrottle={16}
-          onScrollBeginDrag={() => showFilters && setShowFilters(false)}
+          onScrollBeginDrag={handleClientListBeginDrag}
+          onScrollEndDrag={handleClientListEndDrag}
           initialNumToRender={12}
           maxToRenderPerBatch={12}
           windowSize={11}
@@ -1809,7 +1856,8 @@ const HomeScreen = () => {
         renderItem={renderListItem}
         onScroll={handleClientListScroll}
         scrollEventThrottle={16}
-        onScrollBeginDrag={() => showFilters && setShowFilters(false)}
+        onScrollBeginDrag={handleClientListBeginDrag}
+        onScrollEndDrag={handleClientListEndDrag}
         style={{ flex: 1 }}
         contentContainerStyle={styles.listContent}
         initialNumToRender={15}

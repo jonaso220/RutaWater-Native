@@ -111,13 +111,14 @@ export const useDataExport = (user: ExportUser) => {
       }
 
       const backup = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         exportDate: new Date().toISOString().split('T')[0],
         exportedBy: user.email || user.uid,
         profileName: user.profileName || '',
         clients: allClients.map((c) => ({
           id: c.id, customerId: c.customerId || c.id,
           name: c.name, phone: c.phone || '', address: c.address || '',
+          addresses: c.addresses || [],
           lat: c.lat || '', lng: c.lng || '', freq: c.freq || '',
           visitDay: c.visitDay || '', visitDays: c.visitDays || [],
           specificDate: c.specificDate || '', notes: c.notes || '',

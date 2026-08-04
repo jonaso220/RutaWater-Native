@@ -1,4 +1,4 @@
-import { RELATIONSHIP_TYPES } from '../types';
+import { ClientAddress, ClientAddressType, RELATIONSHIP_TYPES } from '../types';
 import { parseDate, sanitizePhone, sanitizeProductQty, sanitizeString } from './helpers';
 
 export interface BackupClientRecord {
@@ -7,6 +7,7 @@ export interface BackupClientRecord {
   name: string;
   phone: string;
   address: string;
+  addresses: ClientAddress[];
   notes: string;
   lat: string;
   lng: string;
@@ -85,6 +86,27 @@ const safeMapsLink = (value: unknown): string => {
   return /^https?:\/\/[^\s]+$/i.test(link) ? link : '';
 };
 
+const sanitizeAddresses = (value: unknown): ClientAddress[] => {
+  if (!Array.isArray(value)) return [];
+  const validTypes = new Set<ClientAddressType>(['home', 'work', 'other']);
+  const seen = new Set<string>();
+  return value.slice(0, 10).flatMap((entry, index) => {
+    if (!isObject(entry)) return [];
+    let id = sanitizeString(typeof entry.id === 'string' ? entry.id : '', 100) || `address-${index + 1}`;
+    if (seen.has(id)) id = `${id}-${index + 1}`;
+    seen.add(id);
+    const type = typeof entry.type === 'string' && validTypes.has(entry.type as ClientAddressType)
+      ? entry.type as ClientAddressType
+      : (index === 0 ? 'home' : 'other');
+    const address = sanitizeString(entry.address, 200);
+    const mapsLink = safeMapsLink(entry.mapsLink);
+    const lat = sanitizeString(entry.lat, 20);
+    const lng = sanitizeString(entry.lng, 20);
+    if (!address && !mapsLink && !lat && !lng) return [];
+    return [{ id, type, address, mapsLink, lat, lng }];
+  });
+};
+
 const sanitizeProducts = (value: unknown): Record<string, string> => {
   if (!isObject(value)) return {};
   const products: Record<string, string> = {};
@@ -149,6 +171,7 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
     name,
     phone: sanitizePhone(value.phone),
     address: sanitizeString(value.address, 200),
+    addresses: sanitizeAddresses(value.addresses),
     notes: sanitizeString(value.notes, 500),
     lat: sanitizeString(value.lat, 20),
     lng: sanitizeString(value.lng, 20),

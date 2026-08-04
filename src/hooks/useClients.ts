@@ -2,7 +2,7 @@ import { useCallback, useRef, useMemo } from 'react';
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
-import { Client, RELATIONSHIP_INVERSE } from '../types';
+import { Client, ClientAddress, RELATIONSHIP_INVERSE } from '../types';
 import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, toLocalDateString, parseDate } from '../utils/helpers';
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { findExactClientMatch, planDuplicateClientCleanup } from '../utils/clientDuplicates';
@@ -12,6 +12,7 @@ import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission }
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
 import { reportError } from '../lib/crashReporting';
 import { moveItemToPosition } from '../utils/clientOrder';
+import { getClientAddresses, getClientAddressSearchText, locationFields } from '../utils/clientAddresses';
 
 interface UseClientsProps {
   userId: string;
@@ -128,16 +129,20 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         // Los ex-clientes ("inactivo") salen de todos los filtros de trabajo.
         // (El filtro Deuda se resuelve a nivel de pantalla, así que ahí sí aparecen.)
         if (c.isInactive) return false;
-        if (filter === 'no_location') return !((c.lat && c.lng) || c.mapsLink);
+        if (filter === 'no_location') {
+          return !getClientAddresses(c).some((location) =>
+            !!(location.lat && location.lng) || !!location.mapsLink,
+          );
+        }
         if (filter === 'sin_frecuencia') return c.freq === 'once' || c.freq === 'on_demand';
         return c.freq === filter;
       })
-      .filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
+      .filter((c) => matcher(c.name || '', getClientAddressSearchText(c), c.phone || ''));
     if (!hasSearch) {
       return matched.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     }
     return matched
-      .map((c) => ({ c, score: matchScore(searchTerm, c.name || '', c.address || '', c.phone || '') }))
+      .map((c) => ({ c, score: matchScore(searchTerm, c.name || '', getClientAddressSearchText(c), c.phone || '') }))
       .sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || ''))
       .map((entry) => entry.c);
   }, [clients]);
@@ -169,7 +174,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         counts.sin_frecuencia++;
         counts.recurrencia++;
       }
-      if (!((c.lat && c.lng) || c.mapsLink)) counts.no_location++;
+      if (!getClientAddresses(c).some((location) =>
+        !!(location.lat && location.lng) || !!location.mapsLink,
+      )) counts.no_location++;
     });
     return counts;
   }, [clients]);
@@ -403,17 +410,19 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     newNotes: string,
     newProducts: Record<string, number>,
     mode: 'add' | 'replace' = 'add',
+    selectedAddress?: ClientAddress,
   ) => {
     try {
       const scope = groupId ? { groupId, userId } : { userId };
+      const savedAddresses = getClientAddresses(clientData);
+      const scheduledLocation = selectedAddress || savedAddresses[0];
+      const scheduledLocationFields = locationFields(scheduledLocation);
       const newData: Record<string, any> = {
         customerId: clientData.customerId || clientData.id,
         name: clientData.name,
         phone: clientData.phone,
-        address: clientData.address,
-        lat: clientData.lat,
-        lng: clientData.lng,
-        mapsLink: clientData.mapsLink,
+        addresses: savedAddresses,
+        ...scheduledLocationFields,
         ...scope,
         userId,
         freq: newFreq,

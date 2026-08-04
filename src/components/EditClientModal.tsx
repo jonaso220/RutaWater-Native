@@ -15,8 +15,9 @@ import ModalOverlay from './ModalOverlay';
 import { ProductLabel } from './ProductIcon';
 import ClientInfoEditModal from './ClientInfoEditModal';
 import FrequencyEditModal from './FrequencyEditModal';
+import ClientAddressesEditor from './ClientAddressesEditor';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { Client } from '../types';
+import { Client, ClientAddress } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
 import { FREQUENCIES, Frequency, getFreqLabel } from '../constants/products';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -27,6 +28,11 @@ import { getModalWidth, getNextVisitDate } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import { scheduleClientAlarm } from '../services/notifications';
 import { getLastVisitDate } from '../utils/recency';
+import {
+  getEditableClientAddresses,
+  locationFields,
+  sanitizeClientAddresses,
+} from '../utils/clientAddresses';
 
 interface EditClientModalProps {
   visible: boolean;
@@ -72,6 +78,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [mapsLink, setMapsLink] = useState('');
+  const [addresses, setAddresses] = useState<ClientAddress[]>([]);
   const [products, setProducts] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const [freq, setFreq] = useState<Frequency>('weekly');
@@ -91,6 +98,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       setAddress(client.address || '');
       setPhone(client.phone || '');
       setMapsLink(client.mapsLink || '');
+      setAddresses(getEditableClientAddresses(client));
       // Initialize products from client data. Start from whatever the client
       // already has (so quantities for hidden/removed products survive an edit)
       // then make sure every product in the current catalog has an entry.
@@ -302,9 +310,33 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     // Avoids overwriting `undefined` legacy fields with empty strings on
     // unrelated edits (e.g. just bumping product quantities from the list).
     if (name.trim() !== (client.name || '').trim()) data.name = name.trim();
-    if (address.trim() !== (client.address || '').trim()) data.address = address.trim();
+    if (showClientInfo) {
+      const cleanAddresses = sanitizeClientAddresses(addresses);
+      const currentAddresses = sanitizeClientAddresses(client.addresses);
+      const primaryFields = locationFields(cleanAddresses[0]);
+      if (JSON.stringify(cleanAddresses) !== JSON.stringify(currentAddresses)) {
+        data.addresses = cleanAddresses;
+      }
+      if (primaryFields.address !== (client.address || '').trim()) data.address = primaryFields.address;
+      if (primaryFields.mapsLink !== (client.mapsLink || '').trim()) data.mapsLink = primaryFields.mapsLink;
+      if (primaryFields.lat !== (client.lat || '').trim()) data.lat = primaryFields.lat;
+      if (primaryFields.lng !== (client.lng || '').trim()) data.lng = primaryFields.lng;
+    } else if (address.trim() !== (client.address || '').trim() || mapsLink.trim() !== (client.mapsLink || '').trim()) {
+      const existingAddresses = getEditableClientAddresses(client);
+      const primary = {
+        ...existingAddresses[0],
+        address: address.trim(),
+        mapsLink: mapsLink.trim(),
+        lat: '',
+        lng: '',
+      };
+      data.address = primary.address;
+      data.mapsLink = primary.mapsLink;
+      data.lat = '';
+      data.lng = '';
+      data.addresses = sanitizeClientAddresses([primary, ...existingAddresses.slice(1)]);
+    }
     if (phone.trim() !== (client.phone || '').trim()) data.phone = phone.trim();
-    if (mapsLink.trim() !== (client.mapsLink || '').trim()) data.mapsLink = mapsLink.trim();
     try {
       await onSave(client.id, data);
       // Si el cliente tenía alarma y el guardado le cambió el día o la fecha,
@@ -318,7 +350,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
         void scheduleClientAlarm(
           client.id,
           (data.name ?? client.name) || '',
-          (data.address ?? client.address) || '',
+          (data.address ?? (showClientInfo ? locationFields(sanitizeClientAddresses(addresses)[0]).address : client.address)) || '',
           client.alarm,
           {
             targetDay: savedDay || client.visitDay,
@@ -434,20 +466,6 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                 <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
                   <TextInput
                     style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
-                    value={address}
-                    onChangeText={setAddress}
-                    placeholder={t('editModal.addressPlaceholder')}
-                    placeholderTextColor={colors.textHint}
-                  />
-                  {address.length > 0 && (
-                    <TouchableOpacity onPress={() => setAddress('')} style={{ padding: 10 }}>
-                      <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
-                  <TextInput
-                    style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
                     value={phone}
                     onChangeText={setPhone}
                     placeholder={t('editModal.phonePlaceholder')}
@@ -460,23 +478,10 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                     </TouchableOpacity>
                   )}
                 </View>
-                <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
-                  <TextInput
-                    style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
-                    value={mapsLink}
-                    onChangeText={setMapsLink}
-                    placeholder={t('editModal.mapsPlaceholder')}
-                    placeholderTextColor={colors.textHint}
-                    keyboardType="url"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  {mapsLink.length > 0 && (
-                    <TouchableOpacity onPress={() => setMapsLink('')} style={{ padding: 10 }}>
-                      <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
+                  {t('clientAddresses.title')}
+                </Text>
+                <ClientAddressesEditor addresses={addresses} onChange={setAddresses} />
               </>
             )}
 

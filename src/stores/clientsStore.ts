@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Client } from '../types';
+import { Client, ClientAddress } from '../types';
 import { Frequency } from '../constants/products';
 
 interface ClientsStore {
@@ -26,6 +26,7 @@ interface ClientsStore {
     notes: string,
     products: Record<string, number>,
     mode?: 'add' | 'replace',
+    selectedAddress?: ClientAddress,
   ) => Promise<boolean>;
   toggleStar: (clientId: string, currentValue: boolean) => Promise<void>;
   saveAlarm: (clientId: string, time: string, targetDay?: string) => Promise<Date | null>;

@@ -516,10 +516,25 @@ export default {
     saveError: 'No se pudo guardar la nota.',
   },
 
+  clientAddresses: {
+    title: 'Direcciones',
+    home: 'Casa',
+    work: 'Trabajo',
+    other: 'Otro',
+    addressPlaceholder: 'Dirección',
+    mapsPlaceholder: 'URL de Google Maps',
+    add: 'Añadir nueva dirección',
+    remove: 'Eliminar dirección',
+    help: 'La primera dirección queda como principal. Podés elegir cualquiera al agendar una visita.',
+  },
+
   // Schedule Modal
   scheduleModal: {
     title: 'Agendar Visita',
     scheduleFor: 'Programar a {{name}}',
+    visitAddress: 'Dirección de la visita',
+    visitAddressHint: 'Elegí dónde querés agendar esta visita.',
+    savedMapLocation: 'Ubicación guardada en Google Maps',
     orderType: 'Tipo de Pedido',
     deliveryDate: 'Fecha de Entrega',
     visitDays: 'Dias de Visita',

@@ -1,5 +1,16 @@
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 
+export type ClientAddressType = 'home' | 'work' | 'other';
+
+export interface ClientAddress {
+  id: string;
+  type: ClientAddressType;
+  address: string;
+  mapsLink: string;
+  lat?: string;
+  lng?: string;
+}
+
 // Client document in Firestore 'clients' collection
 export interface Client {
   id: string;
@@ -9,6 +20,10 @@ export interface Client {
   name: string;
   phone: string;
   address: string;
+  // Ubicaciones guardadas en la ficha. `address/mapsLink/lat/lng` continúan
+  // siendo la ubicación efectiva de la visita para compatibilidad con rutas,
+  // alarmas, exportaciones y documentos anteriores a esta lista.
+  addresses?: ClientAddress[];
   notes: string;
   lat: string;
   lng: string;

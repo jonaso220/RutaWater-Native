@@ -8,6 +8,7 @@ export const withDefaults = (id: string, data: any): Client => ({
   name: '',
   phone: '',
   address: '',
+  addresses: [],
   notes: '',
   lat: '',
   lng: '',

@@ -8,6 +8,10 @@ const validBackup = {
     name: 'Cliente Uno',
     phone: '099 123 456',
     mapsLink: 'https://maps.app.goo.gl/example',
+    addresses: [
+      { id: 'home', type: 'home', address: 'Casa', mapsLink: 'https://maps.app.goo.gl/home' },
+      { id: 'work', type: 'work', address: 'Trabajo', mapsLink: 'javascript:alert(1)' },
+    ],
     freq: 'weekly',
     visitDay: 'Lunes',
     visitDays: ['Lunes'],
@@ -29,6 +33,10 @@ describe('backup validation', () => {
     expect(backup.clients[0].relationships).toEqual({ 'client-2': 'hermano_a' });
     expect(backup.clients[0].sameHousehold).toEqual({ 'client-2': false });
     expect(backup.clients[0].customerId).toBe('client-1');
+    expect(backup.clients[0].addresses).toEqual([
+      { id: 'home', type: 'home', address: 'Casa', mapsLink: 'https://maps.app.goo.gl/home', lat: '', lng: '' },
+      { id: 'work', type: 'work', address: 'Trabajo', mapsLink: '', lat: '', lng: '' },
+    ]);
     expect(backup.clients[0].lastDeliveredAt?.toISOString()).toBe('2026-07-09T12:00:00.000Z');
     expect(backup.debts[0].amount).toBe(350);
     expect(backup.schemaVersion).toBe(1);

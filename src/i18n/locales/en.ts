@@ -516,10 +516,25 @@ export default {
     saveError: 'The note could not be saved.',
   },
 
+  clientAddresses: {
+    title: 'Addresses',
+    home: 'Home',
+    work: 'Work',
+    other: 'Other',
+    addressPlaceholder: 'Address',
+    mapsPlaceholder: 'Google Maps URL',
+    add: 'Add another address',
+    remove: 'Remove address',
+    help: 'The first address is the primary one. You can choose any address when scheduling a visit.',
+  },
+
   // Schedule Modal
   scheduleModal: {
     title: 'Schedule Visit',
     scheduleFor: 'Schedule {{name}}',
+    visitAddress: 'Visit address',
+    visitAddressHint: 'Choose where to schedule this visit.',
+    savedMapLocation: 'Saved Google Maps location',
     orderType: 'Order Type',
     deliveryDate: 'Delivery Date',
     visitDays: 'Visit Days',

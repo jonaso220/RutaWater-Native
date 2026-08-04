@@ -15,7 +15,7 @@ import {
 import ModalOverlay from './ModalOverlay';
 import { ProductLabel } from './ProductIcon';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { Client } from '../types';
+import { Client, ClientAddress } from '../types';
 import { ALL_DAYS, Frequency, getDayLabel } from '../constants/products';
 import { useProducts } from '../stores/productCatalogStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { getModalWidth, getDayIndex, toLocalDateString } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import { getHouseholdMembers } from '../utils/recency';
+import { getClientAddresses } from '../utils/clientAddresses';
 
 // Nombres de día indexados por Date.getDay() (0 = Domingo).
 const ALL_DAYS_BY_INDEX = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -41,6 +42,8 @@ interface ScheduleModalProps {
     date: string,
     notes: string,
     products: Record<string, number>,
+    mode?: 'add' | 'replace',
+    selectedAddress?: ClientAddress,
   ) => boolean | void | Promise<boolean | void>;
   onClose: () => void;
   allClients?: Client[];
@@ -74,7 +77,13 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const [localProducts, setLocalProducts] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [selectedHouseholdIds, setSelectedHouseholdIds] = useState<string[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState('');
   const catalogProducts = useProducts();
+
+  const clientAddresses = React.useMemo(
+    () => client ? getClientAddresses(client) : [],
+    [client],
+  );
 
   const householdMembers = React.useMemo(() => {
     if (!client) return [];
@@ -90,6 +99,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     if (client) {
       setSaving(false);
       setSelectedHouseholdIds([]);
+      setSelectedAddressId(getClientAddresses(client)[0]?.id || '');
       // Reset notes and products so each new scheduling starts clean
       setLocalNotes('');
       // Always default to 'once' when scheduling from the directory: the
@@ -222,7 +232,18 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     try {
       // Periódico: la fecha (si se eligió) va como ancla de inicio de la frecuencia.
       const dateArg = localFreq === 'once' ? localDate : startDate;
-      const ok = await onSave(client, localDays, localFreq, dateArg, localNotes, cleanProducts);
+      const selectedAddress = clientAddresses.find((location) => location.id === selectedAddressId)
+        || clientAddresses[0];
+      const ok = await onSave(
+        client,
+        localDays,
+        localFreq,
+        dateArg,
+        localNotes,
+        cleanProducts,
+        'add',
+        selectedAddress,
+      );
       saveFailed = ok === false;
       // La selección es explícita y solo contiene familiares sin agenda activa.
       // Cada uno empieza vacío para evitar copiar por error el pedido del titular.
@@ -232,7 +253,16 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         );
         for (const member of selectedMembers) {
           try {
-            const memberOk = await onSave(member, localDays, localFreq, dateArg, '', {});
+            const memberOk = await onSave(
+              member,
+              localDays,
+              localFreq,
+              dateArg,
+              '',
+              {},
+              'add',
+              getClientAddresses(member)[0],
+            );
             if (memberOk === false) familySaveFailed = true;
           } catch (e) {
             familySaveFailed = true;
@@ -285,6 +315,44 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+            {clientAddresses.length > 1 && (
+              <View style={styles.addressSection}>
+                <Text style={styles.sectionTitle}>{t('scheduleModal.visitAddress')}</Text>
+                <Text style={styles.addressHint}>{t('scheduleModal.visitAddressHint')}</Text>
+                {clientAddresses.map((location) => {
+                  const selected = selectedAddressId === location.id;
+                  return (
+                    <TouchableOpacity
+                      key={location.id}
+                      onPress={() => setSelectedAddressId(location.id)}
+                      style={[styles.addressOption, selected && styles.addressOptionSelected]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: selected }}
+                    >
+                      <View style={[styles.addressIcon, selected && styles.addressIconSelected]}>
+                        <Ionicons
+                          name={location.type === 'home' ? 'home-outline' : location.type === 'work' ? 'briefcase-outline' : 'location-outline'}
+                          size={18}
+                          color={selected ? colors.textWhite : colors.primary}
+                        />
+                      </View>
+                      <View style={styles.addressOptionText}>
+                        <Text style={styles.addressType}>{t(`clientAddresses.${location.type}`)}</Text>
+                        <Text style={styles.addressValue} numberOfLines={2}>
+                          {location.address || t('scheduleModal.savedMapLocation')}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={23}
+                        color={selected ? colors.primary : colors.textHint}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
             {/* Frequency selector */}
             <Text style={styles.sectionTitle}>{t('scheduleModal.orderType')}</Text>
             <View style={styles.freqGrid}>
@@ -611,6 +679,57 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     color: colors.textMuted,
     textTransform: 'uppercase',
     marginBottom: s(10),
+  },
+  addressSection: {
+    marginBottom: s(20),
+  },
+  addressHint: {
+    fontSize: s(13),
+    lineHeight: s(18),
+    color: colors.textHint,
+    marginTop: -s(5),
+    marginBottom: s(10),
+  },
+  addressOption: {
+    minHeight: s(62),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(10),
+    padding: s(10),
+    marginBottom: s(8),
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: s(12),
+    backgroundColor: colors.sectionBackground,
+  },
+  addressOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  addressIcon: {
+    width: s(36),
+    height: s(36),
+    borderRadius: s(18),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+  },
+  addressIconSelected: {
+    backgroundColor: colors.primary,
+  },
+  addressOptionText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  addressType: {
+    fontSize: s(13),
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  addressValue: {
+    fontSize: s(13),
+    color: colors.textMuted,
+    marginTop: s(2),
   },
   hintInline: {
     fontSize: s(12),

@@ -1,0 +1,219 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Transitional production policy for the 1.48 -> 1.49 rollout.
+    // It keeps the published clients working while the 1.49 backend becomes
+    // available, but closes the lifetime-Premium bypass immediately.
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(uid()));
+    }
+    function userData() {
+      return get(/databases/$(database)/documents/users/$(uid())).data;
+    }
+    function myGroupId() {
+      return userExists() ? userData().get('groupId', null) : null;
+    }
+    function myProfileIds() {
+      return (userExists() && userData().get('profileIds', []) is list)
+        ? userData().get('profileIds', [])
+        : [];
+    }
+    function familyGroupExists(groupId) {
+      return groupId != null
+        && exists(/databases/$(database)/documents/groups/$(groupId));
+    }
+    function isFamilyGroupAdmin(groupId) {
+      return familyGroupExists(groupId)
+        && get(/databases/$(database)/documents/groups/$(groupId)).data.adminId == uid();
+    }
+
+    function inScope(data) {
+      return signedIn() && (
+        data.userId == uid() ||
+        (data.groupId != null && (
+          data.groupId == myGroupId() || data.groupId in myProfileIds()
+        ))
+      );
+    }
+
+    // The canonical group descriptor is the source of truth. A stale cached
+    // users.role can no longer grant deletion, and a real admin is not blocked
+    // merely because that legacy field is missing or delayed.
+    function canDeleteClient(data) {
+      return signedIn() && (
+        (data.get('isNote', false) == true && inScope(data)) ||
+        (data.userId == uid() && data.groupId == null) ||
+        (data.groupId != null && data.groupId == myGroupId()
+          && isFamilyGroupAdmin(data.groupId)) ||
+        (data.groupId != null && data.groupId != myGroupId()
+          && exists(/databases/$(database)/documents/profiles/$(data.groupId))
+          && get(/databases/$(database)/documents/profiles/$(data.groupId)).data.ownerId == uid())
+      );
+    }
+
+    match /clients/{id} {
+      allow read: if inScope(resource.data);
+      allow create: if inScope(request.resource.data);
+      allow update: if inScope(resource.data) && inScope(request.resource.data);
+      allow delete: if canDeleteClient(resource.data);
+    }
+
+    match /debts/{id} {
+      allow read, update, delete: if inScope(resource.data);
+      allow create: if inScope(request.resource.data);
+    }
+    match /transfers/{id} {
+      allow read, update, delete: if inScope(resource.data);
+      allow create: if inScope(request.resource.data);
+    }
+
+    match /daily_loads/{id} {
+      allow read, write: if signedIn() && id.split('_')[0] == uid();
+    }
+
+    // The deployed parser now owns quota writes. The 1.48 app consumes only
+    // after a successful response and treats a rejected client write as
+    // best-effort, so blocking it avoids double counting and period resets.
+    match /aiUsage/{id} {
+      allow read: if signedIn() && id == uid();
+      allow create, update, delete: if false;
+    }
+
+    // Only Firebase Admin may activate Premium. Existing benefits remain
+    // untouched; clients may only deactivate or delete their own override.
+    match /premiumOverrides/{id} {
+      allow read: if signedIn() && id == uid();
+      allow delete: if signedIn() && id == uid();
+      allow create: if false;
+      allow update: if signedIn() && id == uid()
+        && resource.data.active == true
+        && request.resource.data.active == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active']);
+    }
+
+    match /promoCodes/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /settings/{id} {
+      allow read, write: if signedIn() && (id == uid() || id == myGroupId());
+    }
+
+    match /users/{id} {
+      allow read: if signedIn() && (
+        id == uid() || (myGroupId() != null && resource.data.groupId == myGroupId())
+      );
+      allow create: if signedIn() && id == uid();
+      allow update: if signedIn() && (
+        id == uid() ||
+        (
+          myGroupId() != null
+          && isFamilyGroupAdmin(myGroupId())
+          && resource.data.get('groupId', null) == myGroupId()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'groupId',
+            'role'
+          ])
+          && request.resource.data.get('groupId', null) == null
+          && request.resource.data.get('role', null) == null
+        )
+      );
+      allow delete: if signedIn() && id == uid();
+    }
+
+    // Temporary compatibility for group/profile flows in the distributed 1.48
+    // app. New 1.49 clients use authenticated Admin-backed Functions instead.
+    match /groups/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.adminId == uid();
+      allow update, delete: if signedIn() && resource.data.adminId == uid();
+    }
+
+    match /profiles/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.ownerId == uid()
+        && request.resource.data.memberUids is list
+        && request.resource.data.memberUids.size() == 1
+        && request.resource.data.memberUids[0] == uid()
+        && request.resource.data.members is map
+        && request.resource.data.members.keys().hasOnly([uid()])
+        && request.resource.data.members[uid()].role == 'admin'
+        && request.resource.data.keys().hasOnly([
+          'name',
+          'ownerId',
+          'code',
+          'memberUids',
+          'members',
+          'createdAt'
+        ]);
+      allow update: if signedIn() && (
+        (
+          resource.data.ownerId == uid()
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.memberUids is list
+          && uid() in request.resource.data.memberUids
+          && request.resource.data.members is map
+          && uid() in request.resource.data.members
+          && request.resource.data.members[uid()].role == 'admin'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name',
+            'code',
+            'memberUids',
+            'members'
+          ])
+        ) ||
+        (
+          resource.data.ownerId != uid()
+          && resource.data.memberUids is list
+          && !(uid() in resource.data.memberUids)
+          && request.resource.data.memberUids is list
+          && uid() in request.resource.data.memberUids
+          && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+          && request.resource.data.memberUids.hasAll(resource.data.memberUids)
+          && request.resource.data.get('members', {}) is map
+          && request.resource.data.get('members', {}).diff(
+            resource.data.get('members', {})
+          ).affectedKeys().hasOnly([uid()])
+          && request.resource.data.get('members', {})[uid()].role == 'member'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'memberUids',
+            'members'
+          ])
+        ) ||
+        (
+          resource.data.ownerId != uid()
+          && resource.data.memberUids is list
+          && uid() in resource.data.memberUids
+          && request.resource.data.memberUids is list
+          && !(uid() in request.resource.data.memberUids)
+          && resource.data.memberUids.size() == request.resource.data.memberUids.size() + 1
+          && resource.data.memberUids.hasAll(request.resource.data.memberUids)
+          && request.resource.data.get('members', {}) is map
+          && !(uid() in request.resource.data.get('members', {}))
+          && request.resource.data.get('members', {}).diff(
+            resource.data.get('members', {})
+          ).affectedKeys().hasOnly([uid()])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'memberUids',
+            'members'
+          ])
+        )
+      );
+      allow delete: if signedIn() && resource.data.ownerId == uid();
+    }
+
+    // The 1.49 app probes this public flag. Until strict activation, absence of
+    // the document means version 0 and legacy userId queries remain selected.
+    match /appConfig/dataScope {
+      allow get: if signedIn();
+      allow list, write: if false;
+    }
+
+    // All new operational collections (promo reservations, migrations,
+    // deletion jobs and idempotency receipts) stay Admin-only by default.
+  }
+}

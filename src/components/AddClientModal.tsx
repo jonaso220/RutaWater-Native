@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -63,6 +63,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   const [destination, setDestination] = useState<Destination>(day ? 'day' : 'directory');
   const [selectedDay, setSelectedDay] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const catalogProducts = useProducts();
@@ -277,10 +278,12 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
     setProducts({});
     setDestination(isDirectoryMode ? 'directory' : 'day');
     setSelectedDay('');
+    savingRef.current = false;
     setSaving(false);
   };
 
   const handleClose = () => {
+    if (savingRef.current) return;
     resetForm();
     onClose();
   };
@@ -295,7 +298,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   const handleSave = async () => {
     // A fast double-tap can fire twice before the disabled state re-renders,
     // creating the client twice in Firestore.
-    if (saving) return;
+    if (savingRef.current) return;
     if (!name.trim()) {
       Alert.alert(t('error'), t('addModal.nameRequired'));
       return;
@@ -304,6 +307,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
       Alert.alert(t('error'), t('addModal.dayRequired'));
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     try {
       let targetDay = '';
@@ -318,6 +322,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
     } catch (e) {
       Alert.alert(t('error'), t('addModal.saveError'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };

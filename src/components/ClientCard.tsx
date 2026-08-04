@@ -325,8 +325,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
       style={[
         styles.card,
         wideLayout && styles.cardWide,
-        client.isStarred && styles.cardStarred,
         (client.freq === 'once') && styles.cardOnce,
+        client.isStarred && styles.cardStarred,
       ]}
     >
       <PromptModal
@@ -640,12 +640,12 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       borderLeftColor: colors.warningYellow,
     },
     cardOnce: {
-      borderLeftWidth: 4,
-      borderLeftColor: colors.warning,
+      borderWidth: 2,
+      borderColor: colors.warning,
     },
     cardStarred: {
-      borderLeftWidth: 4,
-      borderLeftColor: colors.warningAmber,
+      borderWidth: 2,
+      borderColor: colors.warningAmber,
     },
     orderBadge: {
       width: s(36),

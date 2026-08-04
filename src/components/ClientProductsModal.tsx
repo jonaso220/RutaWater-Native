@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   ScrollView,
@@ -43,6 +43,7 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
   );
   const [products, setProducts] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (!visible || !client) return;
@@ -55,6 +56,7 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
     });
     setProducts(nextProducts);
     setSaving(false);
+    savingRef.current = false;
   }, [client?.id, productsCatalog, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!client) return null;
@@ -67,14 +69,22 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
   };
 
   const handleSave = async () => {
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     const cleanProducts: Record<string, number> = {};
     Object.entries(products).forEach(([id, quantity]) => {
       if (quantity > 0) cleanProducts[id] = quantity;
     });
-    const saved = await onSave(client.id, { products: cleanProducts });
-    setSaving(false);
+    let saved = false;
+    try {
+      saved = await onSave(client.id, { products: cleanProducts });
+    } catch {
+      saved = false;
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
     if (!saved) {
       Alert.alert(t('error'), t('clientProductsModal.saveError'));
       return;
@@ -82,8 +92,12 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
     onClose();
   };
 
+  const requestClose = () => {
+    if (!savingRef.current) onClose();
+  };
+
   return (
-    <ModalOverlay visible={visible} onClose={onClose}>
+    <ModalOverlay visible={visible} onClose={requestClose}>
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <View style={styles.header}>
@@ -92,7 +106,8 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
               <Text style={styles.title} numberOfLines={1}>{client.name}</Text>
             </View>
             <TouchableOpacity
-              onPress={onClose}
+              onPress={requestClose}
+              disabled={saving}
               style={styles.closeButton}
               accessibilityRole="button"
               accessibilityLabel={t('close')}
@@ -114,6 +129,7 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
                 <View style={styles.quantityControls}>
                   <TouchableOpacity
                     onPress={() => adjustQuantity(product.id, -1)}
+                    disabled={saving}
                     style={styles.quantityButton}
                     accessibilityRole="button"
                     accessibilityLabel={`${product.label}: -1`}
@@ -123,6 +139,7 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
                   <Text style={styles.quantityValue}>{products[product.id] || 0}</Text>
                   <TouchableOpacity
                     onPress={() => adjustQuantity(product.id, 1)}
+                    disabled={saving}
                     style={[styles.quantityButton, styles.quantityButtonAdd]}
                     accessibilityRole="button"
                     accessibilityLabel={`${product.label}: +1`}

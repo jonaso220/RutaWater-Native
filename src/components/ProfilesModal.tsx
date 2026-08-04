@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -52,43 +52,85 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
   const [newName, setNewName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [shareProfileId, setShareProfileId] = useState<string | null>(null);
+  const [savingAction, setSavingAction] = useState<string | null>(null);
+  const savingRef = useRef(false);
 
   const myUid = user?.uid || '';
   // Panel de compartir embebido (NO un segundo Modal: en iOS apilar modales
   // nativos deja la presentación trabada).
   const shareProfile = profiles.find((p) => p.id === shareProfileId) || null;
 
-  const handleCreate = () => {
-    if (!newName.trim()) return;
-    createProfile(newName);
-    setNewName('');
+  const runMutation = async (key: string, mutation: () => Promise<void>): Promise<boolean> => {
+    if (savingRef.current) return false;
+    savingRef.current = true;
+    setSavingAction(key);
+    try {
+      await mutation();
+      return true;
+    } catch {
+      Alert.alert(t('error'), t('settings.profileOperationError'));
+      return false;
+    } finally {
+      savingRef.current = false;
+      setSavingAction(null);
+    }
   };
 
-  const handleSwitch = (id: string) => {
-    if (id !== activeProfileId) setActiveProfile(id);
-    onClose();
+  const handleRequestClose = () => {
+    if (!savingRef.current) onClose();
+  };
+
+  const handleRequestCloseShare = () => {
+    if (!savingRef.current) setShareProfileId(null);
+  };
+
+  const handleCreate = async () => {
+    if (!newName.trim()) return;
+    await runMutation('create', async () => {
+      await createProfile(newName);
+      setNewName('');
+    });
+  };
+
+  const handleSwitch = async (id: string) => {
+    if (id === activeProfileId) {
+      onClose();
+      return;
+    }
+    await runMutation(`switch:${id}`, async () => {
+      await setActiveProfile(id);
+      onClose();
+    });
   };
 
   const handleDelete = (id: string, name: string) => {
     Alert.alert(t('settings.deleteProfileTitle'), t('settings.deleteProfileMsg', { name }), [
       { text: t('cancel'), style: 'cancel' },
-      { text: t('delete'), style: 'destructive', onPress: () => deleteProfile(id) },
+      {
+        text: t('delete'),
+        style: 'destructive',
+        onPress: () => {
+          void runMutation(`delete:${id}`, () => deleteProfile(id));
+        },
+      },
     ]);
   };
 
   const handleJoin = async () => {
     if (!joinCode.trim()) return;
-    const res = await joinProfile(joinCode);
-    setJoinCode('');
-    const msgKey =
-      res === 'ok'
-        ? 'settings.joinOk'
-        : res === 'not_found'
-        ? 'settings.joinNotFound'
-        : res === 'already'
-        ? 'settings.joinAlready'
-        : 'settings.joinProfileError';
-    Alert.alert(res === 'ok' ? t('done') : t('error'), t(msgKey));
+    await runMutation('join', async () => {
+      const res = await joinProfile(joinCode);
+      if (res === 'ok') setJoinCode('');
+      const msgKey =
+        res === 'ok'
+          ? 'settings.joinOk'
+          : res === 'not_found'
+          ? 'settings.joinNotFound'
+          : res === 'already'
+          ? 'settings.joinAlready'
+          : 'settings.joinProfileError';
+      Alert.alert(res === 'ok' ? t('done') : t('error'), t(msgKey));
+    });
   };
 
   const handleRemoveMember = (uid: string, name: string) => {
@@ -98,7 +140,9 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
       {
         text: t('settings.removeMember'),
         style: 'destructive',
-        onPress: () => removeMember(shareProfile.id, uid),
+        onPress: () => {
+          void runMutation(`remove:${uid}`, () => removeMember(shareProfile.id, uid));
+        },
       },
     ]);
   };
@@ -112,8 +156,10 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
         text: t('settings.leaveProfileAction'),
         style: 'destructive',
         onPress: () => {
-          leaveProfile(id);
-          setShareProfileId(null);
+          void runMutation(`leave:${id}`, async () => {
+            await leaveProfile(id);
+            setShareProfileId(null);
+          });
         },
       },
     ]);
@@ -122,7 +168,7 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
   const memberEntries = shareProfile ? Object.entries(shareProfile.members || {}) : [];
 
   return (
-    <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
+    <ModalOverlay visible={visible} onClose={handleRequestClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -130,7 +176,7 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
         <View style={styles.modal}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>{t('settings.profilesTitle')}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={handleRequestClose} style={styles.closeBtn} disabled={!!savingAction}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -147,6 +193,7 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
                     key={p.id}
                     onPress={() => handleSwitch(p.id)}
                     style={[styles.quickRow, isActive && styles.quickRowActive]}
+                    disabled={!!savingAction}
                   >
                     <Ionicons
                       name={isActive ? 'radio-button-on' : 'radio-button-off'}
@@ -166,6 +213,7 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
                     onPress={() => handleSwitch(p.id)}
                     style={styles.radio}
                     accessibilityLabel={t('settings.switchProfile')}
+                    disabled={!!savingAction}
                   >
                     <Ionicons
                       name={isActive ? 'radio-button-on' : 'radio-button-off'}
@@ -177,10 +225,15 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
                     key={`${p.id}-${p.name}`}
                     style={[styles.nameInput, !(p.isPrimary || p.isOwner) && styles.nameInputLocked]}
                     defaultValue={p.name}
-                    editable={p.isPrimary || !!p.isOwner}
+                    editable={!savingAction && (p.isPrimary || !!p.isOwner)}
                     placeholder={t('settings.newProfilePlaceholder')}
                     placeholderTextColor={colors.textHint}
-                    onEndEditing={(e) => renameProfile(p.id, e.nativeEvent.text)}
+                    onEndEditing={(e) => {
+                      const nextName = e.nativeEvent.text;
+                      if (nextName.trim() && nextName.trim() !== p.name) {
+                        void runMutation(`rename:${p.id}`, () => renameProfile(p.id, nextName));
+                      }
+                    }}
                     returnKeyType="done"
                   />
                   {!p.isPrimary && (
@@ -188,6 +241,7 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
                       onPress={() => setShareProfileId(p.id)}
                       style={styles.iconBtn}
                       accessibilityLabel={t('settings.shareProfileTitle')}
+                      disabled={!!savingAction}
                     >
                       <Ionicons name="people-outline" size={20} color={colors.primary} />
                     </TouchableOpacity>
@@ -197,6 +251,7 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
                       onPress={() => handleDelete(p.id, p.name)}
                       style={styles.iconBtn}
                       accessibilityLabel={t('delete')}
+                      disabled={!!savingAction}
                     >
                       <Ionicons name="trash-outline" size={20} color={colors.danger} />
                     </TouchableOpacity>
@@ -216,8 +271,8 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
               />
               <TouchableOpacity
                 onPress={handleCreate}
-                style={[styles.addBtn, !newName.trim() && styles.addBtnDisabled]}
-                disabled={!newName.trim()}
+                style={[styles.addBtn, (!newName.trim() || !!savingAction) && styles.addBtnDisabled]}
+                disabled={!newName.trim() || !!savingAction}
               >
                 <Ionicons name="add" size={18} color={colors.textWhite} />
                 <Text style={styles.addBtnText}>{t('settings.createProfileBtn')}</Text>
@@ -239,8 +294,8 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
               />
               <TouchableOpacity
                 onPress={handleJoin}
-                style={[styles.addBtn, !joinCode.trim() && styles.addBtnDisabled]}
-                disabled={!joinCode.trim()}
+                style={[styles.addBtn, (!joinCode.trim() || !!savingAction) && styles.addBtnDisabled]}
+                disabled={!joinCode.trim() || !!savingAction}
               >
                 <Ionicons name="enter-outline" size={18} color={colors.textWhite} />
                 <Text style={styles.addBtnText}>{t('settings.joinProfileBtn')}</Text>
@@ -253,7 +308,7 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
           </ScrollView>
 
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.doneBtn} onPress={onClose}>
+            <TouchableOpacity style={styles.doneBtn} onPress={handleRequestClose} disabled={!!savingAction}>
               <Text style={styles.doneBtnText}>{t('done')}</Text>
             </TouchableOpacity>
           </View>
@@ -264,14 +319,18 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
               <TouchableOpacity
                 style={StyleSheet.absoluteFill}
                 activeOpacity={1}
-                onPress={() => setShareProfileId(null)}
+                onPress={handleRequestCloseShare}
               />
               <View style={styles.shareCard}>
                 <View style={styles.shareHeader}>
                   <Text style={styles.shareTitle} numberOfLines={1}>
                     {shareProfile.name}
                   </Text>
-                  <TouchableOpacity onPress={() => setShareProfileId(null)} style={styles.closeBtn}>
+                  <TouchableOpacity
+                    onPress={handleRequestCloseShare}
+                    style={styles.closeBtn}
+                    disabled={!!savingAction}
+                  >
                     <Text style={styles.closeBtnText}>✕</Text>
                   </TouchableOpacity>
                 </View>
@@ -299,7 +358,11 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
                           </Text>
                         </View>
                         {shareProfile.isOwner && !isSelf && (
-                          <TouchableOpacity onPress={() => handleRemoveMember(uid, label)} style={styles.iconBtn}>
+                          <TouchableOpacity
+                            onPress={() => handleRemoveMember(uid, label)}
+                            style={styles.iconBtn}
+                            disabled={!!savingAction}
+                          >
                             <Ionicons name="close-circle" size={22} color={colors.danger} />
                           </TouchableOpacity>
                         )}
@@ -308,7 +371,11 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
                   })}
 
                   {!shareProfile.isOwner && (
-                    <TouchableOpacity onPress={handleLeave} style={styles.leaveBtn}>
+                    <TouchableOpacity
+                      onPress={handleLeave}
+                      style={styles.leaveBtn}
+                      disabled={!!savingAction}
+                    >
                       <Ionicons name="exit-outline" size={18} color={colors.danger} />
                       <Text style={styles.leaveBtnText}>{t('settings.leaveProfileAction')}</Text>
                     </TouchableOpacity>

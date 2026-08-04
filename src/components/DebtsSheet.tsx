@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -79,6 +79,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [addAmount, setAddAmount] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [editingDebt, setEditingDebt] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
 
@@ -214,21 +215,26 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   }, [clients, addSearch]);
 
   const handleAddDebt = async () => {
-    if (!selectedClient || !onAddDebt || saving) return;
+    if (!selectedClient || !onAddDebt || savingRef.current) return;
     const amount = parseMoneyInput(addAmount);
     if (!amount || amount <= 0) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await onAddDebt(selectedClient, amount);
       setAddAmount('');
       setSelectedClient(null);
       setShowAddPanel(false);
+    } catch {
+      Alert.alert(t('error'), t('debtsSheet.operationError'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
 
   const closeAddPanel = () => {
+    if (savingRef.current) return;
     setShowAddPanel(false);
     setAddSearch('');
     setSelectedClient(null);
@@ -237,13 +243,17 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 
   const handleSaveEdit = async (debtId: string) => {
     const amount = parseMoneyInput(editAmount);
-    if (!amount || amount <= 0 || saving) return;
+    if (!amount || amount <= 0 || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await onEditDebt(debtId, amount);
       setEditingDebt(null);
       setEditAmount('');
+    } catch {
+      Alert.alert(t('error'), t('debtsSheet.operationError'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -253,7 +263,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const uniqueClients = clientGroups.length;
 
   const handleMarkPaid = (debt: Debt) => {
-    if (saving) return;
+    if (savingRef.current) return;
     Alert.alert(
       t('debtModal.confirmPayment'),
       t('debtModal.paidConfirm', { name: debt.clientName, amount: formatMoney(debt.amount) }),
@@ -262,10 +272,15 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
         {
           text: t('debtModal.paid'),
           onPress: async () => {
+            if (savingRef.current) return;
+            savingRef.current = true;
             setSaving(true);
             try {
               await onMarkPaid(debt);
+            } catch {
+              Alert.alert(t('error'), t('debtsSheet.operationError'));
             } finally {
+              savingRef.current = false;
               setSaving(false);
             }
           },
@@ -275,7 +290,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   };
 
   const handleMarkAllPaid = (group: ClientDebtGroup) => {
-    if (saving) return;
+    if (savingRef.current) return;
     Alert.alert(
       t('debtsSheet.allPaidTitle'),
       t('debtsSheet.allPaidMsg', { name: group.clientName, count: group.debts.length, total: formatMoney(group.total) }),
@@ -284,10 +299,15 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
         {
           text: t('debtsSheet.allPaid'),
           onPress: async () => {
+            if (savingRef.current) return;
+            savingRef.current = true;
             setSaving(true);
             try {
               await onMarkAllPaid(group.clientId, group.debts.map((d) => d.id));
+            } catch {
+              Alert.alert(t('error'), t('debtsSheet.operationError'));
             } finally {
+              savingRef.current = false;
               setSaving(false);
             }
           },
@@ -484,8 +504,17 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     </View>
   );
 
+  const requestClose = () => {
+    if (savingRef.current) return;
+    setSearchTerm('');
+    setEditingDebt(null);
+    setEditAmount('');
+    closeAddPanel();
+    onClose();
+  };
+
   return (
-    <ModalOverlay visible={visible} onClose={() => { setSearchTerm(''); setEditingDebt(null); setEditAmount(''); closeAddPanel(); onClose(); }} animationType="slide">
+    <ModalOverlay visible={visible} onClose={requestClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -500,7 +529,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                   <Text style={styles.addDebtBtnText}>{t('debtsSheet.addBtn')}</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity onPress={() => { setSearchTerm(''); setEditingDebt(null); setEditAmount(''); closeAddPanel(); onClose(); }} style={styles.closeBtn}>
+              <TouchableOpacity onPress={requestClose} style={styles.closeBtn} disabled={saving}>
                 <Ionicons name="close" size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </View>

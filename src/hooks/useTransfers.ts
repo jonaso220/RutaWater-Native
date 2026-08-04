@@ -4,18 +4,28 @@ import { db } from '../config/firebase';
 import { Transfer, Client } from '../types';
 import { getClientMatchKey } from '../utils/helpers';
 import { useTransfersQuery } from './queries/useTransfersQuery';
+import { dataScopeFields } from '../utils/dataScope';
 
 interface UseTransfersProps {
   userId: string;
   groupId?: string;
   clients?: Client[];
+  scopeReadVersion?: number;
 }
 
-export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProps) => {
+export const useTransfers = ({
+  userId,
+  groupId,
+  clients = [],
+  scopeReadVersion = 0,
+}: UseTransfersProps) => {
   // Data source: TanStack Query holds the live transfers array via
   // useTransfersQuery's Firestore listener.
-  const transfersQuery = useTransfersQuery({ userId, groupId });
-  const transfers = useMemo<Transfer[]>(() => transfersQuery.data ?? [], [transfersQuery.data]);
+  const transfersQuery = useTransfersQuery({ userId, groupId, scopeReadVersion });
+  const transfers = useMemo<Transfer[]>(
+    () => transfersQuery.snapshotReady ? (transfersQuery.data ?? []) : [],
+    [transfersQuery.data, transfersQuery.snapshotReady],
+  );
   const transfersRef = useRef<Transfer[]>(transfers);
   transfersRef.current = transfers;
   const clientsRef = useRef<Client[]>(clients);
@@ -73,7 +83,7 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
         const existing = transfersRef.current.find((t) => matchingIds.has(t.clientId));
         if (existing) return false;
 
-        const scope = groupId ? { groupId, userId } : { userId };
+        const scope = dataScopeFields(userId, groupId);
         await db.collection('transfers').add({
           ...scope,
           clientId: client.id,
@@ -87,7 +97,7 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
         return true;
       } catch (e) {
         reportError(e, 'Error adding transfer');
-        return false;
+        throw e;
       } finally {
         busyRef.current.delete(key);
       }
@@ -107,6 +117,7 @@ export const useTransfers = ({ userId, groupId, clients = [] }: UseTransfersProp
         await db.collection('transfers').doc(transfer.id).delete();
       } catch (e) {
         reportError(e, 'Error reviewing transfer');
+        throw e;
       } finally {
         busyRef.current.delete(key);
       }

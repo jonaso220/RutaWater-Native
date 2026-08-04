@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -203,6 +203,11 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
   const [newEmoji, setNewEmoji] = useState('');
   const [newName, setNewName] = useState('');
   const [newShort, setNewShort] = useState('');
+  const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const pendingActionsRef = useRef(0);
+  const actionQueueRef = useRef<Promise<void>>(Promise.resolve());
   // Which product's emoji is being edited: a product id, NEW_TARGET, or null.
   const [emojiTarget, setEmojiTarget] = useState<string | null>(null);
   const [emojiDraft, setEmojiDraft] = useState('');
@@ -216,7 +221,8 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
     return ALL_PICKABLE.filter((item) => normalize(keywordsFor(item)).includes(q));
   }, [emojiSearch]);
 
-  const closeEmojiPicker = () => {
+  const closeEmojiPicker = (force = false) => {
+    if (savingRef.current && !force) return;
     setEmojiTarget(null);
     setEmojiDraft('');
     setEmojiSearch('');
@@ -224,34 +230,76 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
 
   const isCustom = (id: string) => customProducts.some((c) => c.id === id);
 
-  const pickEmoji = (emoji: string) => {
+  const runCatalogAction = async (
+    action: () => Promise<void>,
+    onSuccess?: () => void,
+  ): Promise<boolean> => {
+    pendingActionsRef.current += 1;
+    savingRef.current = true;
+    setSaving(true);
+    const queued = actionQueueRef.current.then(async () => {
+      try {
+        await action();
+        onSuccess?.();
+        return true;
+      } catch {
+        Alert.alert(t('error'), t('settings.productsSaveError'));
+        return false;
+      }
+    });
+    actionQueueRef.current = queued.then(() => undefined, () => undefined);
+    return queued.finally(() => {
+      pendingActionsRef.current -= 1;
+      if (pendingActionsRef.current === 0) {
+        savingRef.current = false;
+        setSaving(false);
+      }
+    });
+  };
+
+  const requestClose = () => {
+    if (!savingRef.current) onClose();
+  };
+
+  const pickEmoji = async (emoji: string) => {
     const value = emoji.trim();
     if (!value) return;
     if (emojiTarget === NEW_TARGET) {
       setNewEmoji(value);
+      closeEmojiPicker();
     } else if (emojiTarget) {
-      setProductEmoji(emojiTarget, value);
+      await runCatalogAction(
+        () => setProductEmoji(emojiTarget, value),
+        () => closeEmojiPicker(true),
+      );
     }
-    closeEmojiPicker();
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!newName.trim()) return;
-    addProduct({ label: newName, emoji: newEmoji, short: newShort });
-    setNewEmoji('');
-    setNewName('');
-    setNewShort('');
+    await runCatalogAction(
+      () => addProduct({ label: newName, emoji: newEmoji, short: newShort }),
+      () => {
+        setNewEmoji('');
+        setNewName('');
+        setNewShort('');
+      },
+    );
   };
 
   const handleDelete = (id: string, name: string) => {
     Alert.alert(t('settings.deleteProductTitle'), t('settings.deleteProductMsg', { name }), [
       { text: t('cancel'), style: 'cancel' },
-      { text: t('delete'), style: 'destructive', onPress: () => removeCustomProduct(id) },
+      {
+        text: t('delete'),
+        style: 'destructive',
+        onPress: () => { void runCatalogAction(() => removeCustomProduct(id)); },
+      },
     ]);
   };
 
   return (
-    <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
+    <ModalOverlay visible={visible} onClose={requestClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -259,7 +307,7 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
         <View style={styles.modal}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>{t('settings.productsTitle')}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={requestClose} style={styles.closeBtn} disabled={saving}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -275,8 +323,8 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                 <View key={p.id} style={[styles.row, isHidden && styles.rowHidden]}>
                   <View style={styles.reorderCol}>
                     <TouchableOpacity
-                      onPress={() => moveProduct(p.id, -1)}
-                      disabled={isFirst}
+                      onPress={() => { void runCatalogAction(() => moveProduct(p.id, -1)); }}
+                      disabled={isFirst || saving}
                       style={styles.reorderBtn}
                       accessibilityLabel="Subir"
                     >
@@ -287,8 +335,8 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                       />
                     </TouchableOpacity>
                     <TouchableOpacity
-                      onPress={() => moveProduct(p.id, 1)}
-                      disabled={isLast}
+                      onPress={() => { void runCatalogAction(() => moveProduct(p.id, 1)); }}
+                      disabled={isLast || saving}
                       style={styles.reorderBtn}
                       accessibilityLabel="Bajar"
                     >
@@ -301,24 +349,40 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                   </View>
                   <TouchableOpacity
                     onPress={() => setEmojiTarget(p.id)}
+                    disabled={saving}
                     style={styles.emojiTouch}
                     accessibilityLabel={t('settings.productEmojiHint')}
                   >
                     <ProductIcon value={p.emoji} size={sz(28)} style={styles.emoji} />
                   </TouchableOpacity>
                   <TextInput
-                    // Remount when the stored label changes so the uncontrolled
-                    // input always reflects the persisted value after a rename.
-                    key={`${p.id}-${p.label}`}
                     style={styles.nameInput}
-                    defaultValue={p.label}
+                    value={nameDrafts[p.id] ?? p.label}
+                    onChangeText={(value) => setNameDrafts((current) => ({
+                      ...current,
+                      [p.id]: value,
+                    }))}
                     placeholder={t('settings.productNamePlaceholder')}
                     placeholderTextColor={colors.textHint}
-                    onEndEditing={(e) => renameProduct(p.id, e.nativeEvent.text)}
+                    onEndEditing={(e) => {
+                      const value = e.nativeEvent.text;
+                      void runCatalogAction(
+                        () => renameProduct(p.id, value),
+                        () => setNameDrafts((current) => {
+                          const next = { ...current };
+                          delete next[p.id];
+                          return next;
+                        }),
+                      );
+                    }}
+                    editable={!saving}
                     returnKeyType="done"
                   />
                   <TouchableOpacity
-                    onPress={() => setProductHidden(p.id, !isHidden)}
+                    onPress={() => {
+                      void runCatalogAction(() => setProductHidden(p.id, !isHidden));
+                    }}
+                    disabled={saving}
                     style={styles.iconBtn}
                     accessibilityLabel={isHidden ? t('settings.showProduct') : t('settings.hideProduct')}
                   >
@@ -331,6 +395,7 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                   {isCustom(p.id) && (
                     <TouchableOpacity
                       onPress={() => handleDelete(p.id, p.label)}
+                      disabled={saving}
                       style={styles.iconBtn}
                       accessibilityLabel={t('delete')}
                     >
@@ -347,6 +412,7 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
               <TouchableOpacity
                 style={styles.emojiInput}
                 onPress={() => setEmojiTarget(NEW_TARGET)}
+                disabled={saving}
                 accessibilityLabel={t('settings.productEmojiHint')}
               >
                 <ProductIcon
@@ -361,6 +427,7 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                 onChangeText={setNewName}
                 placeholder={t('settings.productNamePlaceholder')}
                 placeholderTextColor={colors.textHint}
+                editable={!saving}
               />
               <TextInput
                 style={styles.shortInput}
@@ -369,12 +436,13 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                 placeholder={t('settings.productShortPlaceholder')}
                 placeholderTextColor={colors.textHint}
                 maxLength={12}
+                editable={!saving}
               />
             </View>
             <TouchableOpacity
               onPress={handleAdd}
               style={[styles.addBtn, !newName.trim() && styles.addBtnDisabled]}
-              disabled={!newName.trim()}
+              disabled={!newName.trim() || saving}
             >
               <Ionicons name="add" size={18} color={colors.textWhite} />
               <Text style={styles.addBtnText}>{t('settings.addProductBtn')}</Text>
@@ -382,7 +450,7 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
           </ScrollView>
 
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.doneBtn} onPress={onClose}>
+            <TouchableOpacity style={styles.doneBtn} onPress={requestClose} disabled={saving}>
               <Text style={styles.doneBtnText}>{t('done')}</Text>
             </TouchableOpacity>
           </View>
@@ -393,7 +461,8 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
               <TouchableOpacity
                 style={StyleSheet.absoluteFill}
                 activeOpacity={1}
-                onPress={closeEmojiPicker}
+                onPress={() => closeEmojiPicker()}
+                disabled={saving}
               />
               <View style={styles.pickerCard}>
                 <Text style={styles.pickerTitle}>{t('settings.chooseEmoji')}</Text>
@@ -415,7 +484,8 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                           <TouchableOpacity
                             key={item}
                             style={styles.emojiChoice}
-                            onPress={() => pickEmoji(item)}
+                            onPress={() => { void pickEmoji(item); }}
+                            disabled={saving}
                           >
                             <ProductIcon
                               value={item}
@@ -439,7 +509,8 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                               <TouchableOpacity
                                 key={value}
                                 style={styles.emojiChoice}
-                                onPress={() => pickEmoji(value)}
+                                onPress={() => { void pickEmoji(value); }}
+                                disabled={saving}
                               >
                                 <ProductIcon value={value} size={sz(30)} />
                               </TouchableOpacity>
@@ -455,7 +526,8 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                               <TouchableOpacity
                                 key={e}
                                 style={styles.emojiChoice}
-                                onPress={() => pickEmoji(e)}
+                                onPress={() => { void pickEmoji(e); }}
+                                disabled={saving}
                               >
                                 <ProductIcon
                                   value={e}
@@ -478,13 +550,14 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                     placeholder={t('settings.typeEmoji')}
                     placeholderTextColor={colors.textHint}
                     maxLength={12}
-                    onSubmitEditing={() => pickEmoji(emojiDraft)}
+                    onSubmitEditing={() => { void pickEmoji(emojiDraft); }}
                     returnKeyType="done"
+                    editable={!saving}
                   />
                   <TouchableOpacity
                     style={[styles.pickerUseBtn, !emojiDraft.trim() && styles.pickerUseBtnDisabled]}
-                    onPress={() => pickEmoji(emojiDraft)}
-                    disabled={!emojiDraft.trim()}
+                    onPress={() => { void pickEmoji(emojiDraft); }}
+                    disabled={!emojiDraft.trim() || saving}
                   >
                     <Text style={styles.pickerUseBtnText}>{t('settings.useEmoji')}</Text>
                   </TouchableOpacity>

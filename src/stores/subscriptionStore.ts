@@ -14,6 +14,7 @@ export const useSubscriptionStore = create<FullSubscriptionState>()(() => ({
   isPremium: false,
   loading: true,
   packages: [],
+  introEligibility: {},
   currentPlan: 'free',
   expirationDate: null,
   isTrialActive: false,

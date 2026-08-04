@@ -43,7 +43,15 @@ const SettingsScreen = () => {
   const isTablet = screenWidth >= 600;
   const groupModalWidth = getModalWidth(screenWidth);
   const styles = getStyles(colors, fontScale, isTablet, groupModalWidth);
-  const { user: firebaseUser, groupData, isAdmin, signOut, deleteAccount, setGroupData } = useAuthContext();
+  const {
+    user: firebaseUser,
+    groupData,
+    isAdmin,
+    scopeReadVersion,
+    signOut,
+    deleteAccount,
+    setGroupData,
+  } = useAuthContext();
   const clientCount = useClientsStore((s) => s.clientCount);
   const findDuplicateClients = useClientsStore((s) => s.findDuplicateClients);
   const cleanupDuplicates = useClientsStore((s) => s.cleanupDuplicates);
@@ -97,6 +105,7 @@ const SettingsScreen = () => {
     userId: uid,
     groupId: activeProfile?.scopeGroupId,
     profileName: activeProfileName,
+    scopeReadVersion,
   });
 
   if (!firebaseUser) return null;
@@ -155,8 +164,12 @@ const SettingsScreen = () => {
         text: t('settings.removeMember'),
         style: 'destructive',
         onPress: async () => {
-          await removePromo();
-          Alert.alert(t('done'), t('settings.premiumDeactivated'));
+          try {
+            await removePromo();
+            Alert.alert(t('done'), t('settings.premiumDeactivated'));
+          } catch {
+            Alert.alert(t('error'), t('settings.promoRemoveError'));
+          }
         },
       },
     ]);
@@ -312,7 +325,7 @@ const SettingsScreen = () => {
               placeholder={t('settings.promoPlaceholder')}
               placeholderTextColor={colors.textHint}
               autoCapitalize="characters"
-              maxLength={20}
+              maxLength={64}
             />
             <TouchableOpacity
               onPress={handleRedeemPromo}

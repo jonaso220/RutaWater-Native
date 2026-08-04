@@ -43,11 +43,13 @@ const ClientNotesModal: React.FC<ClientNotesModalProps> = ({
   const inputRef = useRef<TextInput>(null);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (!visible || !client) return;
     setNotes(client.notes || '');
     setSaving(false);
+    savingRef.current = false;
     const timer = setTimeout(() => inputRef.current?.focus(), 240);
     return () => clearTimeout(timer);
   }, [client?.id, visible]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -55,10 +57,18 @@ const ClientNotesModal: React.FC<ClientNotesModalProps> = ({
   if (!client) return null;
 
   const handleSave = async () => {
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
-    const saved = await onSave(client.id, { notes });
-    setSaving(false);
+    let saved = false;
+    try {
+      saved = await onSave(client.id, { notes });
+    } catch {
+      saved = false;
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
     if (!saved) {
       Alert.alert(t('error'), t('clientNotesModal.saveError'));
       return;
@@ -66,8 +76,12 @@ const ClientNotesModal: React.FC<ClientNotesModalProps> = ({
     onClose();
   };
 
+  const requestClose = () => {
+    if (!savingRef.current) onClose();
+  };
+
   return (
-    <ModalOverlay visible={visible} onClose={onClose}>
+    <ModalOverlay visible={visible} onClose={requestClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -79,7 +93,8 @@ const ClientNotesModal: React.FC<ClientNotesModalProps> = ({
               <Text style={styles.title} numberOfLines={1}>{client.name}</Text>
             </View>
             <TouchableOpacity
-              onPress={onClose}
+              onPress={requestClose}
+              disabled={saving}
               style={styles.closeButton}
               accessibilityRole="button"
               accessibilityLabel={t('close')}
@@ -101,10 +116,12 @@ const ClientNotesModal: React.FC<ClientNotesModalProps> = ({
                 multiline
                 numberOfLines={6}
                 textAlignVertical="top"
+                editable={!saving}
               />
               {notes.length > 0 && (
                 <TouchableOpacity
                   onPress={() => setNotes('')}
+                  disabled={saving}
                   style={styles.clearButton}
                   accessibilityRole="button"
                   accessibilityLabel={t('clientNotesModal.clear')}

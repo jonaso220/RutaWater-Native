@@ -11,20 +11,21 @@ import {
 import { useTranslation } from 'react-i18next';
 import { db } from '../config/firebase';
 import { reportError } from '../lib/crashReporting';
-import { useClientsStore } from '../stores/clientsStore';
-import { useDebtsStore } from '../stores/debtsStore';
-import { useTransfersStore } from '../stores/transfersStore';
 import { ValidatedBackup, validateBackup } from '../utils/backupRestore';
+import {
+  buildBackupRestorePlan,
+  CurrentRestoreRecord,
+  RestoreCollection,
+  RestoreWriteOperation,
+} from '../utils/backupRestorePlan';
+import { dataScopeQuery } from '../utils/dataScope';
+import { belongsToProfileScope } from '../utils/profileScope';
 
 interface UseDataRestoreArgs {
   userId: string;
   groupId?: string;
   profileName: string;
-}
-
-interface WriteOperation {
-  ref: any;
-  data: Record<string, any>;
+  scopeReadVersion?: number;
 }
 
 const MAX_BACKUP_BYTES = 25 * 1024 * 1024;
@@ -39,34 +40,44 @@ const localPathFromUri = (uri: string): string => {
   }
 };
 
-const sourceId = (record: any): string =>
-  typeof record?.backupSourceId === 'string' ? record.backupSourceId : '';
-
-const indexCurrentRecords = (records: any[]): Map<string, any> => {
-  const index = new Map<string, any>();
-  records.forEach((record) => {
-    if (record?.id) index.set(record.id, record);
-    const restoredId = sourceId(record);
-    if (restoredId) index.set(restoredId, record);
-  });
-  return index;
-};
-
-const commitOperations = async (operations: WriteOperation[]) => {
+const commitOperations = async (operations: RestoreWriteOperation[]) => {
   for (let offset = 0; offset < operations.length; offset += BATCH_SIZE) {
     const batch = db.batch();
-    operations.slice(offset, offset + BATCH_SIZE).forEach(({ ref, data }) => {
-      batch.set(ref, data, { merge: true });
+    operations.slice(offset, offset + BATCH_SIZE).forEach(({ collection, id, data }) => {
+      batch.set(db.collection(collection).doc(id), data, { merge: true });
     });
     await batch.commit();
   }
 };
 
-export const useDataRestore = ({ userId, groupId, profileName }: UseDataRestoreArgs) => {
+const loadCurrentScopeRecords = async (
+  collection: RestoreCollection,
+  userId: string,
+  groupId: string | undefined,
+  scopeReadVersion: number,
+): Promise<CurrentRestoreRecord[]> => {
+  const { field, value, additionalFilter } = dataScopeQuery(
+    userId,
+    groupId,
+    scopeReadVersion,
+  );
+  const baseQuery = db.collection(collection).where(field, '==', value);
+  const scopedQuery = additionalFilter
+    ? baseQuery.where(additionalFilter.field, '==', additionalFilter.value)
+    : baseQuery;
+  const snapshot = await scopedQuery.get();
+  return snapshot.docs
+    .filter((doc) => belongsToProfileScope(doc.data(), userId, groupId))
+    .map((doc) => ({ id: doc.id, ...doc.data() }) as CurrentRestoreRecord);
+};
+
+export const useDataRestore = ({
+  userId,
+  groupId,
+  profileName,
+  scopeReadVersion = 0,
+}: UseDataRestoreArgs) => {
   const { t } = useTranslation();
-  const clients = useClientsStore((state) => state.clients);
-  const debts = useDebtsStore((state) => state.debts);
-  const transfers = useTransfersStore((state) => state.transfers);
   const [selecting, setSelecting] = useState(false);
   const [writing, setWriting] = useState(false);
 
@@ -74,110 +85,21 @@ export const useDataRestore = ({ userId, groupId, profileName }: UseDataRestoreA
     if (writing) return;
     setWriting(true);
     try {
-      const scope = groupId ? { userId, groupId } : { userId };
-      const clientCollection = db.collection('clients');
-      const debtCollection = db.collection('debts');
-      const transferCollection = db.collection('transfers');
-      const currentClients = indexCurrentRecords(clients);
-      const currentDebts = indexCurrentRecords(debts);
-      const currentTransfers = indexCurrentRecords(transfers);
-      const clientIdMap = new Map<string, string>();
-      const clientRefs = new Map<string, any>();
-
-      backup.clients.forEach((client) => {
-        const existing = currentClients.get(client.id);
-        const ref = existing ? clientCollection.doc(existing.id) : clientCollection.doc();
-        clientIdMap.set(client.id, ref.id);
-        clientRefs.set(client.id, ref);
-      });
-
-      // customerId puede ser una identidad lógica cuyo documento original ya
-      // no existe (por ejemplo, después de limpiar un duplicado). Al restaurar,
-      // todas sus agendas deben converger al mismo identificador nuevo.
-      const customerIdMap = new Map<string, string>();
-      backup.clients.forEach((client) => {
-        if (customerIdMap.has(client.customerId)) return;
-        customerIdMap.set(
-          client.customerId,
-          clientIdMap.get(client.customerId) ||
-            currentClients.get(client.customerId)?.id ||
-            clientIdMap.get(client.id)!,
-        );
-      });
-
-      const orphanClientIds = new Map<string, string>();
-      const resolveClientId = (oldId: string, existingRecord?: any): string => {
-        const restored = clientIdMap.get(oldId);
-        if (restored) return restored;
-        const current = currentClients.get(oldId);
-        if (current?.id) return current.id;
-        if (existingRecord?.clientId) return existingRecord.clientId;
-        const prior = orphanClientIds.get(oldId);
-        if (prior) return prior;
-        const generated = clientCollection.doc().id;
-        orphanClientIds.set(oldId, generated);
-        return generated;
-      };
-
-      const operations: WriteOperation[] = [];
-      backup.clients.forEach((client) => {
-        const relationships: Record<string, string> = {};
-        const sameHousehold: Record<string, boolean> = {};
-        Object.entries(client.relationships).forEach(([oldRelatedId, type]) => {
-          const relatedId = clientIdMap.get(oldRelatedId) || currentClients.get(oldRelatedId)?.id;
-          if (relatedId) {
-            relationships[relatedId] = type;
-            // Missing values come from legacy backups and intentionally stay
-            // absent so the backwards-compatible default (same home) applies.
-            if (typeof client.sameHousehold[oldRelatedId] === 'boolean') {
-              sameHousehold[relatedId] = client.sameHousehold[oldRelatedId];
-            }
-          }
-        });
-        const { id, customerId, ...clientData } = client;
-        const restoredCustomerId = customerIdMap.get(customerId) || clientIdMap.get(id)!;
-        operations.push({
-          ref: clientRefs.get(id),
-          data: {
-            ...clientData,
-            customerId: restoredCustomerId,
-            relationships,
-            sameHousehold,
-            ...scope,
-            backupSourceId: id,
-            updatedAt: new Date(),
-          },
-        });
-      });
-
-      backup.debts.forEach((debt) => {
-        const existing = currentDebts.get(debt.id);
-        const ref = existing ? debtCollection.doc(existing.id) : debtCollection.doc();
-        const { id, clientId, ...debtData } = debt;
-        operations.push({
-          ref,
-          data: {
-            ...debtData,
-            clientId: resolveClientId(clientId, existing),
-            ...scope,
-            backupSourceId: id,
-          },
-        });
-      });
-
-      backup.transfers.forEach((transfer) => {
-        const existing = currentTransfers.get(transfer.id);
-        const ref = existing ? transferCollection.doc(existing.id) : transferCollection.doc();
-        const { id, clientId, ...transferData } = transfer;
-        operations.push({
-          ref,
-          data: {
-            ...transferData,
-            clientId: resolveClientId(clientId, existing),
-            ...scope,
-            backupSourceId: id,
-          },
-        });
+      // The active stores can still contain the previous route for a moment
+      // after switching profiles. Read the authoritative scope immediately
+      // before planning so an old cache can never redirect or overwrite a
+      // record in the newly selected route. If any read fails, no write starts.
+      const [currentClients, currentDebts, currentTransfers] = await Promise.all([
+        loadCurrentScopeRecords('clients', userId, groupId, scopeReadVersion),
+        loadCurrentScopeRecords('debts', userId, groupId, scopeReadVersion),
+        loadCurrentScopeRecords('transfers', userId, groupId, scopeReadVersion),
+      ]);
+      const operations = buildBackupRestorePlan({
+        backup,
+        scope: groupId ? { userId, groupId } : { userId },
+        currentClients,
+        currentDebts,
+        currentTransfers,
       });
 
       await commitOperations(operations);
@@ -195,7 +117,7 @@ export const useDataRestore = ({ userId, groupId, profileName }: UseDataRestoreA
     } finally {
       setWriting(false);
     }
-  }, [clients, debts, groupId, t, transfers, userId, writing]);
+  }, [groupId, scopeReadVersion, t, userId, writing]);
 
   const handleRestoreJSON = useCallback(async () => {
     if (selecting || writing) return;

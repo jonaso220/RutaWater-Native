@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -15,6 +15,10 @@ import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { useClientsStore } from '../stores/clientsStore';
 import { hapticLight } from '../utils/haptics';
+import {
+  getAlarmPermissionIssue,
+  openExactAlarmPermissionSettings,
+} from '../services/notifications';
 import ModalOverlay from './ModalOverlay';
 
 interface AlarmPickerProps {
@@ -60,6 +64,7 @@ const AlarmPicker: React.FC<AlarmPickerProps> = ({ client, selectedDay, onClose 
   const saveAlarm = useClientsStore((s) => s.saveAlarm);
 
   const [alarmTime, setAlarmTime] = useState(new Date());
+  const savingRef = useRef(false);
 
   // Each time a new client opens the picker, reset the default time to
   // the next half-hour from now. Keying on client.id makes this idempotent
@@ -80,18 +85,40 @@ const AlarmPicker: React.FC<AlarmPickerProps> = ({ client, selectedDay, onClose 
   };
 
   const submit = async (time: Date) => {
-    if (!client) return;
+    if (!client || savingRef.current) return;
+    savingRef.current = true;
     const hours = time.getHours().toString().padStart(2, '0');
     const minutes = time.getMinutes().toString().padStart(2, '0');
     const target = client;
-    onClose();
-    const fireAt = await saveAlarm(target.id, `${hours}:${minutes}`, selectedDay);
-    if (fireAt) {
-      showAlarmConfirm(fireAt);
-    } else {
-      // Permiso de notificaciones denegado o fallo al programar: avisar en vez
-      // de dejar al usuario creyendo que la alarma quedó puesta.
-      Alert.alert(t('error'), t('home.alarmFailed'));
+    try {
+      onClose();
+      const fireAt = await saveAlarm(target.id, `${hours}:${minutes}`, selectedDay);
+      if (fireAt) {
+        showAlarmConfirm(fireAt);
+      } else {
+        const permissionIssue = Platform.OS === 'android'
+          ? await getAlarmPermissionIssue().catch(() => null)
+          : null;
+        if (permissionIssue === 'exact-alarm') {
+          Alert.alert(
+            t('home.exactAlarmPermissionTitle'),
+            t('home.exactAlarmPermissionMsg'),
+            [
+              { text: t('cancel'), style: 'cancel' },
+              {
+                text: t('home.openAlarmSettings'),
+                onPress: () => void openExactAlarmPermissionSettings(),
+              },
+            ],
+          );
+          return;
+        }
+        // Permiso de notificaciones denegado o fallo al programar: avisar en vez
+        // de dejar al usuario creyendo que la alarma quedó puesta.
+        Alert.alert(t('error'), t('home.alarmFailed'));
+      }
+    } finally {
+      savingRef.current = false;
     }
   };
 

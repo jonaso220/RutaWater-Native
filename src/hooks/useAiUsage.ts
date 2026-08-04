@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import firestore from '@react-native-firebase/firestore';
 import { useAiUsageStore } from '../stores/aiUsageStore';
 import { getAiLimit, getCurrentPeriod } from '../constants/ai';
@@ -6,6 +6,7 @@ import { getAiLimit, getCurrentPeriod } from '../constants/ai';
 interface AiUsageDoc {
   count: number;
   period: string; // "YYYY-MM"
+  limit?: number;
   lastUsedAt: any; // FieldValue.serverTimestamp() / Timestamp
 }
 
@@ -19,7 +20,9 @@ interface Args {
 
 /**
  * Sincroniza el contador mensual de parseos de IA con Firestore.
- * El reset se hace de forma "lazy" cuando el período cambia.
+ * El backend es el único que consume cupo y hace el reset mensual. Este hook
+ * queda deliberadamente en modo lectura para que un cliente modificado no
+ * pueda autorizarse a sí mismo ni competir con otros dispositivos.
  */
 export const useAiUsage = ({ userId, plan }: Args) => {
   const limit = getAiLimit(plan);
@@ -32,7 +35,6 @@ export const useAiUsage = ({ userId, plan }: Args) => {
         period: getCurrentPeriod(),
         limit,
         loading: false,
-        tryConsume: async () => false,
       });
       return;
     }
@@ -42,12 +44,20 @@ export const useAiUsage = ({ userId, plan }: Args) => {
     const unsubscribe = docRef(userId).onSnapshot(
       (snap) => {
         const data = snap.data() as AiUsageDoc | undefined;
-        const currentPeriod = getCurrentPeriod();
-        const sameP = data?.period === currentPeriod;
+        const hasServerUsage = !!data
+          && typeof data.period === 'string'
+          && /^\d{4}-\d{2}$/.test(data.period)
+          && Number.isSafeInteger(data.count)
+          && data.count >= 0;
+        const serverLimit = hasServerUsage
+          && Number.isSafeInteger(data.limit)
+          && data.limit! > 0
+          ? data.limit!
+          : limit;
         useAiUsageStore.setState({
-          count: sameP ? data!.count : 0,
-          period: currentPeriod,
-          limit,
+          count: hasServerUsage ? data.count : 0,
+          period: hasServerUsage ? data.period : getCurrentPeriod(),
+          limit: serverLimit,
           loading: false,
         });
       },
@@ -59,42 +69,4 @@ export const useAiUsage = ({ userId, plan }: Args) => {
 
     return unsubscribe;
   }, [userId, limit]);
-
-  // Consumir 1 parseo en una transacción para evitar bypass en multi-device
-  const tryConsume = useCallback(async (): Promise<boolean> => {
-    if (!userId) return false;
-    const ref = docRef(userId);
-    const period = getCurrentPeriod();
-
-    try {
-      const allowed = await firestore().runTransaction(async (tx) => {
-        const snap = await tx.get(ref);
-        const data = snap.data() as AiUsageDoc | undefined;
-        const samePeriod = data?.period === period;
-        const currentCount = samePeriod ? data!.count : 0;
-
-        if (currentCount >= limit) return false;
-
-        tx.set(
-          ref,
-          {
-            count: currentCount + 1,
-            period,
-            lastUsedAt: firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-        return true;
-      });
-      return allowed;
-    } catch (err) {
-      console.warn('[aiUsage] tryConsume tx error:', err);
-      return false;
-    }
-  }, [userId, limit]);
-
-  // Inyectar tryConsume en el store cuando userId/plan cambia
-  useEffect(() => {
-    useAiUsageStore.setState({ tryConsume });
-  }, [tryConsume]);
 };

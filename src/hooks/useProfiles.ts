@@ -1,18 +1,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { AppState } from 'react-native';
+import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import { db } from '../config/firebase';
+import { API_ENDPOINTS } from '../config/api';
 import { reportError } from '../lib/crashReporting';
 import i18n from '../i18n';
 import { Profile, ProfileMember, PRIMARY_PROFILE_ID } from '../stores/profileStore';
-
-const generateCode = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-};
 
 /**
  * Maneja la lista de perfiles del usuario, el perfil activo, y el ABM.
@@ -36,40 +30,82 @@ export const useProfiles = (
   // '' = sin nombre guardado; el fallback traducido se resuelve al mostrar.
   const [primaryName, setPrimaryName] = useState<string>('');
   const [storedProfileIds, setStoredProfileIds] = useState<string[]>([]);
+  const [profileIdsInitialized, setProfileIdsInitialized] = useState(false);
+  const [profileIndexVersion, setProfileIndexVersion] = useState(0);
   const [loaded, setLoaded] = useState(false);
-  const backfilledRef = useRef<Set<string>>(new Set());
+  const [profileSyncRetryNonce, setProfileSyncRetryNonce] = useState(0);
+  const syncAttemptedForUserRef = useRef<string | null>(null);
+  const profileSyncRetryCountRef = useRef(0);
+  const profileSyncRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profileCreateRequestsRef = useRef<Map<string, string>>(new Map());
+  const needsLegacyOwnerRepair = customProfiles.some((profile) =>
+    profile.ownerId === userId && (!profile.code || !profile.members?.[userId]),
+  );
 
-  // Perfiles propios (donde el usuario es miembro).
+  // Los perfiles se cargan por IDs cacheados y cada documento vuelve a validar
+  // memberUids en las reglas. Firestore no puede demostrar de forma segura una
+  // regla de membresía para una query `array-contains`, por eso nunca abrimos el
+  // listado completo de profiles a usuarios autenticados.
   useEffect(() => {
-    if (!userId) return;
-    const unsub = db
+    if (!userId || !loaded || !profileIdsInitialized) return;
+    const ids = [...new Set(storedProfileIds.filter(Boolean))];
+    if (ids.length === 0) {
+      setCustomProfiles([]);
+      return;
+    }
+
+    const byId = new Map<string, Profile>();
+    const emit = () => {
+      setCustomProfiles(ids.map((id) => byId.get(id)).filter((item): item is Profile => !!item));
+    };
+    const unsubscribers = ids.map((id) => db
       .collection('profiles')
-      .where('memberUids', 'array-contains', userId)
+      .doc(id)
       .onSnapshot(
-        (snap) => {
-          const list = snap.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
+        (doc) => {
+          const data = doc.data();
+          const memberUids = Array.isArray(data?.memberUids) ? data.memberUids : [];
+          const lifecycleState = data?.lifecycleState || 'active';
+          if (!doc.exists || !data || lifecycleState !== 'active' || !memberUids.includes(userId)) {
+            byId.delete(id);
+          } else {
+            byId.set(id, {
+              id,
               name: data.name || i18n.t('settings.defaultProfileName'),
               isPrimary: false,
-              scopeGroupId: d.id,
+              scopeGroupId: id,
               ownerId: data.ownerId,
               code: data.code,
               members: (data.members || {}) as Record<string, ProfileMember>,
               isOwner: data.ownerId === userId,
-            } as Profile;
-          });
-          setCustomProfiles(list);
+            });
+          }
+          emit();
         },
-        (e) => reportError(e, 'Error loading profiles'),
-      );
-    return unsub;
-  }, [userId]);
+        () => {
+          // A stale cache entry after an owner removes/deletes a profile is
+          // harmless: canonical rules deny the document and it disappears.
+          byId.delete(id);
+          emit();
+        },
+      ));
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, [loaded, profileIdsInitialized, storedProfileIds, userId]);
 
   // Perfil activo + nombre del Reparto 1, desde el doc del usuario.
   useEffect(() => {
     if (!userId) return;
+    setLoaded(false);
+    setProfileIdsInitialized(false);
+    setProfileIndexVersion(0);
+    setStoredProfileIds([]);
+    setCustomProfiles([]);
+    syncAttemptedForUserRef.current = null;
+    profileSyncRetryCountRef.current = 0;
+    if (profileSyncRetryTimerRef.current) {
+      clearTimeout(profileSyncRetryTimerRef.current);
+      profileSyncRetryTimerRef.current = null;
+    }
     const unsub = db
       .collection('users')
       .doc(userId)
@@ -78,7 +114,12 @@ export const useProfiles = (
           const data = doc.data() || {};
           setActiveProfileId(data.activeProfileId || PRIMARY_PROFILE_ID);
           setPrimaryName(data.primaryProfileName || '');
-          setStoredProfileIds(Array.isArray(data.profileIds) ? data.profileIds : []);
+          const hasProfileIds = Array.isArray(data.profileIds);
+          setStoredProfileIds(hasProfileIds ? data.profileIds : []);
+          setProfileIdsInitialized(hasProfileIds);
+          setProfileIndexVersion(
+            typeof data.profileIndexVersion === 'number' ? data.profileIndexVersion : 0,
+          );
           setLoaded(true);
         },
         () => setLoaded(true),
@@ -86,48 +127,88 @@ export const useProfiles = (
     return unsub;
   }, [userId]);
 
-  // Backfill: perfiles propios creados antes de existir el sharing pueden no
-  // tener `code`/`members`. Los completamos una sola vez por perfil (ref guard
-  // para no regenerar el código en cada snapshot).
+  // One-time backend recovery for accounts not yet certified by the versioned
+  // server index. A legacy profileIds array may be present but incomplete, so
+  // its mere existence cannot skip canonical recovery.
+  // Admin queries canonical memberUids, updates the cache transactionally, and
+  // returns only this authenticated user's IDs; no profile list is exposed.
   useEffect(() => {
-    if (!userId) return;
-    customProfiles.forEach((p) => {
-      if (p.ownerId !== userId) return;
-      const needsCode = !p.code;
-      const needsMember = !p.members || !p.members[userId];
-      if ((!needsCode && !needsMember) || backfilledRef.current.has(p.id)) return;
-      backfilledRef.current.add(p.id);
-      const patch: Record<string, any> = {};
-      if (needsCode) patch.code = generateCode();
-      if (needsMember) {
-        patch[`members.${userId}`] = {
-          role: 'admin',
-          name: displayName || '',
-          email: email || '',
+    const syncKey = `${userId}:${profileIndexVersion < 1 ? 'index' : 'legacy-repair'}`;
+    if (
+      !userId
+      || !loaded
+      || (profileIndexVersion >= 1 && !needsLegacyOwnerRepair)
+      || profileSyncRetryCountRef.current >= 5
+      || syncAttemptedForUserRef.current === syncKey
+    ) return;
+    syncAttemptedForUserRef.current = syncKey;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const currentUser = auth().currentUser;
+        if (!currentUser || currentUser.uid !== userId) {
+          throw new Error('PROFILE_INDEX_AUTH_CHANGED');
+        }
+        const token = await currentUser.getIdToken();
+        const response = await fetch(API_ENDPOINTS.syncProfileIds, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        });
+        const payload = await response.json().catch(() => ({})) as {
+          status?: string;
+          profileIds?: unknown;
+          profileIndexVersion?: unknown;
         };
-        patch.memberUids = firestore.FieldValue.arrayUnion(userId);
+        if (!response.ok || payload.status !== 'ok' || !Array.isArray(payload.profileIds)) {
+          throw new Error('PROFILE_INDEX_SYNC_FAILED');
+        }
+        setStoredProfileIds(payload.profileIds.filter((id): id is string => typeof id === 'string'));
+        setProfileIdsInitialized(true);
+        setProfileIndexVersion(
+          typeof payload.profileIndexVersion === 'number' ? payload.profileIndexVersion : 1,
+        );
+        profileSyncRetryCountRef.current = 0;
+      } catch (error) {
+        if (cancelled) return;
+        reportError(error, 'Error recovering profile index');
+        // list queries are intentionally denied by rules, so a legacy account
+        // depends on this server index. A transient network/function failure
+        // must not hide every reparto for the rest of the app session.
+        const retryIndex = profileSyncRetryCountRef.current;
+        profileSyncRetryCountRef.current += 1;
+        if (profileSyncRetryCountRef.current >= 5) return;
+        syncAttemptedForUserRef.current = null;
+        const retryDelayMs = Math.min(30_000, 1_000 * (2 ** Math.min(retryIndex, 5)));
+        profileSyncRetryTimerRef.current = setTimeout(() => {
+          profileSyncRetryTimerRef.current = null;
+          setProfileSyncRetryNonce((value) => value + 1);
+        }, retryDelayMs);
       }
-      db.collection('profiles')
-        .doc(p.id)
-        .update(patch)
-        .catch((e) => reportError(e, 'Error backfilling profile'));
-    });
-  }, [customProfiles, userId, displayName, email]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loaded, needsLegacyOwnerRepair, profileIndexVersion, profileSyncRetryNonce, userId]);
 
-  // Mantiene `users/{uid}.profileIds` = ids de repartos a los que pertenece el
-  // usuario. Lo usan las reglas de Firestore para autorizar las consultas por
-  // lista (where('groupId' == perfil)) con una sola lectura del doc del usuario.
+  useEffect(() => () => {
+    if (profileSyncRetryTimerRef.current) {
+      clearTimeout(profileSyncRetryTimerRef.current);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!userId) return;
-    const desired = customProfiles.map((p) => p.id);
-    const a = [...desired].sort();
-    const b = [...storedProfileIds].sort();
-    if (a.length === b.length && a.every((v, i) => v === b[i])) return;
-    db.collection('users')
-      .doc(userId)
-      .set({ profileIds: desired }, { merge: true })
-      .catch((e) => reportError(e, 'Error syncing profileIds'));
-  }, [customProfiles, storedProfileIds, userId]);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      profileSyncRetryCountRef.current = 0;
+      syncAttemptedForUserRef.current = null;
+      setProfileSyncRetryNonce((value) => value + 1);
+    });
+    return () => subscription.remove();
+  }, []);
 
   const primary = useMemo<Profile>(
     () => ({
@@ -150,11 +231,12 @@ export const useProfiles = (
   const setActiveProfile = useCallback(
     async (id: string) => {
       if (!userId) return;
-      setActiveProfileId(id); // optimista
       try {
         await db.collection('users').doc(userId).set({ activeProfileId: id }, { merge: true });
+        setActiveProfileId(id);
       } catch (e) {
         reportError(e, 'Error setting active profile');
+        throw e;
       }
     },
     [userId],
@@ -165,21 +247,28 @@ export const useProfiles = (
       const n = name.trim();
       if (!n || !userId) return;
       try {
-        await db.collection('profiles').add({
-          name: n,
-          ownerId: userId,
-          code: generateCode(),
-          memberUids: [userId],
-          members: {
-            [userId]: { role: 'admin', name: displayName || '', email: email || '' },
+        const currentUser = auth().currentUser;
+        if (!currentUser || currentUser.uid !== userId) throw new Error('PROFILE_CREATE_AUTH_CHANGED');
+        const requestId = profileCreateRequestsRef.current.get(n)
+          || db.collection('profileCreateRequests').doc().id;
+        profileCreateRequestsRef.current.set(n, requestId);
+        const response = await fetch(API_ENDPOINTS.createProfile, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${await currentUser.getIdToken()}`,
+            'Content-Type': 'application/json',
           },
-          createdAt: new Date(),
+          body: JSON.stringify({ name: n, requestId }),
         });
+        const payload = await response.json().catch(() => ({})) as { status?: string };
+        if (!response.ok || payload.status !== 'ok') throw new Error('PROFILE_CREATE_FAILED');
+        profileCreateRequestsRef.current.delete(n);
       } catch (e) {
         reportError(e, 'Error creating profile');
+        throw e;
       }
     },
-    [userId, displayName, email],
+    [userId],
   );
 
   const joinProfile = useCallback(
@@ -187,44 +276,51 @@ export const useProfiles = (
       const c = code.trim().toUpperCase();
       if (!c || !userId) return 'error';
       try {
-        const snap = await db.collection('profiles').where('code', '==', c).limit(1).get();
-        if (snap.empty) return 'not_found';
-        const doc = snap.docs[0];
-        const data = doc.data();
-        if ((data.memberUids || []).includes(userId)) return 'already';
-        await doc.ref.update({
-          memberUids: firestore.FieldValue.arrayUnion(userId),
-          [`members.${userId}`]: { role: 'member', name: displayName || '', email: email || '' },
+        const currentUser = auth().currentUser;
+        if (!currentUser) return 'error';
+        const token = await currentUser.getIdToken();
+        const response = await fetch(API_ENDPOINTS.joinProfile, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ code: c }),
         });
-        return 'ok';
+        const payload = await response.json().catch(() => ({})) as { status?: string };
+        if (
+          response.ok
+          && (payload.status === 'ok' || payload.status === 'not_found' || payload.status === 'already')
+        ) {
+          return payload.status;
+        }
+        return 'error';
       } catch (e) {
         reportError(e, 'Error joining profile');
         return 'error';
       }
     },
-    [userId, displayName, email],
+    [userId],
   );
 
   const leaveProfile = useCallback(
     async (id: string) => {
       if (!userId || id === PRIMARY_PROFILE_ID) return;
       try {
-        await db
-          .collection('profiles')
-          .doc(id)
-          .update({
-            memberUids: firestore.FieldValue.arrayRemove(userId),
-            [`members.${userId}`]: firestore.FieldValue.delete(),
-          });
-        if (activeProfileId === id) {
-          await db
-            .collection('users')
-            .doc(userId)
-            .set({ activeProfileId: PRIMARY_PROFILE_ID }, { merge: true });
-          setActiveProfileId(PRIMARY_PROFILE_ID);
-        }
+        const batch = db.batch();
+        batch.update(db.collection('profiles').doc(id), {
+          memberUids: firestore.FieldValue.arrayRemove(userId),
+          [`members.${userId}`]: firestore.FieldValue.delete(),
+        });
+        batch.set(db.collection('users').doc(userId), {
+          profileIds: firestore.FieldValue.arrayRemove(id),
+          ...(activeProfileId === id ? { activeProfileId: PRIMARY_PROFILE_ID } : {}),
+        }, { merge: true });
+        await batch.commit();
+        if (activeProfileId === id) setActiveProfileId(PRIMARY_PROFILE_ID);
       } catch (e) {
         reportError(e, 'Error leaving profile');
+        throw e;
       }
     },
     [userId, activeProfileId],
@@ -243,6 +339,7 @@ export const useProfiles = (
           });
       } catch (e) {
         reportError(e, 'Error removing member');
+        throw e;
       }
     },
     [userId],
@@ -260,6 +357,7 @@ export const useProfiles = (
         }
       } catch (e) {
         reportError(e, 'Error renaming profile');
+        throw e;
       }
     },
     [userId],
@@ -269,33 +367,42 @@ export const useProfiles = (
     async (id: string) => {
       if (!userId || id === PRIMARY_PROFILE_ID) return; // Reparto 1 no se borra
       try {
-        // Borrar primero los datos del reparto: las reglas autorizan el delete
-        // por dueño del perfil leyendo profiles/{id}, así que el doc del perfil
-        // tiene que seguir existiendo mientras se borran. Antes solo se borraba
-        // el perfil y clientes/deudas/transferencias quedaban huérfanos e
-        // inaccesibles para siempre.
-        for (const col of ['clients', 'debts', 'transfers']) {
-          let snap = await db.collection(col).where('groupId', '==', id).limit(450).get();
-          while (!snap.empty) {
-            const batch = db.batch();
-            snap.docs.forEach((doc) => batch.delete(doc.ref));
-            await batch.commit();
-            snap = await db.collection(col).where('groupId', '==', id).limit(450).get();
-          }
+        const profileRef = db.collection('profiles').doc(id);
+        const profileDoc = await profileRef.get();
+        const profileData = profileDoc.data();
+        if (!profileDoc.exists || profileData?.ownerId !== userId) {
+          throw new Error('PROFILE_ARCHIVE_NOT_ALLOWED');
         }
-        await db.collection('profiles').doc(id).delete();
-        if (activeProfileId === id) {
-          await db
-            .collection('users')
-            .doc(userId)
-            .set({ activeProfileId: PRIMARY_PROFILE_ID }, { merge: true });
-          setActiveProfileId(PRIMARY_PROFILE_ID);
-        }
+        const ownerMember = profileData.members?.[userId] || {
+          role: 'admin',
+          name: displayName || '',
+          email: email || '',
+        };
+
+        // Soft-delete: archive only metadata and revoke shared membership. All
+        // clients, debts, transfers, and settings stay byte-for-byte intact so
+        // no customer data can disappear because of this UI action.
+        const finalBatch = db.batch();
+        finalBatch.update(profileRef, {
+          lifecycleState: 'archived',
+          archivedAt: firestore.FieldValue.serverTimestamp(),
+          memberUids: [userId],
+          members: {
+            [userId]: { ...ownerMember, role: 'admin' },
+          },
+        });
+        finalBatch.set(db.collection('users').doc(userId), {
+          profileIds: firestore.FieldValue.arrayRemove(id),
+          ...(activeProfileId === id ? { activeProfileId: PRIMARY_PROFILE_ID } : {}),
+        }, { merge: true });
+        await finalBatch.commit();
+        if (activeProfileId === id) setActiveProfileId(PRIMARY_PROFILE_ID);
       } catch (e) {
         reportError(e, 'Error deleting profile');
+        throw e;
       }
     },
-    [userId, activeProfileId],
+    [userId, activeProfileId, displayName, email],
   );
 
   return {

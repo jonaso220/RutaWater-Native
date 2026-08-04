@@ -40,6 +40,9 @@ export interface Client {
   isPinned: boolean;
   isNote: boolean;
   alarm: string;
+  // Día canónico elegido para la alarma (importante en clientes con varios días).
+  // Opcional para documentos anteriores; en ese caso se deriva de visitDays/visitDay.
+  alarmDay?: string;
   lastVisited: FirebaseFirestoreTypes.Timestamp | null;
   // Fecha canónica de la última entrega REAL. A diferencia de lastVisited,
   // nunca se usa como estado interno para calcular/reiniciar la agenda.
@@ -55,6 +58,9 @@ export interface Client {
   updatedAt: FirebaseFirestoreTypes.Timestamp | null;
   userId: string;
   groupId?: string;
+  // Canonical authorization/query scope. Optional only for legacy documents
+  // while the additive backfill is rolled out.
+  scopeKey?: string;
   relationships?: Record<string, string>; // clientId → relationship type
   // clientId → whether both clients belong to the same household. Missing
   // entries are treated as true for backwards compatibility with links made
@@ -115,6 +121,7 @@ export interface Debt {
   createdAt: FirebaseFirestoreTypes.Timestamp | null;
   userId: string;
   groupId?: string;
+  scopeKey?: string;
   backupSourceId?: string;
 }
 
@@ -130,6 +137,7 @@ export interface Transfer {
   createdAt: FirebaseFirestoreTypes.Timestamp | null;
   userId: string;
   groupId?: string;
+  scopeKey?: string;
   backupSourceId?: string;
 }
 

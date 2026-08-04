@@ -7,6 +7,7 @@ interface AuthContextType {
   user: FirebaseAuthTypes.User | null;
   loading: boolean;
   groupData: Group | null;
+  scopeReadVersion: number;
   isAdmin: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;

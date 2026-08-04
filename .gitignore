@@ -28,6 +28,7 @@ android/app/.cxx/
 android/build/
 android/.gradle/
 android/local.properties
+android/keystore.properties
 android/app/google-services.json
 android/app/rutawater-release.keystore
 *.apk
@@ -37,6 +38,9 @@ android/app/rutawater-release.keystore
 .env
 .env.local
 .xcode.env.local
+
+# Local Firebase emulator logs
+firestore-debug.log
 
 # Netlify
 .netlify/
@@ -57,4 +61,3 @@ Thumbs.db
 
 # Bundle
 *.jsbundle
-

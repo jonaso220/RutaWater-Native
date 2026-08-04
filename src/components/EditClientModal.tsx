@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import ClientInfoEditModal from './ClientInfoEditModal';
 import FrequencyEditModal from './FrequencyEditModal';
 import ClientAddressesEditor from './ClientAddressesEditor';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import auth from '@react-native-firebase/auth';
 import { Client, ClientAddress } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
 import { FREQUENCIES, Frequency, getFreqLabel } from '../constants/products';
@@ -26,7 +27,14 @@ import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
 import { getModalWidth, getNextVisitDate } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
-import { scheduleClientAlarm } from '../services/notifications';
+import {
+  cancelClientAlarm,
+  ClientAlarmSnapshot,
+  persistAlarmOrRollbackTrigger,
+  restoreClientAlarmSnapshots,
+  runSerializedAlarmMutation,
+  scheduleClientAlarm,
+} from '../services/notifications';
 import { getLastVisitDate } from '../utils/recency';
 import {
   getEditableClientAddresses,
@@ -41,7 +49,7 @@ interface EditClientModalProps {
   // client moves to a new day — without it we'd carry the source-day index
   // (e.g. position 54) into a day with a totally different ordering.
   allClients?: Client[];
-  onSave: (clientId: string, data: Partial<Client>) => void;
+  onSave: (clientId: string, data: Partial<Client>) => Promise<boolean>;
   onClose: () => void;
   onDelete?: (clientId: string) => Promise<void>;
   // Removes the client from the current day's list (keeps it in the directory).
@@ -86,6 +94,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const [pickerDate, setPickerDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [deleting, setDeleting] = useState(false);
   const [infoModalVisible, setInfoModalVisible] = useState(false);
   const [freqModalVisible, setFreqModalVisible] = useState(false);
@@ -93,6 +102,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
   useEffect(() => {
     if (client) {
+      savingRef.current = false;
       setSaving(false);
       setName(client.name || '');
       setAddress(client.address || '');
@@ -172,7 +182,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   };
 
   const handleSave = async () => {
-    if (saving) return;
+    if (savingRef.current) return;
     // Allow saving if client has visitDay OR visitDays OR user selected a new date
     const hasDay = (client.visitDays && client.visitDays.length > 0) || (client.visitDay && client.visitDay !== 'Sin Asignar');
     const hasNewDate = needsDate && startDate;
@@ -180,6 +190,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       Alert.alert(t('error'), t('editModal.errorNoDays'));
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     const data: Partial<Client> = { freq };
     if (!hideOrderDetails) {
@@ -337,31 +348,74 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       data.addresses = sanitizeClientAddresses([primary, ...existingAddresses.slice(1)]);
     }
     if (phone.trim() !== (client.phone || '').trim()) data.phone = phone.trim();
+    const savedDay = (data as any).visitDay as string | undefined;
+    const savedDate = (data as any).specificDate as string | undefined;
+    const dayMoved = savedDay !== undefined && savedDay !== client.visitDay;
+    const dateMoved = savedDate !== undefined && savedDate !== (client.specificDate || '');
+    const shouldRescheduleAlarm = !!client.alarm && (dayMoved || dateMoved);
+    const previousAlarm: ClientAlarmSnapshot | null = client.alarm
+      ? {
+        clientId: client.id,
+        clientName: client.name || '',
+        address: client.address || '',
+        time: client.alarm,
+        targetDay: client.alarmDay
+          || scheduledDay
+          || (client.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
+          || client.visitDay,
+        specificDate: client.freq === 'once' ? client.specificDate : undefined,
+        scopeKey: client.groupId || client.userId,
+        ownerUid: auth().currentUser?.uid,
+      }
+      : null;
+
     try {
-      await onSave(client.id, data);
-      // Si el cliente tenía alarma y el guardado le cambió el día o la fecha,
-      // reprogramar el trigger de notifee: hasta ahora quedaba apuntando al
-      // día viejo aunque la campana siguiera encendida en el día nuevo.
-      const savedDay = (data as any).visitDay as string | undefined;
-      const savedDate = (data as any).specificDate as string | undefined;
-      const dayMoved = savedDay !== undefined && savedDay !== client.visitDay;
-      const dateMoved = savedDate !== undefined && savedDate !== (client.specificDate || '');
-      if (client.alarm && (dayMoved || dateMoved)) {
-        void scheduleClientAlarm(
-          client.id,
-          (data.name ?? client.name) || '',
-          (data.address ?? (showClientInfo ? locationFields(sanitizeClientAddresses(addresses)[0]).address : client.address)) || '',
-          client.alarm,
-          {
-            targetDay: savedDay || client.visitDay,
-            specificDate: freq === 'once' ? (savedDate || client.specificDate) : undefined,
-          },
-        );
+      const persistChanges = async () => {
+        const saved = await onSave(client.id, data);
+        if (!saved) throw new Error('CLIENT_SAVE_FAILED');
+      };
+
+      if (shouldRescheduleAlarm && previousAlarm) {
+        data.alarmDay = savedDay || client.alarmDay || client.visitDay;
+        const alarmUpdated = await runSerializedAlarmMutation(client.id, async () => {
+          // Replace the local trigger first, then persist its new schedule. If
+          // either half fails, the helper cancels the replacement and restores
+          // the exact previous trigger snapshot.
+          const fireAt = await scheduleClientAlarm(
+            client.id,
+            (data.name ?? client.name) || '',
+            (data.address ?? (showClientInfo ? locationFields(sanitizeClientAddresses(addresses)[0]).address : client.address)) || '',
+            client.alarm,
+            {
+              targetDay: savedDay || client.alarmDay || client.visitDay,
+              specificDate: freq === 'once' ? (savedDate || client.specificDate) : undefined,
+              scopeKey: client.groupId || client.userId,
+              ownerUid: auth().currentUser?.uid,
+            },
+          );
+          if (!fireAt) {
+            await restoreClientAlarmSnapshots([previousAlarm]).catch(() => {});
+            return false;
+          }
+          await persistAlarmOrRollbackTrigger(
+            persistChanges,
+            () => cancelClientAlarm(client.id),
+            () => restoreClientAlarmSnapshots([previousAlarm]),
+          );
+          return true;
+        });
+        if (!alarmUpdated) {
+          Alert.alert(t('error'), t('home.alarmFailed'));
+          return;
+        }
+      } else {
+        await persistChanges();
       }
       onClose();
     } catch (e) {
       Alert.alert(t('error'), t('editModal.saveError'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -403,23 +457,37 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   // pasa al directorio (on_demand, sin días) para que salga de todas las rutas;
   // se mantiene guardado y reaparece al reactivarlo.
   const handleToggleInactive = async () => {
-    if (saving) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       const data: Partial<Client> = client.isInactive
         ? { isInactive: false }
         : { isInactive: true, freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [] };
-      await onSave(client.id, data);
+      const saved = await onSave(client.id, data);
+      if (!saved) {
+        Alert.alert(t('error'), t('editModal.saveError'));
+        return;
+      }
       onClose();
     } catch (e) {
       Alert.alert(t('error'), t('editModal.saveError'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
 
+  // The draft belongs to this modal. Back/close must not discard it while a
+  // Firestore write is unresolved; successful actions close explicitly after
+  // their awaited write finishes.
+  const handleRequestClose = () => {
+    if (savingRef.current || deleting) return;
+    onClose();
+  };
+
   return (
-    <ModalOverlay visible={visible} onClose={onClose}>
+    <ModalOverlay visible={visible} onClose={handleRequestClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -430,7 +498,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             <Text style={styles.headerTitle}>
               {showClientInfo ? t('editModal.editClient') : (client.name || '').toUpperCase()}
             </Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={handleRequestClose} style={styles.closeBtn}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>

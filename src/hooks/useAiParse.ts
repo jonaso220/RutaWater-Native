@@ -5,6 +5,7 @@ import { API_ENDPOINTS } from '../config/api';
 import { toLocalDateString } from '../utils/helpers';
 import { fbAuth } from '../config/firebase';
 import { looksLikeCompleteClientCardText, parseDirectoryContactCard } from '../utils/googleMapsLink';
+import { isAiLimitResponse, quotaFromResponseBody } from '../utils/aiQuota';
 
 export interface CreateNewClientInput {
   name: string;
@@ -101,17 +102,6 @@ export const useAiParse = (): UseAiParseReturn => {
     setLimitReached(false);
 
     try {
-      // 1) Chequear el límite con el contador local (alimentado por el
-      //    listener en vivo). El consumo real se hace DESPUÉS de un parseo
-      //    exitoso: antes se cobraba antes del fetch, así que un corte de red
-      //    quemaba el cupo sin resultado, y un fallo de la transacción
-      //    (p. ej. sin conexión) se mostraba como "llegaste al límite".
-      const { count, limit, loading } = useAiUsageStore.getState();
-      if (!loading && limit > 0 && count >= limit) {
-        setLimitReached(true);
-        return null;
-      }
-
       // Una ficha sin nombre separado no necesita interpretación semántica:
       // dirección + Maps + teléfono ya determinan exactamente el alta pedida.
       // Resolverla antes del fetch evita que un backend publicado con un prompt
@@ -209,47 +199,44 @@ export const useAiParse = (): UseAiParseReturn => {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({} as any));
+        const quota = quotaFromResponseBody(body);
+        if (quota) {
+          useAiUsageStore.setState({ ...quota, loading: false });
+        }
+        if (isAiLimitResponse(res.status, body)) {
+          setLimitReached(true);
+          return null;
+        }
         throw new Error(body.error || `HTTP ${res.status}`);
       }
 
-      let data = (await res.json()) as ParseResult;
-
-      // Compatibilidad inmediata con backends anteriores al fix: una ficha
-      // completa que cayó en report_not_found se reintenta una sola vez con
-      // intención de alta explícita. El backend igualmente recibe la lista y
-      // debe matchear existentes antes de crear, por lo que no duplica.
-      if (data.tool === 'report_not_found' && looksLikeCompleteClientCardText(text)) {
-        const retryText = `Guardá como cliente nuevo en el directorio la siguiente ficha completa, pero si el nombre ya existe usá ese cliente y no lo dupliques. Si no hay un nombre separado, usá la dirección tanto como nombre como dirección; no exijas productos, día ni frecuencia:\n\n${text}`;
-        const retry = await requestParse(retryText);
-        if (retry.ok) data = (await retry.json()) as ParseResult;
-        // Un backend viejo puede insistir con report_not_found incluso ante la
-        // instrucción explícita. La ficha ya está suficientemente estructurada,
-        // así que completamos el alta localmente sin inventar ningún dato.
-        if (data.tool === 'report_not_found') {
-          const card = parseDirectoryContactCard(text);
-          if (card) {
-            const { usedAddressAsName: _usedAddressAsName, ...contact } = card;
-            data = {
-              tool: 'create_new_client',
-              input: {
-                ...contact,
-                notes: '',
-                products: {},
-                freq: 'on_demand',
-                visitDay: '',
-                specificDate: '',
-              },
-            };
-          }
-        }
+      let data = (await res.json()) as ParseResult & { quota?: unknown };
+      const firstQuota = quotaFromResponseBody(data);
+      if (firstQuota) {
+        useAiUsageStore.setState({ ...firstQuota, loading: false });
       }
 
-      // Consumir 1 uso recién ahora, con el resultado en mano. Best-effort:
-      // si la transacción falla (o el límite se alcanzó en paralelo desde
-      // otro dispositivo), el usuario ya tiene su respuesta — las reglas de
-      // Firestore impiden decrementos, así que no hay "devolución" posible
-      // y cobrar después del éxito es el orden justo.
-      useAiUsageStore.getState().tryConsume().catch(() => {});
+      // El backend actual ya reintenta internamente las fichas completas. Si
+      // aun devuelve report_not_found, la ficha suficientemente estructurada
+      // se recupera en forma local: no hacemos una segunda llamada facturable
+      // ni consumimos dos cupos por una sola acción del usuario.
+      if (data.tool === 'report_not_found' && looksLikeCompleteClientCardText(text)) {
+        const card = parseDirectoryContactCard(text);
+        if (card) {
+          const { usedAddressAsName: _usedAddressAsName, ...contact } = card;
+          data = {
+            tool: 'create_new_client',
+            input: {
+              ...contact,
+              notes: '',
+              products: {},
+              freq: 'on_demand',
+              visitDay: '',
+              specificDate: '',
+            },
+          };
+        }
+      }
 
       return data;
     } catch (e: any) {

@@ -10,7 +10,6 @@ import {
   Alert,
   Platform,
   RefreshControl,
-  FlatList,
   Linking,
   Animated,
   Easing,
@@ -28,6 +27,7 @@ import { useProducts } from '../stores/productCatalogStore';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString, parseDate, settingsDocId } from '../utils/helpers';
 import { hapticLight, hapticSelection } from '../utils/haptics';
 import { db } from '../config/firebase';
+import { dataScopeQuery } from '../utils/dataScope';
 import { useAuthContext } from '../context/AuthContext';
 import { useClientsStore } from '../stores/clientsStore';
 import { useDebtsStore } from '../stores/debtsStore';
@@ -108,7 +108,6 @@ const HEADER_HIDE_ANIMATION_MS = 240;
 const HEADER_SHOW_ANIMATION_MS = 280;
 const HEADER_HIDE_SCROLL_DISTANCE = 48;
 const HEADER_SHOW_SCROLL_DISTANCE = 28;
-const ANDROID_HEADER_TRANSITION_GRACE_MS = 48;
 const REFRESH_TIMEOUT_MS = 10_000;
 const reorderLayoutAnimation = {
   duration: REORDER_ANIMATION_MS,
@@ -229,7 +228,7 @@ const HomeScreen = () => {
   const chromeSize = (value: number) => Math.round(value * fontScale);
 
   const navigation = useNavigation<any>();
-  const { isAdmin, user, groupData } = useAuthContext();
+  const { isAdmin, user, groupData, scopeReadVersion } = useAuthContext();
   const catalogProducts = useProducts();
   const profileSwitcherVisible = useProfileStore((s) => s.switcherVisible);
   const setProfileSwitcherVisible = useProfileStore((s) => s.setSwitcherVisible);
@@ -292,16 +291,15 @@ const HomeScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [routeSession, setRouteSession] = useState<RouteSession | null>(null);
   const collapsibleHeaderProgress = useRef(new Animated.Value(1)).current;
+  const androidHeaderScrollY = useRef(new Animated.Value(0)).current;
   const collapsibleHeaderVisibleRef = useRef(true);
   const [collapsibleHeaderVisible, setCollapsibleHeaderVisibleState] = useState(true);
   const lastListOffsetRef = useRef(0);
   const lastScrollDirectionRef = useRef<-1 | 0 | 1>(0);
   const scrollDirectionDistanceRef = useRef(0);
   const [collapsibleHeaderHeight, setCollapsibleHeaderHeight] = useState(0);
+  const [stickyControlsHeight, setStickyControlsHeight] = useState(0);
   const headerAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-  const androidHeaderDragActiveRef = useRef(false);
-  const androidPendingHeaderVisibleRef = useRef<boolean | null>(null);
-  const androidHeaderTransitionUntilRef = useRef(0);
   const reorderAnimationActiveRef = useRef(false);
   const reorderAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quickActionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -332,26 +330,6 @@ const HomeScreen = () => {
     collapsibleHeaderProgress.stopAnimation();
 
     const duration = visible ? HEADER_SHOW_ANIMATION_MS : HEADER_HIDE_ANIMATION_MS;
-    if (Platform.OS === 'android') {
-      // Animating height through Animated with the JS driver forces FlatList to
-      // relayout on every scroll frame on Android. Let the native layout system
-      // animate the single height change instead, which keeps scrolling smooth.
-      // Ignore the offset changes produced by that relayout so they cannot be
-      // mistaken for a reverse finger gesture and reopen/close the header.
-      androidHeaderTransitionUntilRef.current = animate
-        ? Date.now() + duration + ANDROID_HEADER_TRANSITION_GRACE_MS
-        : 0;
-      if (animate) {
-        LayoutAnimation.configureNext({
-          duration,
-          update: { type: LayoutAnimation.Types.easeInEaseOut },
-        });
-      }
-      collapsibleHeaderProgress.setValue(visible ? 1 : 0);
-      setCollapsibleHeaderVisibleState(visible);
-      return;
-    }
-
     setCollapsibleHeaderVisibleState(visible);
     if (!animate) {
       collapsibleHeaderProgress.setValue(visible ? 1 : 0);
@@ -391,12 +369,6 @@ const HomeScreen = () => {
   }, []);
 
   const requestCollapsibleHeaderVisible = useCallback((visible: boolean) => {
-    if (Platform.OS === 'android' && androidHeaderDragActiveRef.current) {
-      // Changing the list viewport while Android is tracking the finger makes
-      // slow drags jump. Apply only the final direction when the drag ends.
-      androidPendingHeaderVisibleRef.current = visible;
-      return;
-    }
     setCollapsibleHeaderVisible(visible);
   }, [setCollapsibleHeaderVisible]);
 
@@ -404,15 +376,6 @@ const HomeScreen = () => {
     const offset = Math.max(0, event.nativeEvent.contentOffset.y);
     const delta = offset - lastListOffsetRef.current;
     lastListOffsetRef.current = offset;
-
-    if (
-      Platform.OS === 'android' &&
-      Date.now() < androidHeaderTransitionUntilRef.current
-    ) {
-      lastScrollDirectionRef.current = 0;
-      scrollDirectionDistanceRef.current = 0;
-      return;
-    }
 
     if (offset <= 8) {
       lastScrollDirectionRef.current = 0;
@@ -439,22 +402,8 @@ const HomeScreen = () => {
   }, [requestCollapsibleHeaderVisible]);
 
   const handleClientListBeginDrag = useCallback(() => {
-    if (Platform.OS === 'android') {
-      androidHeaderDragActiveRef.current = true;
-      androidPendingHeaderVisibleRef.current = null;
-    }
     if (showFilters) setShowFilters(false);
   }, [showFilters]);
-
-  const handleClientListEndDrag = useCallback(() => {
-    if (Platform.OS !== 'android') return;
-    androidHeaderDragActiveRef.current = false;
-    const pendingVisibility = androidPendingHeaderVisibleRef.current;
-    androidPendingHeaderVisibleRef.current = null;
-    if (pendingVisibility !== null) {
-      setCollapsibleHeaderVisible(pendingVisibility);
-    }
-  }, [setCollapsibleHeaderVisible]);
 
   const handleCollapsibleHeaderLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);
@@ -463,6 +412,40 @@ const HomeScreen = () => {
       setCollapsibleHeaderHeight((currentHeight) => Math.max(currentHeight, nextHeight));
     }
   }, []);
+
+  const handleStickyControlsLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = Math.round(event.nativeEvent.layout.height);
+    if (nextHeight > 0) setStickyControlsHeight(nextHeight);
+  }, []);
+
+  const androidHeaderTravel = Math.max(collapsibleHeaderHeight, 1);
+  const androidClampedHeaderScroll = useMemo(
+    () => Animated.diffClamp(androidHeaderScrollY, 0, androidHeaderTravel),
+    [androidHeaderScrollY, androidHeaderTravel],
+  );
+  const androidHeaderTranslateY = androidClampedHeaderScroll.interpolate({
+    inputRange: [0, androidHeaderTravel],
+    outputRange: [0, -androidHeaderTravel],
+    extrapolate: 'clamp',
+  });
+  const androidHeaderOnScroll = useMemo(
+    () => Animated.event(
+      [{ nativeEvent: { contentOffset: { y: androidHeaderScrollY } } }],
+      { useNativeDriver: true },
+    ),
+    [androidHeaderScrollY],
+  );
+  const clientListContentStyle = useMemo(
+    () => [
+      styles.listContent,
+      // Keep the list viewport fixed on Android. Its content starts below the
+      // floating header, while native transforms move the chrome out of view.
+      Platform.OS === 'android' && {
+        paddingTop: collapsibleHeaderHeight + stickyControlsHeight + 12,
+      },
+    ],
+    [styles.listContent, collapsibleHeaderHeight, stickyControlsHeight],
+  );
 
   // Pull-to-refresh: force a server-side read of clients so the user can
   // get a fresh copy even if the realtime listener is temporarily quiet
@@ -480,12 +463,22 @@ const HomeScreen = () => {
       // Perfil activo primero; si todavía no cargó, caer al grupo familiar
       // (comportamiento previo) y por último al usuario solo.
       const scopeGroupId = activeScopeGroupId || groupData?.groupId;
-      const scopeField = scopeGroupId ? 'groupId' : 'userId';
-      const scopeValue = scopeGroupId || user.uid;
-      const serverRead = db
+      const { field, value, additionalFilter } = dataScopeQuery(
+        user.uid,
+        scopeGroupId,
+        scopeReadVersion,
+      );
+      let scopedQuery = db
         .collection('clients')
-        .where(scopeField, '==', scopeValue)
-        .get({ source: 'server' });
+        .where(field, '==', value);
+      if (additionalFilter) {
+        scopedQuery = scopedQuery.where(
+          additionalFilter.field,
+          '==',
+          additionalFilter.value,
+        );
+      }
+      const serverRead = scopedQuery.get({ source: 'server' });
 
       // Firestore can leave a forced server read pending indefinitely when
       // connectivity drops. The realtime listener may still recover later,
@@ -502,7 +495,7 @@ const HomeScreen = () => {
       if (refreshTimer) clearTimeout(refreshTimer);
       setRefreshing(false);
     }
-  }, [user?.uid, activeScopeGroupId, groupData?.groupId]);
+  }, [user?.uid, activeScopeGroupId, groupData?.groupId, scopeReadVersion]);
   const [appSettings, setAppSettings] = useState<Record<string, string> | null>(null);
   // Queue of undo entries: each "Listo" tap pushes one. Banner shows the
   // newest; tapping Undo pops the newest. Each entry self-expires after 5s.
@@ -818,10 +811,11 @@ const HomeScreen = () => {
   useEffect(() => {
     resetHeaderScrollTracking();
     setCollapsibleHeaderVisible(true, false);
+    if (Platform.OS === 'android') androidHeaderScrollY.setValue(0);
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
     });
-  }, [deferredDay, resetHeaderScrollTracking, setCollapsibleHeaderVisible]);
+  }, [deferredDay, resetHeaderScrollTracking, setCollapsibleHeaderVisible, androidHeaderScrollY]);
 
   const handleMarkDone = useCallback(
     (client: Client) => {
@@ -838,6 +832,7 @@ const HomeScreen = () => {
         doneFor: client.doneFor ?? '',
         specificDate: client.specificDate ?? '',
         alarm: client.alarm ?? '',
+        alarmDay: client.alarmDay ?? '',
         isStarred: client.isStarred ?? false,
       };
 
@@ -933,7 +928,14 @@ const HomeScreen = () => {
             { text: t('cancel'), style: 'cancel' },
             {
               text: t('add'),
-              onPress: () => addTransfer(client),
+              onPress: async () => {
+                try {
+                  const created = await addTransfer(client);
+                  if (created === false) setShowTransfersSheet(true);
+                } catch {
+                  Alert.alert(t('error'), t('home.transferSaveError'));
+                }
+              },
             },
           ],
         );
@@ -1356,35 +1358,41 @@ const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={{ flex: 1 }}>
-      <Animated.View
-        style={[
-          styles.collapsibleTopHeader,
-          collapsibleHeaderHeight > 0 && {
-            height: Platform.OS === 'android'
-              ? (collapsibleHeaderVisible ? collapsibleHeaderHeight : 0)
-              : collapsibleHeaderProgress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, collapsibleHeaderHeight],
-              }),
-          },
-        ]}
-      >
-        <View
-          onLayout={handleCollapsibleHeaderLayout}
-          style={collapsibleHeaderHeight > 0 ? {
-            // Keep the full header intact while its parent clips it, so every
-            // section travels together instead of receiving separate motion.
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            // Allow late layout changes (font metrics, data and device size) to
-            // grow the block; an exact height here could freeze it too short.
-            minHeight: collapsibleHeaderHeight,
-          } : undefined}
-          pointerEvents={collapsibleHeaderVisible ? 'auto' : 'none'}
+      <View style={styles.homeContent}>
+        <Animated.View
+          style={[
+            styles.collapsibleTopHeader,
+            Platform.OS === 'android' && styles.collapsibleTopHeaderAndroid,
+            collapsibleHeaderHeight > 0 && (
+              Platform.OS === 'android'
+                ? {
+                  height: collapsibleHeaderHeight,
+                  transform: [{ translateY: androidHeaderTranslateY }],
+                }
+                : {
+                  height: collapsibleHeaderProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, collapsibleHeaderHeight],
+                  }),
+                }
+            ),
+          ]}
         >
+          <View
+            onLayout={handleCollapsibleHeaderLayout}
+            style={collapsibleHeaderHeight > 0 ? {
+              // Keep the full header intact while its parent clips it, so every
+              // section travels together instead of receiving separate motion.
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              // Allow late layout changes (font metrics, data and device size) to
+              // grow the block; an exact height here could freeze it too short.
+              minHeight: collapsibleHeaderHeight,
+            } : undefined}
+            pointerEvents={Platform.OS === 'android' || collapsibleHeaderVisible ? 'auto' : 'none'}
+          >
           {/* Day selector */}
           <DaySelector
             selectedDay={selectedDay}
@@ -1629,10 +1637,20 @@ const HomeScreen = () => {
           )}
             </View>
           </View>
-        </View>
-      </Animated.View>
+          </View>
+        </Animated.View>
 
-      {routeSession && (
+        <Animated.View
+          onLayout={handleStickyControlsLayout}
+          style={Platform.OS === 'android' ? [
+            styles.stickyControlsAndroid,
+            {
+              top: collapsibleHeaderHeight,
+              transform: [{ translateY: androidHeaderTranslateY }],
+            },
+          ] : undefined}
+        >
+          {routeSession && (
         <View style={styles.routeSessionBar}>
           <View style={styles.routeSessionInfo}>
             <Text style={styles.routeSessionTitle} numberOfLines={1}>
@@ -1818,63 +1836,62 @@ const HomeScreen = () => {
             </ScrollView>
           </View>
         )}
-      </View>
-      {/* Client list — single-column on phones, multi-column grid on wide screens */}
-      {numColumns > 1 ? (
-        <FlatList
-          ref={scrollRef}
-          data={gridData}
-          extraData={`${debts.length}-${transfers.length}-${numColumns}`}
-          keyExtractor={keyExtractor}
-          renderItem={renderGridItem}
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.listContent}
-          onScroll={handleClientListScroll}
-          scrollEventThrottle={16}
-          onScrollBeginDrag={handleClientListBeginDrag}
-          onScrollEndDrag={handleClientListEndDrag}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
-          windowSize={11}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-              colors={[colors.primary]}
-            />
-          }
-          ListEmptyComponent={listEmptyComponent}
-          ListFooterComponent={listFooterComponent}
-        />
-      ) : (
-      <FlatList
-        ref={scrollRef}
-        data={flatListData}
-        extraData={`${debts.length}-${transfers.length}`}
-        keyExtractor={keyExtractor}
-        renderItem={renderListItem}
-        onScroll={handleClientListScroll}
-        scrollEventThrottle={16}
-        onScrollBeginDrag={handleClientListBeginDrag}
-        onScrollEndDrag={handleClientListEndDrag}
-        style={{ flex: 1 }}
-        contentContainerStyle={styles.listContent}
-        initialNumToRender={15}
-        maxToRenderPerBatch={15}
-        windowSize={11}
-        updateCellsBatchingPeriod={30}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
+          </View>
+        </Animated.View>
+        {/* Client list — single-column on phones, multi-column grid on wide screens */}
+        {numColumns > 1 ? (
+          <Animated.FlatList
+            ref={scrollRef}
+            data={gridData}
+            extraData={`${debts.length}-${transfers.length}-${numColumns}`}
+            keyExtractor={keyExtractor}
+            renderItem={renderGridItem}
+            style={{ flex: 1 }}
+            contentContainerStyle={clientListContentStyle}
+            onScroll={Platform.OS === 'android' ? androidHeaderOnScroll : handleClientListScroll}
+            scrollEventThrottle={16}
+            onScrollBeginDrag={handleClientListBeginDrag}
+            initialNumToRender={12}
+            maxToRenderPerBatch={12}
+            windowSize={11}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+              />
+            }
+            ListEmptyComponent={listEmptyComponent}
+            ListFooterComponent={listFooterComponent}
           />
-        }
-        ListEmptyComponent={listEmptyComponent}
-        ListFooterComponent={listFooterComponent}
-      />
+        ) : (
+          <Animated.FlatList
+            ref={scrollRef}
+            data={flatListData}
+            extraData={`${debts.length}-${transfers.length}`}
+            keyExtractor={keyExtractor}
+            renderItem={renderListItem}
+            onScroll={Platform.OS === 'android' ? androidHeaderOnScroll : handleClientListScroll}
+            scrollEventThrottle={16}
+            onScrollBeginDrag={handleClientListBeginDrag}
+            style={{ flex: 1 }}
+            contentContainerStyle={clientListContentStyle}
+            initialNumToRender={15}
+            maxToRenderPerBatch={15}
+            windowSize={11}
+            updateCellsBatchingPeriod={30}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+              />
+            }
+            ListEmptyComponent={listEmptyComponent}
+            ListFooterComponent={listFooterComponent}
+          />
       )}
       </View>
 
@@ -2098,6 +2115,10 @@ const getStyles = (
     flex: 1,
     backgroundColor: colors.background,
   },
+  homeContent: {
+    flex: 1,
+    overflow: 'hidden',
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -2107,6 +2128,21 @@ const getStyles = (
   collapsibleTopHeader: {
     flexShrink: 0,
     overflow: 'hidden',
+  },
+  collapsibleTopHeaderAndroid: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    elevation: 2,
+  },
+  stickyControlsAndroid: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 3,
+    elevation: 3,
   },
   loadingText: {
     marginTop: 12,

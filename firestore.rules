@@ -11,21 +11,144 @@ service cloud.firestore {
     function userData() {
       return get(/databases/$(database)/documents/users/$(uid())).data;
     }
-    function myGroupId() { return userExists() ? userData().groupId : null; }
-    function myRole() { return userExists() ? userData().role : null; }
-    // Repartos (perfiles) a los que pertenece el usuario. La app lo mantiene en
-    // users/{uid}.profileIds para poder autorizar las consultas por lista con
-    // una sola lectura.
-    function myProfileIds() {
-      return (userExists() && userData().profileIds is list) ? userData().profileIds : [];
+    function accountCanWrite() {
+      return signedIn() && (
+        !userExists()
+        || userData().get('accountState', 'active') == 'active'
+      );
+    }
+    function accountCanRead() {
+      return signedIn() && (
+        !userExists()
+        || userData().get('accountState', 'active') == 'active'
+      );
+    }
+    function personalScopeCanWrite() {
+      return !userExists()
+        || userData().get('pendingGroupId', null) == null;
+    }
+    function myGroupId() { return userExists() ? userData().get('groupId', null) : null; }
+    function familyGroupExists(groupId) {
+      return groupId != null
+        && exists(/databases/$(database)/documents/groups/$(groupId));
+    }
+    function familyGroupActive(groupId) {
+      return familyGroupExists(groupId)
+        && get(/databases/$(database)/documents/groups/$(groupId)).data.get('lifecycleState', 'active') == 'active';
+    }
+    function familyGroupActiveAfter(groupId) {
+      return groupId != null
+        && existsAfter(/databases/$(database)/documents/groups/$(groupId))
+        && getAfter(/databases/$(database)/documents/groups/$(groupId)).data.get('lifecycleState', 'active') == 'active';
+    }
+    function isFamilyGroupAdmin(groupId) {
+      return familyGroupExists(groupId)
+        && get(/databases/$(database)/documents/groups/$(groupId)).data.adminId == uid();
+    }
+    function isProfileMember(profileId) {
+      return profileId != null
+        && exists(/databases/$(database)/documents/profiles/$(profileId))
+        && get(/databases/$(database)/documents/profiles/$(profileId)).data.memberUids is list
+        && uid() in get(/databases/$(database)/documents/profiles/$(profileId)).data.memberUids;
+    }
+    function profileActive(profileId) {
+      return profileId != null
+        && exists(/databases/$(database)/documents/profiles/$(profileId))
+        && get(/databases/$(database)/documents/profiles/$(profileId)).data.get('lifecycleState', 'active') == 'active';
+    }
+    function familyAdminCanEditMembership(groupId) {
+      return isFamilyGroupAdmin(groupId) && (
+        get(/databases/$(database)/documents/groups/$(groupId)).data.get('lifecycleState', 'active') == 'active'
+        || (
+          get(/databases/$(database)/documents/groups/$(groupId)).data.get('lifecycleState', 'active') == 'dissolving'
+          && get(/databases/$(database)/documents/groups/$(groupId)).data.get('dissolveRequestedBy', '') == uid()
+        )
+      );
+    }
+    function convertsFamilyGroupAfter(groupId) {
+      return groupId != null
+        && !existsAfter(/databases/$(database)/documents/groups/$(groupId))
+        && existsAfter(/databases/$(database)/documents/profiles/$(groupId))
+        && getAfter(/databases/$(database)/documents/profiles/$(groupId)).data.ownerId == uid()
+        && getAfter(/databases/$(database)/documents/profiles/$(groupId)).data.get('convertedFromFamilyGroup', false) == true;
+    }
+
+    // Writes to family-group data stop while dissolution is in progress. This
+    // closes the join/write race before the group is atomically converted to a
+    // private profile. Custom profile scopes remain writable by their members.
+    function writableScope(data) {
+      let groupId = data.get('groupId', null);
+      return (groupId == null && personalScopeCanWrite())
+        || (groupId == myGroupId() && familyGroupActive(groupId))
+        || (isProfileMember(groupId) && profileActive(groupId));
+    }
+
+    // Additive data-scope rollout. Version 0 keeps published clients working;
+    // Firebase Admin first activates existing users page-by-page. The global
+    // gate is committed only after that sweep, so every account created later
+    // defaults to strict reads instead of reopening legacy creator access.
+    function globalStrictScopeReads() {
+      return exists(/databases/$(database)/documents/systemMigrations/dataScopeV1)
+        && get(/databases/$(database)/documents/systemMigrations/dataScopeV1).data.get('readVersion', 0) == 1;
+    }
+    function strictScopeReads() {
+      return globalStrictScopeReads()
+        || (userExists() && userData().get('scopeReadVersion', 0) == 1);
+    }
+    function canonicalScopeWritesRequired() {
+      return exists(/databases/$(database)/documents/systemMigrations/dataScopeV1)
+        && get(/databases/$(database)/documents/systemMigrations/dataScopeV1).data.get('writeVersion', 0) == 1;
+    }
+    function hasCanonicalScopeKey(data) {
+      let ownerId = data.get('userId', null);
+      let groupId = data.get('groupId', null);
+      let scopeKey = data.get('scopeKey', null);
+      return ownerId is string && ownerId.size() > 0 && (
+        (groupId == null && scopeKey == 'user:' + ownerId)
+        || (groupId is string && groupId.size() > 0 && scopeKey == 'scope:' + groupId)
+      );
+    }
+    function validScopeKeyForWrite(data) {
+      return hasCanonicalScopeKey(data)
+        || (
+          !canonicalScopeWritesRequired()
+          && !strictScopeReads()
+          && data.get('scopeKey', null) == null
+        );
+    }
+    function preservesOrBackfillsScopeKey(before, after) {
+      return validScopeKeyForWrite(after) && (
+        after.get('scopeKey', null) == before.get('scopeKey', null)
+        || (
+          before.get('scopeKey', null) == null
+          && hasCanonicalScopeKey(after)
+        )
+      );
     }
 
     // Un doc (clients/debts/transfers) está en mi alcance si es mío (userId), de
     // mi grupo familiar (Reparto 1) o de un reparto al que pertenezco.
     function inScope(data) {
-      return signedIn() && (
-        data.userId == uid() ||
-        (data.groupId != null && (data.groupId == myGroupId() || data.groupId in myProfileIds()))
+      let ownerId = data.get('userId', null);
+      let groupId = data.get('groupId', null);
+      let sharedMembership = groupId != null
+        && (groupId == myGroupId() || isProfileMember(groupId));
+      let legacyAccess = ownerId == uid() || sharedMembership;
+      let scopeKey = data.get('scopeKey', null);
+      let strictAccess = (
+        scopeKey == 'user:' + uid()
+        || (
+          groupId != null
+          && scopeKey == 'scope:' + groupId
+          && sharedMembership
+        )
+      );
+      // Until the per-user Admin gate is enabled, userId queries remain
+      // compatible with already-published builds. In strict mode creator
+      // attribution never grants access to a shared scope by itself.
+      return accountCanRead() && (
+        (!strictScopeReads() && legacyAccess)
+        || (strictScopeReads() && strictAccess)
       );
     }
 
@@ -36,7 +159,7 @@ service cloud.firestore {
       return signedIn() && (
         (data.isNote == true && inScope(data)) ||
         (data.userId == uid() && data.groupId == null) ||
-        (data.groupId != null && data.groupId == myGroupId() && myRole() == 'admin') ||
+        (data.groupId != null && data.groupId == myGroupId() && isFamilyGroupAdmin(data.groupId)) ||
         (data.groupId != null && data.groupId != myGroupId()
           && exists(/databases/$(database)/documents/profiles/$(data.groupId))
           && get(/databases/$(database)/documents/profiles/$(data.groupId)).data.ownerId == uid())
@@ -46,103 +169,446 @@ service cloud.firestore {
     // ── Clientes ────────────────────────────────────────────────────────────
     match /clients/{id} {
       allow read:   if inScope(resource.data);
-      allow create: if inScope(request.resource.data);
-      allow update: if inScope(resource.data) && inScope(request.resource.data);
-      allow delete: if canDeleteClient(resource.data);
+      allow create: if accountCanWrite()
+        && request.resource.data.get('userId', null) == uid()
+        && validScopeKeyForWrite(request.resource.data)
+        && inScope(request.resource.data) && writableScope(request.resource.data);
+      allow update: if accountCanWrite()
+        && inScope(resource.data) && inScope(request.resource.data)
+        && writableScope(resource.data) && writableScope(request.resource.data)
+        && request.resource.data.get('userId', null) == resource.data.get('userId', null)
+        && request.resource.data.get('groupId', null) == resource.data.get('groupId', null)
+        && preservesOrBackfillsScopeKey(resource.data, request.resource.data)
+        && request.resource.data.get('isNote', false) == resource.data.get('isNote', false);
+      allow delete: if accountCanWrite()
+        && canDeleteClient(resource.data) && writableScope(resource.data);
     }
 
     // ── Deudas y transferencias (acceso completo dentro del alcance) ─────────
     match /debts/{id} {
-      allow read, update, delete: if inScope(resource.data);
-      allow create: if inScope(request.resource.data);
+      allow read: if inScope(resource.data);
+      allow create: if accountCanWrite()
+        && request.resource.data.get('userId', null) == uid()
+        && validScopeKeyForWrite(request.resource.data)
+        && inScope(request.resource.data) && writableScope(request.resource.data);
+      allow update: if accountCanWrite()
+        && inScope(resource.data) && inScope(request.resource.data)
+        && writableScope(resource.data) && writableScope(request.resource.data)
+        && request.resource.data.get('userId', null) == resource.data.get('userId', null)
+        && request.resource.data.get('groupId', null) == resource.data.get('groupId', null)
+        && preservesOrBackfillsScopeKey(resource.data, request.resource.data);
+      allow delete: if accountCanWrite()
+        && inScope(resource.data) && writableScope(resource.data);
     }
     match /transfers/{id} {
-      allow read, update, delete: if inScope(resource.data);
-      allow create: if inScope(request.resource.data);
+      allow read: if inScope(resource.data);
+      allow create: if accountCanWrite()
+        && request.resource.data.get('userId', null) == uid()
+        && validScopeKeyForWrite(request.resource.data)
+        && inScope(request.resource.data) && writableScope(request.resource.data);
+      allow update: if accountCanWrite()
+        && inScope(resource.data) && inScope(request.resource.data)
+        && writableScope(resource.data) && writableScope(request.resource.data)
+        && request.resource.data.get('userId', null) == resource.data.get('userId', null)
+        && request.resource.data.get('groupId', null) == resource.data.get('groupId', null)
+        && preservesOrBackfillsScopeKey(resource.data, request.resource.data);
+      allow delete: if accountCanWrite()
+        && inScope(resource.data) && writableScope(resource.data);
     }
 
     // ── Carga diaria: docId "<uid>_<dia>", por usuario ──────────────────────
     match /daily_loads/{id} {
-      allow read, write: if signedIn() && id.split('_')[0] == uid();
+      allow read: if accountCanRead() && id.split('_')[0] == uid();
+      allow write: if accountCanWrite() && id.split('_')[0] == uid();
     }
 
-    // ── Uso de IA: el contador solo puede avanzar. Sin esto, un cliente
-    //    modificado podía escribir count:0 y saltarse el límite mensual.
-    //    (Residual: cambiar la fecha del dispositivo altera `period`; cerrar
-    //    eso requiere contar los usos en el servidor.)
+    // ── Uso de IA: lectura propia; el backend es el único escritor. Permitir
+    //    create/update/delete al cliente habilitaría reiniciar la cuota.
     match /aiUsage/{id} {
-      allow read: if signedIn() && id == uid();
-      allow create: if signedIn() && id == uid()
-        && request.resource.data.count == 1;
-      allow update: if signedIn() && id == uid()
-        && (
-          (request.resource.data.period == resource.data.get('period', '')
-            && request.resource.data.count > resource.data.get('count', 0))
-          || (request.resource.data.period != resource.data.get('period', '')
-            && request.resource.data.count == 1)
-        );
+      allow read: if accountCanRead() && id == uid();
+      allow create, update, delete: if false;
     }
 
-    // ── Premium por código promo: solo se activa con un código válido.
-    //    Las reglas no son legibles por los clientes, así que la lista de
-    //    códigos acá NO queda expuesta. Antes cualquier usuario podía
-    //    escribirse {active: true} y obtener premium gratis.
-    //    ⚠️ Mantener el listado en sincronía con PROMO_CODES en
-    //    src/constants/subscription.ts (y desplegar las reglas al cambiarlo):
-    //    si divergen, la app valida el código y el canje se rechaza acá.
+    // ── Premium por código promo ─────────────────────────────────────────────
+    // El cliente solo puede leer o quitar su propio beneficio. Las altas y
+    // reactivaciones las realiza exclusivamente la Function autenticada con
+    // Firebase Admin, que no depende de estas reglas.
     match /premiumOverrides/{id} {
-      allow read: if signedIn() && id == uid();
-      allow delete: if signedIn() && id == uid();
-      allow create, update: if signedIn() && id == uid() && (
-        request.resource.data.active == false ||
-        (request.resource.data.active == true
-          && request.resource.data.get('code', '') in ['RUTAFAMILIA', 'RUTAAMIGOS', 'RUTAVIP2026'])
-      );
+      allow read: if accountCanRead() && id == uid();
+      allow delete: if accountCanWrite() && id == uid();
+      allow create: if false;
+      // Compatibilidad con versiones publicadas: pueden desactivar un Premium
+      // existente, pero nunca activar/reactivar ni alterar otros campos.
+      allow update: if accountCanWrite() && id == uid()
+        && resource.data.active == true
+        && request.resource.data.active == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active']);
     }
 
-    // ── Settings (plantillas + catálogo de productos): docId == uid o mi grupo
+    // Códigos, cupos y canjes son privados del backend. No contienen el código
+    // en claro: el id es un HMAC calculado con un secreto de Netlify.
+    match /promoCodes/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reservation for backend-generated family invite codes. An admin may
+    // fetch only the exact code already visible on their group, and may remove
+    // it only in the same atomic group-to-private-profile conversion.
+    match /groupCodes/{code} {
+      allow get: if accountCanWrite()
+        && myGroupId() != null
+        && familyGroupExists(myGroupId())
+        && isFamilyGroupAdmin(myGroupId())
+        && get(/databases/$(database)/documents/groups/$(myGroupId())).data.code == code;
+      allow list, create, update: if false;
+      allow delete: if accountCanWrite()
+        && resource.data.groupId != null
+        && familyGroupExists(resource.data.groupId)
+        && isFamilyGroupAdmin(resource.data.groupId)
+        && get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.code == code
+        && get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.get('lifecycleState', 'active') == 'dissolving'
+        && get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.get('dissolveRequestedBy', '') == uid()
+        && !existsAfter(/databases/$(database)/documents/groups/$(resource.data.groupId))
+        && existsAfter(/databases/$(database)/documents/profiles/$(resource.data.groupId))
+        && getAfter(/databases/$(database)/documents/profiles/$(resource.data.groupId)).data.ownerId == uid()
+        && getAfter(/databases/$(database)/documents/profiles/$(resource.data.groupId)).data.get('convertedFromFamilyGroup', false) == true;
+    }
+
+    // ── Settings: personales, del grupo familiar o de un reparto compartido.
     match /settings/{id} {
-      allow read, write: if signedIn() && (id == uid() || id == myGroupId());
+      allow read: if accountCanRead() && (
+        id == uid() || id == myGroupId() || isProfileMember(id)
+      );
+      allow write: if accountCanWrite() && (
+        (id == uid() && personalScopeCanWrite())
+        || (id == myGroupId() && familyGroupActive(id))
+        || (isProfileMember(id) && profileActive(id))
+      );
     }
 
     // ── Users ───────────────────────────────────────────────────────────────
     match /users/{id} {
       // Propio doc, o miembros de mi grupo familiar (para listar miembros).
-      allow read: if signedIn() && (
+      allow read: if accountCanRead() && (
         id == uid() || (myGroupId() != null && resource.data.groupId == myGroupId())
       );
-      allow create: if signedIn() && id == uid();
+      allow create: if accountCanWrite()
+        && id == uid()
+        && !request.resource.data.keys().hasAny([
+          'accountState',
+          'pendingGroupId',
+          'groupMigrationState',
+          'groupMigrationStartedAt',
+          'profileIndexVersion',
+          'familyGroupRecoveryVersion',
+          'scopeReadVersion'
+        ])
+        && request.resource.data.get('groupId', null) == null
+        && request.resource.data.get('role', null) == null;
       // Propio doc, o el admin del grupo actualizando a un miembro (quitarlo, etc.).
-      allow update: if signedIn() && (
-        id == uid() ||
-        (myRole() == 'admin' && myGroupId() != null && resource.data.groupId == myGroupId())
+      allow update: if accountCanWrite()
+        && resource.data.get('accountState', 'active') == 'active'
+        && request.resource.data.get('accountState', 'active') == 'active'
+        && request.resource.data.get('profileIndexVersion', null)
+          == resource.data.get('profileIndexVersion', null)
+        && request.resource.data.get('scopeReadVersion', null)
+          == resource.data.get('scopeReadVersion', null)
+        && request.resource.data.get('familyGroupRecoveryVersion', null)
+          == resource.data.get('familyGroupRecoveryVersion', null)
+        && request.resource.data.get('pendingGroupId', null)
+          == resource.data.get('pendingGroupId', null)
+        && request.resource.data.get('groupMigrationState', null)
+          == resource.data.get('groupMigrationState', null)
+        && request.resource.data.get('groupMigrationStartedAt', null)
+          == resource.data.get('groupMigrationStartedAt', null)
+        && (
+        (
+          id == uid()
+          && (
+            (
+              request.resource.data.get('groupId', null) == resource.data.get('groupId', null)
+              && (
+                request.resource.data.get('role', null) == resource.data.get('role', null)
+                || (
+                  familyGroupActive(resource.data.get('groupId', null))
+                  && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
+                  && (
+                    (
+                      get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.adminId == uid()
+                      && request.resource.data.get('role', null) == 'admin'
+                    )
+                    || (
+                      get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.adminId != uid()
+                      && request.resource.data.get('role', null) == 'member'
+                    )
+                  )
+                )
+              )
+            )
+            || (
+              request.resource.data.get('groupId', null) == null
+              && request.resource.data.get('role', null) == null
+              && (
+                resource.data.get('groupId', null) == null
+                || !familyGroupExists(resource.data.get('groupId', null))
+                || (
+                  familyGroupActive(resource.data.get('groupId', null))
+                  && !isFamilyGroupAdmin(resource.data.get('groupId', null))
+                )
+              )
+            )
+            || (
+              resource.data.get('groupId', null) == null
+              && familyGroupActiveAfter(request.resource.data.get('groupId', null))
+              && request.resource.data.get('role', null) == 'admin'
+              && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.adminId == uid()
+            )
+          )
+        )
+        || (
+          familyAdminCanEditMembership(myGroupId())
+          && myGroupId() != null
+          && resource.data.get('groupId', null) == myGroupId()
+          && (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groupId', 'role'])
+            || (
+              id == uid()
+              && convertsFamilyGroupAfter(myGroupId())
+              && request.resource.data.get('activeProfileId', '') == myGroupId()
+              && request.resource.data.get('profileIds', []) is list
+              && request.resource.data.get('profileIds', []).hasAny([myGroupId()])
+              && request.resource.data.get('profileIds', []).hasAll(
+                resource.data.get('profileIds', [])
+              )
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'groupId',
+                'role',
+                'profileIds',
+                'activeProfileId'
+              ])
+            )
+          )
+          && (
+            (
+              request.resource.data.get('groupId', null) == null
+              && request.resource.data.get('role', null) == null
+              && (
+                id != uid()
+                || convertsFamilyGroupAfter(myGroupId())
+                || (
+                  existsAfter(/databases/$(database)/documents/groups/$(myGroupId()))
+                  && getAfter(/databases/$(database)/documents/groups/$(myGroupId())).data.adminId != uid()
+                )
+              )
+            )
+            || (
+              request.resource.data.get('groupId', null) == myGroupId()
+              && (
+                request.resource.data.get('role', null) == resource.data.get('role', null)
+                || (
+                  request.resource.data.get('role', null) == 'admin'
+                  && getAfter(/databases/$(database)/documents/groups/$(myGroupId())).data.adminId == id
+                )
+              )
+            )
+          )
+        )
       );
-      // Solo el propio usuario, al eliminar su cuenta.
-      allow delete: if signedIn() && id == uid();
+      // Account deletion is server-owned so the permanent tombstone cannot be
+      // removed by a still-cached Firebase token.
+      allow delete: if false;
     }
 
     // ── Grupos familiares ─────────────────────────────────────────────────────
     match /groups/{id} {
-      allow read: if signedIn(); // necesario para buscar por código al unirse
-      allow create: if signedIn() && request.resource.data.adminId == uid();
-      allow update, delete: if signedIn() && resource.data.adminId == uid();
+      // Los códigos de invitación se resuelven únicamente en la Function
+      // autenticada. El cliente solo puede leer el grupo al que ya pertenece.
+      allow read: if accountCanRead() && (
+        myGroupId() == id || resource.data.get('adminId', '') == uid()
+      );
+      // Creation/migration is exclusively server-owned and resumable. Allowing
+      // the old client batch here could activate membership before all personal
+      // customer documents and settings have migrated.
+      allow create: if false;
+      allow update: if accountCanWrite()
+        && resource.data.adminId == uid()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'lifecycleState',
+          'dissolveRequestedBy',
+          'dissolveRequestedAt'
+        ])
+        && (
+        (
+          resource.data.get('lifecycleState', 'active') == 'active'
+          && request.resource.data.get('lifecycleState', 'active') == 'dissolving'
+          && request.resource.data.get('dissolveRequestedBy', '') == uid()
+        )
+        || (
+          resource.data.get('lifecycleState', 'active') == 'dissolving'
+          && resource.data.get('dissolveRequestedBy', '') == uid()
+          && request.resource.data.get('lifecycleState', 'active') == 'active'
+          && request.resource.data.get('dissolveRequestedBy', null) == null
+          && request.resource.data.get('dissolveRequestedAt', null) == null
+        )
+      );
+      // El cliente solo puede borrar el descriptor al convertir el mismo scope
+      // en un perfil privado dentro del batch atómico. La eliminación de cuenta
+      // usa Admin SDK después de cerrar joins y revalidar miembros.
+      allow delete: if accountCanWrite()
+        && resource.data.adminId == uid()
+        && resource.data.get('lifecycleState', 'active') == 'dissolving'
+        && resource.data.get('dissolveRequestedBy', '') == uid()
+        && existsAfter(/databases/$(database)/documents/profiles/$(id))
+        && getAfter(/databases/$(database)/documents/profiles/$(id)).data.ownerId == uid()
+        && getAfter(/databases/$(database)/documents/profiles/$(id)).data.get('convertedFromFamilyGroup', false) == true
+        && (
+          resource.data.get('creationVersion', '') != 'server_resumable_v1'
+          || (
+            resource.data.code is string
+            && !existsAfter(/databases/$(database)/documents/groupCodes/$(resource.data.code))
+          )
+        );
     }
 
     // ── Repartos (perfiles) ──────────────────────────────────────────────────
     match /profiles/{id} {
-      allow read: if signedIn(); // necesario para buscar por código al unirse
-      allow create: if signedIn()
-        && request.resource.data.ownerId == uid()
-        && uid() in request.resource.data.memberUids;
-      // El dueño puede modificar todo. Otra persona puede modificar SOLO la
-      // membresía (unirse/salir) — no el nombre ni el dueño.
-      // Nota: este guard permite a cualquier miembro tocar la lista de miembros;
-      // suficiente para un equipo de confianza. Endurecer si hace falta.
-      allow update: if signedIn() && (
-        resource.data.ownerId == uid() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'members'])
+      // El cliente carga IDs desde users/{uid}.profileIds y hace get/listeners
+      // individuales; la membresía canónica se vuelve a validar aquí. La
+      // Function recupera índices legacy con Admin, sin abrir listados/códigos.
+      allow get: if accountCanRead() && (
+        (
+          !exists(/databases/$(database)/documents/profiles/$(id))
+          && isFamilyGroupAdmin(id)
+          && get(/databases/$(database)/documents/groups/$(id)).data.get('lifecycleState', 'active') in ['active', 'dissolving']
+        )
+        || (
+          resource.data.memberUids is list
+          && resource.data.memberUids.hasAny([request.auth.uid])
+        )
       );
-      allow delete: if signedIn() && resource.data.ownerId == uid();
+      allow list: if false;
+      // Normal creation and invite-code allocation are Admin-only. The sole
+      // client create path is the existing atomic family-group conversion: it
+      // preserves the same scope/id and leaves code reservation to sync-profile-ids.
+      allow create: if accountCanWrite()
+        && exists(/databases/$(database)/documents/groups/$(id))
+        && get(/databases/$(database)/documents/groups/$(id)).data.adminId == uid()
+        && get(/databases/$(database)/documents/groups/$(id)).data.get('lifecycleState', 'active') == 'dissolving'
+        && get(/databases/$(database)/documents/groups/$(id)).data.get('dissolveRequestedBy', '') == uid()
+        && !existsAfter(/databases/$(database)/documents/groups/$(id))
+        && request.resource.data.ownerId == uid()
+        && request.resource.data.get('lifecycleState', '') == 'active'
+        && request.resource.data.get('convertedFromFamilyGroup', false) == true
+        && !('code' in request.resource.data)
+        && request.resource.data.memberUids is list
+        && request.resource.data.memberUids.size() == 1
+        && request.resource.data.memberUids[0] == uid()
+        && request.resource.data.members is map
+        && request.resource.data.members.keys().hasOnly([uid()])
+        && request.resource.data.members[uid()].role == 'admin'
+        && request.resource.data.get('createdAt', null)
+          == get(/databases/$(database)/documents/groups/$(id)).data.get('createdAt', null)
+        && request.resource.data.keys().hasOnly([
+          'name',
+          'ownerId',
+          'memberUids',
+          'members',
+          'createdAt',
+          'lifecycleState',
+          'convertedFromFamilyGroup'
+        ]);
+      // El dueño administra el reparto. Un miembro no puede agregarse ni
+      // agregar terceros: su única escritura directa es quitar exactamente su
+      // UID, sin cambiar otro miembro ni metadato.
+      allow update: if accountCanWrite() && (
+        (
+          resource.data.ownerId == uid()
+          && resource.data.get('lifecycleState', 'active') == 'active'
+          && request.resource.data.get('lifecycleState', 'active') == 'active'
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.memberUids is list
+          && uid() in request.resource.data.memberUids
+          && request.resource.data.members is map
+          && uid() in request.resource.data.members
+          && request.resource.data.members[uid()].role == 'admin'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'name',
+            'memberUids',
+            'members'
+          ])
+        ) ||
+        (
+          resource.data.ownerId == uid()
+          && resource.data.get('lifecycleState', 'active') == 'active'
+          && request.resource.data.get('lifecycleState', 'active') == 'archived'
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.memberUids is list
+          && request.resource.data.memberUids.size() == 1
+          && request.resource.data.memberUids[0] == uid()
+          && request.resource.data.members is map
+          && request.resource.data.members.keys().hasOnly([uid()])
+          && request.resource.data.members[uid()].role == 'admin'
+          && request.resource.data.archivedAt is timestamp
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['lifecycleState', 'archivedAt', 'memberUids', 'members'])
+        ) ||
+        (
+          resource.data.ownerId != uid()
+          && resource.data.get('lifecycleState', 'active') == 'active'
+          && request.resource.data.get('lifecycleState', 'active') == 'active'
+          && resource.data.memberUids is list
+          && uid() in resource.data.memberUids
+          && request.resource.data.memberUids is list
+          && !(uid() in request.resource.data.memberUids)
+          && resource.data.memberUids.size() == request.resource.data.memberUids.size() + 1
+          && resource.data.memberUids.hasAll(request.resource.data.memberUids)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'members'])
+          && (
+            (
+              resource.data.get('members', {}) is map
+              && uid() in resource.data.get('members', {})
+              && request.resource.data.get('members', {}) is map
+              && !(uid() in request.resource.data.get('members', {}))
+              && request.resource.data.get('members', {}).diff(resource.data.get('members', {})).affectedKeys().hasOnly([uid()])
+            )
+            || (
+              !(uid() in resource.data.get('members', {}))
+              && request.resource.data.get('members', {}) == resource.data.get('members', {})
+            )
+          )
+        )
+      );
+      allow delete: if false;
+    }
+
+    // Exact invite reservations and idempotency receipts are server-only.
+    match /profileCodes/{code} {
+      allow read, write: if false;
+    }
+
+    match /profileCreateRequests/{id} {
+      allow read, write: if false;
+    }
+
+    // Durable deletion plans contain private scope ids and are exclusively
+    // maintained by Firebase Admin in the Netlify cleanup endpoint.
+    match /accountDeletionJobs/{id} {
+      allow read, write: if false;
+    }
+
+    // The compatible app reads only this public rollout version. The operator
+    // Function is the sole writer and publishes it atomically with the private
+    // global gate after the activation sweep finishes cleanly.
+    match /appConfig/dataScope {
+      allow get: if accountCanRead();
+      allow list, write: if false;
+    }
+
+    // Cursor, audit totals and rollout gates are operator/Admin-only. In
+    // particular, clients cannot self-enable strict reads or disable the
+    // canonical-write seal.
+    match /systemMigrations/{id} {
+      allow read, write: if false;
     }
   }
 }

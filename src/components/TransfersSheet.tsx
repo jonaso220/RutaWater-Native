@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -24,7 +24,7 @@ import { useLayout } from '../hooks/useLayout';
 interface TransfersSheetProps {
   visible: boolean;
   transfers: Transfer[];
-  onReview: (transfer: Transfer) => void;
+  onReview: (transfer: Transfer) => Promise<void>;
   onClose: () => void;
 }
 
@@ -41,6 +41,12 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth, fontScale);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const reviewingRef = useRef<string | null>(null);
+
+  const requestClose = () => {
+    if (!reviewingRef.current) onClose();
+  };
 
   const handleReview = (transfer: Transfer) => {
     Alert.alert(
@@ -50,7 +56,19 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
         { text: t('cancel'), style: 'cancel' },
         {
           text: t('transfers.reviewed'),
-          onPress: () => onReview(transfer),
+          onPress: async () => {
+            if (reviewingRef.current) return;
+            reviewingRef.current = transfer.id;
+            setReviewingId(transfer.id);
+            try {
+              await onReview(transfer);
+            } catch {
+              Alert.alert(t('error'), t('transfers.reviewError'));
+            } finally {
+              reviewingRef.current = null;
+              setReviewingId(null);
+            }
+          },
         },
       ],
     );
@@ -89,6 +107,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
         <TouchableOpacity
           onPress={() => handleReview(item)}
           style={styles.reviewBtn}
+          disabled={reviewingId !== null}
         >
           <Text style={styles.reviewBtnText}>{t('transfers.reviewed')}</Text>
         </TouchableOpacity>
@@ -97,7 +116,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   );
 
   return (
-    <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
+    <ModalOverlay visible={visible} onClose={requestClose} animationType="slide">
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <View style={styles.header}>
@@ -107,7 +126,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
                 {t('transfers.pendingCount', { count: transfers.length })}
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={requestClose} style={styles.closeBtn} disabled={reviewingId !== null}>
               <Ionicons name="close" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           </View>

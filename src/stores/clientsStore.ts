@@ -5,6 +5,9 @@ import { Frequency } from '../constants/products';
 interface ClientsStore {
   clients: Client[];
   loading: boolean;
+  // Scope exacto de la query que produjo `clients`; no se infiere del array
+  // porque un perfil vacío también es un estado canónico válido.
+  scopeKey: string;
   getAllDayClients: (day: string) => Client[];
   getVisibleClients: (day: string) => Client[];
   getCompletedClients: (day: string) => Client[];
@@ -74,6 +77,7 @@ const noop = async () => {};
 export const useClientsStore = create<ClientsStore>()(() => ({
   clients: [],
   loading: true,
+  scopeKey: '',
   getAllDayClients: () => [],
   getVisibleClients: () => [],
   getCompletedClients: () => [],

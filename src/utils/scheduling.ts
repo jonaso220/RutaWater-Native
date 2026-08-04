@@ -55,6 +55,13 @@ export const occurrenceForSpecificDate = (
   const day = parseInt(match[3], 10);
   const target = new Date(year, month, day, hours, minutes, 0, 0);
   if (Number.isNaN(target.getTime())) return null;
+  // JavaScript normalizes impossible dates (e.g. 2026-02-31) into March.
+  // Reject that rollover so callers never schedule a different calendar day.
+  if (
+    target.getFullYear() !== year
+    || target.getMonth() !== month
+    || target.getDate() !== day
+  ) return null;
   if (target.getTime() <= Date.now()) return null;
   return target;
 };

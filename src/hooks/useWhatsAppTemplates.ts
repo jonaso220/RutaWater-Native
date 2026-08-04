@@ -26,32 +26,45 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
         if (data?.whatsappRecordatorio) setWaRecordatorio(data.whatsappRecordatorio);
       }
       setWaLoaded(true);
-    }).catch(() => setWaLoaded(true));
+    }).catch((error) => {
+      reportError(error, 'Error loading templates');
+      setWaLoaded(true);
+    });
   }, [uid, groupId]);
 
   const handleSaveTemplates = async () => {
     try {
-      const settings: Record<string, string> = {};
-      if (waEnCamino.trim()) settings.whatsappEnCamino = waEnCamino.trim();
-      if (waDeuda.trim()) settings.whatsappDeuda = waDeuda.trim();
-      if (waRecordatorio.trim()) settings.whatsappRecordatorio = waRecordatorio.trim();
+      if (!uid) throw new Error('WHATSAPP_TEMPLATES_USER_REQUIRED');
+      const settings: Record<string, string | null> = {
+        whatsappEnCamino: waEnCamino.trim() || null,
+        whatsappDeuda: waDeuda.trim() || null,
+        whatsappRecordatorio: waRecordatorio.trim() || null,
+      };
       await db.collection('settings').doc(settingsDocId(uid, groupId)).set(settings, { merge: true });
       Alert.alert(t('settings.templatesSaved'), t('settings.templatesSavedMsg'));
     } catch (e) {
       reportError(e, 'Error saving templates');
       Alert.alert(t('error'), t('settings.templatesSaveError'));
+      throw e;
     }
   };
 
-  const handleResetTemplates = () => {
-    setWaEnCamino('');
-    setWaDeuda('');
-    setWaRecordatorio('');
-    db.collection('settings').doc(settingsDocId(uid, groupId)).set(
-      { whatsappEnCamino: null, whatsappDeuda: null, whatsappRecordatorio: null },
-      { merge: true },
-    ).catch((e) => reportError(e, 'Error resetting templates'));
-    Alert.alert(t('settings.templatesReset'), t('settings.templatesResetMsg'));
+  const handleResetTemplates = async () => {
+    try {
+      if (!uid) throw new Error('WHATSAPP_TEMPLATES_USER_REQUIRED');
+      await db.collection('settings').doc(settingsDocId(uid, groupId)).set(
+        { whatsappEnCamino: null, whatsappDeuda: null, whatsappRecordatorio: null },
+        { merge: true },
+      );
+      setWaEnCamino('');
+      setWaDeuda('');
+      setWaRecordatorio('');
+      Alert.alert(t('settings.templatesReset'), t('settings.templatesResetMsg'));
+    } catch (e) {
+      reportError(e, 'Error resetting templates');
+      Alert.alert(t('error'), t('settings.templatesSaveError'));
+      throw e;
+    }
   };
 
   return {

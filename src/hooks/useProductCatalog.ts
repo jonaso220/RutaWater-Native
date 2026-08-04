@@ -74,7 +74,7 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
 
   const persist = useCallback(
     async (patch: Record<string, any>) => {
-      if (!uid) return;
+      if (!uid) throw new Error('PRODUCT_CATALOG_USER_REQUIRED');
       try {
         await db
           .collection('settings')
@@ -82,6 +82,7 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
           .set(patch, { merge: true });
       } catch (e) {
         reportError(e, 'Error saving product catalog');
+        throw e;
       }
     },
     [uid, groupId],
@@ -98,8 +99,8 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
       } else {
         next[id] = trimmed;
       }
-      setProductNames(next);
       await persist({ productNames: next });
+      setProductNames(next);
     },
     [productNames, persist],
   );
@@ -116,8 +117,8 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
       } else {
         next[id] = value;
       }
-      setProductEmojis(next);
       await persist({ productEmojis: next });
+      setProductEmojis(next);
     },
     [productEmojis, persist],
   );
@@ -125,8 +126,8 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
   const setProductHidden = useCallback(
     async (id: string, hide: boolean) => {
       const next = hide ? [...new Set([...hidden, id])] : hidden.filter((h) => h !== id);
-      setHidden(next);
       await persist({ productHidden: next });
+      setHidden(next);
     },
     [hidden, persist],
   );
@@ -143,8 +144,8 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
         short: (short.trim() || name).slice(0, 12),
       };
       const next = [...customProducts, newProduct];
-      setCustomProducts(next);
       await persist({ customProducts: next });
+      setCustomProducts(next);
     },
     [customProducts, persist],
   );
@@ -158,11 +159,6 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
       delete nextEmojis[id];
       const nextHidden = hidden.filter((h) => h !== id);
       const nextOrder = order.filter((o) => o !== id);
-      setCustomProducts(nextCustom);
-      setProductNames(nextNames);
-      setProductEmojis(nextEmojis);
-      setHidden(nextHidden);
-      setOrder(nextOrder);
       await persist({
         customProducts: nextCustom,
         productNames: nextNames,
@@ -170,6 +166,11 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
         productHidden: nextHidden,
         productOrder: nextOrder,
       });
+      setCustomProducts(nextCustom);
+      setProductNames(nextNames);
+      setProductEmojis(nextEmojis);
+      setHidden(nextHidden);
+      setOrder(nextOrder);
     },
     [customProducts, productNames, productEmojis, hidden, order, persist],
   );
@@ -182,8 +183,8 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
       const target = idx + dir;
       if (idx === -1 || target < 0 || target >= ids.length) return;
       [ids[idx], ids[target]] = [ids[target], ids[idx]];
-      setOrder(ids);
       await persist({ productOrder: ids });
+      setOrder(ids);
     },
     [allProducts, persist],
   );

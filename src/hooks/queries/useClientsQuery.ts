@@ -1,17 +1,21 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { reportError } from '../../lib/crashReporting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Client } from '../../types';
 import { withDefaults } from '../../utils/clientDefaults';
 import { belongsToProfileScope } from '../../utils/profileScope';
+import { dataScopeCacheKey, dataScopeQuery } from '../../utils/dataScope';
+import { isLiveSnapshotReady, liveSnapshotGeneration } from '../../utils/liveSnapshot';
 
 interface UseClientsQueryArgs {
   userId: string;
   groupId?: string;
+  scopeReadVersion?: number;
 }
 
-export const clientsQueryKey = (scopeKey: string) => ['clients', scopeKey] as const;
+export const clientsQueryKey = (scopeKey: string, scopeReadVersion = 0) =>
+  dataScopeCacheKey('clients', scopeKey, scopeReadVersion);
 
 /**
  * Live clients query backed by a perpetual Firestore listener.
@@ -23,19 +27,38 @@ export const clientsQueryKey = (scopeKey: string) => ['clients', scopeKey] as co
  * Unused as of commit 2 of the StoreSync → TanStack Query migration. Will
  * replace the listener inside useClients.ts in commit 4.
  */
-export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
+export const useClientsQuery = ({
+  userId,
+  groupId,
+  scopeReadVersion = 0,
+}: UseClientsQueryArgs) => {
   const queryClient = useQueryClient();
   const scopeKey = groupId || userId;
-  const queryKey = useMemo(() => clientsQueryKey(scopeKey), [scopeKey]);
+  const queryKey = useMemo(
+    () => clientsQueryKey(scopeKey, scopeReadVersion),
+    [scopeKey, scopeReadVersion],
+  );
+  const generation = liveSnapshotGeneration(scopeKey, scopeReadVersion);
+  const [readyGeneration, setReadyGeneration] = useState('');
 
   useEffect(() => {
     if (!userId) return;
-    const scopeField = groupId ? 'groupId' : 'userId';
-    const scopeValue = groupId || userId;
-    const unsubscribe = db
+    const { field: scopeField, value: scopeValue, additionalFilter } = dataScopeQuery(
+      userId,
+      groupId,
+      scopeReadVersion,
+    );
+    let scopedQuery = db
       .collection('clients')
-      .where(scopeField, '==', scopeValue)
-      .onSnapshot(
+      .where(scopeField, '==', scopeValue);
+    if (additionalFilter) {
+      scopedQuery = scopedQuery.where(
+        additionalFilter.field,
+        '==',
+        additionalFilter.value,
+      );
+    }
+    const unsubscribe = scopedQuery.onSnapshot(
         (snapshot) => {
           // Build the list from the authoritative snapshot.docs (so membership
           // is always correct — deleted docs are absent), but REUSE the prior
@@ -74,6 +97,7 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
               : withDefaults(doc.id, doc.data());
           });
           queryClient.setQueryData<Client[]>(queryKey, next);
+          setReadyGeneration(generation);
         },
         (error: any) => {
           reportError(error, 'Error loading clients');
@@ -83,21 +107,19 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
           // silencio — vaciar la lista es honesto (pantalla "sin clientes").
           if (String(error?.code || '').includes('permission-denied')) {
             queryClient.setQueryData<Client[]>(queryKey, []);
+            setReadyGeneration(generation);
             return;
           }
-          // Parity with the legacy hook: on a Firestore error before any
-          // data has loaded, surface an empty array so consumers exit the
-          // `isPending` state (the old code did setLoading(false)+empty).
-          // If real data already arrived, leave the existing cache intact.
-          if (queryClient.getQueryData<Client[]>(queryKey) === undefined) {
-            queryClient.setQueryData<Client[]>(queryKey, []);
-          }
+          // This listener generation did not authorize a fresh snapshot.
+          // Empty the keyed cache instead of rendering a revisited stale one.
+          queryClient.setQueryData<Client[]>(queryKey, []);
+          setReadyGeneration(generation);
         },
       );
     return () => unsubscribe();
-  }, [userId, groupId, queryClient, queryKey]);
+  }, [userId, groupId, scopeReadVersion, queryClient, queryKey, generation]);
 
-  return useQuery<Client[]>({
+  const query = useQuery<Client[]>({
     queryKey,
     // The Firestore listener feeds data via setQueryData; this promise is
     // intentionally never resolved. Once the first snapshot arrives,
@@ -105,4 +127,8 @@ export const useClientsQuery = ({ userId, groupId }: UseClientsQueryArgs) => {
     queryFn: () => new Promise<Client[]>(() => {}),
     enabled: !!userId,
   });
+  return {
+    ...query,
+    snapshotReady: isLiveSnapshotReady(readyGeneration, generation),
+  };
 };

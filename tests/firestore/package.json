@@ -1,0 +1,8 @@
+{
+  "name": "rutawater-firestore-rules-tests",
+  "private": true,
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.1",
+    "firebase": "12.17.0"
+  }
+}

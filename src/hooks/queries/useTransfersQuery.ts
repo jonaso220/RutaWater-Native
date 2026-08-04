@@ -1,35 +1,58 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { reportError } from '../../lib/crashReporting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Transfer } from '../../types';
 import { parseDate } from '../../utils/helpers';
 import { belongsToProfileScope } from '../../utils/profileScope';
+import { dataScopeCacheKey, dataScopeQuery } from '../../utils/dataScope';
+import { isLiveSnapshotReady, liveSnapshotGeneration } from '../../utils/liveSnapshot';
 
 interface UseTransfersQueryArgs {
   userId: string;
   groupId?: string;
+  scopeReadVersion?: number;
 }
 
-export const transfersQueryKey = (scopeKey: string) => ['transfers', scopeKey] as const;
+export const transfersQueryKey = (scopeKey: string, scopeReadVersion = 0) =>
+  dataScopeCacheKey('transfers', scopeKey, scopeReadVersion);
 
 /**
  * Live transfers query backed by a perpetual Firestore listener.
  * Same pattern as useClientsQuery / useDebtsQuery.
  */
-export const useTransfersQuery = ({ userId, groupId }: UseTransfersQueryArgs) => {
+export const useTransfersQuery = ({
+  userId,
+  groupId,
+  scopeReadVersion = 0,
+}: UseTransfersQueryArgs) => {
   const queryClient = useQueryClient();
   const scopeKey = groupId || userId;
-  const queryKey = useMemo(() => transfersQueryKey(scopeKey), [scopeKey]);
+  const queryKey = useMemo(
+    () => transfersQueryKey(scopeKey, scopeReadVersion),
+    [scopeKey, scopeReadVersion],
+  );
+  const generation = liveSnapshotGeneration(scopeKey, scopeReadVersion);
+  const [readyGeneration, setReadyGeneration] = useState('');
 
   useEffect(() => {
     if (!userId) return;
-    const scopeField = groupId ? 'groupId' : 'userId';
-    const scopeValue = groupId || userId;
-    const unsubscribe = db
+    const { field: scopeField, value: scopeValue, additionalFilter } = dataScopeQuery(
+      userId,
+      groupId,
+      scopeReadVersion,
+    );
+    let scopedQuery = db
       .collection('transfers')
-      .where(scopeField, '==', scopeValue)
-      .onSnapshot(
+      .where(scopeField, '==', scopeValue);
+    if (additionalFilter) {
+      scopedQuery = scopedQuery.where(
+        additionalFilter.field,
+        '==',
+        additionalFilter.value,
+      );
+    }
+    const unsubscribe = scopedQuery.onSnapshot(
         (snapshot) => {
           const loaded: Transfer[] = snapshot.docs
             .filter((doc) => belongsToProfileScope(doc.data(), userId, groupId))
@@ -43,22 +66,24 @@ export const useTransfersQuery = ({ userId, groupId }: UseTransfersQueryArgs) =>
             return dateB - dateA;
           });
           queryClient.setQueryData<Transfer[]>(queryKey, loaded);
+          setReadyGeneration(generation);
         },
         (error) => {
           reportError(error, 'Error loading transfers');
-          // Parity: surface empty state on first-error so consumers don't
-          // hang in isPending. See useClientsQuery for the rationale.
-          if (queryClient.getQueryData<Transfer[]>(queryKey) === undefined) {
-            queryClient.setQueryData<Transfer[]>(queryKey, []);
-          }
+          queryClient.setQueryData<Transfer[]>(queryKey, []);
+          setReadyGeneration(generation);
         },
       );
     return () => unsubscribe();
-  }, [userId, groupId, queryClient, queryKey]);
+  }, [userId, groupId, scopeReadVersion, queryClient, queryKey, generation]);
 
-  return useQuery<Transfer[]>({
+  const query = useQuery<Transfer[]>({
     queryKey,
     queryFn: () => new Promise<Transfer[]>(() => {}),
     enabled: !!userId,
   });
+  return {
+    ...query,
+    snapshotReady: isLiveSnapshotReady(readyGeneration, generation),
+  };
 };

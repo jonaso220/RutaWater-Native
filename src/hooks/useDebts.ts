@@ -3,27 +3,39 @@ import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 import { Debt, Client } from '../types';
 import { getClientMatchKey } from '../utils/helpers';
+import { shareInFlightOperation } from '../utils/inFlightOperation';
 import { useDebtsQuery } from './queries/useDebtsQuery';
+import { dataScopeFields } from '../utils/dataScope';
 
 interface UseDebtsProps {
   userId: string;
   groupId?: string;
   clients?: Client[];
+  scopeReadVersion?: number;
 }
 
-export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
+export const useDebts = ({
+  userId,
+  groupId,
+  clients = [],
+  scopeReadVersion = 0,
+}: UseDebtsProps) => {
   // Data source: TanStack Query holds the live debts array, fed by a
   // perpetual Firestore listener. See useDebtsQuery for details.
-  const debtsQuery = useDebtsQuery({ userId, groupId });
-  const debts = useMemo<Debt[]>(() => debtsQuery.data ?? [], [debtsQuery.data]);
+  const debtsQuery = useDebtsQuery({ userId, groupId, scopeReadVersion });
+  const debts = useMemo<Debt[]>(
+    () => debtsQuery.snapshotReady ? (debtsQuery.data ?? []) : [],
+    [debtsQuery.data, debtsQuery.snapshotReady],
+  );
   // Ref sincrónico para evitar closures stale en operaciones rápidas
   const debtsRef = useRef<Debt[]>(debts);
   debtsRef.current = debts;
   // Ref con los clientes para que los callbacks no queden stale
   const clientsRef = useRef<Client[]>(clients);
   clientsRef.current = clients;
-  // Guard contra doble-tap en operaciones de escritura
-  const busyRef = useRef<Set<string>>(new Set());
+  // Promesas compartidas contra doble-tap: todos los callers esperan el mismo
+  // write real, en vez de que el segundo reciba `undefined` como falso éxito.
+  const inFlightRef = useRef<Map<string, Promise<void>>>(new Map());
 
   // Índice: matchKey -> lista de clientIds del mismo "cliente humano"
   const matchIndex = useMemo(() => {
@@ -99,26 +111,25 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
 
   // Add a new debt (guarded against double-tap)
   const addDebt = useCallback(
-    async (client: Client, amount: number) => {
-      if (!amount || amount <= 0) return;
+    (client: Client, amount: number): Promise<void> => {
+      if (!amount || amount <= 0) return Promise.resolve();
       const key = `add-${client.id}`;
-      if (busyRef.current.has(key)) return;
-      busyRef.current.add(key);
-      try {
-        const scope = groupId ? { groupId, userId } : { userId };
-        await db.collection('debts').add({
-          ...scope,
-          clientId: client.id,
-          clientName: client.name,
-          clientAddress: client.address || '',
-          amount,
-          createdAt: new Date(),
-        });
-      } catch (e) {
-        reportError(e, 'Error adding debt');
-      } finally {
-        busyRef.current.delete(key);
-      }
+      return shareInFlightOperation(inFlightRef.current, key, async () => {
+        try {
+          const scope = dataScopeFields(userId, groupId);
+          await db.collection('debts').add({
+            ...scope,
+            clientId: client.id,
+            clientName: client.name,
+            clientAddress: client.address || '',
+            amount,
+            createdAt: new Date(),
+          });
+        } catch (e) {
+          reportError(e, 'Error adding debt');
+          throw e;
+        }
+      });
     },
     [groupId, userId],
   );
@@ -127,51 +138,48 @@ export const useDebts = ({ userId, groupId, clients = [] }: UseDebtsProps) => {
   // se deriva siempre en vivo de la colección (getClientDebtTotal), no de
   // ningún flag persistido.
   const markDebtPaid = useCallback(
-    async (debt: Debt) => {
+    (debt: Debt): Promise<void> => {
       const key = `paid-${debt.id}`;
-      if (busyRef.current.has(key)) return;
-      busyRef.current.add(key);
-      try {
-        await db.collection('debts').doc(debt.id).delete();
-      } catch (e) {
-        reportError(e, 'Error marking debt paid');
-      } finally {
-        busyRef.current.delete(key);
-      }
+      return shareInFlightOperation(inFlightRef.current, key, async () => {
+        try {
+          await db.collection('debts').doc(debt.id).delete();
+        } catch (e) {
+          reportError(e, 'Error marking debt paid');
+          throw e;
+        }
+      });
     },
     [],
   );
 
   // Edit debt amount (guarded)
-  const editDebt = useCallback(async (debtId: string, newAmount: number) => {
-    if (!newAmount || newAmount <= 0) return;
+  const editDebt = useCallback((debtId: string, newAmount: number): Promise<void> => {
+    if (!newAmount || newAmount <= 0) return Promise.resolve();
     const key = `edit-${debtId}`;
-    if (busyRef.current.has(key)) return;
-    busyRef.current.add(key);
-    try {
-      await db.collection('debts').doc(debtId).update({ amount: newAmount });
-    } catch (e) {
-      reportError(e, 'Error editing debt');
-    } finally {
-      busyRef.current.delete(key);
-    }
+    return shareInFlightOperation(inFlightRef.current, key, async () => {
+      try {
+        await db.collection('debts').doc(debtId).update({ amount: newAmount });
+      } catch (e) {
+        reportError(e, 'Error editing debt');
+        throw e;
+      }
+    });
   }, []);
 
   // Mark ALL debts for a client as paid (guarded, batch atómico)
   const markAllDebtsPaid = useCallback(
-    async (clientId: string, debtIds: string[]) => {
+    (clientId: string, debtIds: string[]): Promise<void> => {
       const key = `allpaid-${clientId}`;
-      if (busyRef.current.has(key)) return;
-      busyRef.current.add(key);
-      try {
-        const batch = db.batch();
-        debtIds.forEach((id) => batch.delete(db.collection('debts').doc(id)));
-        await batch.commit();
-      } catch (e) {
-        reportError(e, 'Error marking all debts paid');
-      } finally {
-        busyRef.current.delete(key);
-      }
+      return shareInFlightOperation(inFlightRef.current, key, async () => {
+        try {
+          const batch = db.batch();
+          debtIds.forEach((id) => batch.delete(db.collection('debts').doc(id)));
+          await batch.commit();
+        } catch (e) {
+          reportError(e, 'Error marking all debts paid');
+          throw e;
+        }
+      });
     },
     [],
   );

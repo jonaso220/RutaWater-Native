@@ -141,6 +141,13 @@ describe('occurrenceForSpecificDate', () => {
     expect(occurrenceForSpecificDate('', 10, 0)).toBeNull();
   });
 
+  test('rejects impossible calendar dates instead of normalizing to another day', () => {
+    expect(occurrenceForSpecificDate('2026-04-31', 10, 0)).toBeNull();
+    expect(occurrenceForSpecificDate('2027-02-29', 10, 0)).toBeNull();
+    expect(occurrenceForSpecificDate('2026-13-01', 10, 0)).toBeNull();
+    expect(occurrenceForSpecificDate('2026-00-01', 10, 0)).toBeNull();
+  });
+
   test('today at a future time on FAKE_NOW returns same day', () => {
     // 2026-03-04 15:00 is later today
     const result = occurrenceForSpecificDate('2026-03-04', 15, 0);

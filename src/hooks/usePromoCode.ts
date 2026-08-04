@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { reportError } from '../lib/crashReporting';
-import { db } from '../config/firebase';
-import { PROMO_CODES } from '../constants/subscription';
+import i18n from '../i18n';
+import { API_ENDPOINTS } from '../config/api';
+import { db, fbAuth } from '../config/firebase';
 
 interface PromoState {
   hasPromo: boolean;
@@ -47,41 +48,42 @@ export const usePromoCode = ({ userId }: { userId: string | undefined }): PromoS
   const redeemCode = useCallback(
     async (code: string): Promise<{ success: boolean; message: string }> => {
       if (!userId) {
-        return { success: false, message: 'Debes iniciar sesion primero.' };
-      }
-
-      const normalizedCode = code.trim().toUpperCase();
-
-      if (!PROMO_CODES[normalizedCode]) {
-        return { success: false, message: 'Codigo invalido.' };
+        return { success: false, message: i18n.t('settings.promoAuthRequired') };
       }
 
       try {
-        // Check if code was already used by this user
-        const existing = await db.collection('premiumOverrides').doc(userId).get();
-        if (existing.exists && existing.data()?.active) {
-          return { success: false, message: 'Ya tienes premium activado.' };
+        const idToken = await fbAuth.currentUser?.getIdToken();
+        if (!idToken) {
+          return { success: false, message: i18n.t('settings.promoAuthRequired') };
         }
 
-        await db.collection('premiumOverrides').doc(userId).set({
-          active: true,
-          code: normalizedCode,
-          type: PROMO_CODES[normalizedCode],
-          redeemedAt: new Date(),
-          userId,
+        const response = await fetch(API_ENDPOINTS.redeemPromo, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ code: code.trim() }),
         });
 
-        return { success: true, message: 'Premium activado!' };
-      } catch (error: any) {
-        // permission-denied acá = el código pasó la lista local (PROMO_CODES)
-        // pero las reglas lo rechazaron: los listados divergieron. Para el
-        // usuario es un código inválido, no un error de conexión.
-        if (String(error?.code || '').includes('permission-denied')) {
-          reportError(error, 'Promo redeem rejected by rules: PROMO_CODES y firestore.rules desincronizados');
-          return { success: false, message: 'Codigo invalido.' };
+        const body = await response.json().catch(() => ({} as any));
+        if (!response.ok) {
+          throw new Error(body?.error || `HTTP ${response.status}`);
         }
+
+        if (body?.success === true) {
+          return {
+            success: true,
+            message: body.status === 'already_active'
+              ? i18n.t('settings.promoAlreadyActive')
+              : i18n.t('settings.promoSuccess'),
+          };
+        }
+
+        return { success: false, message: i18n.t('settings.promoInvalidCode') };
+      } catch (error) {
         reportError(error, 'Promo redeem error');
-        return { success: false, message: 'Error al activar el codigo.' };
+        return { success: false, message: i18n.t('settings.promoRedeemError') };
       }
     },
     [userId],
@@ -90,9 +92,13 @@ export const usePromoCode = ({ userId }: { userId: string | undefined }): PromoS
   const removePromo = useCallback(async () => {
     if (!userId) return;
     try {
+      // Las reglas permiten exclusivamente true -> false en el documento propio.
+      // Así las versiones ya publicadas pueden quitar Premium, pero ninguna
+      // versión del cliente puede concedérselo o reactivarlo.
       await db.collection('premiumOverrides').doc(userId).update({ active: false });
     } catch (error) {
       reportError(error, 'Remove promo error');
+      throw error;
     }
   }, [userId]);
 

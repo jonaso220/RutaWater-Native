@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { reportError } from '../lib/crashReporting';
 import {
   View,
@@ -76,6 +76,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   const [localNotes, setLocalNotes] = useState('');
   const [localProducts, setLocalProducts] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [primarySavedPendingFamily, setPrimarySavedPendingFamily] = useState(false);
   const [selectedHouseholdIds, setSelectedHouseholdIds] = useState<string[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const catalogProducts = useProducts();
@@ -98,6 +100,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   useEffect(() => {
     if (client) {
       setSaving(false);
+      savingRef.current = false;
+      setPrimarySavedPendingFamily(false);
       setSelectedHouseholdIds([]);
       setSelectedAddressId(getClientAddresses(client)[0]?.id || '');
       // Reset notes and products so each new scheduling starts clean
@@ -213,7 +217,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   };
 
   const handleSubmit = async () => {
-    if (saving) return;
+    if (savingRef.current) return;
     if (localFreq === 'once' && !localDate) {
       Alert.alert(t('error'), t('scheduleModal.errorDate'));
       return;
@@ -222,29 +226,32 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       Alert.alert(t('error'), t('scheduleModal.errorDays'));
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     const cleanProducts: Record<string, number> = {};
     Object.entries(localProducts).forEach(([key, val]) => {
       if (val > 0) cleanProducts[key] = val;
     });
     let saveFailed = false;
-    let familySaveFailed = false;
+    const failedHouseholdIds: string[] = [];
     try {
       // Periódico: la fecha (si se eligió) va como ancla de inicio de la frecuencia.
       const dateArg = localFreq === 'once' ? localDate : startDate;
       const selectedAddress = clientAddresses.find((location) => location.id === selectedAddressId)
         || clientAddresses[0];
-      const ok = await onSave(
-        client,
-        localDays,
-        localFreq,
-        dateArg,
-        localNotes,
-        cleanProducts,
-        'add',
-        selectedAddress,
-      );
-      saveFailed = ok === false;
+      if (!primarySavedPendingFamily) {
+        const ok = await onSave(
+          client,
+          localDays,
+          localFreq,
+          dateArg,
+          localNotes,
+          cleanProducts,
+          'add',
+          selectedAddress,
+        );
+        saveFailed = ok === false;
+      }
       // La selección es explícita y solo contiene familiares sin agenda activa.
       // Cada uno empieza vacío para evitar copiar por error el pedido del titular.
       if (!saveFailed) {
@@ -263,9 +270,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
               'add',
               getClientAddresses(member)[0],
             );
-            if (memberOk === false) familySaveFailed = true;
+            if (memberOk === false) failedHouseholdIds.push(member.id);
           } catch (e) {
-            familySaveFailed = true;
+            failedHouseholdIds.push(member.id);
             reportError(e, 'Household member schedule error');
           }
         }
@@ -274,14 +281,26 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       saveFailed = true;
       reportError(e, 'Schedule save error');
     } finally {
+      savingRef.current = false;
       setSaving(false);
-      onClose();
     }
-    if (familySaveFailed) {
+    if (failedHouseholdIds.length > 0) {
+      // The primary and any non-failed relatives are already committed. Keep
+      // the exact draft visible, freeze it, and retry only the failed member
+      // IDs so a second tap cannot duplicate the primary one-time order.
+      setPrimarySavedPendingFamily(true);
+      setSelectedHouseholdIds(failedHouseholdIds);
       Alert.alert(t('error'), t('scheduleModal.errorFamilySave'));
     } else if (saveFailed) {
       Alert.alert(t('error'), t('scheduleModal.errorSave'));
+    } else {
+      setPrimarySavedPendingFamily(false);
+      onClose();
     }
+  };
+
+  const requestClose = () => {
+    if (!savingRef.current) onClose();
   };
 
   // Mismas etiquetas freq.* que el resto de la app (Directorio, Editar Cliente)
@@ -295,7 +314,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   ];
 
   return (
-    <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
+    <ModalOverlay visible={visible} onClose={requestClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -309,12 +328,16 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                 {t('scheduleModal.scheduleFor', { name: client.name })}
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={requestClose} style={styles.closeBtn} disabled={saving}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={[styles.body, primarySavedPendingFamily && { opacity: 0.65 }]}
+            showsVerticalScrollIndicator={false}
+            pointerEvents={primarySavedPendingFamily ? 'none' : 'auto'}
+          >
             {clientAddresses.length > 1 && (
               <View style={styles.addressSection}>
                 <Text style={styles.sectionTitle}>{t('scheduleModal.visitAddress')}</Text>
@@ -608,7 +631,9 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
             <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSubmit} disabled={saving}>
               <Text style={styles.saveBtnText}>
                 {t('scheduleModal.scheduleBtn')}
-                {selectedHouseholdIds.length > 0 ? ` (${selectedHouseholdIds.length + 1})` : ''}
+                {selectedHouseholdIds.length > 0
+                  ? ` (${selectedHouseholdIds.length + (primarySavedPendingFamily ? 0 : 1)})`
+                  : ''}
               </Text>
             </TouchableOpacity>
           </View>

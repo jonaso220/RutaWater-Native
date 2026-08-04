@@ -76,6 +76,40 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'org.webkit:android-jsc:+'
 
+// Release signing credentials live outside Git. Local builds read the ignored
+// android/keystore.properties file; CI can provide the same names as
+// environment variables. Keeping this optional allows Gradle sync/debug builds
+// without signing material, while the task-graph guard below blocks unsigned
+// release artifacts.
+def releaseSigningPropertyNames = [
+    "RUTAWATER_UPLOAD_STORE_FILE",
+    "RUTAWATER_UPLOAD_KEY_ALIAS",
+    "RUTAWATER_UPLOAD_STORE_PASSWORD",
+    "RUTAWATER_UPLOAD_KEY_PASSWORD",
+]
+def releaseSigningProperties = new Properties()
+def releaseSigningPropertiesFile = rootProject.file("keystore.properties")
+if (releaseSigningPropertiesFile.exists()) {
+    releaseSigningPropertiesFile.withInputStream { stream ->
+        releaseSigningProperties.load(stream)
+    }
+}
+def releaseSigningValue = { String name ->
+    def environmentValue = System.getenv(name)
+    if (environmentValue != null && !environmentValue.trim().isEmpty()) {
+        return environmentValue.trim()
+    }
+    def localValue = releaseSigningProperties.getProperty(name)
+    return localValue == null ? null : localValue.trim()
+}
+def releaseSigningValues = releaseSigningPropertyNames.collectEntries { name ->
+    [(name): releaseSigningValue(name)]
+}
+def releaseSigningConfigured = releaseSigningPropertyNames.every { name ->
+    def value = releaseSigningValues[name]
+    value != null && !value.isEmpty()
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -96,11 +130,13 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-        release {
-            storeFile file(RUTAWATER_UPLOAD_STORE_FILE)
-            storePassword RUTAWATER_UPLOAD_STORE_PASSWORD
-            keyAlias RUTAWATER_UPLOAD_KEY_ALIAS
-            keyPassword RUTAWATER_UPLOAD_KEY_PASSWORD
+        if (releaseSigningConfigured) {
+            release {
+                storeFile file(releaseSigningValues.RUTAWATER_UPLOAD_STORE_FILE)
+                storePassword releaseSigningValues.RUTAWATER_UPLOAD_STORE_PASSWORD
+                keyAlias releaseSigningValues.RUTAWATER_UPLOAD_KEY_ALIAS
+                keyPassword releaseSigningValues.RUTAWATER_UPLOAD_KEY_PASSWORD
+            }
         }
     }
     buildTypes {
@@ -108,10 +144,33 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig signingConfigs.release
+            if (releaseSigningConfigured) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
+    }
+}
+
+def releaseSigningTaskNamePatterns = [
+    ~/(?i)^(assemble|bundle|install)Release$/,
+    ~/(?i)^packageRelease(Bundle|UniversalApk)?$/,
+    ~/(?i)^validateSigningRelease$/,
+    ~/(?i)^signRelease(Bundle)?$/,
+]
+
+gradle.taskGraph.whenReady { graph ->
+    def requestsReleaseArtifact = graph.allTasks.any { task ->
+        task.project == project && releaseSigningTaskNamePatterns.any { pattern ->
+            task.name ==~ pattern
+        }
+    }
+    if (requestsReleaseArtifact && !releaseSigningConfigured) {
+        throw new GradleException(
+            "Release signing is not configured. Copy android/keystore.properties.example " +
+            "to android/keystore.properties and provide the four RUTAWATER_UPLOAD_* values."
+        )
     }
 }
 

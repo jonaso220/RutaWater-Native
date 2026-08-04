@@ -61,13 +61,14 @@ export const useDailyLoads = ({ userId }: UseDailyLoadsProps) => {
   );
 
   const saveDailyLoad = async (day: string, data: DailyLoad) => {
-    if (!userId || !day) return;
+    if (!userId || !day) throw new Error('DAILY_LOAD_SCOPE_REQUIRED');
     try {
       const docId = `${userId}_${day}`;
       await db.collection('daily_loads').doc(docId).set(data);
       setDailyLoad(data);
     } catch (e) {
       reportError(e, 'Error saving daily load');
+      throw e;
     }
   };
 

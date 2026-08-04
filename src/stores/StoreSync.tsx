@@ -39,7 +39,7 @@ import { queryClient } from '../lib/queryClient';
  * documentarlo acá.
  */
 export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, groupData } = useAuthContext();
+  const { user, groupData, scopeReadVersion } = useAuthContext();
   const userId = user?.uid || '';
   const groupId = groupData?.groupId;
 
@@ -74,10 +74,14 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
       redeemCode: promo.redeemCode,
       removePromo: promo.removePromo,
     });
-  }, [subscription.isPremium, subscription.loading, subscription.packages, subscription.currentPlan, subscription.expirationDate, subscription.isTrialActive, promo.hasPromo, promo.promoLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [subscription.isPremium, subscription.loading, subscription.packages, subscription.introEligibility, subscription.currentPlan, subscription.expirationDate, subscription.isTrialActive, promo.hasPromo, promo.promoLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Clients ---
-  const clientsHook = useClients({ userId, groupId: effectiveGroupId });
+  const clientsHook = useClients({
+    userId,
+    groupId: effectiveGroupId,
+    scopeReadVersion,
+  });
 
   const dayCounts = useMemo(() => {
     // Single pass over clients (one bucket-increment per assigned day) instead
@@ -109,15 +113,21 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   useEffect(() => {
     useClientsStore.setState({
       ...clientsHook,
+      scopeKey: effectiveGroupId || userId,
       dayCounts,
       canAddClient,
       clientCount,
     });
-  }, [clientsHook.clients, clientsHook.loading, dayCounts, canAddClient, clientCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clientsHook.clients, clientsHook.loading, effectiveGroupId, userId, dayCounts, canAddClient, clientCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Debts ---
   // Pasamos clients para que getClientDebtTotal agrupe duplicados (mismo cliente del directorio añadido varias veces)
-  const debtsHook = useDebts({ userId, groupId: effectiveGroupId, clients: clientsHook.clients });
+  const debtsHook = useDebts({
+    userId,
+    groupId: effectiveGroupId,
+    clients: clientsHook.clients,
+    scopeReadVersion,
+  });
 
   useEffect(() => {
     useDebtsStore.setState({
@@ -133,7 +143,12 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
 
   // --- Transfers ---
   // Pasamos clients para agrupar transferencias de instancias duplicadas del mismo cliente humano
-  const transfersHook = useTransfers({ userId, groupId: effectiveGroupId, clients: clientsHook.clients });
+  const transfersHook = useTransfers({
+    userId,
+    groupId: effectiveGroupId,
+    clients: clientsHook.clients,
+    scopeReadVersion,
+  });
 
   useEffect(() => {
     useTransfersStore.setState({

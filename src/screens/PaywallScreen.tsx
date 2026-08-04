@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,12 @@ import { useLayout } from '../hooks/useLayout';
 import { useSubscriptionStore } from '../stores/subscriptionStore';
 import { ThemeColors } from '../theme/colors';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
-import { PACKAGE_TYPE } from 'react-native-purchases';
+import type { PurchasesPackage } from 'react-native-purchases';
+import {
+  buildPaywallPlans,
+} from '../utils/paywallPricing';
+import type { StorePlatform, TrialDuration } from '../utils/paywallPricing';
+import { runExclusiveOperation } from '../utils/inFlightOperation';
 
 interface Props {
   navigation: any;
@@ -29,48 +34,83 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
   const { t } = useTranslation();
   const styles = getStyles(colors, fontScale);
   const packages = useSubscriptionStore((s) => s.packages);
+  const subscriptionLoading = useSubscriptionStore((s) => s.loading);
+  const introEligibility = useSubscriptionStore((s) => s.introEligibility);
   const purchasePackage = useSubscriptionStore((s) => s.purchasePackage);
   const restorePurchases = useSubscriptionStore((s) => s.restorePurchases);
   const isPremium = useSubscriptionStore((s) => s.isPremium);
   const [purchasing, setPurchasing] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const billingInFlightRef = useRef(false);
+  const billingPending = purchasing || restoring;
 
-  const monthlyPkg = packages.find((p) => p.packageType === PACKAGE_TYPE.MONTHLY);
-  const annualPkg = packages.find((p) => p.packageType === PACKAGE_TYPE.ANNUAL);
+  useEffect(() => navigation.addListener('beforeRemove', (event: any) => {
+    if (billingInFlightRef.current) event.preventDefault();
+  }), [navigation]);
 
-  const handlePurchase = async (pkg: typeof monthlyPkg) => {
+  const storePlatform: StorePlatform = Platform.OS === 'ios'
+    ? 'ios'
+    : Platform.OS === 'android' ? 'android' : 'other';
+  const plans = buildPaywallPlans(packages, storePlatform, introEligibility);
+
+  const durationLabel = (duration: TrialDuration): string => {
+    const key = {
+      DAY: 'trialDays',
+      WEEK: 'trialWeeks',
+      MONTH: 'trialMonths',
+      YEAR: 'trialYears',
+    }[duration.unit];
+    return t(`paywall.${key}`, { count: duration.count });
+  };
+
+  const recurringPeriodLabel = (
+    period: TrialDuration | null,
+    fallbackKey: 'paywall.perMonth' | 'paywall.perYear',
+  ): string => period
+    ? t('paywall.everyDuration', { duration: durationLabel(period) })
+    : t(fallbackKey);
+
+  const hasPromotionalOffer = [plans.monthly, plans.annual].some(
+    (plan) => Boolean(plan?.trial || plan?.paidIntroPhases.length),
+  );
+
+  const handlePurchase = async (pkg: PurchasesPackage) => {
     if (!pkg) return;
-    setPurchasing(true);
-    try {
-      const success = await purchasePackage(pkg);
-      if (success) {
-        Alert.alert(t('paywall.welcomePremium'), t('paywall.welcomePremiumMsg'), [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
+    await runExclusiveOperation(billingInFlightRef, async () => {
+      setPurchasing(true);
+      try {
+        const success = await purchasePackage(pkg);
+        if (success) {
+          Alert.alert(t('paywall.welcomePremium'), t('paywall.welcomePremiumMsg'), [
+            { text: 'OK', onPress: () => navigation.goBack() },
+          ]);
+        }
+      } catch (error: any) {
+        Alert.alert(t('error'), t('paywall.purchaseError'));
+      } finally {
+        setPurchasing(false);
       }
-    } catch (error: any) {
-      Alert.alert(t('error'), t('paywall.purchaseError'));
-    } finally {
-      setPurchasing(false);
-    }
+    });
   };
 
   const handleRestore = async () => {
-    setRestoring(true);
-    try {
-      const restored = await restorePurchases();
-      if (restored) {
-        Alert.alert(t('paywall.restored'), t('paywall.restoredMsg'), [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
-      } else {
-        Alert.alert(t('paywall.noRestored'), t('paywall.noRestoredMsg'));
+    await runExclusiveOperation(billingInFlightRef, async () => {
+      setRestoring(true);
+      try {
+        const restored = await restorePurchases();
+        if (restored) {
+          Alert.alert(t('paywall.restored'), t('paywall.restoredMsg'), [
+            { text: 'OK', onPress: () => navigation.goBack() },
+          ]);
+        } else {
+          Alert.alert(t('paywall.noRestored'), t('paywall.noRestoredMsg'));
+        }
+      } catch {
+        Alert.alert(t('error'), t('paywall.restoreError'));
+      } finally {
+        setRestoring(false);
       }
-    } catch {
-      Alert.alert(t('error'), t('paywall.restoreError'));
-    } finally {
-      setRestoring(false);
-    }
+    });
   };
 
   if (isPremium) {
@@ -94,7 +134,11 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
     <View style={styles.outer}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
       {/* Header */}
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+      <TouchableOpacity
+        onPress={() => navigation.goBack()}
+        style={styles.backBtn}
+        disabled={billingPending}
+      >
         <Ionicons name="close" size={28} color={colors.textMuted} />
       </TouchableOpacity>
 
@@ -132,49 +176,142 @@ const PaywallScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       {/* Pricing */}
-      <View style={styles.pricingSection}>
-        <TouchableOpacity
-          onPress={() => monthlyPkg ? handlePurchase(monthlyPkg) : Alert.alert(t('paywall.notAvailable'), t('paywall.notAvailableMsg'))}
-          style={styles.priceCard}
-          disabled={purchasing}
-        >
-          <Text style={styles.priceLabel}>{t('paywall.monthly')}</Text>
-          <Text style={styles.priceAmount}>
-            {monthlyPkg ? monthlyPkg.product.priceString : '$2.99'}
-          </Text>
-          <Text style={styles.pricePeriod}>{t('paywall.perMonth')}</Text>
-          <View style={styles.trialBadge}>
-            <Ionicons name="gift" size={14} color={colors.success} />
-            <Text style={styles.trialText}>{t('paywall.freeWeek')}</Text>
-          </View>
-        </TouchableOpacity>
+      {subscriptionLoading && !plans.monthly && !plans.annual ? (
+        <View style={styles.loadingPackages}>
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.loadingText}>{t('paywall.loadingPrices')}</Text>
+        </View>
+      ) : plans.monthly || plans.annual ? (
+        <>
+          <View style={styles.pricingSection}>
+            {plans.monthly ? (
+              <TouchableOpacity
+                onPress={() => handlePurchase(plans.monthly!.pkg)}
+                style={styles.priceCard}
+                disabled={billingPending}
+              >
+                <Text style={styles.priceLabel}>{t('paywall.monthly')}</Text>
+                <Text style={styles.priceAmount}>{plans.monthly.priceString}</Text>
+                <Text style={styles.pricePeriod}>
+                  {recurringPeriodLabel(plans.monthly.renewalPeriod, 'paywall.perMonth')}
+                </Text>
+                {plans.monthly.trial || plans.monthly.paidIntroPhases.length > 0 ? (
+                  <>
+                    {plans.monthly.trial ? (
+                      <View style={styles.trialBadge}>
+                        <Ionicons name="gift" size={14} color={colors.success} />
+                        <Text style={styles.trialText}>
+                          {t('paywall.freeTrial', {
+                            duration: durationLabel(plans.monthly.trial),
+                          })}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {plans.monthly.paidIntroPhases.map((phase, index) => (
+                      <Text
+                        key={`${phase.priceString}-${phase.billingPeriod.unit}-${index}`}
+                        style={styles.introPhaseText}
+                      >
+                        {t('paywall.paidIntroPhase', {
+                          price: phase.priceString,
+                          period: recurringPeriodLabel(phase.billingPeriod, 'paywall.perMonth'),
+                          duration: durationLabel(phase.totalDuration),
+                          count: phase.cycles,
+                        })}
+                      </Text>
+                    ))}
+                    <Text style={styles.renewalText}>
+                      {t('paywall.renewsAfterOffer', {
+                        price: plans.monthly.priceString,
+                        period: recurringPeriodLabel(
+                          plans.monthly.renewalPeriod,
+                          'paywall.perMonth',
+                        ),
+                      })}
+                    </Text>
+                  </>
+                ) : null}
+              </TouchableOpacity>
+            ) : null}
 
-        <TouchableOpacity
-          onPress={() => annualPkg ? handlePurchase(annualPkg) : Alert.alert(t('paywall.notAvailable'), t('paywall.notAvailableMsg'))}
-          style={[styles.priceCard, styles.priceCardFeatured]}
-          disabled={purchasing}
-        >
-          <View style={styles.saveBadge}>
-            <Text style={styles.saveBadgeText}>{t('paywall.save16')}</Text>
+            {plans.annual ? (
+              <TouchableOpacity
+                onPress={() => handlePurchase(plans.annual!.pkg)}
+                style={[styles.priceCard, styles.priceCardFeatured]}
+                disabled={billingPending}
+              >
+                {plans.savingsPercent ? (
+                  <View style={styles.saveBadge}>
+                    <Text style={styles.saveBadgeText}>
+                      {t('paywall.savePercent', { percent: plans.savingsPercent })}
+                    </Text>
+                  </View>
+                ) : null}
+                <Text style={[styles.priceLabel, styles.priceLabelFeatured]}>{t('paywall.annual')}</Text>
+                <Text style={[styles.priceAmount, styles.priceAmountFeatured]}>
+                  {plans.annual.priceString}
+                </Text>
+                <Text style={[styles.pricePeriod, styles.pricePeriodFeatured]}>
+                  {recurringPeriodLabel(plans.annual.renewalPeriod, 'paywall.perYear')}
+                </Text>
+                {plans.annual.trial || plans.annual.paidIntroPhases.length > 0 ? (
+                  <>
+                    {plans.annual.trial ? (
+                      <View style={[styles.trialBadge, styles.trialBadgeFeatured]}>
+                        <Ionicons name="gift" size={14} color={colors.primary} />
+                        <Text style={[styles.trialText, styles.trialTextFeatured]}>
+                          {t('paywall.freeTrial', {
+                            duration: durationLabel(plans.annual.trial),
+                          })}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {plans.annual.paidIntroPhases.map((phase, index) => (
+                      <Text
+                        key={`${phase.priceString}-${phase.billingPeriod.unit}-${index}`}
+                        style={styles.introPhaseText}
+                      >
+                        {t('paywall.paidIntroPhase', {
+                          price: phase.priceString,
+                          period: recurringPeriodLabel(phase.billingPeriod, 'paywall.perYear'),
+                          duration: durationLabel(phase.totalDuration),
+                          count: phase.cycles,
+                        })}
+                      </Text>
+                    ))}
+                    <Text style={styles.renewalText}>
+                      {t('paywall.renewsAfterOffer', {
+                        price: plans.annual.priceString,
+                        period: recurringPeriodLabel(
+                          plans.annual.renewalPeriod,
+                          'paywall.perYear',
+                        ),
+                      })}
+                    </Text>
+                  </>
+                ) : null}
+              </TouchableOpacity>
+            ) : null}
           </View>
-          <Text style={[styles.priceLabel, styles.priceLabelFeatured]}>{t('paywall.annual')}</Text>
-          <Text style={[styles.priceAmount, styles.priceAmountFeatured]}>
-            {annualPkg ? annualPkg.product.priceString : '$29.99'}
-          </Text>
-          <Text style={[styles.pricePeriod, styles.pricePeriodFeatured]}>{t('paywall.perYear')}</Text>
-          <View style={[styles.trialBadge, styles.trialBadgeFeatured]}>
-            <Ionicons name="gift" size={14} color={colors.primary} />
-            <Text style={[styles.trialText, styles.trialTextFeatured]}>{t('paywall.freeMonth')}</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+          <Text style={styles.taxNotice}>{t('paywall.taxNotice')}</Text>
+          {hasPromotionalOffer ? (
+            <Text style={styles.offerCancellationText}>
+              {t('paywall.cancelBeforeOfferEnds')}
+            </Text>
+          ) : null}
+        </>
+      ) : (
+        <View style={styles.unavailablePrices}>
+          <Text style={styles.loadingText}>{t('paywall.notAvailableMsg')}</Text>
+        </View>
+      )}
 
       {purchasing && (
         <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 16 }} />
       )}
 
       {/* Restore */}
-      <TouchableOpacity onPress={handleRestore} disabled={restoring} style={styles.restoreBtn}>
+      <TouchableOpacity onPress={handleRestore} disabled={billingPending} style={styles.restoreBtn}>
         {restoring ? (
           <ActivityIndicator size="small" color={colors.textMuted} />
         ) : (
@@ -319,6 +456,21 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     trialTextFeatured: {
       color: colors.primary,
     },
+    renewalText: {
+      fontSize: s(10),
+      color: colors.textHint,
+      textAlign: 'center',
+      marginTop: 8,
+      lineHeight: s(14),
+    },
+    introPhaseText: {
+      fontSize: s(10),
+      color: colors.textMuted,
+      textAlign: 'center',
+      marginTop: 8,
+      lineHeight: s(14),
+      fontWeight: '600',
+    },
     pricingSection: {
       flexDirection: 'row',
       gap: 12,
@@ -385,6 +537,30 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     loadingText: {
       fontSize: s(14),
       color: colors.textMuted,
+      textAlign: 'center',
+    },
+    unavailablePrices: {
+      marginTop: 20,
+      padding: 16,
+      borderRadius: 12,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    taxNotice: {
+      marginTop: 10,
+      fontSize: s(10),
+      lineHeight: s(14),
+      color: colors.textHint,
+      textAlign: 'center',
+    },
+    offerCancellationText: {
+      marginTop: 6,
+      fontSize: s(10),
+      lineHeight: s(14),
+      color: colors.textMuted,
+      textAlign: 'center',
+      fontWeight: '600',
     },
     restoreBtn: {
       marginTop: 20,

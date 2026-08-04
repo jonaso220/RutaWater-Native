@@ -1,5 +1,4 @@
-import { Alert, Share, Platform } from 'react-native';
-import RNFS from 'react-native-fs';
+import { Alert } from 'react-native';
 import { reportError } from '../lib/crashReporting';
 import { useTranslation } from 'react-i18next';
 import { useClientsStore } from '../stores/clientsStore';
@@ -8,6 +7,7 @@ import { useTransfersStore } from '../stores/transfersStore';
 import { useProductCatalogStore } from '../stores/productCatalogStore';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
 import { parseDate } from '../utils/helpers';
+import { exportFile } from '../utils/exportFile';
 
 interface ExportUser {
   uid: string;
@@ -25,18 +25,6 @@ const escapeCsv = (val: string | number | boolean | undefined | null): string =>
     return '"' + str.replace(/"/g, '""') + '"';
   }
   return str;
-};
-
-const shareFile = async (content: string, filename: string) => {
-  const dir = Platform.OS === 'ios' ? RNFS.TemporaryDirectoryPath : RNFS.CachesDirectoryPath;
-  const filePath = `${dir}/${filename}`;
-  await RNFS.writeFile(filePath, content, 'utf8');
-  const fileUrl = Platform.OS === 'ios' ? filePath : `file://${filePath}`;
-  await Share.share(
-    Platform.OS === 'ios'
-      ? { url: fileUrl }
-      : { title: filename, message: content },
-  );
 };
 
 export const useDataExport = (user: ExportUser) => {
@@ -93,7 +81,12 @@ export const useDataExport = (user: ExportUser) => {
       const csvContent = bom + headers.map(escapeCsv).join(',') + '\n' + rows.join('\n');
 
       const date = new Date().toISOString().split('T')[0];
-      await shareFile(csvContent, `RutaWater_Clientes_${date}.csv`);
+      const result = await exportFile(
+        csvContent,
+        `RutaWater_Clientes_${date}.csv`,
+        'text/csv',
+      );
+      if (result === 'cancelled') return;
 
       Alert.alert(t('settings.csvExported', { count: allClients.length }), '');
     } catch (e) {
@@ -156,7 +149,12 @@ export const useDataExport = (user: ExportUser) => {
 
       const jsonContent = JSON.stringify(backup, null, 2);
       const date = new Date().toISOString().split('T')[0];
-      await shareFile(jsonContent, `RutaWater_Backup_${date}.json`);
+      const result = await exportFile(
+        jsonContent,
+        `RutaWater_Backup_${date}.json`,
+        'application/json',
+      );
+      if (result === 'cancelled') return;
 
       const counts: string[] = [];
       if (backup.clients.length > 0) counts.push(t('settings.backupClients', { count: backup.clients.length }));

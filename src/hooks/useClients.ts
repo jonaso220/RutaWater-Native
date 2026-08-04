@@ -8,16 +8,58 @@ import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { findExactClientMatch, planDuplicateClientCleanup } from '../utils/clientDuplicates';
 import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../utils/recency';
 import { ALL_DAYS, Frequency } from '../constants/products';
-import { scheduleClientAlarm, cancelClientAlarm, requestNotificationPermission } from '../services/notifications';
+import {
+  scheduleClientAlarm,
+  cancelClientAlarm,
+  cancelAlarmsThenMutate,
+  ClientAlarmSnapshot,
+  persistAlarmOrRollbackTrigger,
+  restoreClientAlarmSnapshots,
+  runSerializedAlarmMutation,
+  requestNotificationPermission,
+} from '../services/notifications';
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
 import { reportError } from '../lib/crashReporting';
 import { moveItemToPosition } from '../utils/clientOrder';
 import { getClientAddresses, getClientAddressSearchText, locationFields } from '../utils/clientAddresses';
+import { useClientsStore } from '../stores/clientsStore';
+import { toExistingClientUpdate } from '../utils/clientWriteData';
+import { dataScopeFields, dataScopeQuery } from '../utils/dataScope';
 
 interface UseClientsProps {
   userId: string;
   groupId?: string;
+  scopeReadVersion?: number;
 }
+
+const alarmSnapshotForClient = (
+  client: Client | undefined,
+  preferredDay?: string,
+  ownerUid?: string,
+): ClientAlarmSnapshot | null => {
+  if (!client?.alarm) return null;
+  const targetDay = client.alarmDay
+    || preferredDay
+    || (client.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
+    || client.visitDay;
+  return {
+    clientId: client.id,
+    clientName: client.name || '',
+    address: client.address || '',
+    time: client.alarm,
+    targetDay,
+    specificDate: client.freq === 'once' ? client.specificDate : undefined,
+    scopeKey: client.groupId || client.userId,
+    ownerUid,
+  };
+};
+
+const alarmSnapshotsForClients = (
+  clients: Array<Client | undefined>,
+  ownerUid?: string,
+): ClientAlarmSnapshot[] => clients
+  .map((client) => alarmSnapshotForClient(client, undefined, ownerUid))
+  .filter((snapshot): snapshot is ClientAlarmSnapshot => snapshot !== null);
 
 // Comparator for a single day's list: prefer listOrders[day], fall back to the
 // legacy single `listOrder`, and push clients with no order to the end.
@@ -39,19 +81,27 @@ const compareDayOrder = (day: string) => (a: Client, b: Client) => {
   return orderA - orderB;
 };
 
-export const useClients = ({ userId, groupId }: UseClientsProps) => {
+export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClientsProps) => {
   // Data source: TanStack Query holds the live array fed by a perpetual
   // Firestore listener (see useClientsQuery). isPending stays true until
   // the first snapshot arrives, mirroring the old `loading` boolean.
-  const clientsQuery = useClientsQuery({ userId, groupId });
+  const clientsQuery = useClientsQuery({ userId, groupId, scopeReadVersion });
   // useMemo to keep the reference stable while data is still undefined:
   // a bare `?? []` would create a new array each render, causing downstream
   // effects (StoreSync, getAllDayClients, etc.) to fire spuriously.
-  const clients = useMemo<Client[]>(() => clientsQuery.data ?? [], [clientsQuery.data]);
-  const loading = clientsQuery.isPending;
+  const clients = useMemo<Client[]>(
+    () => clientsQuery.snapshotReady ? (clientsQuery.data ?? []) : [],
+    [clientsQuery.data, clientsQuery.snapshotReady],
+  );
+  // A cached query can be `success` before the newly attached Firestore
+  // listener emits its first authoritative snapshot for this scope.
+  const loading = clientsQuery.isPending || !clientsQuery.snapshotReady;
 
   const queryClient = useQueryClient();
-  const cacheKey = useMemo(() => clientsQueryKey(groupId || userId), [userId, groupId]);
+  const cacheKey = useMemo(
+    () => clientsQueryKey(groupId || userId, scopeReadVersion),
+    [userId, groupId, scopeReadVersion],
+  );
   // Optimistic-update helper: writes directly into the React Query cache so
   // consumers see the change immediately. The Firestore listener will
   // overwrite this with the authoritative server state on its next snapshot.
@@ -66,6 +116,14 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   // Evita race condition cuando se asignan posiciones rápidamente
   const clientsRef = useRef<Client[]>(clients);
   clientsRef.current = clients;
+  const setClientAlarmCache = useCallback((clientId: string, alarm: string, alarmDay = '') => {
+    const applyAlarm = (list: Client[]): Client[] => list.map((client) =>
+      client.id === clientId ? { ...client, alarm, alarmDay } : client,
+    );
+    clientsRef.current = applyAlarm(clientsRef.current);
+    setClientsCache(applyAlarm);
+    useClientsStore.setState((state) => ({ clients: applyAlarm(state.clients) }));
+  }, [setClientsCache]);
   // Guard against double-tap on markAsDone
   const markingDoneRef = useRef<Set<string>>(new Set());
 
@@ -191,67 +249,75 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     if (markingDoneRef.current.has(clientId)) return true;
     markingDoneRef.current.add(clientId);
     try {
-      // La notificación local ya programada debe cancelarse acá: escribir
-      // alarm:'' solo limpia el campo, el trigger de notifee sonaría igual
-      // después de entregar. (cancelClientAlarm nunca rechaza.)
-      void cancelClientAlarm(clientId);
-      if (client.isNote && client.freq === 'once') {
-        // One-time notes are finished forever and do not belong in the directory.
-        await db.collection('clients').doc(clientId).delete();
-      } else if (client.freq === 'once') {
-        // Once: mark as completed permanently
-        const deliveredAt = new Date();
-        const previousDeliveredAt = getLastVisitDate(client);
-        await db.collection('clients').doc(clientId).update({
-          isCompleted: true,
-          completedAt: deliveredAt,
-          lastDeliveredAt: deliveredAt,
-          previousDeliveredAt,
-          updatedAt: deliveredAt,
-          alarm: '',
-          isStarred: false,
-        });
-      } else {
-        // Periodic: update lastVisited to hide until next cycle.
-        // doneFor pins WHICH scheduled occurrence this tap completed (the one
-        // the card was displayed under), so getNextVisitDate reschedules by
-        // one full cycle from it even when the delivery happens days away
-        // from the visit day (e.g. a Saturday client marked done on Monday).
-        const deliveredAt = new Date();
-        const updates: Record<string, any> = {
-          lastVisited: deliveredAt,
-          lastDeliveredAt: deliveredAt,
-          alarm: '',
-        };
+      await cancelAlarmsThenMutate(
+        () => {
+          const latest = clientsRef.current.find((candidate) => candidate.id === clientId) || client;
+          const previousAlarm = alarmSnapshotForClient(latest, forDay, userId);
+          return previousAlarm ? [previousAlarm] : [];
+        },
+        async () => {
+          if (client.isNote && client.freq === 'once') {
+            // One-time notes are finished forever and do not belong in the directory.
+            await db.collection('clients').doc(clientId).delete();
+          } else if (client.freq === 'once') {
+            // Once: mark as completed permanently
+            const deliveredAt = new Date();
+            const previousDeliveredAt = getLastVisitDate(client);
+            await db.collection('clients').doc(clientId).update({
+              isCompleted: true,
+              completedAt: deliveredAt,
+              lastDeliveredAt: deliveredAt,
+              previousDeliveredAt,
+              updatedAt: deliveredAt,
+              alarm: '',
+              alarmDay: '',
+              isStarred: false,
+            });
+          } else {
+            // Periodic: update lastVisited to hide until next cycle.
+            // doneFor pins WHICH scheduled occurrence this tap completed (the one
+            // the card was displayed under), so getNextVisitDate reschedules by
+            // one full cycle from it even when the delivery happens days away
+            // from the visit day (e.g. a Saturday client marked done on Monday).
+            const deliveredAt = new Date();
+            const updates: Record<string, any> = {
+              lastVisited: deliveredAt,
+              lastDeliveredAt: deliveredAt,
+              alarm: '',
+              alarmDay: '',
+            };
 
-        const pendingOccurrence = getNextVisitDate(client, forDay);
-        if (pendingOccurrence) {
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-          const daysAhead = Math.round(
-            (pendingOccurrence.getTime() - todayStart.getTime()) / 86400000,
-          );
-          const intervalWeeks =
-            client.freq === 'biweekly' ? 2 : client.freq === 'triweekly' ? 3 :
-            client.freq === 'monthly' ? 4 : 1;
-          // Never pin more than one cycle ahead: a repeat tap on a client that
-          // already advanced keeps the previous doneFor (idempotent) instead
-          // of ratcheting the schedule one extra cycle per tap.
-          if (daysAhead < intervalWeeks * 7) {
-            updates.doneFor = toLocalDateString(pendingOccurrence);
+            const pendingOccurrence = getNextVisitDate(client, forDay);
+            if (pendingOccurrence) {
+              const todayStart = new Date();
+              todayStart.setHours(0, 0, 0, 0);
+              const daysAhead = Math.round(
+                (pendingOccurrence.getTime() - todayStart.getTime()) / 86400000,
+              );
+              const intervalWeeks =
+                client.freq === 'biweekly' ? 2 : client.freq === 'triweekly' ? 3 :
+                client.freq === 'monthly' ? 4 : 1;
+              // Never pin more than one cycle ahead: a repeat tap on a client that
+              // already advanced keeps the previous doneFor (idempotent) instead
+              // of ratcheting the schedule one extra cycle per tap.
+              if (daysAhead < intervalWeeks * 7) {
+                updates.doneFor = toLocalDateString(pendingOccurrence);
+              }
+            }
+
+            if (client.specificDate) {
+              updates.specificDate = '';
+            }
+
+            if (client.isStarred) {
+              updates.isStarred = false;
+            }
+
+            await db.collection('clients').doc(clientId).update(updates);
           }
-        }
-
-        if (client.specificDate) {
-          updates.specificDate = '';
-        }
-
-        if (client.isStarred) {
-          updates.isStarred = false;
-        }
-
-        await db.collection('clients').doc(clientId).update(updates);
-      }
+        },
+        [clientId],
+      );
       return true;
     } catch (e) {
       reportError(e, 'Error marking as done');
@@ -289,6 +355,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       const BATCH_SIZE = 450;
       for (let i = 0; i < completed.length; i += BATCH_SIZE) {
         const chunk = completed.slice(i, i + BATCH_SIZE);
+        const chunkIds = chunk.map((completedClient) => completedClient.id);
         const batch = db.batch();
         chunk.forEach((c) => {
           const ref = db.collection('clients').doc(c.id);
@@ -310,13 +377,19 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
               previousDeliveredAt: null,
               ...historyUpdate,
               alarm: '',
+              alarmDay: '',
               updatedAt: new Date(),
             });
           }
         });
-        await batch.commit();
-        // Fuera de la ruta ⇒ sus alarmas pendientes ya no corresponden.
-        await Promise.all(chunk.map((c) => cancelClientAlarm(c.id)));
+        await cancelAlarmsThenMutate(
+          () => alarmSnapshotsForClients(chunk.map((completedClient) =>
+            clientsRef.current.find((candidate) => candidate.id === completedClient.id)
+              || completedClient,
+          ), userId),
+          () => batch.commit(),
+          chunkIds,
+        );
       }
     } catch (e) {
       reportError(e, 'Error clearing completed');
@@ -330,7 +403,13 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       // Notes never belong in the directory. Removing their only route entry
       // must delete them instead of turning them into invisible on-demand docs.
       if (client?.isNote) {
-        await db.collection('clients').doc(clientId).delete();
+        await cancelAlarmsThenMutate(
+          () => alarmSnapshotsForClients([
+            clientsRef.current.find((candidate) => candidate.id === clientId) || client,
+          ], userId),
+          () => db.collection('clients').doc(clientId).delete(),
+          [clientId],
+        );
         return;
       }
       const currentDays = client?.visitDays || [];
@@ -345,23 +424,29 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       } else {
         // Last (or only) day — move to directory. Sale de la ruta: su alarma
         // pendiente ya no corresponde (se cancela el trigger y el campo).
-        void cancelClientAlarm(clientId);
         const historyUpdate = client
           ? getDirectoryDeliveryHistoryUpdate(client)
           : { lastDeliveredAt: null, lastVisited: null };
-        await db.collection('clients').doc(clientId).update({
-          freq: 'on_demand',
-          visitDay: 'Sin Asignar',
-          visitDays: [],
-          specificDate: '',
-          listOrders: {},
-          listOrder: 0,
-          isCompleted: false,
-          completedAt: null,
-          previousDeliveredAt: null,
-          ...historyUpdate,
-          alarm: '',
-        });
+        await cancelAlarmsThenMutate(
+          () => alarmSnapshotsForClients([
+            clientsRef.current.find((candidate) => candidate.id === clientId) || client,
+          ], userId),
+          () => db.collection('clients').doc(clientId).update({
+            freq: 'on_demand',
+            visitDay: 'Sin Asignar',
+            visitDays: [],
+            specificDate: '',
+            listOrders: {},
+            listOrder: 0,
+            isCompleted: false,
+            completedAt: null,
+            previousDeliveredAt: null,
+            ...historyUpdate,
+            alarm: '',
+            alarmDay: '',
+          }),
+          [clientId],
+        );
       }
     } catch (e) {
       reportError(e, 'Error deleting from day');
@@ -383,8 +468,23 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     // si esta parte falla, el rename principal ya quedó guardado.
     if (typeof data.name === 'string' && data.name.trim()) {
       try {
+        const { field, value, additionalFilter } = dataScopeQuery(
+          userId,
+          groupId,
+          scopeReadVersion,
+        );
         for (const collection of ['debts', 'transfers'] as const) {
-          const snap = await db.collection(collection).where('clientId', '==', clientId).get();
+          let scopedQuery = db.collection(collection)
+            .where(field, '==', value)
+            .where('clientId', '==', clientId);
+          if (additionalFilter) {
+            scopedQuery = scopedQuery.where(
+              additionalFilter.field,
+              '==',
+              additionalFilter.value,
+            );
+          }
+          const snap = await scopedQuery.get();
           if (snap.empty) continue;
           const batch = db.batch();
           snap.docs.forEach((docSnap) => batch.update(docSnap.ref, { clientName: data.name }));
@@ -395,7 +495,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       }
     }
     return true;
-  }, []);
+  }, [groupId, scopeReadVersion, userId]);
 
   // Schedule a client from the directory to a specific day/frequency.
   // mode='add' (default, used by directory ScheduleModal): when client already has a
@@ -413,7 +513,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     selectedAddress?: ClientAddress,
   ) => {
     try {
-      const scope = groupId ? { groupId, userId } : { userId };
+      const scope = dataScopeFields(userId, groupId);
       const savedAddresses = getClientAddresses(clientData);
       const scheduledLocation = selectedAddress || savedAddresses[0];
       const scheduledLocationFields = locationFields(scheduledLocation);
@@ -436,6 +536,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         // runs in the route while still flagged "Inactivo" in the Directory.
         isInactive: false,
         alarm: '',
+        alarmDay: '',
         products: newProducts || {},
         // completedAt pertenece al estado de un pedido once ya entregado. Al
         // abrir una agenda nueva se promueve al historial canónico y se limpia.
@@ -531,8 +632,12 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       // Keep the synchronous scheduling source current between consecutive
       // household writes. Firestore snapshots arrive later; without this,
       // several relatives scheduled in one tap could receive the same order.
-      const syncScheduledClientRef = (id: string, base: Client) => {
-        const scheduled = { ...base, ...newData, id } as Client;
+      const syncScheduledClientRef = (
+        id: string,
+        base: Client,
+        appliedData: Record<string, any>,
+      ) => {
+        const scheduled = { ...base, ...appliedData, id } as Client;
         const index = clientsRef.current.findIndex((candidate) => candidate.id === id);
         if (index === -1) {
           clientsRef.current = [...clientsRef.current, scheduled];
@@ -546,16 +651,28 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       if (wasInDirectory) {
         // Reactivate existing client. newData pisa alarm:'' → cancelar también
         // el trigger programado para que no suene una alarma vieja.
-        void cancelClientAlarm(clientData.id);
-        await db.collection('clients').doc(clientData.id).update(newData);
-        syncScheduledClientRef(clientData.id, clientData);
+        const updateData = toExistingClientUpdate(newData);
+        await cancelAlarmsThenMutate(
+          () => alarmSnapshotsForClients([
+            clientsRef.current.find((candidate) => candidate.id === clientData.id) || clientData,
+          ], userId),
+          () => db.collection('clients').doc(clientData.id).update(updateData),
+          [clientData.id],
+        );
+        syncScheduledClientRef(clientData.id, clientData, updateData);
       } else if (mode === 'replace' || isRecurringScheduleEdit) {
         // Move/replace: update the existing pending-order doc in place
         // (e.g. user said "movélo del 29-4 al 6 de mayo"), or the user is
         // editing the recurring schedule of an already-active client.
-        void cancelClientAlarm(clientData.id);
-        await db.collection('clients').doc(clientData.id).update(newData);
-        syncScheduledClientRef(clientData.id, clientData);
+        const updateData = toExistingClientUpdate(newData);
+        await cancelAlarmsThenMutate(
+          () => alarmSnapshotsForClients([
+            clientsRef.current.find((candidate) => candidate.id === clientData.id) || clientData,
+          ], userId),
+          () => db.collection('clients').doc(clientData.id).update(updateData),
+          [clientData.id],
+        );
+        syncScheduledClientRef(clientData.id, clientData, updateData);
       } else {
         // Add: keep the existing order and add a new one (only reached for
         // freq='once' with a date — a one-time extra pedido).
@@ -577,9 +694,16 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
           ) {
             newData.lastDeliveredAt = existingDelivery;
           }
-          void cancelClientAlarm(existingOnDemand.id);
-          await db.collection('clients').doc(existingOnDemand.id).update(newData);
-          syncScheduledClientRef(existingOnDemand.id, existingOnDemand);
+          const updateData = toExistingClientUpdate(newData);
+          await cancelAlarmsThenMutate(
+            () => alarmSnapshotsForClients([
+              clientsRef.current.find((candidate) => candidate.id === existingOnDemand.id)
+                || existingOnDemand,
+            ], userId),
+            () => db.collection('clients').doc(existingOnDemand.id).update(updateData),
+            [existingOnDemand.id],
+          );
+          syncScheduledClientRef(existingOnDemand.id, existingOnDemand, updateData);
         } else {
           // El pedido extra es otro documento del mismo cliente humano. La
           // identidad estable permite sumar su entrega al hogar sin copiar
@@ -591,7 +715,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
             ...clientData,
             relationships: {},
             sameHousehold: {},
-          });
+          }, newData);
         }
       }
       return true;
@@ -616,44 +740,85 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   const saveAlarm = useCallback(async (clientId: string, time: string, targetDay?: string): Promise<Date | null> => {
     try {
       if (time) {
-        // Sin permiso de notificaciones no hay alarma real: no escribir el
-        // campo (la campana quedaría "activa" sin que nada vaya a sonar).
-        const granted = await requestNotificationPermission();
-        if (!granted) return null;
+        return await runSerializedAlarmMutation(clientId, async () => {
+          // Sin permiso de notificaciones no hay alarma real: no escribir el
+          // campo (la campana quedaría "activa" sin que nada vaya a sonar).
+          const granted = await requestNotificationPermission();
+          if (!granted) return null;
 
-        const client = clientsRef.current.find((c) => c.id === clientId);
-        // Prefer the day the user is currently viewing; fall back to the client's
-        // configured visit day(s) so the alarm fires on the right delivery day.
-        const resolvedDay =
-          targetDay ||
-          (client?.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined) ||
-          client?.visitDay;
-        const fireAt = await scheduleClientAlarm(
-          clientId,
-          client?.name || '',
-          client?.address || '',
-          time,
-          {
-            targetDay: resolvedDay,
-            specificDate: client?.freq === 'once' ? client?.specificDate : undefined,
-          },
-        );
-        // El campo se escribe solo si la notificación quedó programada de
-        // verdad; si notifee falló, la UI no debe mostrar la campana activa.
-        if (fireAt) {
-          await db.collection('clients').doc(clientId).update({ alarm: time });
-        }
-        return fireAt;
+          const client = clientsRef.current.find((c) => c.id === clientId);
+          // Prefer the day the user is currently viewing; fall back to the client's
+          // configured visit day(s) so the alarm fires on the right delivery day.
+          const resolvedDay =
+            targetDay ||
+            (client?.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined) ||
+            client?.visitDay;
+          const previousAlarm = alarmSnapshotForClient(client, resolvedDay, userId);
+          const fireAt = await scheduleClientAlarm(
+            clientId,
+            client?.name || '',
+            client?.address || '',
+            time,
+            {
+              targetDay: resolvedDay,
+              specificDate: client?.freq === 'once' ? client?.specificDate : undefined,
+              scopeKey: groupId || userId,
+              ownerUid: userId,
+            },
+          );
+          if (!fireAt) {
+            // A native replacement may have invalidated the old trigger before
+            // reporting failure. Reapply its snapshot while Firestore still has
+            // the previous alarm value.
+            if (previousAlarm) {
+              await restoreClientAlarmSnapshots([previousAlarm]).catch((restoreError) => {
+                reportError(restoreError, 'Error restoring previous alarm');
+              });
+            }
+            return null;
+          }
+          // El campo se escribe solo si la notificación quedó programada de
+          // verdad; si notifee falló, la UI no debe mostrar la campana activa.
+          await persistAlarmOrRollbackTrigger(
+            () => db.collection('clients').doc(clientId).update({
+              alarm: time,
+              alarmDay: resolvedDay || '',
+            }),
+            () => cancelClientAlarm(clientId),
+            previousAlarm
+              ? () => restoreClientAlarmSnapshots([previousAlarm])
+              : undefined,
+          );
+          // Keep the synchronous source authoritative for any already-queued
+          // save/remove operation; the Firestore listener may arrive later.
+          setClientAlarmCache(clientId, time, resolvedDay || '');
+          return fireAt;
+        });
       } else {
-        await db.collection('clients').doc(clientId).update({ alarm: '' });
-        await cancelClientAlarm(clientId);
+        await cancelAlarmsThenMutate(
+          () => {
+            const client = clientsRef.current.find((candidate) => candidate.id === clientId);
+            const previousAlarm = alarmSnapshotForClient(client, targetDay, userId);
+            return previousAlarm ? [previousAlarm] : [];
+          },
+          async (snapshots) => {
+            // Defensive fallback for a stale UI callback whose client snapshot
+            // has no alarm metadata, while a native trigger could still exist.
+            if (snapshots.length === 0) {
+              await cancelClientAlarm(clientId);
+            }
+            await db.collection('clients').doc(clientId).update({ alarm: '', alarmDay: '' });
+          },
+          [clientId],
+        );
+        setClientAlarmCache(clientId, '');
         return null;
       }
     } catch (e) {
       reportError(e, 'Error saving alarm');
       return null;
     }
-  }, []);
+  }, [groupId, setClientAlarmCache, userId]);
 
   // Add a note (special client with isNote: true)
   const addNote = useCallback(async (
@@ -666,7 +831,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
       const dayName = dayNames[d.getDay()];
 
-      const scope = groupId ? { groupId, userId } : { userId };
+      const scope = dataScopeFields(userId, groupId);
 
       // Place at beginning of day
       const existingInDay = clientsRef.current.filter(
@@ -790,7 +955,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     mapsLink?: string,
   ) => {
     try {
-      const scope = groupId ? { groupId, userId } : { userId };
+      const scope = dataScopeFields(userId, groupId);
 
       const cleanProducts: Record<string, number> = {};
       Object.entries(products).forEach(([key, val]) => {
@@ -843,6 +1008,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         isPinned: false,
         isNote: false,
         alarm: '',
+        alarmDay: '',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -851,7 +1017,8 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       if (exactMatch?.freq === 'on_demand') {
         // Scheduling or re-saving the same directory contact must keep the
         // existing document id instead of creating another client document.
-        const { createdAt: _createdAt, ...updates } = newClientData;
+        // Its creator/scope remain unchanged when a teammate performs this.
+        const updates = toExistingClientUpdate(newClientData);
         await db.collection('clients').doc(exactMatch.id).update(updates);
         return;
       }
@@ -870,6 +1037,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       await db.collection('clients').add(newClientData);
     } catch (e) {
       reportError(e, 'Error adding client');
+      // The modal owns the draft. Propagate the failure so it can keep the
+      // form open and avoid announcing/simulating a successful save.
+      throw e;
     }
   }, [groupId, userId]);
 
@@ -888,7 +1058,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
     specificDate: string;
   }) => {
     try {
-      const scope = groupId ? { groupId, userId } : { userId };
+      const scope = dataScopeFields(userId, groupId);
 
       const cleanProducts: Record<string, number> = {};
       Object.entries(data.products).forEach(([key, val]) => {
@@ -964,6 +1134,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         isPinned: false,
         isNote: false,
         alarm: '',
+        alarmDay: '',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -974,7 +1145,8 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         data.phone,
       );
       if (exactMatch?.freq === 'on_demand') {
-        const { createdAt: _createdAt, ...updates } = newClientData;
+        // AI intake follows the same immutable-attribution contract as the UI.
+        const updates = toExistingClientUpdate(newClientData);
         await db.collection('clients').doc(exactMatch.id).update(updates);
         return true;
       }
@@ -1170,10 +1342,21 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       //    La consulta DEBE incluir el reparto/usuario: las reglas de Firestore
       //    no pueden autorizar un query global limitado solo por clientId.
       const staleToKeeper = new Map(details.map((d) => [d.staleId, d.activeId]));
-      const scopeField = groupId ? 'groupId' : 'userId';
-      const scopeValue = groupId || userId;
+      const { field, value, additionalFilter } = dataScopeQuery(
+        userId,
+        groupId,
+        scopeReadVersion,
+      );
       for (const collection of ['debts', 'transfers'] as const) {
-        const snap = await db.collection(collection).where(scopeField, '==', scopeValue).get();
+        let scopedQuery = db.collection(collection).where(field, '==', value);
+        if (additionalFilter) {
+          scopedQuery = scopedQuery.where(
+            additionalFilter.field,
+            '==',
+            additionalFilter.value,
+          );
+        }
+        const snap = await scopedQuery.get();
         snap.docs.forEach((docSnap) => {
           const staleId = (docSnap.data() as any).clientId as string;
           const keeperId = staleToKeeper.get(staleId);
@@ -1253,11 +1436,16 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       chunk.forEach(id => {
         batch.delete(db.collection('clients').doc(id));
       });
-      await batch.commit();
-      await Promise.all(chunk.map((id) => cancelClientAlarm(id)));
+      await cancelAlarmsThenMutate(
+        () => alarmSnapshotsForClients(chunk.map((id) =>
+          clientsRef.current.find((client) => client.id === id) || byId.get(id),
+        ), userId),
+        () => batch.commit(),
+        chunk,
+      );
     }
     return staleIds.length;
-  }, [findDuplicateClients, groupId, userId]);
+  }, [findDuplicateClients, groupId, scopeReadVersion, userId]);
 
   // Add a family relationship between two clients (bidirectional)
   const addRelationship = useCallback(async (
@@ -1307,36 +1495,46 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
   // Permanently delete a client from Firestore (cleans up relationship references)
   const deleteClient = useCallback(async (clientId: string) => {
     try {
-      await cancelClientAlarm(clientId);
-      // Clean up relationship references in other clients
       const client = clientsRef.current.find((c) => c.id === clientId);
-      if (client?.relationships && Object.keys(client.relationships).length > 0) {
-        const FieldValue = firestore.FieldValue;
-        // Only clean up related clients that still exist locally
-        const existingRelatedIds = Object.keys(client.relationships).filter(
-          (relId) => clientsRef.current.some((c) => c.id === relId),
-        );
-        const batch = db.batch();
-        batch.delete(db.collection('clients').doc(clientId));
-        existingRelatedIds.forEach((relatedId) => {
-          batch.update(db.collection('clients').doc(relatedId), {
-            [`relationships.${clientId}`]: FieldValue.delete(),
-            [`sameHousehold.${clientId}`]: FieldValue.delete(),
-          });
-        });
-        await batch.commit();
-      } else {
-        await db.collection('clients').doc(clientId).delete();
-      }
+      await cancelAlarmsThenMutate(
+        () => alarmSnapshotsForClients([
+          clientsRef.current.find((candidate) => candidate.id === clientId) || client,
+        ], userId),
+        async () => {
+          // Clean up relationship references in other clients
+          if (client?.relationships && Object.keys(client.relationships).length > 0) {
+            const FieldValue = firestore.FieldValue;
+            // Only clean up related clients that still exist locally
+            const existingRelatedIds = Object.keys(client.relationships).filter(
+              (relId) => clientsRef.current.some((c) => c.id === relId),
+            );
+            const batch = db.batch();
+            batch.delete(db.collection('clients').doc(clientId));
+            existingRelatedIds.forEach((relatedId) => {
+              batch.update(db.collection('clients').doc(relatedId), {
+                [`relationships.${clientId}`]: FieldValue.delete(),
+                [`sameHousehold.${clientId}`]: FieldValue.delete(),
+              });
+            });
+            await batch.commit();
+          } else {
+            await db.collection('clients').doc(clientId).delete();
+          }
+        },
+        [clientId],
+      );
     } catch (e) {
       reportError(e, 'Error deleting client');
+      // EditClientModal keeps the client open and shows the existing error
+      // message when deletion did not reach Firestore.
+      throw e;
     }
   }, []);
 
   // Clone a client (duplicate with same data, for additional visits)
   const cloneClient = useCallback(async (client: Client) => {
     try {
-      const scope = groupId ? { groupId, userId } : { userId };
+      const scope = dataScopeFields(userId, groupId);
       const newData: Record<string, any> = {
         ...scope,
         userId,
@@ -1360,6 +1558,7 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
         isPinned: false,
         isNote: false,
         alarm: '',
+        alarmDay: '',
         // La copia representa otra agenda del mismo cliente humano, pero no
         // hereda parentescos: eso haría aparecer la copia como otro familiar.
         lastDeliveredAt: getLastVisitDate(client),
@@ -1369,6 +1568,9 @@ export const useClients = ({ userId, groupId }: UseClientsProps) => {
       await db.collection('clients').add(newData);
     } catch (e) {
       reportError(e, 'Error cloning client');
+      // DirectoryScreen announces success only after this promise resolves.
+      // Preserve the rejection so an offline/denied write cannot look saved.
+      throw e;
     }
   }, [groupId, userId]);
 

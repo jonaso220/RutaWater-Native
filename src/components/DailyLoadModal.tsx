@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   useWindowDimensions,
+  Alert,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { useTranslation } from 'react-i18next';
@@ -23,7 +24,7 @@ interface DailyLoadModalProps {
   visible: boolean;
   day: string;
   initialData: DailyLoad;
-  onSave: (day: string, data: DailyLoad) => void;
+  onSave: (day: string, data: DailyLoad) => Promise<void>;
   onClose: () => void;
 }
 
@@ -49,6 +50,8 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
   const modalWidth = getModalWidth(windowWidth);
   const styles = getStyles(colors, isTablet, modalWidth, fontScale);
   const [data, setData] = useState<DailyLoad>(initialData);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     setData(initialData);
@@ -58,13 +61,27 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
     setData((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleSave = () => {
-    onSave(day, data);
-    onClose();
+  const requestClose = () => {
+    if (!savingRef.current) onClose();
+  };
+
+  const handleSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await onSave(day, data);
+      onClose();
+    } catch {
+      Alert.alert(t('error'), t('dailyLoad.saveError'));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   return (
-    <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
+    <ModalOverlay visible={visible} onClose={requestClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -72,7 +89,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
         <View style={styles.modal}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>{t('dailyLoad.title', { day })}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={requestClose} style={styles.closeBtn} disabled={saving}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -93,6 +110,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
                     keyboardType="numeric"
                     placeholder="0"
                     placeholderTextColor={colors.textDisabled}
+                    editable={!saving}
                   />
                 </View>
               ))}
@@ -115,6 +133,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
                     keyboardType="numeric"
                     placeholder="0"
                     placeholderTextColor={colors.textDisabled}
+                    editable={!saving}
                   />
                 </View>
               ))}
@@ -132,11 +151,12 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
               placeholderTextColor={colors.textHint}
               multiline
               numberOfLines={3}
+              editable={!saving}
             />
           </ScrollView>
 
           <View style={styles.footer}>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
               <Text style={styles.saveBtnText}>{t('save')}</Text>
             </TouchableOpacity>
           </View>

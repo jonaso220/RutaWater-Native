@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -59,6 +59,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   const [sameHousehold, setSameHousehold] = useState(false);
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const relationships = client?.relationships || {};
   const relatedIds = Object.keys(relationships);
@@ -99,7 +100,8 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   if (!client) return null;
 
   const handleAdd = async () => {
-    if (!selectedTarget || !selectedType || saving) return;
+    if (!selectedTarget || !selectedType || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await onAddRelationship(client.id, selectedTarget.id, selectedType, sameHousehold);
@@ -107,6 +109,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
     } catch {
       Alert.alert(t('error'), t('relationships.saveError'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -121,12 +124,15 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
           text: t('relationships.remove'),
           style: 'destructive',
           onPress: async () => {
+            if (savingRef.current) return;
+            savingRef.current = true;
             setSaving(true);
             try {
               await onRemoveRelationship(client.id, relatedClient.id);
             } catch {
               Alert.alert(t('error'), t('relationships.removeError'));
             } finally {
+              savingRef.current = false;
               setSaving(false);
             }
           },
@@ -176,6 +182,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   };
 
   const handleClose = () => {
+    if (savingRef.current) return;
     resetAddState();
     onClose();
   };
@@ -197,7 +204,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
                 {(client.name || '').toUpperCase()}
               </Text>
             </View>
-            <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeBtn} disabled={saving}>
               <Ionicons name="close" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
@@ -241,12 +248,14 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
                         <TouchableOpacity
                           onPress={() => startEdit(rel, type)}
                           style={styles.actionIconBtn}
+                          disabled={saving}
                         >
                           <Ionicons name="pencil" size={17} color={colors.primary} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           onPress={() => handleRemove(rel)}
                           style={styles.actionIconBtn}
+                          disabled={saving}
                         >
                           <Ionicons name="close-circle" size={18} color={colors.danger} />
                         </TouchableOpacity>
@@ -332,6 +341,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
                       <Switch
                         value={sameHousehold}
                         onValueChange={setSameHousehold}
+                        disabled={saving}
                         trackColor={{ false: colors.cardBorder, true: colors.primaryLight }}
                         thumbColor={sameHousehold ? colors.primary : colors.textMuted}
                       />
@@ -348,6 +358,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
               <TouchableOpacity
                 onPress={() => setMode('add')}
                 style={styles.addBtn}
+                disabled={saving}
               >
                 <Ionicons name="add" size={18} color={colors.textWhite} />
                 <Text style={styles.addBtnText}>{t('relationships.add')}</Text>
@@ -366,6 +377,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
               <TouchableOpacity
                 onPress={resetAddState}
                 style={styles.cancelBtn}
+                disabled={saving}
               >
                 <Text style={styles.cancelBtnText}>{t('cancel')}</Text>
               </TouchableOpacity>

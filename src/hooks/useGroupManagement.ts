@@ -1,32 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 import { db } from '../config/firebase';
+import { API_ENDPOINTS } from '../config/api';
 import { reportError } from '../lib/crashReporting';
 import { useTranslation } from 'react-i18next';
+import { canDissolveGroupAtomically } from '../utils/groupLifecycle';
+import {
+  createGroupWithRetry,
+  GroupCreationRequestError,
+} from '../utils/groupCreationRetry';
 
 interface GroupUser {
   uid: string;
   email: string;
   displayName: string;
 }
-
-const generateCode = (): string => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-};
-
-// Firestore batches cap at 500 writes; chunk well under that.
-const commitBatchUpdates = async (updates: { ref: any; data: any }[]) => {
-  for (let i = 0; i < updates.length; i += 450) {
-    const batch = db.batch();
-    updates.slice(i, i + 450).forEach(({ ref, data }) => batch.update(ref, data));
-    await batch.commit();
-  }
-};
 
 export const useGroupManagement = (
   user: GroupUser,
@@ -66,83 +56,71 @@ export const useGroupManagement = (
   const handleCreateGroup = async () => {
     setLoading(true);
     try {
-      const groupId = `group_${user.uid}_${Date.now()}`;
-      const code = generateCode();
-
-      await db
-        .collection('groups')
-        .doc(groupId)
-        .set({
-          code,
-          adminId: user.uid,
-          adminEmail: user.email,
-          adminName: user.displayName,
-          createdAt: new Date(),
+      const result = await createGroupWithRetry(async () => {
+        const currentUser = auth().currentUser;
+        if (!currentUser) throw new GroupCreationRequestError('AUTH_REQUIRED');
+        const token = await currentUser.getIdToken();
+        const response = await fetch(API_ENDPOINTS.createGroup, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
         });
-
-      await db.collection('users').doc(user.uid).update({
-        groupId,
-        role: 'admin',
+        const payload = await response.json().catch(() => ({}));
+        return { status: response.status, payload };
       });
 
-      // Migrate existing data — only unscoped personal docs. Docs that already
-      // have a groupId belong to a reparto (profile) or another group and must
-      // keep that scope, otherwise creating a group would absorb every reparto.
-      const updates: { ref: any; data: any }[] = [];
-      const collections = ['clients', 'debts', 'transfers'];
-      for (const collectionName of collections) {
-        const snap = await db
-          .collection(collectionName)
-          .where('userId', '==', user.uid)
-          .get();
-        snap.docs.forEach((doc) => {
-          if (!doc.data().groupId) updates.push({ ref: doc.ref, data: { groupId } });
-        });
-      }
-      await commitBatchUpdates(updates);
-
-      onGroupUpdate({ groupId, role: 'admin', code });
+      onGroupUpdate({ groupId: result.groupId, role: 'admin', code: result.code });
     } catch (e) {
+      if (e instanceof GroupCreationRequestError && e.code === 'FREE_MIGRATION_LIMIT') {
+        Alert.alert(t('error'), t('settings.createGroupFreeLimit'));
+        return;
+      }
       reportError(e, 'Error creating group');
       Alert.alert(t('error'), t('settings.createGroupError'));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleJoinGroup = async () => {
     if (!joinCode.trim()) return;
     setLoading(true);
     try {
-      const snap = await db
-        .collection('groups')
-        .where('code', '==', joinCode.trim().toUpperCase())
-        .get();
-
-      if (snap.empty) {
+      const currentUser = auth().currentUser;
+      if (!currentUser) throw new Error('AUTH_REQUIRED');
+      const token = await currentUser.getIdToken();
+      const response = await fetch(API_ENDPOINTS.joinGroup, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code: joinCode }),
+      });
+      const payload = await response.json().catch(() => ({})) as { status?: string };
+      if (payload.status === 'not_found') {
         Alert.alert(t('error'), t('settings.joinError'));
-        setLoading(false);
         return;
       }
-
-      const groupDoc = snap.docs[0];
-      const groupId = groupDoc.id;
-
-      await db.collection('users').doc(user.uid).update({
-        groupId,
-        role: 'member',
-      });
-
-      onGroupUpdate({
-        groupId,
-        role: 'member',
-        code: groupDoc.data().code,
-      });
+      if (payload.status === 'has_personal_data') {
+        Alert.alert(t('error'), t('settings.joinHasPersonalData'));
+        return;
+      }
+      if (!response.ok || (payload.status !== 'ok' && payload.status !== 'already')) {
+        throw new Error('JOIN_GROUP_FAILED');
+      }
+      // useAuth observes users/{uid} and switches the scope from the canonical
+      // server write. This also covers an idempotent retry whose first response
+      // was lost after committing.
       setJoinCode('');
     } catch (e) {
       reportError(e, 'Error joining group');
       Alert.alert(t('error'), t('settings.joinGroupError'));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleLeaveGroup = () => {
@@ -202,34 +180,173 @@ export const useGroupManagement = (
           onPress: async () => {
             if (!groupData?.groupId) return;
             setLoading(true);
+            const gid = groupData.groupId;
+            const groupRef = db.collection('groups').doc(gid);
+            let shouldRestoreLifecycle = false;
             try {
-              const gid = groupData.groupId;
+              // Close the join/write race before reading the final member set.
+              // A retry may resume a marker left by an interrupted app process.
+              await db.runTransaction(async (transaction) => {
+                const current = await transaction.get(groupRef);
+                const data = current.data();
+                if (!current.exists || data?.adminId !== user.uid || groupData.role !== 'admin') {
+                  throw new Error('GROUP_DISSOLVE_PREFLIGHT_FAILED');
+                }
+                const state = data?.lifecycleState || 'active';
+                if (state === 'active') {
+                  transaction.update(groupRef, {
+                    lifecycleState: 'dissolving',
+                    dissolveRequestedBy: user.uid,
+                    dissolveRequestedAt: new Date(),
+                  });
+                  return;
+                }
+                if (state !== 'dissolving' || data?.dissolveRequestedBy !== user.uid) {
+                  throw new Error('GROUP_DISSOLVE_ALREADY_RUNNING');
+                }
+              });
+              shouldRestoreLifecycle = true;
 
-              // Collect all docs to update
-              const updates: { ref: any; data: any }[] = [];
+              // Preserve every customer/debt/transfer/settings document byte
+              // for byte by turning the old family-group scope into a private
+              // custom profile owned by the admin. Only membership metadata
+              // changes, and all of it commits atomically.
+              const groupRef = db.collection('groups').doc(gid);
+              const profileRef = db.collection('profiles').doc(gid);
+              const groupSettingsRef = db.collection('settings').doc(gid);
+              const personalSettingsRef = db.collection('settings').doc(user.uid);
+              const [
+                groupDoc,
+                profileDoc,
+                membersSnap,
+                groupSettingsDoc,
+                personalSettingsDoc,
+              ] = await Promise.all([
+                groupRef.get(),
+                profileRef.get(),
+                db.collection('users').where('groupId', '==', gid).get(),
+                groupSettingsRef.get(),
+                personalSettingsRef.get(),
+              ]);
 
-              const membersSnap = await db.collection('users').where('groupId', '==', gid).get();
-              membersSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null, role: null } }));
+              if (
+                !groupDoc.exists ||
+                groupDoc.data()?.adminId !== user.uid ||
+                groupDoc.data()?.lifecycleState !== 'dissolving' ||
+                groupDoc.data()?.dissolveRequestedBy !== user.uid ||
+                groupData.role !== 'admin' ||
+                profileDoc.exists
+              ) {
+                throw new Error('GROUP_DISSOLVE_PREFLIGHT_FAILED');
+              }
 
-              const clientsSnap = await db.collection('clients').where('groupId', '==', gid).get();
-              clientsSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null } }));
+              const groupCode = groupDoc.data()?.code;
+              const groupCodeRef = typeof groupCode === 'string' && groupCode
+                ? db.collection('groupCodes').doc(groupCode)
+                : null;
+              const groupCodeDoc = groupCodeRef ? await groupCodeRef.get() : null;
+              if (
+                groupDoc.data()?.creationVersion === 'server_resumable_v1'
+                && (!groupCodeDoc?.exists || groupCodeDoc.data()?.groupId !== gid)
+              ) {
+                throw new Error('GROUP_CODE_RESERVATION_MISSING');
+              }
+              if (groupCodeDoc?.exists && groupCodeDoc.data()?.groupId !== gid) {
+                throw new Error('GROUP_CODE_RESERVATION_CHANGED');
+              }
 
-              const debtsSnap = await db.collection('debts').where('groupId', '==', gid).get();
-              debtsSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null } }));
+              const memberDocs = [...membersSnap.docs];
+              if (!memberDocs.some((doc) => doc.id === user.uid)) {
+                throw new Error('GROUP_ADMIN_MEMBERSHIP_MISSING');
+              }
+              if (!canDissolveGroupAtomically(memberDocs.length)) {
+                throw new Error('GROUP_TOO_LARGE_FOR_ATOMIC_DISSOLVE');
+              }
 
-              const transfersSnap = await db.collection('transfers').where('groupId', '==', gid).get();
-              transfersSnap.docs.forEach((doc) => updates.push({ ref: doc.ref, data: { groupId: null } }));
-
-              await commitBatchUpdates(updates);
-
-              // Delete group doc
-              await db.collection('groups').doc(gid).delete();
+              const adminDoc = memberDocs.find((doc) => doc.id === user.uid);
+              const adminData = adminDoc?.data() || {};
+              const originalCreatedAt = groupDoc.data()?.createdAt;
+              const privateProfileName =
+                adminData.primaryProfileName || t('settings.defaultPrimaryProfile');
+              const batch = db.batch();
+              batch.set(profileRef, {
+                name: privateProfileName,
+                ownerId: user.uid,
+                memberUids: [user.uid],
+                members: {
+                  [user.uid]: {
+                    role: 'admin',
+                    name: user.displayName,
+                    email: user.email,
+                  },
+                },
+                // Preserve the descriptor exactly. Some legacy groups predate
+                // createdAt; omitting it is safer than inventing metadata and
+                // is what the atomic conversion rule verifies.
+                ...(originalCreatedAt !== undefined ? { createdAt: originalCreatedAt } : {}),
+                lifecycleState: 'active',
+                convertedFromFamilyGroup: true,
+              });
+              memberDocs.forEach((doc) => {
+                if (doc.id === user.uid) {
+                  batch.set(doc.ref, {
+                    groupId: null,
+                    role: null,
+                    profileIds: firestore.FieldValue.arrayUnion(gid),
+                    activeProfileId: gid,
+                  }, { merge: true });
+                } else {
+                  batch.update(doc.ref, { groupId: null, role: null });
+                }
+              });
+              // StoreSync switches from settings/{gid} to settings/{uid} as
+              // soon as groupData clears. Copy the effective group settings in
+              // the same atomic batch so no catalog/template preference is
+              // lost or briefly replaced. Keep settings/{gid} untouched as a
+              // historical backup and for the converted profile scope.
+              if (groupSettingsDoc.exists) {
+                batch.set(personalSettingsRef, {
+                  ...(personalSettingsDoc.data() || {}),
+                  ...(groupSettingsDoc.data() || {}),
+                }, { merge: true });
+              }
+              if (groupCodeRef && groupCodeDoc?.exists) {
+                batch.delete(groupCodeRef);
+              }
+              batch.delete(groupRef);
+              await batch.commit();
+              shouldRestoreLifecycle = false;
 
               onGroupUpdate(null);
             } catch (e) {
+              // A failed final batch is fully rolled back. Re-open the group so
+              // normal joins/writes can continue; if the app was killed, the
+              // next admin retry can resume the same `dissolving` marker.
+              if (shouldRestoreLifecycle) {
+                try {
+                  const current = await groupRef.get();
+                  const data = current.data();
+                  if (
+                    current.exists
+                    && data?.adminId === user.uid
+                    && data?.lifecycleState === 'dissolving'
+                    && data?.dissolveRequestedBy === user.uid
+                  ) {
+                    await groupRef.update({
+                      lifecycleState: 'active',
+                      dissolveRequestedBy: firestore.FieldValue.delete(),
+                      dissolveRequestedAt: firestore.FieldValue.delete(),
+                    });
+                  }
+                } catch (restoreError) {
+                  reportError(restoreError, 'Error restoring group lifecycle');
+                }
+              }
+              reportError(e, 'Error dissolving group');
               Alert.alert(t('error'), t('settings.dissolveError'));
+            } finally {
+              setLoading(false);
             }
-            setLoading(false);
           },
         },
       ],

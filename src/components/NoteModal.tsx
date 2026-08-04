@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -50,6 +50,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, note, onSave, onClose })
   const [freq, setFreq] = useState<NoteFrequency>('once');
   const [showAndroidPicker, setShowAndroidPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -62,9 +63,11 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, note, onSave, onClose })
     setFreq(note?.freq && note.freq !== 'on_demand' ? note.freq : 'once');
     setShowAndroidPicker(false);
     setSaving(false);
+    savingRef.current = false;
   }, [visible, note?.id, note?.notes, note?.specificDate, note?.freq, note?.visitDay]);
 
   const handleClose = () => {
+    if (savingRef.current) return;
     setNotes('');
     setPickerDate(new Date());
     setDate(toLocalDateString(new Date()));
@@ -98,7 +101,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, note, onSave, onClose })
   };
 
   const handleSave = async () => {
-    if (saving) return;
+    if (savingRef.current) return;
     if (!notes.trim()) {
       Alert.alert(t('error'), t('noteModal.noteRequired'));
       return;
@@ -107,19 +110,23 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, note, onSave, onClose })
       Alert.alert(t('error'), t('noteModal.dateRequired'));
       return;
     }
+    savingRef.current = true;
     setSaving(true);
+    let savedSuccessfully = false;
     try {
       const saved = await onSave(notes.trim(), date, freq);
       if (saved === false) {
         Alert.alert(t('error'), t('noteModal.saveError'));
         return;
       }
-      handleClose();
+      savedSuccessfully = true;
     } catch {
       Alert.alert(t('error'), t('noteModal.saveError'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
+    if (savedSuccessfully) handleClose();
   };
 
   return (
@@ -134,7 +141,11 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, note, onSave, onClose })
               <Text style={styles.headerTitle}>
                 {note ? t('noteModal.editTitle') : t('noteModal.title')}
               </Text>
-              <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+              <TouchableOpacity
+                onPress={handleClose}
+                style={styles.closeBtn}
+                disabled={saving}
+              >
                 <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>
             </View>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -55,14 +55,42 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
     handleSaveTemplates,
     handleResetTemplates,
   } = useWhatsAppTemplates(uid, groupId);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+
+  const runTemplateAction = async (
+    action: () => Promise<void>,
+    closeAfterSuccess: boolean,
+  ) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await action();
+      if (closeAfterSuccess) onClose();
+    } catch {
+      // The hook reports the persistence error. Keep the user's draft open so
+      // the same action can be retried without retyping it.
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const requestClose = () => {
+    if (!savingRef.current) onClose();
+  };
 
   const handleSave = () => {
-    handleSaveTemplates();
-    onClose();
+    void runTemplateAction(handleSaveTemplates, true);
+  };
+
+  const handleReset = () => {
+    void runTemplateAction(handleResetTemplates, false);
   };
 
   return (
-    <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
+    <ModalOverlay visible={visible} onClose={requestClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -70,7 +98,7 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
         <View style={styles.modal}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>{t('settings.whatsappMessages')}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={requestClose} style={styles.closeBtn} disabled={saving}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -87,6 +115,7 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
               placeholderTextColor={colors.textDisabled}
               multiline
               numberOfLines={3}
+              editable={!saving}
             />
 
             <View style={styles.templateDivider} />
@@ -100,6 +129,7 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
               placeholderTextColor={colors.textDisabled}
               multiline
               numberOfLines={2}
+              editable={!saving}
             />
             <Text style={styles.templateHint}>{t('settings.debtHint')}</Text>
 
@@ -114,14 +144,23 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
               placeholderTextColor={colors.textDisabled}
               multiline
               numberOfLines={4}
+              editable={!saving}
             />
 
             <View style={styles.templateActions}>
-              <TouchableOpacity onPress={handleSave} style={styles.templateSaveBtn}>
+              <TouchableOpacity
+                onPress={handleSave}
+                style={styles.templateSaveBtn}
+                disabled={saving}
+              >
                 <Ionicons name="checkmark" size={Math.round(16 * fontScale)} color="#FFFFFF" />
                 <Text style={styles.templateSaveBtnText}>{t('settings.saveTemplates')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleResetTemplates} style={styles.templateResetBtn}>
+              <TouchableOpacity
+                onPress={handleReset}
+                style={styles.templateResetBtn}
+                disabled={saving}
+              >
                 <Ionicons name="refresh" size={Math.round(16 * fontScale)} color={colors.textMuted} />
                 <Text style={styles.templateResetBtnText}>{t('settings.resetTemplates')}</Text>
               </TouchableOpacity>

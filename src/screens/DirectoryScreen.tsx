@@ -232,8 +232,12 @@ const DirectoryScreen = () => {
         {
           text: t('directory.clone'),
           onPress: async () => {
-            await cloneClient(client);
-            Alert.alert(t('done'), t('directory.cloneDone', { name: client.name }));
+            try {
+              await cloneClient(client);
+              Alert.alert(t('done'), t('directory.cloneDone', { name: client.name }));
+            } catch {
+              Alert.alert(t('error'), t('directory.cloneError'));
+            }
           },
         },
       ],

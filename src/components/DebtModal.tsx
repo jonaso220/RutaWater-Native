@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -62,6 +62,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const [editingDebt, setEditingDebt] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   // The modal stays mounted with client=null between opens; reset the form
   // whenever the target client changes so an amount typed for client A can't
@@ -70,6 +71,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
     setNewAmount('');
     setEditingDebt(null);
     setEditAmount('');
+    savingRef.current = false;
   }, [client?.id]);
 
   if (!client) return null;
@@ -90,17 +92,22 @@ const DebtModal: React.FC<DebtModalProps> = ({
 
   const handleAdd = async () => {
     const amount = parseMoneyInput(newAmount);
-    if (!amount || amount <= 0 || saving) return;
+    if (!amount || amount <= 0 || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await onAddDebt(client, amount);
       setNewAmount('');
+    } catch {
+      Alert.alert(t('error'), t('debtsSheet.operationError'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
 
   const handlePaid = (debt: Debt) => {
+    if (savingRef.current) return;
     Alert.alert(
       t('debtModal.confirmPayment'),
       t('debtModal.paidConfirm', { name: debt.clientName, amount: formatMoney(debt.amount) }),
@@ -109,10 +116,15 @@ const DebtModal: React.FC<DebtModalProps> = ({
         {
           text: t('debtModal.paid'),
           onPress: async () => {
+            if (savingRef.current) return;
+            savingRef.current = true;
             setSaving(true);
             try {
               await onMarkPaid(debt);
+            } catch {
+              Alert.alert(t('error'), t('debtsSheet.operationError'));
             } finally {
+              savingRef.current = false;
               setSaving(false);
             }
           },
@@ -122,7 +134,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
   };
 
   const handleMarkAllPaid = () => {
-    if (saving || clientDebts.length < 2) return;
+    if (savingRef.current || clientDebts.length < 2) return;
     Alert.alert(
       t('debtsSheet.allPaidTitle'),
       t('debtsSheet.allPaidMsg', {
@@ -135,10 +147,15 @@ const DebtModal: React.FC<DebtModalProps> = ({
         {
           text: t('debtsSheet.allPaid'),
           onPress: async () => {
+            if (savingRef.current) return;
+            savingRef.current = true;
             setSaving(true);
             try {
               await onMarkAllPaid(client.id, clientDebts.map((d) => d.id));
+            } catch {
+              Alert.alert(t('error'), t('debtsSheet.operationError'));
             } finally {
+              savingRef.current = false;
               setSaving(false);
             }
           },
@@ -149,13 +166,17 @@ const DebtModal: React.FC<DebtModalProps> = ({
 
   const handleSaveEdit = async (debtId: string) => {
     const amount = parseMoneyInput(editAmount);
-    if (!amount || amount <= 0 || saving) return;
+    if (!amount || amount <= 0 || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await onEditDebt(debtId, amount);
       setEditingDebt(null);
       setEditAmount('');
+    } catch {
+      Alert.alert(t('error'), t('debtsSheet.operationError'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -178,8 +199,12 @@ const DebtModal: React.FC<DebtModalProps> = ({
     Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
   };
 
+  const requestClose = () => {
+    if (!savingRef.current) onClose();
+  };
+
   return (
-    <ModalOverlay visible={visible} onClose={onClose} animationType="slide">
+    <ModalOverlay visible={visible} onClose={requestClose} animationType="slide">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
@@ -197,7 +222,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
                 </Text>
               )}
             </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={requestClose} style={styles.closeBtn} disabled={saving}>
               <Ionicons name="close" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           </View>

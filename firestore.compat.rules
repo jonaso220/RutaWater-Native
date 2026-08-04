@@ -16,11 +16,6 @@ service cloud.firestore {
     function myGroupId() {
       return userExists() ? userData().get('groupId', null) : null;
     }
-    function myProfileIds() {
-      return (userExists() && userData().get('profileIds', []) is list)
-        ? userData().get('profileIds', [])
-        : [];
-    }
     function familyGroupExists(groupId) {
       return groupId != null
         && exists(/databases/$(database)/documents/groups/$(groupId));
@@ -29,12 +24,18 @@ service cloud.firestore {
       return familyGroupExists(groupId)
         && get(/databases/$(database)/documents/groups/$(groupId)).data.adminId == uid();
     }
+    function isProfileMember(profileId) {
+      return profileId != null
+        && exists(/databases/$(database)/documents/profiles/$(profileId))
+        && get(/databases/$(database)/documents/profiles/$(profileId)).data.memberUids is list
+        && uid() in get(/databases/$(database)/documents/profiles/$(profileId)).data.memberUids;
+    }
 
     function inScope(data) {
       return signedIn() && (
         data.userId == uid() ||
         (data.groupId != null && (
-          data.groupId == myGroupId() || data.groupId in myProfileIds()
+          data.groupId == myGroupId() || isProfileMember(data.groupId)
         ))
       );
     }
@@ -132,24 +133,78 @@ service cloud.firestore {
       allow update, delete: if signedIn() && resource.data.adminId == uid();
     }
 
+    // Server-created reservations are private. The canonical admin may read
+    // their own exact code and remove it only inside the atomic conversion of
+    // that family group into a private profile.
+    match /groupCodes/{code} {
+      allow get: if signedIn()
+        && myGroupId() != null
+        && familyGroupExists(myGroupId())
+        && isFamilyGroupAdmin(myGroupId())
+        && get(/databases/$(database)/documents/groups/$(myGroupId())).data.code == code;
+      allow list, create, update: if false;
+      allow delete: if signedIn()
+        && resource.data.groupId != null
+        && familyGroupExists(resource.data.groupId)
+        && isFamilyGroupAdmin(resource.data.groupId)
+        && get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.code == code
+        && get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.get('lifecycleState', 'active') == 'dissolving'
+        && get(/databases/$(database)/documents/groups/$(resource.data.groupId)).data.get('dissolveRequestedBy', '') == uid()
+        && !existsAfter(/databases/$(database)/documents/groups/$(resource.data.groupId))
+        && existsAfter(/databases/$(database)/documents/profiles/$(resource.data.groupId))
+        && getAfter(/databases/$(database)/documents/profiles/$(resource.data.groupId)).data.ownerId == uid()
+        && getAfter(/databases/$(database)/documents/profiles/$(resource.data.groupId)).data.get('convertedFromFamilyGroup', false) == true;
+    }
+
     match /profiles/{id} {
       allow read: if signedIn();
-      allow create: if signedIn()
-        && request.resource.data.ownerId == uid()
-        && request.resource.data.memberUids is list
-        && request.resource.data.memberUids.size() == 1
-        && request.resource.data.memberUids[0] == uid()
-        && request.resource.data.members is map
-        && request.resource.data.members.keys().hasOnly([uid()])
-        && request.resource.data.members[uid()].role == 'admin'
-        && request.resource.data.keys().hasOnly([
-          'name',
-          'ownerId',
-          'code',
-          'memberUids',
-          'members',
-          'createdAt'
-        ]);
+      allow create: if signedIn() && (
+        (
+          request.resource.data.ownerId == uid()
+          && request.resource.data.memberUids is list
+          && request.resource.data.memberUids.size() == 1
+          && request.resource.data.memberUids[0] == uid()
+          && request.resource.data.members is map
+          && request.resource.data.members.keys().hasOnly([uid()])
+          && request.resource.data.members[uid()].role == 'admin'
+          && request.resource.data.keys().hasOnly([
+            'name',
+            'ownerId',
+            'code',
+            'memberUids',
+            'members',
+            'createdAt'
+          ])
+        ) ||
+        (
+          exists(/databases/$(database)/documents/groups/$(id))
+          && get(/databases/$(database)/documents/groups/$(id)).data.adminId == uid()
+          && get(/databases/$(database)/documents/groups/$(id)).data.get('lifecycleState', 'active') == 'dissolving'
+          && get(/databases/$(database)/documents/groups/$(id)).data.get('dissolveRequestedBy', '') == uid()
+          && !existsAfter(/databases/$(database)/documents/groups/$(id))
+          && request.resource.data.ownerId == uid()
+          && request.resource.data.get('lifecycleState', '') == 'active'
+          && request.resource.data.get('convertedFromFamilyGroup', false) == true
+          && !('code' in request.resource.data)
+          && request.resource.data.memberUids is list
+          && request.resource.data.memberUids.size() == 1
+          && request.resource.data.memberUids[0] == uid()
+          && request.resource.data.members is map
+          && request.resource.data.members.keys().hasOnly([uid()])
+          && request.resource.data.members[uid()].role == 'admin'
+          && request.resource.data.get('createdAt', null)
+            == get(/databases/$(database)/documents/groups/$(id)).data.get('createdAt', null)
+          && request.resource.data.keys().hasOnly([
+            'name',
+            'ownerId',
+            'memberUids',
+            'members',
+            'createdAt',
+            'lifecycleState',
+            'convertedFromFamilyGroup'
+          ])
+        )
+      );
       allow update: if signedIn() && (
         (
           resource.data.ownerId == uid()
@@ -162,6 +217,25 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'name',
             'code',
+            'memberUids',
+            'members'
+          ])
+        ) ||
+        (
+          resource.data.ownerId == uid()
+          && resource.data.get('lifecycleState', 'active') == 'active'
+          && request.resource.data.get('lifecycleState', 'active') == 'archived'
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.memberUids is list
+          && request.resource.data.memberUids.size() == 1
+          && request.resource.data.memberUids[0] == uid()
+          && request.resource.data.members is map
+          && request.resource.data.members.keys().hasOnly([uid()])
+          && request.resource.data.members[uid()].role == 'admin'
+          && request.resource.data.archivedAt is timestamp
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'lifecycleState',
+            'archivedAt',
             'memberUids',
             'members'
           ])

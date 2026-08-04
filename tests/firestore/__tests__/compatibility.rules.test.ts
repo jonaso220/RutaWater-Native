@@ -37,7 +37,22 @@ describeWithEmulator('1.48 to 1.49 compatibility Firestore rules', () => {
         db.doc('users/owner').set({ groupId: 'family', role: 'member', profileIds: [] }),
         db.doc('users/member').set({ groupId: 'family', role: 'admin', profileIds: [] }),
         db.doc('users/legacy').set({ groupId: null, role: null, profileIds: ['route'] }),
+        db.doc('users/outsider').set({ groupId: null, role: null, profileIds: ['route'] }),
+        db.doc('users/former-member').set({ groupId: null, role: null, profileIds: ['route'] }),
+        db.doc('users/converter').set({ groupId: 'convert', role: 'admin', profileIds: [] }),
         db.doc('groups/family').set({ adminId: 'owner', code: 'FAMILY' }),
+        db.doc('groups/convert').set({
+          adminId: 'converter',
+          code: 'CONVERT',
+          lifecycleState: 'dissolving',
+          dissolveRequestedBy: 'converter',
+          createdAt: 'original-created-at',
+          creationVersion: 'server_resumable_v1',
+        }),
+        db.doc('groupCodes/CONVERT').set({
+          groupId: 'convert',
+          ownerId: 'converter',
+        }),
         db.doc('profiles/route').set({
           name: 'Legacy route',
           ownerId: 'owner',
@@ -48,6 +63,23 @@ describeWithEmulator('1.48 to 1.49 compatibility Firestore rules', () => {
           userId: 'member',
           groupId: 'family',
           name: 'Customer',
+        }),
+        db.doc('clients/route-client').set({
+          userId: 'owner',
+          groupId: 'route',
+          name: 'Private route customer',
+        }),
+        db.doc('debts/route-debt').set({
+          userId: 'owner',
+          groupId: 'route',
+          clientId: 'route-client',
+          amount: 10,
+        }),
+        db.doc('transfers/route-transfer').set({
+          userId: 'owner',
+          groupId: 'route',
+          clientId: 'route-client',
+          amount: 5,
         }),
         db.doc('premiumOverrides/owner').set({
           active: true,
@@ -105,6 +137,57 @@ describeWithEmulator('1.48 to 1.49 compatibility Firestore rules', () => {
   test('does not trust a stale admin role for deletion', async () => {
     const memberDb = testEnvironment.authenticatedContext('member').firestore();
     await assertFails(memberDb.doc('clients/family-client').delete());
+  });
+
+  test('does not trust forged or stale profileIds for business data access', async () => {
+    const outsiderDb = testEnvironment.authenticatedContext('outsider').firestore();
+    const formerDb = testEnvironment.authenticatedContext('former-member').firestore();
+
+    for (const db of [outsiderDb, formerDb]) {
+      await assertFails(db.doc('clients/route-client').get());
+      await assertFails(db.collection('clients').where('groupId', '==', 'route').get());
+      await assertFails(db.doc('clients/route-client').update({ name: 'Stolen' }));
+      await assertFails(db.doc('debts/route-debt').delete());
+      await assertFails(db.doc('transfers/route-transfer').delete());
+    }
+  });
+
+  test('allows the 1.49 atomic family-group conversion', async () => {
+    const converterDb = testEnvironment.authenticatedContext('converter').firestore();
+    const batch = converterDb.batch();
+    batch.set(converterDb.doc('profiles/convert'), {
+      name: 'Converted route',
+      ownerId: 'converter',
+      memberUids: ['converter'],
+      members: { converter: { role: 'admin' } },
+      createdAt: 'original-created-at',
+      lifecycleState: 'active',
+      convertedFromFamilyGroup: true,
+    });
+    batch.update(converterDb.doc('users/converter'), {
+      groupId: null,
+      role: null,
+      profileIds: ['convert'],
+      activeProfileId: 'convert',
+    });
+    batch.delete(converterDb.doc('groupCodes/CONVERT'));
+    batch.delete(converterDb.doc('groups/convert'));
+
+    await assertSucceeds(batch.commit());
+  });
+
+  test('allows the 1.49 non-destructive profile archive', async () => {
+    const ownerDb = testEnvironment.authenticatedContext('owner').firestore();
+    await assertSucceeds(ownerDb.doc('profiles/route').update({
+      lifecycleState: 'archived',
+      archivedAt: new Date(),
+      memberUids: ['owner'],
+      members: { owner: { role: 'admin' } },
+    }));
+
+    expect((await ownerDb.doc('clients/route-client').get()).exists).toBe(true);
+    expect((await ownerDb.doc('debts/route-debt').get()).exists).toBe(true);
+    expect((await ownerDb.doc('transfers/route-transfer').get()).exists).toBe(true);
   });
 
   test('preserves existing Premium but blocks client grants and reactivation', async () => {

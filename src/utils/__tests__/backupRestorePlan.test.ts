@@ -146,4 +146,88 @@ describe('backup restore planning', () => {
       operation.collection === 'clients' && operation.data.backupSourceId === 'client-a');
     expect(restoredClientA?.id).toBe('client-a');
   });
+
+  test('a legacy restore overwrites a stale customerId on an existing merged debt', () => {
+    const backup = validateBackup(rawBackup());
+    const plan = buildBackupRestorePlan({
+      backup,
+      scope: { userId: 'owner' },
+      currentClients: [{
+        id: 'live-client-a',
+        backupSourceId: 'client-a',
+        userId: 'owner',
+      }],
+      currentDebts: [{
+        id: 'live-debt-a',
+        backupSourceId: 'debt-a',
+        clientId: 'wrong-client',
+        userId: 'owner',
+      }],
+      currentTransfers: [],
+    });
+    const debt = plan.find((operation) => operation.collection === 'debts')!;
+    const stored = new Map<string, Record<string, any>>([
+      [keyFor(debt), {
+        clientId: 'wrong-client',
+        customerId: 'stale-customer',
+        amount: 1,
+      }],
+    ]);
+
+    applyMerged(stored, debt);
+
+    expect(stored.get(keyFor(debt))).toMatchObject({
+      clientId: 'live-client-a',
+      customerId: 'live-client-a',
+      amount: 250,
+    });
+  });
+
+  test('restores exact clientId plus stable customerId without requiring the original document', () => {
+    const backup = validateBackup({
+      exportDate: '2026-08-05',
+      clients: [{
+        id: 'route-order-9',
+        customerId: 'deleted-original',
+        name: 'Cliente',
+        freq: 'once',
+        visitDay: 'Miércoles',
+        visitDays: ['Miércoles'],
+      }],
+      debts: [{
+        id: 'debt-stable',
+        clientId: 'route-order-9',
+        customerId: 'deleted-original',
+        amount: 100,
+      }],
+      transfers: [{
+        id: 'transfer-stable',
+        clientId: 'route-order-9',
+        customerId: 'deleted-original',
+      }],
+    });
+    const plan = buildBackupRestorePlan({
+      backup,
+      scope: { userId: 'owner', groupId: 'route-1' },
+      currentClients: [],
+      currentDebts: [],
+      currentTransfers: [],
+    });
+    const restoredClientId = deterministicRestoreDocumentId(
+      'clients',
+      'route-1',
+      'route-order-9',
+    );
+    const debt = plan.find((operation) => operation.collection === 'debts')!;
+    const transfer = plan.find((operation) => operation.collection === 'transfers')!;
+
+    expect(debt.data).toMatchObject({
+      clientId: restoredClientId,
+      customerId: restoredClientId,
+    });
+    expect(transfer.data).toMatchObject({
+      clientId: restoredClientId,
+      customerId: restoredClientId,
+    });
+  });
 });

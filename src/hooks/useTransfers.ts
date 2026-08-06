@@ -2,9 +2,14 @@ import { useCallback, useMemo, useRef } from 'react';
 import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 import { Transfer, Client } from '../types';
-import { getClientMatchKey } from '../utils/helpers';
 import { useTransfersQuery } from './queries/useTransfersQuery';
 import { dataScopeFields } from '../utils/dataScope';
+import {
+  buildClientIdentityIndex,
+  getRelatedClientReference,
+  getRelatedRecordStableClientId,
+  getStableClientId,
+} from '../utils/clientIdentity';
 
 interface UseTransfersProps {
   userId: string;
@@ -28,65 +33,49 @@ export const useTransfers = ({
   );
   const transfersRef = useRef<Transfer[]>(transfers);
   transfersRef.current = transfers;
-  const clientsRef = useRef<Client[]>(clients);
-  clientsRef.current = clients;
   const busyRef = useRef<Set<string>>(new Set());
 
-  // Índice: matchKey -> clientIds del mismo cliente humano
-  const matchIndex = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    clients.forEach((c) => {
-      if (!c || c.isNote) return;
-      const key = getClientMatchKey(c.name || '', c.phone || '', c.id);
-      if (!map[key]) map[key] = [];
-      map[key].push(c.id);
-    });
-    return map;
-  }, [clients]);
+  const identityIndex = useMemo(() => buildClientIdentityIndex(clients), [clients]);
 
-  const getMatchingIds = useCallback(
-    (clientId: string): string[] => {
-      const client = clientsRef.current.find((c) => c.id === clientId);
-      if (!client) return [clientId];
-      const key = getClientMatchKey(client.name || '', client.phone || '', client.id);
-      const ids = matchIndex[key];
-      return ids && ids.length > 0 ? ids : [clientId];
-    },
-    [matchIndex],
-  );
-
-  // Agrega transferencias de todas las instancias duplicadas del mismo cliente humano
+  // Resolve current stable ids and exact legacy document ids without using
+  // editable contact fields.
   const getClientTransfers = useCallback(
     (clientId: string): Transfer[] => {
-      const ids = new Set(getMatchingIds(clientId));
-      return transfersRef.current.filter((t) => ids.has(t.clientId));
+      const stableId = getRelatedRecordStableClientId(clientId, identityIndex);
+      return transfersRef.current.filter(
+        (transfer) => getRelatedRecordStableClientId(transfer, identityIndex) === stableId,
+      );
     },
-    [getMatchingIds],
+    [identityIndex],
   );
 
   const hasPendingTransfer = useCallback(
     (clientId: string): boolean => {
-      const ids = new Set(getMatchingIds(clientId));
-      return transfersRef.current.some((t) => ids.has(t.clientId));
+      const stableId = getRelatedRecordStableClientId(clientId, identityIndex);
+      return transfersRef.current.some(
+        (transfer) => getRelatedRecordStableClientId(transfer, identityIndex) === stableId,
+      );
     },
-    [getMatchingIds],
+    [identityIndex],
   );
 
   const addTransfer = useCallback(
     async (client: Client) => {
-      const key = `add-${client.id}`;
+      const stableClientId = getStableClientId(client);
+      const key = `add-${stableClientId}`;
       if (busyRef.current.has(key)) return false;
       busyRef.current.add(key);
       try {
         // Usa el ref sincrónico para evitar carrera con el listener
-        const matchingIds = new Set(getMatchingIds(client.id));
-        const existing = transfersRef.current.find((t) => matchingIds.has(t.clientId));
+        const existing = transfersRef.current.find(
+          (transfer) => getRelatedRecordStableClientId(transfer, identityIndex) === stableClientId,
+        );
         if (existing) return false;
 
         const scope = dataScopeFields(userId, groupId);
         await db.collection('transfers').add({
           ...scope,
-          clientId: client.id,
+          ...getRelatedClientReference(client),
           clientName: client.name,
           clientAddress: client.address || '',
           clientLat: client.lat || null,
@@ -102,7 +91,7 @@ export const useTransfers = ({
         busyRef.current.delete(key);
       }
     },
-    [groupId, userId, getMatchingIds],
+    [groupId, identityIndex, userId],
   );
 
   // Revisar una transferencia BORRA el documento; el estado "tiene transferencia

@@ -34,6 +34,7 @@ import { useProfileStore } from '../stores/profileStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
+import { isDeveloperPromoRedemptionAvailable } from '../utils/promoAvailability';
 
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();
@@ -74,6 +75,8 @@ const SettingsScreen = () => {
     : isAdmin;
   // ALL hooks must be called before any early return (Rules of Hooks)
   const [loading, setLoading] = useState(false);
+  const hasStoreSubscription = currentPlan !== 'free';
+  const canRedeemDeveloperPromo = isDeveloperPromoRedemptionAvailable(Platform.OS);
 
   const uid = firebaseUser?.uid || '';
   const userEmail = firebaseUser?.email || '';
@@ -258,26 +261,32 @@ const SettingsScreen = () => {
                 </View>
               )}
             </View>
-            <Text style={styles.premiumPlan}>
-              {t('settings.plan')} {currentPlan === 'annual' ? t('settings.annual') : t('settings.monthly')}
-            </Text>
-            {expirationDate && (
-              <Text style={styles.premiumExpiry}>
-                {t('settings.renews')}: {formatShortDate(expirationDate)}
-              </Text>
+            {hasStoreSubscription ? (
+              <>
+                <Text style={styles.premiumPlan}>
+                  {t('settings.plan')} {currentPlan === 'annual' ? t('settings.annual') : t('settings.monthly')}
+                </Text>
+                {expirationDate && (
+                  <Text style={styles.premiumExpiry}>
+                    {t('settings.renews')}: {formatShortDate(expirationDate)}
+                  </Text>
+                )}
+                <TouchableOpacity
+                  onPress={() => {
+                    Linking.openURL(
+                      Platform.OS === 'ios'
+                        ? 'https://apps.apple.com/account/subscriptions'
+                        : 'https://play.google.com/store/account/subscriptions',
+                    );
+                  }}
+                  style={styles.manageBtn}
+                >
+                  <Text style={styles.manageBtnText}>{t('settings.manageSub')}</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <Text style={styles.premiumPlan}>{t('settings.complimentaryPremium')}</Text>
             )}
-            <TouchableOpacity
-              onPress={() => {
-                Linking.openURL(
-                  Platform.OS === 'ios'
-                    ? 'https://apps.apple.com/account/subscriptions'
-                    : 'https://play.google.com/store/account/subscriptions',
-                );
-              }}
-              style={styles.manageBtn}
-            >
-              <Text style={styles.manageBtnText}>{t('settings.manageSub')}</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.freeCard}>
@@ -299,48 +308,51 @@ const SettingsScreen = () => {
         )}
       </View>
 
-      {/* Promo code section */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="gift-outline" size={20} color={colors.warningDark} />
-          <Text style={styles.sectionTitle}>{t('settings.promoCode')}</Text>
-        </View>
-        {hasPromo ? (
-          <View style={styles.premiumCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="gift" size={20} color={colors.primary} />
-              <Text style={styles.premiumLabel}>{t('settings.premiumActivated')}</Text>
+      {/* Developer promo codes are not an activation path on iOS. Existing
+          premiumOverrides remain active and are represented in the card above. */}
+      {canRedeemDeveloperPromo && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="gift-outline" size={20} color={colors.warningDark} />
+            <Text style={styles.sectionTitle}>{t('settings.promoCode')}</Text>
+          </View>
+          {hasPromo ? (
+            <View style={styles.premiumCard}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="gift" size={20} color={colors.primary} />
+                <Text style={styles.premiumLabel}>{t('settings.premiumActivated')}</Text>
+              </View>
+              <Text style={styles.premiumPlan}>{t('settings.activatedWithCode')}</Text>
+              <TouchableOpacity onPress={handleRemovePromo} style={styles.manageBtn}>
+                <Text style={[styles.manageBtnText, { color: colors.danger }]}>{t('settings.deactivate')}</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.premiumPlan}>{t('settings.activatedWithCode')}</Text>
-            <TouchableOpacity onPress={handleRemovePromo} style={styles.manageBtn}>
-              <Text style={[styles.manageBtnText, { color: colors.danger }]}>{t('settings.deactivate')}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.joinRow}>
-            <TextInput
-              style={styles.joinInput}
-              value={promoCode}
-              onChangeText={setPromoCode}
-              placeholder={t('settings.promoPlaceholder')}
-              placeholderTextColor={colors.textHint}
-              autoCapitalize="characters"
-              maxLength={64}
-            />
-            <TouchableOpacity
-              onPress={handleRedeemPromo}
-              style={[styles.joinBtn, (!promoCode.trim() || promoLoading) && styles.joinBtnDisabled]}
-              disabled={!promoCode.trim() || promoLoading}
-            >
-              {promoLoading ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.joinBtnText}>{t('settings.redeem')}</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+          ) : (
+            <View style={styles.joinRow}>
+              <TextInput
+                style={styles.joinInput}
+                value={promoCode}
+                onChangeText={setPromoCode}
+                placeholder={t('settings.promoPlaceholder')}
+                placeholderTextColor={colors.textHint}
+                autoCapitalize="characters"
+                maxLength={64}
+              />
+              <TouchableOpacity
+                onPress={handleRedeemPromo}
+                style={[styles.joinBtn, (!promoCode.trim() || promoLoading) && styles.joinBtnDisabled]}
+                disabled={!promoCode.trim() || promoLoading}
+              >
+                {promoLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.joinBtnText}>{t('settings.redeem')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Management group heading */}
       <Text style={styles.groupHeading}>{t('settings.managementGroup')}</Text>

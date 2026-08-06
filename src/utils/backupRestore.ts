@@ -37,6 +37,7 @@ export interface BackupClientRecord {
 export interface BackupDebtRecord {
   id: string;
   clientId: string;
+  customerId?: string;
   clientName: string;
   clientAddress: string;
   amount: number;
@@ -46,6 +47,7 @@ export interface BackupDebtRecord {
 export interface BackupTransferRecord {
   id: string;
   clientId: string;
+  customerId?: string;
   clientName: string;
   clientAddress: string;
   clientLat: string;
@@ -210,6 +212,7 @@ const sanitizeDebt = (value: unknown, index: number): BackupDebtRecord => {
   return {
     id: value.id,
     clientId: value.clientId,
+    ...(validId(value.customerId) ? { customerId: value.customerId } : {}),
     clientName: sanitizeString(value.clientName, 100),
     clientAddress: sanitizeString(value.clientAddress, 200),
     amount,
@@ -224,6 +227,7 @@ const sanitizeTransfer = (value: unknown, index: number): BackupTransferRecord =
   return {
     id: value.id,
     clientId: value.clientId,
+    ...(validId(value.customerId) ? { customerId: value.customerId } : {}),
     clientName: sanitizeString(value.clientName, 100),
     clientAddress: sanitizeString(value.clientAddress, 200),
     clientLat: sanitizeString(value.clientLat, 20),

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -15,7 +15,11 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, getClientMatchKey, getModalWidth, parseMoneyInput } from '../utils/helpers';
+import { normalizePhone, getModalWidth, parseMoneyInput } from '../utils/helpers';
+import {
+  buildClientIdentityIndex,
+  relatedRecordBelongsToClient,
+} from '../utils/clientIdentity';
 import { formatMoney, formatShortDate } from '../utils/format';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
@@ -26,8 +30,8 @@ interface DebtModalProps {
   visible: boolean;
   client: Client | null;
   debts: Debt[];
-  // Pasar la lista completa permite agrupar deudas de instancias duplicadas
-  // del mismo cliente humano (nombre+teléfono iguales, IDs distintos).
+  // La lista completa permite resolver clientId legacy y customerId estable
+  // entre varias agendas explícitamente vinculadas del mismo cliente.
   allClients?: Client[];
   debtTemplate?: string;
   reminderTemplate?: string;
@@ -74,20 +78,20 @@ const DebtModal: React.FC<DebtModalProps> = ({
     savingRef.current = false;
   }, [client?.id]);
 
+  const identityClients = useMemo(
+    () => allClients && allClients.length > 0 ? allClients : client ? [client] : [],
+    [allClients, client],
+  );
+  const identityIndex = useMemo(
+    () => buildClientIdentityIndex(identityClients),
+    [identityClients],
+  );
+
   if (!client) return null;
 
-  // Si tenemos la lista completa de clientes, expandimos el filtro a TODAS las
-  // instancias duplicadas del mismo cliente humano (nombre+teléfono normalizados).
-  // Sin allClients, comportamiento original: solo el clientId exacto.
-  const matchingIds: Set<string> = (() => {
-    if (!allClients || allClients.length === 0) return new Set([client.id]);
-    const key = getClientMatchKey(client.name || '', client.phone || '', client.id);
-    const ids = allClients
-      .filter((c) => !c.isNote && getClientMatchKey(c.name || '', c.phone || '', c.id) === key)
-      .map((c) => c.id);
-    return new Set(ids.length > 0 ? ids : [client.id]);
-  })();
-  const clientDebts = debts.filter((d) => matchingIds.has(d.clientId));
+  const clientDebts = debts.filter(
+    (debt) => relatedRecordBelongsToClient(debt, client, identityIndex),
+  );
   const total = clientDebts.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
   const handleAdd = async () => {

@@ -115,8 +115,12 @@ export const RELATIONSHIP_INVERSE: Record<string, string> = {
 // Debt document in Firestore 'debts' collection
 export interface Debt {
   id: string;
+  // Exact client document id, kept for compatibility with older app builds.
   clientId: string;
+  // Stable customer identity. Missing only on legacy debt documents.
+  customerId?: string;
   clientName: string;
+  clientAddress?: string;
   amount: number;
   createdAt: FirebaseFirestoreTypes.Timestamp | null;
   userId: string;
@@ -128,7 +132,10 @@ export interface Debt {
 // Transfer document in Firestore 'transfers' collection
 export interface Transfer {
   id: string;
+  // Exact client document id, kept for compatibility with older app builds.
   clientId: string;
+  // Stable customer identity. Missing only on legacy transfer documents.
+  customerId?: string;
   clientName: string;
   clientAddress?: string;
   clientLat?: string | null;

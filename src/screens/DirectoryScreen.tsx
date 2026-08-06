@@ -9,7 +9,11 @@ import {
   ScrollView,
 } from 'react-native';
 import { Client } from '../types';
-import { getClientMatchKey } from '../utils/helpers';
+import {
+  buildClientIdentityIndex,
+  getRelatedRecordStableClientId,
+  getStableClientId,
+} from '../utils/clientIdentity';
 import { buildEffectiveLastActivityDates } from '../utils/recency';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuthContext } from '../context/AuthContext';
@@ -107,27 +111,24 @@ const DirectoryScreen = () => {
     }, []),
   );
 
-  // Conjunto de matchKeys de clientes con deuda. Un cliente humano puede tener varias
-  // instancias (mismo nombre+teléfono, IDs distintos); si CUALQUIERA tiene deuda, todas
-  // sus instancias cuentan y se muestran en el filtro "con deuda".
-  const debtMatchKeys = useMemo(() => {
+  const clientIdentityIndex = useMemo(
+    () => buildClientIdentityIndex(clients),
+    [clients],
+  );
+
+  // Deudas actuales y legacy convergen solo por identidad explícita.
+  const indebtedStableIds = useMemo(() => {
     const set = new Set<string>();
-    debts.forEach((d) => {
-      if (!(d.amount > 0)) return;
-      const c = clients.find((cl) => cl.id === d.clientId);
-      // Nombre vivo primero: el congelado en la deuda queda viejo tras un
-      // rename y sacaba al cliente del filtro "con deuda" aunque su tarjeta
-      // mostrara el badge rojo.
-      const name = c?.name || d.clientName || '';
-      const phone = c?.phone || '';
-      set.add(getClientMatchKey(name, phone, d.clientId));
+    debts.forEach((debt) => {
+      if (!(debt.amount > 0)) return;
+      set.add(getRelatedRecordStableClientId(debt, clientIdentityIndex));
     });
     return set;
-  }, [clients, debts]);
+  }, [clientIdentityIndex, debts]);
 
   const clientHasDebt = useCallback(
-    (c: Client) => debtMatchKeys.has(getClientMatchKey(c.name || '', c.phone || '', c.id)),
-    [debtMatchKeys],
+    (client: Client) => indebtedStableIds.has(getStableClientId(client)),
+    [indebtedStableIds],
   );
 
   // Compute with_debt count (needs both clients and debts)

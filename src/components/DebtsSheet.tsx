@@ -14,7 +14,14 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Debt } from '../types';
-import { normalizePhone, normalizePhoneForComparison, fuzzyMatch, matchScore, getClientMatchKey, getModalWidth, parseMoneyInput, parseDate } from '../utils/helpers';
+import { normalizePhone, fuzzyMatch, matchScore, getModalWidth, parseMoneyInput, parseDate } from '../utils/helpers';
+import {
+  buildClientIdentityIndex,
+  getRelatedRecordStableClientId,
+  getStableClientId,
+  resolveClientForRelatedRecord,
+  resolveClientForStableId,
+} from '../utils/clientIdentity';
 import { formatMoney, formatShortDate } from '../utils/format';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -40,10 +47,9 @@ interface DebtsSheetProps {
 type SortMode = 'date' | 'amount';
 
 interface ClientDebtGroup {
-  // Clave única del grupo (matchKey): el clientId puede repetirse entre grupos
-  // cuando una deuda huérfana se "promueve" al mismo cliente activo.
-  matchKey: string;
+  stableClientId: string;
   clientId: string;
+  isUnlinked: boolean;
   clientName: string;
   clientPhone: string;
   clientAddress: string;
@@ -90,81 +96,55 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     return d ? Math.floor((now - d.getTime()) / 86400000) : 0;
   };
 
-  // Agrupa deudas por "cliente humano" (nombre+teléfono normalizados),
-  // no por clientId. Así si un cliente del directorio fue agregado varias veces
-  // a la ruta (p.ej. semanal + una vez para otra ubicación), las deudas de
-  // ambas instancias se muestran en una sola tarjeta.
-  // Si la deuda apunta a un clientId huérfano (cliente eliminado o re-agendado
-  // con otro ID), busca cualquier instancia activa con el mismo nombre para
-  // recuperar teléfono/dirección y un clientId válido.
-  const clientsByName: Record<string, Client[]> = useMemo(() => {
-    const map: Record<string, Client[]> = {};
-    clients.forEach((c) => {
-      if (!c || c.isNote) return;
-      const normName = (c.name || '').toLowerCase().trim();
-      if (!normName) return;
-      if (!map[normName]) map[normName] = [];
-      map[normName].push(c);
-    });
-    return map;
-  }, [clients]);
+  const identityIndex = useMemo(() => buildClientIdentityIndex(clients), [clients]);
 
+  // Agrupa solo por identidad explícita: customerId en documentos actuales o
+  // el clientId exacto resuelto a través del cliente vivo para documentos
+  // legacy. Nunca intenta adivinar por nombre/teléfono.
   const clientGroups: ClientDebtGroup[] = useMemo(() => {
-    const grouped: Record<string, ClientDebtGroup> = {};
+    const grouped = new Map<string, ClientDebtGroup>();
 
     debts.forEach((debt) => {
-      let client = clients.find((c) => c.id === debt.clientId);
-      // Fallback: si el clientId está huérfano, intenta resolver por nombre —
-      // pero SOLO cuando es inequívoco. Con homónimos (dos "María" con
-      // teléfonos distintos), colgar la deuda de cualquiera manda el
-      // recordatorio y el cobro a la persona equivocada; mejor tarjeta propia.
-      if (!client && debt.clientName) {
-        const candidates = clientsByName[debt.clientName.toLowerCase().trim()] || [];
-        const distinctPhones = new Set(
-          candidates.map((c) => normalizePhoneForComparison(c.phone || '')).filter(Boolean),
-        );
-        if (distinctPhones.size <= 1) {
-          // Preferir una instancia con teléfono (mejor matching para getMatchingIds)
-          client = candidates.find((c) => c.phone) || candidates[0];
-        }
-      }
-      // Nombre vivo primero: el congelado en la deuda queda viejo tras un
-      // rename y partía la tarjeta en dos.
+      const stableClientId = getRelatedRecordStableClientId(debt, identityIndex);
+      const client = resolveClientForStableId(stableClientId, identityIndex)
+        || resolveClientForRelatedRecord(debt, identityIndex);
       const name = client?.name || debt.clientName || '';
       const phone = client?.phone || '';
-      const key = getClientMatchKey(name, phone, debt.clientId);
+      const key = stableClientId || `__debt_${debt.id}`;
 
-      if (!grouped[key]) {
-        grouped[key] = {
-          matchKey: key,
-          // Usar el id del cliente activo cuando exista, así las acciones de
-          // la tarjeta (agregar deuda, WhatsApp) apuntan al cliente correcto.
+      const group = grouped.get(key);
+      if (!group) {
+        grouped.set(key, {
+          stableClientId: key,
           clientId: client?.id || debt.clientId,
+          isUnlinked: !client,
           clientName: name,
           clientPhone: phone,
-          clientAddress: client?.address || '',
+          clientAddress: client?.address || debt.clientAddress || '',
           total: 0,
           debts: [],
           maxAgeDays: 0,
-        };
+        });
       } else {
-        // Completa con datos del cliente más "vivo" si la primera deuda no tenía
-        if (!grouped[key].clientPhone && phone) grouped[key].clientPhone = phone;
-        if (!grouped[key].clientAddress && client?.address) grouped[key].clientAddress = client.address;
-        // Promover el clientId a uno activo si el grupo arrancó con uno huérfano
-        if (client && !clients.some((c) => c.id === grouped[key].clientId)) {
-          grouped[key].clientId = client.id;
+        if (client) group.isUnlinked = false;
+        if (!group.clientPhone && phone) group.clientPhone = phone;
+        if (!group.clientAddress) {
+          group.clientAddress = client?.address || debt.clientAddress || '';
+        }
+        if (client && !clients.some((c) => c.id === group.clientId)) {
+          group.clientId = client.id;
         }
       }
-      grouped[key].total += Number(debt.amount) || 0;
-      grouped[key].debts.push(debt);
+      const targetGroup = grouped.get(key)!;
+      targetGroup.total += Number(debt.amount) || 0;
+      targetGroup.debts.push(debt);
       const age = getAgeDays(debt.createdAt);
-      if (age > grouped[key].maxAgeDays) {
-        grouped[key].maxAgeDays = age;
+      if (age > targetGroup.maxAgeDays) {
+        targetGroup.maxAgeDays = age;
       }
     });
 
-    const groups = Object.values(grouped);
+    const groups = Array.from(grouped.values());
 
     if (sortMode === 'amount') {
       groups.sort((a, b) => b.total - a.total);
@@ -178,7 +158,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     }
 
     return groups;
-  }, [debts, clients, sortMode, clientsByName]);
+  }, [debts, clients, sortMode, identityIndex]);
 
   const filteredGroups = useMemo(() => {
     if (!searchTerm.trim()) return clientGroups;
@@ -188,18 +168,13 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     );
   }, [clientGroups, searchTerm]);
 
-  // Clientes con deuda (por matchKey) — el badge "Debe" aparece en cualquier
-  // instancia duplicada del mismo cliente humano, no solo en el clientId exacto del debt.
-  const debtMatchKeys = useMemo(() => {
+  const indebtedStableIds = useMemo(() => {
     const set = new Set<string>();
     debts.forEach((d) => {
-      const c = clients.find((cl) => cl.id === d.clientId);
-      const name = d.clientName || c?.name || '';
-      const phone = c?.phone || '';
-      set.add(getClientMatchKey(name, phone, d.clientId));
+      set.add(getRelatedRecordStableClientId(d, identityIndex));
     });
     return set;
-  }, [debts, clients]);
+  }, [debts, identityIndex]);
 
   // Filtered clients for add panel — rank by matchScore so the most
   // relevant matches (exact name, prefix) appear first instead of being
@@ -259,8 +234,12 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   };
 
   const grandTotal = debts.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
-  // Cuenta clientes únicos por matchKey para no contar el mismo cliente dos veces cuando tiene instancias duplicadas
+  // Cuenta identidades estables, no coincidencias de datos de contacto.
   const uniqueClients = clientGroups.length;
+  const unlinkedDebtCount = clientGroups.reduce(
+    (count, group) => count + (group.isUnlinked ? group.debts.length : 0),
+    0,
+  );
 
   const handleMarkPaid = (debt: Debt) => {
     if (savingRef.current) return;
@@ -345,6 +324,9 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           </Text>
           {item.clientAddress ? (
             <Text style={styles.clientAddress}>{item.clientAddress}</Text>
+          ) : null}
+          {item.isUnlinked ? (
+            <Text style={styles.unlinkedLabel}>{t('debtsSheet.unlinkedLabel')}</Text>
           ) : null}
         </View>
         <View style={styles.totalBlock}>
@@ -440,7 +422,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
         );
       })}
 
-      {(item.clientPhone || onTransferPayment) ? (
+      {(item.clientPhone || (onTransferPayment && !item.isUnlinked)) ? (
         <View style={styles.secondaryActions}>
           {item.clientPhone ? (
             <TouchableOpacity
@@ -464,7 +446,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               <Text style={styles.secondaryActionText}>{t('debtsSheet.remind')}</Text>
             </TouchableOpacity>
           ) : null}
-          {onTransferPayment ? (
+          {onTransferPayment && !item.isUnlinked ? (
             <TouchableOpacity
               onPress={() => onTransferPayment(item.clientId)}
               style={styles.secondaryActionBtn}
@@ -553,6 +535,15 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             </View>
           )}
 
+          {unlinkedDebtCount > 0 ? (
+            <View style={styles.unlinkedBanner} accessibilityRole="alert">
+              <Ionicons name="shield-checkmark-outline" size={18} color={colors.warningAmber} />
+              <Text style={styles.unlinkedBannerText}>
+                {t('debtsSheet.unlinkedCount', { count: unlinkedDebtCount })}
+              </Text>
+            </View>
+          ) : null}
+
           <View style={styles.searchSection}>
             <View style={styles.searchInputWrapper}>
               <Ionicons name="search" size={16} color={colors.textHint} style={{ marginRight: 6 }} />
@@ -603,7 +594,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
             data={filteredGroups}
             renderItem={renderGroup}
             keyboardShouldPersistTaps="handled"
-            keyExtractor={(item) => item.matchKey}
+            keyExtractor={(item) => item.stableClientId}
             contentContainerStyle={styles.list}
             ListEmptyComponent={
               <View style={styles.empty}>
@@ -712,7 +703,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                           <Text style={styles.addPanelAddress} numberOfLines={1}>{client.address}</Text>
                         ) : null}
                       </View>
-                      {debtMatchKeys.has(getClientMatchKey(client.name || '', client.phone || '', client.id)) && (
+                      {indebtedStableIds.has(getStableClientId(client)) && (
                         <Text style={styles.debtBadge}>{t('debtsSheet.owes')}</Text>
                       )}
                     </TouchableOpacity>
@@ -841,6 +832,26 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     color: colors.textHint,
     fontWeight: '600',
   },
+  unlinkedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(8),
+    marginHorizontal: s(12),
+    marginTop: s(8),
+    paddingHorizontal: s(10),
+    paddingVertical: s(9),
+    borderRadius: s(10),
+    backgroundColor: colors.warningAmberBg,
+    borderWidth: 1,
+    borderColor: colors.warningAmber,
+  },
+  unlinkedBannerText: {
+    flex: 1,
+    fontSize: s(12),
+    lineHeight: s(16),
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
   // Search
   searchSection: {
     paddingHorizontal: s(12),
@@ -938,6 +949,18 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     fontWeight: '400',
     color: colors.textSecondary,
     marginTop: s(1),
+  },
+  unlinkedLabel: {
+    alignSelf: 'flex-start',
+    marginTop: s(5),
+    paddingHorizontal: s(7),
+    paddingVertical: s(3),
+    borderRadius: s(8),
+    overflow: 'hidden',
+    backgroundColor: colors.warningAmberBg,
+    color: colors.warningAmber,
+    fontSize: s(11),
+    fontWeight: '700',
   },
   totalBlock: {
     alignItems: 'flex-end',

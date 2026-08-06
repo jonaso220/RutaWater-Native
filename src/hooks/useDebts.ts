@@ -2,10 +2,15 @@ import { useCallback, useRef, useMemo } from 'react';
 import { reportError } from '../lib/crashReporting';
 import { db } from '../config/firebase';
 import { Debt, Client } from '../types';
-import { getClientMatchKey } from '../utils/helpers';
 import { shareInFlightOperation } from '../utils/inFlightOperation';
 import { useDebtsQuery } from './queries/useDebtsQuery';
 import { dataScopeFields } from '../utils/dataScope';
+import {
+  buildClientIdentityIndex,
+  getRelatedClientReference,
+  getRelatedRecordStableClientId,
+  getStableClientId,
+} from '../utils/clientIdentity';
 
 interface UseDebtsProps {
   userId: string;
@@ -30,96 +35,61 @@ export const useDebts = ({
   // Ref sincrónico para evitar closures stale en operaciones rápidas
   const debtsRef = useRef<Debt[]>(debts);
   debtsRef.current = debts;
-  // Ref con los clientes para que los callbacks no queden stale
-  const clientsRef = useRef<Client[]>(clients);
-  clientsRef.current = clients;
   // Promesas compartidas contra doble-tap: todos los callers esperan el mismo
   // write real, en vez de que el segundo reciba `undefined` como falso éxito.
   const inFlightRef = useRef<Map<string, Promise<void>>>(new Map());
 
-  // Índice: matchKey -> lista de clientIds del mismo "cliente humano"
-  const matchIndex = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    clients.forEach((c) => {
-      if (!c || c.isNote) return;
-      const key = getClientMatchKey(c.name || '', c.phone || '', c.id);
-      if (!map[key]) map[key] = [];
-      map[key].push(c.id);
-    });
-    return map;
-  }, [clients]);
+  const identityIndex = useMemo(() => buildClientIdentityIndex(clients), [clients]);
 
-  // Dado un clientId, devuelve todos los clientIds que representan al mismo cliente humano
-  const getMatchingIds = useCallback(
-    (clientId: string): string[] => {
-      const client = clientsRef.current.find((c) => c.id === clientId);
-      if (!client) return [clientId];
-      const key = getClientMatchKey(client.name || '', client.phone || '', client.id);
-      const ids = matchIndex[key];
-      return ids && ids.length > 0 ? ids : [clientId];
-    },
-    [matchIndex],
-  );
-
-  // Get debts for a specific client (agrega duplicados por nombre+teléfono)
+  // Legacy debts keep only an exact client document id; current debts add the
+  // stable customerId while retaining that exact id for old app versions.
   const getClientDebts = useCallback(
     (clientId: string): Debt[] => {
-      const ids = new Set(getMatchingIds(clientId));
-      return debtsRef.current.filter((d) => ids.has(d.clientId));
+      const stableId = getRelatedRecordStableClientId(clientId, identityIndex);
+      return debtsRef.current.filter(
+        (debt) => getRelatedRecordStableClientId(debt, identityIndex) === stableId,
+      );
     },
-    [getMatchingIds],
+    [identityIndex],
   );
 
-  // Pre-cómputo de totales de deuda agregados por "cliente humano" (matchKey).
+  // Pre-cómputo de totales por identidad estable explícita.
   // Antes getClientDebtTotal era O(C+D) por llamada (find sobre clients +
   // filter+reduce sobre todas las deudas) y se invoca una vez por cliente en
   // los bucles de HomeScreen (filtro con_deuda + debtMap) → O(N²) con 600+
   // clientes. Ahora se arma este índice una sola vez por cambio de
   // clients/debts (O(C+D)) y cada total es un lookup O(1).
   const debtTotals = useMemo(() => {
-    // clientId -> matchKey (misma lógica y exclusiones que matchIndex)
-    const keyByClientId: Record<string, string> = {};
-    clients.forEach((c) => {
-      if (!c || c.isNote) return;
-      keyByClientId[c.id] = getClientMatchKey(c.name || '', c.phone || '', c.id);
+    const totalByStableId = new Map<string, number>();
+    debts.forEach((debt) => {
+      const stableId = getRelatedRecordStableClientId(debt, identityIndex);
+      const amount = Number(debt.amount) || 0;
+      totalByStableId.set(stableId, (totalByStableId.get(stableId) || 0) + amount);
     });
-    // Suma por matchKey (clientes del directorio) y por clientId crudo
-    // (fallback para clientes huérfanos fuera del directorio).
-    const totalByKey: Record<string, number> = {};
-    const totalByClientId: Record<string, number> = {};
-    debts.forEach((d) => {
-      const amt = Number(d.amount) || 0;
-      totalByClientId[d.clientId] = (totalByClientId[d.clientId] || 0) + amt;
-      const key = keyByClientId[d.clientId];
-      if (key !== undefined) totalByKey[key] = (totalByKey[key] || 0) + amt;
-    });
-    return { keyByClientId, totalByKey, totalByClientId };
-  }, [clients, debts]);
+    return totalByStableId;
+  }, [debts, identityIndex]);
 
-  // Get total debt for a specific client (agrega duplicados). O(1) vía índice.
+  // O(1) lookup; no depende del nombre ni del teléfono editables.
   const getClientDebtTotal = useCallback(
     (clientId: string): number => {
-      const key = debtTotals.keyByClientId[clientId];
-      // Cliente en el directorio: total agregado de todas sus instancias.
-      if (key !== undefined) return debtTotals.totalByKey[key] || 0;
-      // Huérfano (no está en el directorio): equivale al viejo
-      // getMatchingIds → [clientId], suma solo sus propias deudas.
-      return debtTotals.totalByClientId[clientId] || 0;
+      const stableId = getRelatedRecordStableClientId(clientId, identityIndex);
+      return debtTotals.get(stableId) || 0;
     },
-    [debtTotals],
+    [debtTotals, identityIndex],
   );
 
   // Add a new debt (guarded against double-tap)
   const addDebt = useCallback(
     (client: Client, amount: number): Promise<void> => {
       if (!amount || amount <= 0) return Promise.resolve();
-      const key = `add-${client.id}`;
+      const stableClientId = getStableClientId(client);
+      const key = `add-${stableClientId}`;
       return shareInFlightOperation(inFlightRef.current, key, async () => {
         try {
           const scope = dataScopeFields(userId, groupId);
           await db.collection('debts').add({
             ...scope,
-            clientId: client.id,
+            ...getRelatedClientReference(client),
             clientName: client.name,
             clientAddress: client.address || '',
             amount,
@@ -169,7 +139,8 @@ export const useDebts = ({
   // Mark ALL debts for a client as paid (guarded, batch atómico)
   const markAllDebtsPaid = useCallback(
     (clientId: string, debtIds: string[]): Promise<void> => {
-      const key = `allpaid-${clientId}`;
+      const stableClientId = getRelatedRecordStableClientId(clientId, identityIndex);
+      const key = `allpaid-${stableClientId}`;
       return shareInFlightOperation(inFlightRef.current, key, async () => {
         try {
           const batch = db.batch();
@@ -181,7 +152,7 @@ export const useDebts = ({
         }
       });
     },
-    [],
+    [identityIndex],
   );
 
   return {

@@ -435,7 +435,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
               activeOpacity={0.6}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               accessibilityRole="link"
-              accessibilityLabel={`${t('home.routeOpenCurrent')}: ${client.address}`}
+              accessibilityLabel={`${t('clientCard.openMaps')}: ${client.address}`}
             >
               <Ionicons name="location-sharp" size={s(18)} color={colors.primary} />
               <Text style={styles.clientAddressLink} numberOfLines={wideLayout ? 1 : 3}>

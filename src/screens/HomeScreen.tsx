@@ -10,7 +10,6 @@ import {
   Alert,
   Platform,
   RefreshControl,
-  Linking,
   Animated,
   Easing,
   LayoutChangeEvent,
@@ -61,20 +60,11 @@ import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { Frequency } from '../constants/products';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import {
-  RouteMapStop,
-  RouteSession as RouteSessionState,
-  buildGoogleMapsDirectionsUrl,
-  coordinatesFromClient,
-  reconcileRouteSession,
-} from '../utils/mapsRoute';
 
 type ListItem =
   | { type: 'header'; key: string; title: string; count: number; isToday: boolean }
   | { type: 'client'; key: string; client: Client }
   | { type: 'gridrow'; key: string; clients: Client[]; sectionDateKey: string };
-
-type RouteSession = RouteSessionState & { routeDay: string };
 
 // --- Memoized SectionHeader to avoid re-renders ---
 interface SectionHeaderProps {
@@ -289,7 +279,6 @@ const HomeScreen = () => {
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
   const [alarmPromptClient, setAlarmPromptClient] = useState<Client | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [routeSession, setRouteSession] = useState<RouteSession | null>(null);
   const collapsibleHeaderProgress = useRef(new Animated.Value(1)).current;
   const androidHeaderScrollY = useRef(new Animated.Value(0)).current;
   const collapsibleHeaderVisibleRef = useRef(true);
@@ -513,13 +502,6 @@ const HomeScreen = () => {
   // Refs to access state without adding as dependencies (stabilizes callbacks)
   const selectedDayRef = useRef(selectedDay);
   selectedDayRef.current = selectedDay;
-  const routeSessionRef = useRef<RouteSession | null>(routeSession);
-  routeSessionRef.current = routeSession;
-
-  const updateRouteSession = useCallback((session: RouteSession | null) => {
-    routeSessionRef.current = session;
-    setRouteSession(session);
-  }, []);
 
   // Fix 3: Detect cross-midnight day change
   useEffect(() => {
@@ -685,106 +667,6 @@ const HomeScreen = () => {
     return clientSections[0].data;
   }, [clientSections]);
 
-  // Route preparation must ignore temporary search/product filters. Otherwise
-  // starting a route while a search is active would silently omit clients.
-  const nearestRouteClients = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayKey = toLocalDateString(today);
-    let nearestKey: string | null = null;
-    const keyed = allVisibleClients.map((client) => {
-      const nextDate = getNextVisitDate(client, deferredDay);
-      let dateKey = nextDate ? toLocalDateString(nextDate) : todayKey;
-      if (dateKey < todayKey) dateKey = todayKey;
-      if (nearestKey === null || dateKey < nearestKey) nearestKey = dateKey;
-      return { client, dateKey };
-    });
-    return keyed.filter((item) => item.dateKey === nearestKey).map((item) => item.client);
-  }, [allVisibleClients, deferredDay]);
-
-  const orderedRouteStops = useMemo(() => nearestRouteClients
-    .filter((client) => !client.isNote && (!!client.mapsLink || !!coordinatesFromClient(client.lat, client.lng)))
-    .map((client): RouteMapStop => ({
-      clientId: client.id,
-      name: client.name || '',
-      mapsLink: client.mapsLink || '',
-      coordinates: coordinatesFromClient(client.lat, client.lng),
-    })), [nearestRouteClients]);
-
-  const orderedRouteStopsRef = useRef({ day: deferredDay, stops: orderedRouteStops });
-  orderedRouteStopsRef.current = { day: deferredDay, stops: orderedRouteStops };
-
-  // A guided route used to be a fixed snapshot created at start time. Keep
-  // its pending portion aligned with live position/location changes instead.
-  useEffect(() => {
-    const session = routeSessionRef.current;
-    if (!session || session.routeDay !== deferredDay) return;
-    const reconciled = reconcileRouteSession(session, orderedRouteStops);
-    if (reconciled !== session) updateRouteSession(reconciled);
-  }, [deferredDay, orderedRouteStops, updateRouteSession]);
-
-  const openRouteStop = useCallback(async (stop: RouteMapStop) => {
-    const directionsUrl = stop.coordinates
-      ? buildGoogleMapsDirectionsUrl(stop.coordinates)
-      : null;
-    const url = stop.mapsLink || directionsUrl;
-    if (!url) {
-      Alert.alert(t('home.routeOpenFailedTitle'), t('home.routeOpenFailedMsg'));
-      return false;
-    }
-    try {
-      await Linking.openURL(url);
-      return true;
-    } catch (e) {
-      reportError(e, 'Error opening guided route stop');
-      Alert.alert(t('home.routeOpenFailedTitle'), t('home.routeOpenFailedMsg'));
-      return false;
-    }
-  }, [t]);
-
-  const handleStartRoute = useCallback(async () => {
-    if (orderedRouteStops.length === 0) {
-      Alert.alert(t('home.routeNoClientsTitle'), t('home.routeNoClientsMsg'));
-      return;
-    }
-
-    const session: RouteSession = { stops: orderedRouteStops, currentIndex: 0, routeDay: deferredDay };
-    updateRouteSession(session);
-    await openRouteStop(orderedRouteStops[0]);
-  }, [deferredDay, orderedRouteStops, openRouteStop, t, updateRouteSession]);
-
-  const advanceGuidedRoute = useCallback(async (completedClientId?: string) => {
-    const storedSession = routeSessionRef.current;
-    if (!storedSession) return;
-    const current = storedSession.stops[storedSession.currentIndex];
-    if (completedClientId && current.clientId !== completedClientId) return;
-
-    const latestRoute = orderedRouteStopsRef.current;
-    const session = latestRoute.day === storedSession.routeDay
-      ? reconcileRouteSession(storedSession, latestRoute.stops)
-      : storedSession;
-
-    // The completed client can disappear from the live list before this
-    // callback runs. In that case reconciliation has already selected the
-    // next stop, so open it without advancing a second time.
-    if (completedClientId && session.stops[session.currentIndex]?.clientId !== completedClientId) {
-      updateRouteSession(session);
-      await openRouteStop(session.stops[session.currentIndex]);
-      return;
-    }
-
-    const nextIndex = session.currentIndex + 1;
-    if (nextIndex >= session.stops.length) {
-      updateRouteSession(null);
-      Alert.alert(t('home.routeFinishedTitle'), t('home.routeFinishedMsg'));
-      return;
-    }
-
-    const nextSession: RouteSession = { ...session, currentIndex: nextIndex };
-    updateRouteSession(nextSession);
-    await openRouteStop(nextSession.stops[nextIndex]);
-  }, [openRouteStop, t, updateRouteSession]);
-
   // Flatten sections into a single array for FlatList
   const flatListData = useMemo(() => {
     const items: ListItem[] = [];
@@ -843,9 +725,7 @@ const HomeScreen = () => {
       markAsDone(client.id, client, selectedDayRef.current).then((ok) => {
         if (!ok) {
           Alert.alert(t('error'), t('home.markDoneFailed'));
-          return;
         }
-        void advanceGuidedRoute(client.id);
       });
       // Las notas de una sola vez se borran definitivamente. Las recurrentes
       // avanzan al próximo ciclo y sí pueden deshacerse como cualquier agenda.
@@ -857,7 +737,7 @@ const HomeScreen = () => {
         });
       }
     },
-    [advanceGuidedRoute, markAsDone, pushUndo, t],
+    [markAsDone, pushUndo, t],
   );
 
   const handleDelete = useCallback(
@@ -1650,45 +1530,6 @@ const HomeScreen = () => {
             },
           ] : undefined}
         >
-          {routeSession && (
-        <View style={styles.routeSessionBar}>
-          <View style={styles.routeSessionInfo}>
-            <Text style={styles.routeSessionTitle} numberOfLines={1}>
-              {t('home.routeGuidedProgress', {
-                current: routeSession.currentIndex + 1,
-                total: routeSession.stops.length,
-                name: routeSession.stops[routeSession.currentIndex].name,
-              })}
-            </Text>
-            <Text style={styles.routeSessionHint} numberOfLines={1}>
-              {t('home.routeGuidedHint')}
-            </Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.routeSessionActions}>
-            <TouchableOpacity
-              style={styles.routeSessionButton}
-              onPress={() => void openRouteStop(routeSession.stops[routeSession.currentIndex])}
-            >
-              <Text style={styles.routeSessionButtonText}>🗺️ {t('home.routeOpenCurrent')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.routeSessionButton} onPress={() => void advanceGuidedRoute()}>
-              <Text style={styles.routeSessionButtonText}>{t('home.routeSkip')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.routeSessionButton, styles.routeSessionStopButton]}
-              onPress={() => {
-                Alert.alert(t('home.routeStopTitle'), t('home.routeStopMsg'), [
-                  { text: t('cancel'), style: 'cancel' },
-                  { text: t('home.routeStop'), style: 'destructive', onPress: () => updateRouteSession(null) },
-                ]);
-              }}
-            >
-              <Text style={[styles.routeSessionButtonText, styles.routeSessionStopText]}>{t('home.routeStop')}</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-      )}
-
       {/* Search bar + Filters */}
       <View style={styles.searchSection}>
         <View style={styles.searchRow}>
@@ -2185,18 +2026,6 @@ const getStyles = (
     justifyContent: 'center',
     gap: s(6),
   },
-  actionCompactRoute: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: colors.successDark,
-    borderColor: colors.success,
-  },
-  actionCompactPrimaryText: {
-    flexShrink: 1,
-    fontSize: s(14),
-    fontWeight: '800',
-    color: colors.textWhite,
-  },
   actionCompactAi: {
     flex: 1,
     minWidth: 0,
@@ -2280,10 +2109,6 @@ const getStyles = (
     alignItems: 'center',
     justifyContent: 'center',
     gap: s(7),
-  },
-  actionPrimaryRoute: {
-    backgroundColor: colors.successDark,
-    borderColor: colors.success,
   },
   actionPrimaryAi: {
     backgroundColor: colors.primary,
@@ -2545,51 +2370,6 @@ const getStyles = (
     fontSize: s(10),
     fontWeight: '900',
     color: colors.textWhite,
-  },
-  routeSessionBar: {
-    width: '100%',
-    maxWidth: WIDE_CONTENT_MAX_WIDTH,
-    alignSelf: 'center',
-    backgroundColor: colors.successLighter,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.successLight,
-    paddingHorizontal: s(12),
-    paddingVertical: s(8),
-    gap: s(8),
-  },
-  routeSessionInfo: {
-    gap: s(2),
-  },
-  routeSessionTitle: {
-    color: colors.successDark,
-    fontSize: s(15),
-    fontWeight: '800',
-  },
-  routeSessionHint: {
-    color: colors.textMuted,
-    fontSize: s(12),
-  },
-  routeSessionActions: {
-    gap: s(6),
-  },
-  routeSessionButton: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.successLight,
-    borderRadius: s(8),
-    paddingHorizontal: s(10),
-    paddingVertical: s(6),
-  },
-  routeSessionButtonText: {
-    color: colors.successDark,
-    fontSize: s(12),
-    fontWeight: '700',
-  },
-  routeSessionStopButton: {
-    borderColor: colors.dangerBorder,
-  },
-  routeSessionStopText: {
-    color: colors.danger,
   },
   searchSection: {
     backgroundColor: colors.card,

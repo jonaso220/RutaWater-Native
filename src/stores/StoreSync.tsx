@@ -121,7 +121,7 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   }, [clientsHook.clients, clientsHook.loading, effectiveGroupId, userId, dayCounts, canAddClient, clientCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Debts ---
-  // Pasamos clients para que getClientDebtTotal agrupe duplicados (mismo cliente del directorio añadido varias veces)
+  // Pasamos clients para resolver customerId estable y clientId legacy.
   const debtsHook = useDebts({
     userId,
     groupId: effectiveGroupId,
@@ -142,7 +142,7 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   }, [debtsHook.debts, debtsHook.getClientDebts, debtsHook.getClientDebtTotal, debtsHook.addDebt, debtsHook.markDebtPaid, debtsHook.editDebt, debtsHook.markAllDebtsPaid]);
 
   // --- Transfers ---
-  // Pasamos clients para agrupar transferencias de instancias duplicadas del mismo cliente humano
+  // Pasamos clients para resolver customerId estable y clientId legacy.
   const transfersHook = useTransfers({
     userId,
     groupId: effectiveGroupId,

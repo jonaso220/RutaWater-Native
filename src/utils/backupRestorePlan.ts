@@ -127,6 +127,24 @@ export const buildBackupRestorePlan = ({
         ? existingRecord.clientId
         : deterministicRestoreDocumentId('clients', scopeKey, oldId));
 
+  // Only persist a restored customerId when it resolves to a client identity
+  // present in this scope. Old backups omit the field and continue to resolve
+  // through their exact remapped clientId.
+  const resolveCustomerId = (oldId: string | undefined): string | undefined => {
+    if (!oldId) return undefined;
+    return customerIdMap.get(oldId)
+      || clientIdMap.get(oldId)
+      || findCurrentRecord(indexedClients, oldId)?.id;
+  };
+
+  // Backups anteriores guardaban customerId en la ficha del cliente pero no
+  // en cada deuda/transferencia. Derivarlo desde esa relación explícita evita
+  // tanto adivinar por datos de contacto como conservar, por merge, un
+  // customerId viejo que ya no corresponda al clientId restaurado.
+  const backupCustomerIdByClientId = new Map(
+    backup.clients.map((client) => [client.id, client.customerId]),
+  );
+
   const operations: RestoreWriteOperation[] = [];
   backup.clients.forEach((client) => {
     const relationships: Record<string, string> = {};
@@ -169,13 +187,18 @@ export const buildBackupRestorePlan = ({
 
   backup.debts.forEach((debt) => {
     const existing = findCurrentRecord(indexedDebts, debt.id);
-    const { id, clientId, ...debtData } = debt;
+    const { id, clientId, customerId, ...debtData } = debt;
+    const restoredClientId = resolveClientId(clientId, existing);
+    const restoredCustomerId = resolveCustomerId(
+      customerId || backupCustomerIdByClientId.get(clientId),
+    ) || restoredClientId;
     operations.push({
       collection: 'debts',
       id: existing?.id || deterministicRestoreDocumentId('debts', scopeKey, id),
       data: {
         ...debtData,
-        clientId: resolveClientId(clientId, existing),
+        clientId: restoredClientId,
+        customerId: restoredCustomerId,
         ...scopeForNewRecord(existing, scope),
         backupSourceId: id,
       },
@@ -184,13 +207,18 @@ export const buildBackupRestorePlan = ({
 
   backup.transfers.forEach((transfer) => {
     const existing = findCurrentRecord(indexedTransfers, transfer.id);
-    const { id, clientId, ...transferData } = transfer;
+    const { id, clientId, customerId, ...transferData } = transfer;
+    const restoredClientId = resolveClientId(clientId, existing);
+    const restoredCustomerId = resolveCustomerId(
+      customerId || backupCustomerIdByClientId.get(clientId),
+    ) || restoredClientId;
     operations.push({
       collection: 'transfers',
       id: existing?.id || deterministicRestoreDocumentId('transfers', scopeKey, id),
       data: {
         ...transferData,
-        clientId: resolveClientId(clientId, existing),
+        clientId: restoredClientId,
+        customerId: restoredCustomerId,
         ...scopeForNewRecord(existing, scope),
         backupSourceId: id,
       },

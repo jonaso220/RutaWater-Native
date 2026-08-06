@@ -39,7 +39,35 @@ describe('backup validation', () => {
     ]);
     expect(backup.clients[0].lastDeliveredAt?.toISOString()).toBe('2026-07-09T12:00:00.000Z');
     expect(backup.debts[0].amount).toBe(350);
+    expect(backup.debts[0].customerId).toBeUndefined();
+    expect(backup.transfers[0].customerId).toBeUndefined();
     expect(backup.schemaVersion).toBe(1);
+  });
+
+  test('preserves additive customerId while accepting legacy related records without it', () => {
+    const backup = validateBackup({
+      ...validBackup,
+      debts: [{
+        id: 'debt-1',
+        clientId: 'route-order-1',
+        customerId: 'client-1',
+        amount: 350,
+      }],
+      transfers: [{
+        id: 'transfer-1',
+        clientId: 'route-order-1',
+        customerId: 'client-1',
+      }],
+    });
+
+    expect(backup.debts[0]).toMatchObject({
+      clientId: 'route-order-1',
+      customerId: 'client-1',
+    });
+    expect(backup.transfers[0]).toMatchObject({
+      clientId: 'route-order-1',
+      customerId: 'client-1',
+    });
   });
 
   test('rejects malformed and empty files', () => {

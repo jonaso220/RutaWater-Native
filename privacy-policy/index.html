@@ -14,67 +14,91 @@
     p { margin-bottom: 16px; }
     ul { margin: 10px 0 16px 24px; }
     li { margin-bottom: 6px; }
+    a { color: #1464c0; }
+    .notice { background: #eaf3ff; border-left: 4px solid #1a73e8; border-radius: 4px; padding: 14px 16px; margin: 20px 0; }
     .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 13px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Politica de Privacidad</h1>
-    <p class="date">Ultima actualizacion: 17 de marzo de 2026</p>
+    <h1>Política de Privacidad</h1>
+    <p class="date">Última actualización: 5 de agosto de 2026</p>
 
-    <p>RutaWater ("nosotros", "la app") es una aplicacion movil desarrollada por Coralux Studio. Esta politica describe como recopilamos, usamos y protegemos tu informacion personal.</p>
+    <p>RutaWater ("RutaWater" o "la app") es una aplicación de gestión de repartos desarrollada por Jonathan Olivera bajo el nombre Coralux Studio. Esta política explica qué información trata la app, para qué la utiliza y qué opciones tienes.</p>
 
-    <h2>1. Informacion que recopilamos</h2>
-    <p>Recopilamos la siguiente informacion cuando usas RutaWater:</p>
+    <div class="notice">
+      <strong>RutaWater no muestra publicidad, no vende datos personales y no utiliza tus datos para rastrearte entre aplicaciones o sitios web.</strong>
+    </div>
+
+    <h2>1. Responsable y contacto</h2>
+    <p>El responsable del tratamiento es Jonathan Olivera (Coralux Studio). Para consultas o solicitudes de privacidad puedes escribir a <a href="mailto:jonaolivera23@gmail.com">jonaolivera23@gmail.com</a>.</p>
+
+    <h2>2. Información que tratamos</h2>
     <ul>
-      <li><strong>Informacion de cuenta:</strong> Nombre, direccion de correo electronico al registrarte mediante Google Sign-In o Apple Sign-In.</li>
-      <li><strong>Datos de clientes:</strong> Nombres, direcciones, numeros de telefono y notas de los clientes que agregas a tu ruta.</li>
-      <li><strong>Datos de ubicacion:</strong> Coordenadas de las direcciones de clientes para mostrarlas en el mapa.</li>
-      <li><strong>Datos de suscripcion:</strong> Informacion de compra procesada por Apple App Store o Google Play Store.</li>
+      <li><strong>Cuenta e identidad:</strong> identificador de usuario de Firebase, nombre visible, correo electrónico, proveedor de inicio de sesión y datos necesarios para grupos o repartos compartidos. Firebase Authentication procesa las credenciales; RutaWater no guarda contraseñas en Firestore.</li>
+      <li><strong>Información del reparto:</strong> nombres, teléfonos, domicilios, coordenadas y enlaces de mapas de los clientes que agregas; productos y cantidades; frecuencia, días y fechas de visita; estado y orden de entrega; alarmas; notas; relaciones entre clientes; cargas diarias; catálogo, plantillas y preferencias.</li>
+      <li><strong>Información financiera operativa:</strong> importes de deudas y registros de transferencias pendientes que ingresas para administrar el reparto. RutaWater no solicita datos bancarios, números de tarjeta ni calificaciones crediticias.</li>
+      <li><strong>Suscripción y compras:</strong> producto adquirido, estado del plan, elegibilidad de prueba, fechas y datos de transacción o recibo necesarios para validar y restaurar Premium. El pago y los datos de tarjeta son procesados por Apple App Store o Google Play; RutaWater no recibe los datos completos de pago.</li>
+      <li><strong>Uso de Pedido IA:</strong> el texto que decides interpretar, la fecha actual y un resumen del directorio que puede abarcar todas las fichas visibles de la ruta actual e incluir identificador interno, nombre, dirección, agenda, productos y notas. Ese resumen no incluye teléfonos, enlaces de mapas ni deudas, salvo que aparezcan en el texto o en las notas que tú ingresaste. Para prevenir abuso, OpenAI recibe además un identificador seudónimo estable derivado del UID de la cuenta. También registramos, vinculado a tu cuenta, el número mensual de interpretaciones para aplicar el cupo correspondiente.</li>
+      <li><strong>Diagnóstico y seguridad:</strong> datos de fallos y errores, modelo y sistema operativo del dispositivo, identificadores técnicos de instalación o servicio, versión de la app y metadatos de conexión como fecha, hora o dirección IP que los proveedores de infraestructura pueden procesar para operar y proteger el servicio.</li>
     </ul>
 
-    <h2>2. Como usamos tu informacion</h2>
-    <p>Usamos tu informacion para:</p>
+    <p>La app también mantiene una copia local de parte de la información para funcionar con conexiones inestables. Los recordatorios se programan localmente en el dispositivo. Los archivos CSV o JSON se crean únicamente cuando eliges exportarlos y quedan bajo tu control en la ubicación o aplicación que selecciones.</p>
+
+    <h2>3. Cómo usamos la información</h2>
     <ul>
-      <li>Proporcionarte el servicio de gestion de rutas de agua.</li>
-      <li>Sincronizar tus datos entre dispositivos mediante Firebase.</li>
-      <li>Gestionar tu suscripcion premium.</li>
-      <li>Mejorar la experiencia de la aplicacion.</li>
+      <li>Crear y proteger tu cuenta, iniciar sesión y sincronizar tus repartos entre dispositivos.</li>
+      <li>Mostrar el directorio, organizar recorridos, pedidos, entregas, deudas, transferencias y recordatorios.</li>
+      <li>Compartir un reparto con las personas que tú o el administrador incorporen al grupo.</li>
+      <li>Validar compras, habilitar Premium y restaurar suscripciones.</li>
+      <li>Interpretar, a petición tuya, texto de pedidos mediante inteligencia artificial y controlar el cupo mensual.</li>
+      <li>Prevenir abuso, mantener la seguridad y disponibilidad, diagnosticar fallos y atender consultas.</li>
     </ul>
 
-    <h2>3. Almacenamiento de datos</h2>
-    <p>Tus datos se almacenan de forma segura en Google Firebase (Firestore). Los datos de pago son procesados exclusivamente por Apple (App Store) y Google (Play Store) a traves de RevenueCat. No almacenamos informacion de tarjetas de credito ni datos bancarios.</p>
+    <h2>4. Cómo funciona Pedido IA</h2>
+    <p>Pedido IA es opcional y solo se ejecuta cuando pulsas la acción para interpretar texto. La app envía la solicitud autenticada al backend de RutaWater alojado en Netlify. El backend la remite primero a la API comercial de OpenAI y, si ese servicio no está configurado o falla, puede utilizar la API comercial de Anthropic como respaldo.</p>
+    <p>La finalidad exclusiva es convertir el texto en una acción estructurada para la app. RutaWater no guarda el texto como historial de conversación en su base de datos. Las solicitudes de OpenAI se realizan con <code>store: false</code>; aun así, OpenAI puede conservar registros temporales de seguridad y prevención de abuso conforme a sus <a href="https://platform.openai.com/docs/models/default-usage-policies-by-endpoint" target="_blank" rel="noopener noreferrer">controles de datos</a>. Anthropic indica que las entradas y salidas de su API comercial se eliminan normalmente dentro de 30 días, con excepciones por seguridad, cumplimiento legal o acuerdos distintos, según su <a href="https://privacy.anthropic.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data" target="_blank" rel="noopener noreferrer">política de retención</a>.</p>
+    <p>Según las políticas vigentes de las APIs comerciales, OpenAI y Anthropic no usan estas entradas y salidas para entrenar sus modelos por defecto, salvo que el titular de la cuenta del servicio opte expresamente por compartirlas. Coralux Studio no activa voluntariamente ese uso. Para reducir la exposición de terceros, evita incluir información que no sea necesaria para interpretar el pedido.</p>
 
-    <h2>4. Compartir informacion</h2>
-    <p>No vendemos, alquilamos ni compartimos tu informacion personal con terceros, excepto:</p>
+    <h2>5. Con quién compartimos información</h2>
+    <p>No vendemos ni alquilamos información personal. Utilizamos o comunicamos datos únicamente en estos casos:</p>
     <ul>
-      <li><strong>Grupos de trabajo:</strong> Si te unes a un grupo de trabajo, los miembros del grupo pueden ver los clientes compartidos.</li>
-      <li><strong>Proveedores de servicios:</strong> Utilizamos Firebase (Google) para almacenamiento y RevenueCat para gestion de suscripciones.</li>
+      <li><strong>Google Firebase:</strong> autenticación, base de datos Firestore, sincronización y Crashlytics para diagnóstico de fallos. Consulta la <a href="https://firebase.google.com/support/privacy/" target="_blank" rel="noopener noreferrer">información de privacidad de Firebase</a>.</li>
+      <li><strong>RevenueCat, Apple y Google Play:</strong> validación, historial y estado de compras y suscripciones. El UID de Firebase se utiliza como identificador de usuario de RevenueCat para mantener el beneficio Premium asociado a la cuenta. Consulta la <a href="https://www.revenuecat.com/privacy-policy" target="_blank" rel="noopener noreferrer">política de RevenueCat</a>.</li>
+      <li><strong>Netlify, OpenAI y Anthropic:</strong> infraestructura del backend e interpretación opcional de Pedido IA, en las condiciones descritas en la sección anterior.</li>
+      <li><strong>Miembros de un reparto compartido:</strong> las personas que forman parte del mismo reparto pueden acceder a su información operativa, incluidos clientes, pedidos, deudas, transferencias y ajustes compartidos.</li>
+      <li><strong>Aplicaciones que eliges abrir:</strong> al tocar WhatsApp, teléfono o Google Maps, la app transmite a ese servicio el número, mensaje, enlace o destino necesario. Ese tratamiento queda sujeto a la política del servicio externo.</li>
+      <li><strong>Obligaciones legales y seguridad:</strong> cuando sea razonablemente necesario para cumplir una obligación legal, proteger derechos o investigar fraude o abuso.</li>
     </ul>
 
-    <h2>5. Seguridad</h2>
-    <p>Implementamos medidas de seguridad para proteger tu informacion, incluyendo autenticacion segura, conexiones cifradas (HTTPS) y reglas de seguridad en la base de datos.</p>
+    <h2>6. Conservación, almacenamiento y seguridad</h2>
+    <p>La información de cuenta y del reparto se conserva en Firebase mientras mantengas la cuenta o hasta que la elimines desde la app, salvo contenido compartido, registros mínimos de seguridad y datos que deban conservar los proveedores por obligaciones legales, contables o antifraude. Los diagnósticos, datos de compras y solicitudes de IA se conservan según los plazos de Firebase, Apple, Google, RevenueCat, OpenAI, Anthropic y Netlify.</p>
+    <p>Los proveedores pueden procesar información en Estados Unidos y otros países donde operen. Aplicamos autenticación, conexiones cifradas, reglas de acceso en Firestore, separación por cuenta o reparto y validaciones del servidor. Ningún sistema es completamente infalible, por lo que también debes proteger el acceso a tu cuenta y dispositivo.</p>
 
-    <h2>6. Tus derechos</h2>
-    <p>Tienes derecho a:</p>
+    <h2>7. Repartos compartidos</h2>
+    <p>Antes de incorporar información de clientes u otras personas, asegúrate de tener autorización para usarla con fines de gestión del reparto. Si compartes un reparto, sus miembros autorizados podrán ver y modificar los datos comunes. Al abandonar un reparto o eliminar tu cuenta, el contenido compartido puede permanecer disponible para los demás miembros porque forma parte de su operación común.</p>
+
+    <h2>8. Tus opciones y derechos</h2>
     <ul>
-      <li>Acceder a tus datos personales.</li>
-      <li>Solicitar la eliminacion de tu cuenta y datos.</li>
-      <li>Exportar tus datos en formato CSV o JSON.</li>
-      <li>Cancelar tu suscripcion en cualquier momento.</li>
+      <li>Consultar y corregir la mayoría de los datos desde la propia app.</li>
+      <li>Exportar información del reparto en CSV o crear un respaldo JSON.</li>
+      <li>Eliminar clientes, contenido y tu cuenta desde Ajustes.</li>
+      <li>Cancelar o administrar la suscripción desde los ajustes de la tienda correspondiente.</li>
+      <li>Solicitar acceso, corrección o eliminación adicional escribiendo al correo de contacto. Podemos pedirte que verifiques la titularidad de la cuenta.</li>
     </ul>
 
-    <h2>7. Eliminacion de datos</h2>
-    <p>Puedes solicitar la eliminacion de tu cuenta y todos los datos asociados enviando un correo a <a href="mailto:jonaolivera23@gmail.com">jonaolivera23@gmail.com</a>. Procesaremos tu solicitud en un plazo de 30 dias.</p>
+    <h2>9. Eliminación de la cuenta</h2>
+    <p>Puedes iniciar la eliminación desde <strong>Ajustes &gt; Eliminar cuenta</strong>. Se eliminan la cuenta de autenticación, los datos privados y los repartos que solo te pertenecen. Si un reparto tiene otros miembros, se conserva para ellos y puede transferirse su administración; se elimina de tu perfil la información personal de cuenta. RutaWater puede mantener un marcador técnico sin nombre ni correo que indique que la cuenta fue eliminada, necesario para impedir que una credencial en caché vuelva a acceder.</p>
+    <p>La información de compra administrada por Apple, Google o RevenueCat puede conservarse conforme a obligaciones legales, contables, antifraude o a las políticas de esos proveedores. Para una solicitud adicional relacionada con esos registros, utiliza el correo de contacto indicado arriba.</p>
 
-    <h2>8. Menores de edad</h2>
-    <p>RutaWater no esta dirigida a menores de 13 anos. No recopilamos intencionalmente informacion de menores de edad.</p>
+    <h2>10. Menores de edad</h2>
+    <p>RutaWater no está dirigida a menores de 13 años y no busca recopilar intencionalmente información personal de menores.</p>
 
-    <h2>9. Cambios en esta politica</h2>
-    <p>Podemos actualizar esta politica de privacidad periodicamente. Te notificaremos sobre cambios significativos a traves de la aplicacion.</p>
+    <h2>11. Cambios en esta política</h2>
+    <p>Podemos actualizar esta política cuando cambien las funciones, los proveedores o los requisitos aplicables. Publicaremos la nueva fecha en esta página y, cuando el cambio sea significativo, podremos comunicarlo dentro de la app.</p>
 
-    <h2>10. Contacto</h2>
-    <p>Si tienes preguntas sobre esta politica de privacidad, contactanos en: <a href="mailto:jonaolivera23@gmail.com">jonaolivera23@gmail.com</a></p>
+    <h2>12. Contacto</h2>
+    <p>Para cualquier pregunta o solicitud sobre privacidad, escribe a <a href="mailto:jonaolivera23@gmail.com">jonaolivera23@gmail.com</a>.</p>
 
     <div class="footer">
       <p>&copy; 2026 Coralux Studio. Todos los derechos reservados.</p>

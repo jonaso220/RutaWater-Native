@@ -25,6 +25,7 @@ import { getClientAddresses, getClientAddressSearchText, locationFields } from '
 import { useClientsStore } from '../stores/clientsStore';
 import { toExistingClientUpdate } from '../utils/clientWriteData';
 import { dataScopeFields, dataScopeQuery } from '../utils/dataScope';
+import { getRelatedClientReference } from '../utils/clientIdentity';
 
 interface UseClientsProps {
   userId: string;
@@ -1363,7 +1364,10 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
           const keeper = keeperId ? byId.get(keeperId) : undefined;
           if (!keeper) return;
           addMigration(docSnap.ref, {
-            clientId: keeper.id,
+            // Keep the exact id for old builds and add the stable identity for
+            // current builds. This cleanup only runs after explicit user
+            // confirmation; no background/live backfill is introduced.
+            ...getRelatedClientReference(keeper),
             clientName: keeper.name || (docSnap.data() as any).clientName || '',
           });
         });

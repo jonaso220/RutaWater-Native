@@ -8,6 +8,10 @@ import { useProductCatalogStore } from '../stores/productCatalogStore';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
 import { parseDate } from '../utils/helpers';
 import { exportFile } from '../utils/exportFile';
+import {
+  buildClientIdentityIndex,
+  getRelatedRecordStableClientId,
+} from '../utils/clientIdentity';
 
 interface ExportUser {
   uid: string;
@@ -33,7 +37,7 @@ export const useDataExport = (user: ExportUser) => {
   const debts = useDebtsStore((s) => s.debts);
   const transfers = useTransfersStore((s) => s.transfers);
   // Mismo criterio que el badge de la UI: la deuda se deriva en vivo de la
-  // colección (agregando duplicados por nombre+teléfono), no del flag
+  // colección (por customerId estable con fallback clientId legacy), no del flag
   // persistido c.hasDebt, que puede quedar desincronizado (p. ej. deuda
   // creada desde la webapp o instancia duplicada creada después de la deuda).
   const getClientDebtTotal = useDebtsStore((s) => s.getClientDebtTotal);
@@ -103,8 +107,9 @@ export const useDataExport = (user: ExportUser) => {
         return;
       }
 
+      const identityIndex = buildClientIdentityIndex(clients);
       const backup = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         exportDate: new Date().toISOString().split('T')[0],
         exportedBy: user.email || user.uid,
         profileName: user.profileName || '',
@@ -135,12 +140,14 @@ export const useDataExport = (user: ExportUser) => {
         })),
         debts: debts.map((d) => ({
           id: d.id, clientId: d.clientId, clientName: d.clientName || '',
-          clientAddress: (d as any).clientAddress || '', amount: d.amount || 0,
+          customerId: getRelatedRecordStableClientId(d, identityIndex),
+          clientAddress: d.clientAddress || '', amount: d.amount || 0,
           createdAt: parseDate(d.createdAt)?.toISOString() || '',
         })),
         transfers: transfers.map((t) => ({
           id: t.id, clientId: t.clientId, clientName: t.clientName || '',
-          clientAddress: (t as any).clientAddress || '',
+          customerId: getRelatedRecordStableClientId(t, identityIndex),
+          clientAddress: t.clientAddress || '',
           clientLat: t.clientLat || '', clientLng: t.clientLng || '',
           clientMapsLink: t.clientMapsLink || '',
           createdAt: parseDate(t.createdAt)?.toISOString() || '',

@@ -3,6 +3,8 @@ import {
   nextOccurrence,
   nextOccurrenceForDay,
   occurrenceForSpecificDate,
+  isValidCalendarDate,
+  isValidScheduleDate,
 } from '../scheduling';
 
 // Wednesday 2026-03-04 10:00:00 local time. Used as the synthetic "now" so
@@ -42,6 +44,44 @@ describe('parseTime', () => {
     expect(parseTime('25:30')).toBeNull();
     expect(parseTime('10:60')).toBeNull();
     expect(parseTime('10:99')).toBeNull();
+  });
+});
+
+describe('isValidCalendarDate', () => {
+  test('accepts real calendar dates, including a leap day', () => {
+    expect(isValidCalendarDate('2024-02-29')).toBe(true);
+    expect(isValidCalendarDate('2026-02-28')).toBe(true);
+    expect(isValidCalendarDate('2026-04-30')).toBe(true);
+  });
+
+  test('rejects impossible dates instead of allowing JavaScript rollover', () => {
+    expect(isValidCalendarDate('2026-02-29')).toBe(false);
+    expect(isValidCalendarDate('2026-02-30')).toBe(false);
+    expect(isValidCalendarDate('2026-02-31')).toBe(false);
+    expect(isValidCalendarDate('2026-04-31')).toBe(false);
+  });
+
+  test('rejects invalid ranges and non-ISO formats', () => {
+    expect(isValidCalendarDate('2026-00-10')).toBe(false);
+    expect(isValidCalendarDate('2026-13-10')).toBe(false);
+    expect(isValidCalendarDate('2026-01-00')).toBe(false);
+    expect(isValidCalendarDate('2026-2-01')).toBe(false);
+    expect(isValidCalendarDate('2026/02/01')).toBe(false);
+  });
+});
+
+describe('isValidScheduleDate', () => {
+  test('requires a real date for one-time visits', () => {
+    expect(isValidScheduleDate('once', '')).toBe(false);
+    expect(isValidScheduleDate('once', '2026-02-31')).toBe(false);
+    expect(isValidScheduleDate('once', '2026-02-28')).toBe(true);
+  });
+
+  test('allows periodic schedules without a date but validates one when supplied', () => {
+    expect(isValidScheduleDate('weekly', '')).toBe(true);
+    expect(isValidScheduleDate('on_demand', '')).toBe(true);
+    expect(isValidScheduleDate('weekly', '2026-04-31')).toBe(false);
+    expect(isValidScheduleDate('weekly', '2026-04-30')).toBe(true);
   });
 });
 

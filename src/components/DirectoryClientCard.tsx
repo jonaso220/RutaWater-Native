@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 
 const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
+const ACTION_HIT_SLOP = { top: 3, bottom: 3, left: 3, right: 3 };
 
 interface Props {
   client: Client;
@@ -146,6 +147,7 @@ const DirectoryClientCard = ({
   const initial = (item.name || '?').charAt(0).toUpperCase();
   const freqStyle = getFreqStyle(item.freq, colors);
   const recencyBadge = showRecency ? getRecencyBadge(item) : null;
+  const scheduleAction = isOnDemand ? t('directory.schedule') : t('directory.addVisit');
 
   return (
     <View style={[styles.card, debtTotal > 0 && styles.cardDebt]}>
@@ -172,6 +174,8 @@ const DirectoryClientCard = ({
                   activeOpacity={0.6}
                   style={styles.addressLinkBox}
                   hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                  accessibilityRole="link"
+                  accessibilityLabel={`${t('clientCard.openMaps')}: ${item.name}. ${item.address}`}
                 >
                   <Ionicons name="location-sharp" size={14} color={colors.primary} />
                   <Text style={styles.addressLinkText} numberOfLines={1}>{item.address}</Text>
@@ -187,6 +191,8 @@ const DirectoryClientCard = ({
                 activeOpacity={0.6}
                 style={styles.addressLinkBox}
                 hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                accessibilityRole="link"
+                accessibilityLabel={`${t('clientCard.openMaps')}: ${item.name}`}
               >
                 <Ionicons name="location-sharp" size={14} color={colors.primary} />
                 <Text style={styles.addressLinkText} numberOfLines={1}>{t('directory.viewLocation')}</Text>
@@ -221,12 +227,20 @@ const DirectoryClientCard = ({
             </Text>
           )}
           {debtTotal > 0 && (
-            <TouchableOpacity onPress={() => onDebt(item)}>
+            <TouchableOpacity
+              onPress={() => onDebt(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`${t('clientCard.manageDebt')}: ${item.name}. ${formatMoney(debtTotal)}`}
+            >
               <Text style={styles.debtBadge}><Ionicons name="cash" size={12} /> {formatMoney(debtTotal)}</Text>
             </TouchableOpacity>
           )}
           {hasRelationships && (
-            <TouchableOpacity onPress={() => onRelationship(item)}>
+            <TouchableOpacity
+              onPress={() => onRelationship(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`${t('clientCard.manageFamily')}: ${item.name}. ${t('relationships.badge')}: ${relationshipCount}`}
+            >
               <Text style={styles.familyBadge}><Ionicons name="people" size={12} /> {t('relationships.badge')} · {relationshipCount}</Text>
             </TouchableOpacity>
           )}
@@ -237,23 +251,53 @@ const DirectoryClientCard = ({
         <View style={[styles.actionsRow, wideLayout && styles.actionsRowWide]}>
           <View style={[styles.actionButtonsGroup, wideLayout && styles.actionButtonsGroupWide]}>
             {item.phone ? (
-              <TouchableOpacity onPress={() => callClient(item)} style={styles.actionBtn}>
+              <TouchableOpacity
+                onPress={() => callClient(item)}
+                style={styles.actionBtn}
+                hitSlop={ACTION_HIT_SLOP}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('clientCard.call')}: ${item.name}`}
+              >
                 <Text style={styles.actionBtnEmoji}>📞</Text>
               </TouchableOpacity>
             ) : null}
             {item.phone ? (
-              <TouchableOpacity onPress={() => sendWhatsApp(item)} style={styles.actionBtn}>
+              <TouchableOpacity
+                onPress={() => sendWhatsApp(item)}
+                style={styles.actionBtn}
+                hitSlop={ACTION_HIT_SLOP}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('clientCard.whatsapp')}: ${item.name}`}
+              >
                 <Text style={styles.actionBtnEmoji}>💬</Text>
               </TouchableOpacity>
             ) : null}
-            <TouchableOpacity onPress={() => onDebt(item)} style={styles.actionBtn}>
+            <TouchableOpacity
+              onPress={() => onDebt(item)}
+              style={styles.actionBtn}
+              hitSlop={ACTION_HIT_SLOP}
+              accessibilityRole="button"
+              accessibilityLabel={`${t(debtTotal > 0 ? 'clientCard.manageDebt' : 'clientCard.addDebt')}: ${item.name}`}
+            >
               <Text style={styles.actionBtnEmoji}>{debtTotal > 0 ? '💰' : '💵'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => onRelationship(item)} style={styles.actionBtn}>
+            <TouchableOpacity
+              onPress={() => onRelationship(item)}
+              style={styles.actionBtn}
+              hitSlop={ACTION_HIT_SLOP}
+              accessibilityRole="button"
+              accessibilityLabel={`${t('clientCard.manageFamily')}: ${item.name}`}
+            >
               <Text style={styles.actionBtnEmoji}>{hasRelationships ? '👨‍👩‍👧' : '👥'}</Text>
             </TouchableOpacity>
             {isAdmin && (
-              <TouchableOpacity onPress={() => onEdit(item)} style={styles.actionBtn}>
+              <TouchableOpacity
+                onPress={() => onEdit(item)}
+                style={styles.actionBtn}
+                hitSlop={ACTION_HIT_SLOP}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('clientCard.editClient')}: ${item.name}`}
+              >
                 <Text style={styles.actionBtnEmoji}>✏️</Text>
               </TouchableOpacity>
             )}
@@ -262,9 +306,11 @@ const DirectoryClientCard = ({
             style={[styles.scheduleButton, wideLayout && styles.scheduleButtonWide]}
             onPress={() => onSchedule(item)}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`${scheduleAction}: ${item.name}`}
           >
             <Text style={styles.scheduleButtonText}>
-              {isOnDemand ? t('directory.schedule') : t('directory.addVisit')}
+              {scheduleAction}
             </Text>
           </TouchableOpacity>
         </View>
@@ -373,6 +419,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     paddingVertical: s(6),
     paddingHorizontal: s(10),
     marginTop: s(4),
+    minHeight: 44,
     alignSelf: 'flex-start',
     maxWidth: '100%',
   },
@@ -496,9 +543,11 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   },
   scheduleButton: {
     backgroundColor: colors.primaryLight,
+    minHeight: s(44),
     paddingHorizontal: s(14),
     paddingVertical: s(8),
     borderRadius: s(8),
+    justifyContent: 'center',
   },
   scheduleButtonWide: {
     width: '100%',

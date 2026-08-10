@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  AccessibilityInfo,
   useWindowDimensions,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -28,6 +29,7 @@ import { useLayout } from '../hooks/useLayout';
 import { useAiParse, ParseResult, NotesMode } from '../hooks/useAiParse';
 import { useAiUsageStore } from '../stores/aiUsageStore';
 import { useClientsStore } from '../stores/clientsStore';
+import { isValidCalendarDate, isValidScheduleDate } from '../utils/scheduling';
 
 interface SmartOrderModalProps {
   visible: boolean;
@@ -63,13 +65,6 @@ const inferNotesModeFromUserText = (userText: string): NotesMode | null => {
   if (/\banot[áa]\b/i.test(t)) return 'append';
   return null;
 };
-
-// Validación de lo que devuelve la IA antes de escribir en Firestore: una
-// fecha malformada producía dayNames[NaN] = undefined (write rechazado en
-// silencio) y un día fuera del enum creaba un cliente invisible en todas las
-// listas de día.
-const isValidDateStr = (s: string): boolean =>
-  /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(new Date(s + 'T12:00:00').getTime());
 
 const DAY_CANON = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 // "miércoles"/"MARTES"/"sabado" → nombre canónico; '' si no es un día real.
@@ -110,6 +105,17 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   const addNote = useClientsStore((s) => s.addNote);
   const clients = useClientsStore((s) => s.clients);
   const canAddClient = useClientsStore((s) => s.canAddClient);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (limitReached) {
+      AccessibilityInfo.announceForAccessibility(t('smartOrder.limitTitle'));
+    } else if (error) {
+      AccessibilityInfo.announceForAccessibility(`${t('smartOrder.parseErrorTitle')}. ${error}`);
+    } else if (result) {
+      AccessibilityInfo.announceForAccessibility(t('smartOrder.previewReady'));
+    }
+  }, [error, limitReached, result, t, visible]);
 
   // Calcula el valor final de la nota a guardar.
   // Orden de prioridad para determinar el mode:
@@ -180,8 +186,11 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        if (i.specificDate && !isValidDateStr(i.specificDate)) {
-          Alert.alert(t('error'), t('smartOrder.invalidDate', { date: i.specificDate }));
+        if (!isValidScheduleDate(i.freq, i.specificDate || '')) {
+          Alert.alert(
+            t('error'),
+            t(i.specificDate ? 'smartOrder.invalidDate' : 'smartOrder.missingDate', { date: i.specificDate }),
+          );
           setSaving(false);
           return;
         }
@@ -315,17 +324,12 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         // toda la agenda (sin visitDay y sin specificDate), bloqueamos. No hay tool de
         // delete por IA — debe hacerse manualmente desde la UI para evitar accidentes.
         const isCancellation = i.freq === 'on_demand'
-          || (!i.visitDay && !i.specificDate && i.freq !== 'keep');
+          || (!i.visitDay && !i.specificDate && i.freq !== 'keep' && i.freq !== 'once');
         if (isCancellation) {
           Alert.alert(
             t('smartOrder.cannotCancelTitle'),
             t('smartOrder.cannotCancelMsg'),
           );
-          setSaving(false);
-          return;
-        }
-        if (i.specificDate && !isValidDateStr(i.specificDate)) {
-          Alert.alert(t('error'), t('smartOrder.invalidDate', { date: i.specificDate }));
           setSaving(false);
           return;
         }
@@ -348,6 +352,14 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
             setSaving(false);
             return;
           }
+        }
+        if (!isValidScheduleDate(freq, i.specificDate || '')) {
+          Alert.alert(
+            t('error'),
+            t(i.specificDate ? 'smartOrder.invalidDate' : 'smartOrder.missingDate', { date: i.specificDate }),
+          );
+          setSaving(false);
+          return;
         }
         let days = schedVisitDay ? [schedVisitDay] : (client.visitDays && client.visitDays.length ? client.visitDays : (client.visitDay ? [client.visitDay] : []));
         // Pedido periódico con fecha ("semanal a partir del sábado 11") sin día
@@ -424,7 +436,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        if (!isValidDateStr(i.specificDate)) {
+        if (!isValidCalendarDate(i.specificDate)) {
           Alert.alert(t('error'), t('smartOrder.invalidDateNote', { date: i.specificDate }));
           setSaving(false);
           return;
@@ -463,7 +475,13 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
               <Ionicons name="sparkles" size={20} color={colors.primary} />
               <Text style={styles.headerTitle}>{t('smartOrder.title')}</Text>
             </View>
-            <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+            <TouchableOpacity
+              onPress={handleClose}
+              style={styles.closeBtn}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel={t('close')}
+            >
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
           </View>
@@ -497,6 +515,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
                 multiline
                 textAlignVertical="top"
                 autoCapitalize="sentences"
+                accessibilityLabel={t('smartOrder.orderSection')}
               />
             </View>
 
@@ -507,6 +526,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
               disabled={parsing || !text.trim()}
               accessibilityRole="button"
               accessibilityLabel={t('smartOrder.interpretBtn')}
+              accessibilityState={{ disabled: parsing || !text.trim(), busy: parsing }}
             >
               {parsing ? (
                 <ActivityIndicator color={colors.textWhite} />
@@ -520,7 +540,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
 
             {/* Limit reached */}
             {limitReached && (
-              <View style={styles.errorBox}>
+              <View style={styles.errorBox} accessibilityRole="alert">
                 <Text style={styles.errorTitle}>{t('smartOrder.limitTitle')}</Text>
                 <Text style={styles.errorMsg}>
                   {t('smartOrder.limitMsg', { limit: usage.limit })}
@@ -530,7 +550,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
 
             {/* Generic error */}
             {error && !limitReached && (
-              <View style={styles.errorBox}>
+              <View style={styles.errorBox} accessibilityRole="alert">
                 <Text style={styles.errorTitle}>{t('smartOrder.parseErrorTitle')}</Text>
                 <Text style={styles.errorMsg}>{error}</Text>
                 <Text style={styles.errorHint}>{t('smartOrder.parseErrorHint')}</Text>
@@ -544,13 +564,23 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           {/* Footer with confirm/cancel */}
           {result && result.tool !== 'report_not_found' && result.tool !== 'report_no_action' && (
             <View style={styles.footer}>
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => setResult(null)} disabled={saving}>
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() => setResult(null)}
+                disabled={saving}
+                accessibilityRole="button"
+                accessibilityLabel={t('back')}
+                accessibilityState={{ disabled: saving }}
+              >
                 <Text style={styles.secondaryBtnText}>{t('back')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.confirmBtn, saving && styles.primaryBtnDisabled]}
                 onPress={handleConfirm}
                 disabled={saving}
+                accessibilityRole="button"
+                accessibilityLabel={t('smartOrder.confirmBtn')}
+                accessibilityState={{ disabled: saving, busy: saving }}
               >
                 {saving ? (
                   <ActivityIndicator color={colors.textWhite} />
@@ -566,7 +596,12 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
 
           {result && (result.tool === 'report_not_found' || result.tool === 'report_no_action') && (
             <View style={styles.footer}>
-              <TouchableOpacity style={[styles.confirmBtn, { flex: 1 }]} onPress={handleClose}>
+              <TouchableOpacity
+                style={[styles.confirmBtn, { flex: 1 }]}
+                onPress={handleClose}
+                accessibilityRole="button"
+                accessibilityLabel={t('smartOrder.understoodBtn')}
+              >
                 <Text style={styles.confirmBtnText}>{t('smartOrder.understoodBtn')}</Text>
               </TouchableOpacity>
             </View>

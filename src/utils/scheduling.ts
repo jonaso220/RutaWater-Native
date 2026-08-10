@@ -1,8 +1,46 @@
-// Pure date/time helpers used by notifications scheduling. Kept here (no
-// imports of notifee or react-native) so they can be unit-tested without
-// mocking native modules.
+// Pure date/time helpers shared by notifications and order scheduling. Kept
+// here (no imports of notifee or react-native) so they can be unit-tested
+// without mocking native modules.
 
 const SPANISH_DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+interface CalendarDateParts {
+  year: number;
+  month: number;
+  day: number;
+}
+
+const parseCalendarDateParts = (value: string): CalendarDateParts | null => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+
+  const year = Number.parseInt(match[1], 10);
+  const month = Number.parseInt(match[2], 10) - 1;
+  const day = Number.parseInt(match[3], 10);
+  const date = new Date(year, month, day, 12, 0, 0, 0);
+
+  // JavaScript normalizes impossible dates (for example, 2026-02-31) into a
+  // different month. Exact component comparison rejects that rollover.
+  if (
+    Number.isNaN(date.getTime())
+    || date.getFullYear() !== year
+    || date.getMonth() !== month
+    || date.getDate() !== day
+  ) return null;
+
+  return { year, month, day };
+};
+
+export const isValidCalendarDate = (value: string): boolean =>
+  parseCalendarDateParts(value) !== null;
+
+// A one-time visit is not actionable without its date. Periodic and on-demand
+// schedules may omit it, but whenever the parser supplies a date it must be a
+// real ISO calendar day.
+export const isValidScheduleDate = (
+  frequency: string | undefined,
+  value: string,
+): boolean => value ? isValidCalendarDate(value) : frequency !== 'once';
 
 export const parseTime = (
   time: string,
@@ -48,15 +86,12 @@ export const occurrenceForSpecificDate = (
   hours: number,
   minutes: number,
 ): Date | null => {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(specificDate);
-  if (!match) return null;
-  const year = parseInt(match[1], 10);
-  const month = parseInt(match[2], 10) - 1;
-  const day = parseInt(match[3], 10);
+  const parts = parseCalendarDateParts(specificDate);
+  if (!parts) return null;
+  const { year, month, day } = parts;
   const target = new Date(year, month, day, hours, minutes, 0, 0);
   if (Number.isNaN(target.getTime())) return null;
-  // JavaScript normalizes impossible dates (e.g. 2026-02-31) into March.
-  // Reject that rollover so callers never schedule a different calendar day.
+  // Keep guarding the final timestamp as hours/minutes are supplied separately.
   if (
     target.getFullYear() !== year
     || target.getMonth() !== month

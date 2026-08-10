@@ -285,6 +285,7 @@ const DirectoryScreen = () => {
               value={searchInput}
               onChangeText={setSearchInput}
               autoCorrect={false}
+              accessibilityLabel={t('directory.searchPlaceholder')}
             />
             {searchInput.length > 0 && (
               <TouchableOpacity
@@ -293,6 +294,9 @@ const DirectoryScreen = () => {
                   setSearch('');
                 }}
                 style={{ position: 'absolute', right: 4, padding: 10 }}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                accessibilityRole="button"
+                accessibilityLabel={t('directory.clearSearch')}
               >
                 <Ionicons name="close" size={16} color={colors.textHint} />
               </TouchableOpacity>
@@ -300,6 +304,8 @@ const DirectoryScreen = () => {
           </View>
           <TouchableOpacity
             style={styles.importBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('home.newClient')}
             onPress={() => {
               if (!canAddClient) {
                 Alert.alert(
@@ -327,6 +333,7 @@ const DirectoryScreen = () => {
         >
           {FILTERS.filter((f) => f.key === 'all' || (counts[f.key] || 0) > 0).map((f) => {
             const isActive = activeFilter === f.key;
+            const filterCount = f.key === 'all' ? counts.total || 0 : counts[f.key] || 0;
             const isWarning = f.key === 'no_location';
             const isDanger = f.key === 'with_debt';
             const isRecurrencia = f.key === 'recurrencia';
@@ -341,6 +348,9 @@ const DirectoryScreen = () => {
                   isActive && isRecurrencia && styles.filterChipRecurrencia,
                 ]}
                 onPress={() => setActiveFilter(activeFilter === f.key ? 'all' : f.key)}
+                accessibilityRole="button"
+                accessibilityLabel={`${f.label}: ${filterCount}`}
+                accessibilityState={{ selected: isActive }}
               >
                 <Text
                   style={[
@@ -504,7 +514,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     alignItems: 'center',
     gap: s(6),
     paddingHorizontal: s(12),
-    height: isWide ? s(38) : s(34),
+    minHeight: s(44),
+    paddingVertical: s(7),
     borderRadius: isWide ? s(19) : s(17),
     backgroundColor: colors.sectionBackground,
   },
@@ -578,6 +589,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
   },
   importBtn: {
     backgroundColor: colors.primary,
+    minWidth: s(44),
+    minHeight: s(44),
     paddingHorizontal: s(12),
     paddingVertical: s(10),
     borderRadius: s(10),

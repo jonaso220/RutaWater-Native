@@ -4,10 +4,15 @@ export interface ProductQuantitiesSource {
   products?: Record<string, string | number> | null;
 }
 
+const positiveQuantity = (value: string | number | undefined): number => {
+  const quantity = Number.parseInt(String(value || 0), 10);
+  return quantity > 0 ? quantity : 0;
+};
+
 /**
- * Totals every catalog product that still exists in scheduled client data.
- * Callers must pass the complete catalog, including hidden products: hiding a
- * product prevents new selection but must never make an existing load vanish.
+ * Totals every product that exists in scheduled client data. Catalog entries
+ * establish the normal display order, while IDs no longer present in the
+ * catalog are still retained so deleting a descriptor cannot hide a load.
  */
 export const calculateProductTotals = (
   clients: readonly ProductQuantitiesSource[],
@@ -19,12 +24,19 @@ export const calculateProductTotals = (
   });
 
   clients.forEach((client) => {
-    if (!client.products) return;
-    products.forEach((product) => {
-      const quantity = Number.parseInt(String(client.products?.[product.id] || 0), 10);
-      if (quantity > 0) totals[product.id] += quantity;
+    Object.entries(client.products || {}).forEach(([productId, value]) => {
+      const quantity = positiveQuantity(value);
+      if (quantity > 0) totals[productId] = (totals[productId] || 0) + quantity;
     });
   });
 
   return totals;
 };
+
+export const countProductReferences = (
+  clients: readonly ProductQuantitiesSource[],
+  productId: string,
+): number => clients.reduce(
+  (count, client) => count + (positiveQuantity(client.products?.[productId]) > 0 ? 1 : 0),
+  0,
+);

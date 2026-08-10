@@ -1,4 +1,4 @@
-import { calculateProductTotals } from '../productCounter';
+import { calculateProductTotals, countProductReferences } from '../productCounter';
 
 const products = [
   { id: 'b20' },
@@ -17,7 +17,7 @@ describe('calculateProductTotals', () => {
       b12: 8,
       soda: 0,
     });
-    expect(calculateProductTotals(clients, visibleProducts)).not.toHaveProperty('b12');
+    expect(calculateProductTotals(clients, visibleProducts)).toMatchObject({ b12: 8 });
   });
 
   test('keeps the load visible when every scheduled quantity belongs to a hidden product', () => {
@@ -40,5 +40,21 @@ describe('calculateProductTotals', () => {
       b12: 0,
       soda: 12,
     });
+  });
+
+  test('keeps quantities whose product descriptor was deleted from the catalog', () => {
+    expect(calculateProductTotals([
+      { products: { custom_deleted: 3 } },
+      { products: { custom_deleted: '2' } },
+    ], products)).toMatchObject({ custom_deleted: 5 });
+  });
+
+  test('counts only clients with a positive reference before deleting a product', () => {
+    expect(countProductReferences([
+      { products: { custom_ice: 2 } },
+      { products: { custom_ice: '1' } },
+      { products: { custom_ice: 0 } },
+      { products: { custom_ice: 'invalid' } },
+    ], 'custom_ice')).toBe(2);
   });
 });

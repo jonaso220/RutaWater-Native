@@ -191,6 +191,7 @@ export default {
   // Directory Screen
   directory: {
     searchPlaceholder: 'Search by name, address or phone...',
+    clearSearch: 'Clear search',
     clientCount_one: '{{count}} client',
     clientCount_other: '{{count}} clients',
     ofTotal: 'of {{total}}',
@@ -358,6 +359,11 @@ export default {
     hiddenTag: 'Hidden',
     deleteProductTitle: 'Delete product?',
     deleteProductMsg: '"{{name}}" will be removed from the catalog. Saved orders are not changed.',
+    productInUseTitle: 'Product in use',
+    productInUseMsg_one: '"{{name}}" is still assigned to 1 order. It cannot be deleted because its name would be lost. Hide it to prevent new orders; it will remain visible in the existing load.',
+    productInUseMsg_other: '"{{name}}" is still assigned to {{count}} orders. It cannot be deleted because its name would be lost. Hide it to prevent new orders; it will remain visible in existing loads.',
+    productUsageLoadingTitle: 'Clients loading',
+    productUsageLoadingMsg: 'Wait for clients to finish loading before deleting a product.',
     productEmojiHint: 'Tap to pick an emoji',
     chooseEmoji: 'Choose emoji',
     typeEmoji: 'Or type any emoji',
@@ -586,6 +592,7 @@ export default {
     orderSection: 'Order',
     placeholder: 'Enter an order or add a new client. Include their name, address, phone number, and products; AI will organize the details and add them to your directory.',
     interpretBtn: 'Interpret with AI',
+    previewReady: 'Interpretation ready to review',
     limitTitle: 'You reached this month\'s limit',
     limitMsg: 'You already used your {{limit}} AI parses. You can keep adding orders manually; it resets on the 1st of next month.',
     parseErrorTitle: 'Error interpreting',
@@ -597,6 +604,7 @@ export default {
     clientLimitTitle: 'Limit reached',
     clientLimitMsg: 'You reached the client limit of the free plan. Upgrade to Premium to create more.',
     invalidDate: 'The AI returned an invalid date ("{{date}}"). Rephrase the order with a clear date.',
+    missingDate: 'A one-time order needs a date. Rephrase the order with the exact day.',
     invalidDateNote: 'The AI returned an invalid date ("{{date}}"). Rephrase the note with a clear date.',
     invalidDay: 'The AI returned an invalid day ("{{day}}"). Rephrase the order with a clear day.',
     invalidMapsLink: 'A Google Maps link was detected but could not be validated. The client was not saved to avoid losing the location.',
@@ -815,6 +823,7 @@ export default {
   // Product Counter
   productCounter: {
     crate: 'cr.',
+    notInCatalog: 'Not in catalog',
   },
 
   // Relationships

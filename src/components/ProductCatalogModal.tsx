@@ -24,6 +24,8 @@ import {
 } from '../stores/productCatalogStore';
 import ProductIcon, { STICKER_PREFIX } from './ProductIcon';
 import { STICKER_IDS } from '../assets/stickers';
+import { useClientsStore } from '../stores/clientsStore';
+import { countProductReferences } from '../utils/productCounter';
 
 interface ProductCatalogModalProps {
   visible: boolean;
@@ -199,6 +201,7 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
   const addProduct = useProductCatalogStore((s) => s.addProduct);
   const removeCustomProduct = useProductCatalogStore((s) => s.removeCustomProduct);
   const moveProduct = useProductCatalogStore((s) => s.moveProduct);
+  const clientsLoading = useClientsStore((s) => s.loading);
 
   const [newEmoji, setNewEmoji] = useState('');
   const [newName, setNewName] = useState('');
@@ -288,12 +291,32 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
   };
 
   const handleDelete = (id: string, name: string) => {
+    const canDeleteLatestProduct = (): boolean => {
+      const { clients: latestClients, loading } = useClientsStore.getState();
+      if (loading) {
+        Alert.alert(t('settings.productUsageLoadingTitle'), t('settings.productUsageLoadingMsg'));
+        return false;
+      }
+      const referenceCount = countProductReferences(latestClients, id);
+      if (referenceCount <= 0) return true;
+      Alert.alert(
+        t('settings.productInUseTitle'),
+        t('settings.productInUseMsg', { name, count: referenceCount }),
+      );
+      return false;
+    };
+
+    if (!canDeleteLatestProduct()) return;
     Alert.alert(t('settings.deleteProductTitle'), t('settings.deleteProductMsg', { name }), [
       { text: t('cancel'), style: 'cancel' },
       {
         text: t('delete'),
         style: 'destructive',
-        onPress: () => { void runCatalogAction(() => removeCustomProduct(id)); },
+        onPress: () => {
+          if (canDeleteLatestProduct()) {
+            void runCatalogAction(() => removeCustomProduct(id));
+          }
+        },
       },
     ]);
   };
@@ -395,7 +418,7 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                   {isCustom(p.id) && (
                     <TouchableOpacity
                       onPress={() => handleDelete(p.id, p.label)}
-                      disabled={saving}
+                      disabled={saving || clientsLoading}
                       style={styles.iconBtn}
                       accessibilityLabel={t('delete')}
                     >

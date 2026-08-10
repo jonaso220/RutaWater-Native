@@ -25,6 +25,17 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1 
     () => calculateProductTotals(clients, products),
     [clients, products],
   );
+  const displayProductIds = React.useMemo(() => {
+    const knownIds = new Set(products.map((product) => product.id));
+    return [
+      ...products.map((product) => product.id),
+      ...Object.keys(totals).filter((productId) => !knownIds.has(productId)).sort(),
+    ];
+  }, [products, totals]);
+  const productsById = React.useMemo(
+    () => new Map(products.map((product) => [product.id, product])),
+    [products],
+  );
 
   const hasAny = Object.values(totals).some((v) => v > 0);
   if (!hasAny) return null;
@@ -37,19 +48,22 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1 
         style={styles.container}
         contentContainerStyle={styles.content}
       >
-        {products.map((p) => {
-          if (totals[p.id] <= 0) return null;
-          const isSoda = p.id === 'soda';
+        {displayProductIds.map((productId) => {
+          if (totals[productId] <= 0) return null;
+          const product = productsById.get(productId);
+          const isSoda = productId === 'soda';
           // Soda is delivered by the crate (6 sifones), so the crate count is the
           // number actually loaded onto the truck — show it big, sifones in parens.
-          const bigValue = isSoda ? Math.ceil(totals[p.id] / 6) : totals[p.id];
-          const bigLabel = isSoda ? t('productCounter.crate') : p.short;
+          const bigValue = isSoda ? Math.ceil(totals[productId] / 6) : totals[productId];
+          const bigLabel = isSoda
+            ? t('productCounter.crate')
+            : product?.short || `${t('productCounter.notInCatalog')} · ${productId.slice(-4)}`;
           return (
-            <View key={p.id} style={styles.item}>
+            <View key={productId} style={styles.item}>
               <Text style={styles.qty}>{bigValue}</Text>
-              <Text style={styles.label}>{bigLabel}</Text>
+              <Text style={[styles.label, !product && styles.missingLabel]}>{bigLabel}</Text>
               {isSoda && (
-                <Text style={styles.crateLabel}>({totals[p.id]} {p.short})</Text>
+                <Text style={styles.crateLabel}>({totals[productId]} {product?.short})</Text>
               )}
             </View>
           );
@@ -100,6 +114,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontSize: s(16),
     fontWeight: '600',
     color: colors.textMuted,
+  },
+  missingLabel: {
+    color: colors.danger,
   },
   crateLabel: {
     fontSize: s(12),

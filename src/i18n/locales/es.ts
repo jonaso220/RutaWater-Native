@@ -191,6 +191,7 @@ export default {
   // Directory Screen
   directory: {
     searchPlaceholder: 'Buscar por nombre, direccion o telefono...',
+    clearSearch: 'Limpiar búsqueda',
     clientCount_one: '{{count}} cliente',
     clientCount_other: '{{count}} clientes',
     ofTotal: 'de {{total}}',
@@ -358,6 +359,11 @@ export default {
     hiddenTag: 'Oculto',
     deleteProductTitle: 'Borrar producto?',
     deleteProductMsg: 'Se quitara "{{name}}" del catalogo. Los pedidos ya guardados no se modifican.',
+    productInUseTitle: 'Producto en uso',
+    productInUseMsg_one: '"{{name}}" sigue asignado a 1 pedido. No se puede borrar porque perdería su nombre. Ocultalo para impedir nuevos pedidos; seguirá visible en la carga existente.',
+    productInUseMsg_other: '"{{name}}" sigue asignado a {{count}} pedidos. No se puede borrar porque perdería su nombre. Ocultalo para impedir nuevos pedidos; seguirá visible en las cargas existentes.',
+    productUsageLoadingTitle: 'Clientes cargando',
+    productUsageLoadingMsg: 'Esperá a que terminen de cargar los clientes antes de borrar un producto.',
     productEmojiHint: 'Toca para elegir un emoji',
     chooseEmoji: 'Elegir emoji',
     typeEmoji: 'O escribi cualquier emoji',
@@ -586,6 +592,7 @@ export default {
     orderSection: 'Pedido',
     placeholder: 'Escribí un pedido o agregá un cliente nuevo. Incluí su nombre, dirección, teléfono y productos; la IA organizará los datos y lo incorporará al directorio por vos.',
     interpretBtn: 'Interpretar con IA',
+    previewReady: 'Interpretación lista para revisar',
     limitTitle: 'Llegaste al límite del mes',
     limitMsg: 'Ya usaste tus {{limit}} parseos de IA. Podés seguir cargando pedidos a mano y vuelve a estar disponible el 1° del próximo mes.',
     parseErrorTitle: 'Error al interpretar',
@@ -597,6 +604,7 @@ export default {
     clientLimitTitle: 'Límite alcanzado',
     clientLimitMsg: 'Llegaste al límite de clientes del plan gratuito. Pasate a Premium para crear más.',
     invalidDate: 'La IA devolvió una fecha inválida ("{{date}}"). Reformulá el pedido con la fecha clara.',
+    missingDate: 'Un pedido para una sola vez necesita una fecha. Reformulá el pedido indicando el día exacto.',
     invalidDateNote: 'La IA devolvió una fecha inválida ("{{date}}"). Reformulá la nota con la fecha clara.',
     invalidDay: 'La IA devolvió un día inválido ("{{day}}"). Reformulá el pedido con el día claro.',
     invalidMapsLink: 'Se detectó un enlace de Google Maps, pero no se pudo validar. El cliente no se guardó para evitar perder la ubicación.',
@@ -815,6 +823,7 @@ export default {
   // Product Counter
   productCounter: {
     crate: 'caj.',
+    notInCatalog: 'Sin catálogo',
   },
 
   // Relationships

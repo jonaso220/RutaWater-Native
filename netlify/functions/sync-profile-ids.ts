@@ -7,7 +7,10 @@ import {
   getAdminAuth,
   getAdminFirestore,
 } from './_shared/firebaseAdmin';
-import { confirmJoinAuthUser } from './_shared/joinEndpoint';
+import {
+  confirmJoinAuthUser,
+  isInactiveAuthAccountError,
+} from './_shared/joinEndpoint';
 import { syncProfileIds } from './_shared/profileIndexService';
 
 const CORS_HEADERS = {
@@ -46,10 +49,33 @@ export const createSyncProfileIdsHandler = (dependencies: SyncProfileIdsDependen
     let authPayload: { sub: string };
     try {
       authPayload = await dependencies.verifyToken(bearerToken(request));
-      const adminAuth = dependencies.getAuth(dependencies.readEnvironment);
-      await dependencies.getAuthUser(adminAuth, authPayload.sub);
     } catch {
       return json(401, { status: 'error' });
+    }
+
+    let adminAuth: Auth;
+    try {
+      adminAuth = dependencies.getAuth(dependencies.readEnvironment);
+    } catch (error) {
+      console.error(
+        'sync-profile-ids Auth configuration error:',
+        error instanceof Error ? error.name : 'unknown',
+      );
+      return json(500, { status: 'error' });
+    }
+    try {
+      await dependencies.getAuthUser(adminAuth, authPayload.sub);
+    } catch (error) {
+      if (isInactiveAuthAccountError(error)) {
+        return json(401, { status: 'error' });
+      }
+      console.error(
+        'sync-profile-ids Auth lookup error:',
+        typeof (error as { code?: unknown })?.code === 'string'
+          ? (error as { code: string }).code
+          : error instanceof Error ? error.name : 'unknown',
+      );
+      return json(500, { status: 'error' });
     }
 
     try {

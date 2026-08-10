@@ -596,6 +596,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Per-installation rollout evidence is written only by the authenticated
+    // Admin Function. Keeping it outside users/{uid} prevents clients from
+    // self-certifying a compatible build or reading installation metadata.
+    match /appCompatibility/{document=**} {
+      allow read, write: if false;
+    }
+
     // The compatible app reads only this public rollout version. The operator
     // Function is the sole writer and publishes it atomically with the private
     // global gate after the activation sweep finishes cleanly.

@@ -1134,6 +1134,7 @@ export const cleanupDeletedAccountDocuments = async (
     db.collection('settings').doc(uid),
     db.collection('premiumOverrides').doc(uid),
     db.collection('aiUsage').doc(uid),
+    db.collection('appCompatibility').doc(uid),
     ...DAILY_LOAD_DAYS.map((day) => db.collection('daily_loads').doc(`${uid}_${day}`)),
   ];
   if (scopes.familyGroupId) {

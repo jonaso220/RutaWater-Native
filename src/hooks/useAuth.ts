@@ -9,6 +9,7 @@ import { Group } from '../types';
 import { API_ENDPOINTS } from '../config/api';
 import { logoutRevenueCatSession } from '../services/revenueCatSession';
 import { cancelScheduledAlarmsForOwner } from '../services/notifications';
+import { reportAppCompatibility } from '../services/appCompatibilityHeartbeat';
 import { planSessionRetry } from '../utils/sessionRetry';
 
 const MAX_GROUP_RECOVERY_ATTEMPTS = 5;
@@ -99,6 +100,8 @@ export const useAuth = () => {
         },
       );
       void ensureUserDocument(firebaseUser)
+        .then(() => reportAppCompatibility(firebaseUser)
+          .catch((e) => reportError(e, 'Error reporting app compatibility')))
         .catch((e) => reportError(e, 'Error ensuring user doc'));
       // Live subscription to users/{uid}: if the admin expels this user or
       // dissolves the group, the scope switches immediately. This used to be a
@@ -261,6 +264,11 @@ export const useAuth = () => {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
+      const currentUser = auth().currentUser;
+      if (currentUser) {
+        void reportAppCompatibility(currentUser)
+          .catch((e) => reportError(e, 'Error refreshing app compatibility'));
+      }
       groupRecoveryRetryCountRef.current = 0;
       if (groupRecoveryRetryTimerRef.current) {
         clearTimeout(groupRecoveryRetryTimerRef.current);

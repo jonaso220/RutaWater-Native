@@ -7,7 +7,10 @@ import {
   getAdminAuth,
   getAdminFirestore,
 } from './_shared/firebaseAdmin';
-import { confirmJoinAuthUser } from './_shared/joinEndpoint';
+import {
+  confirmJoinAuthUser,
+  isInactiveAuthAccountError,
+} from './_shared/joinEndpoint';
 import {
   createProfileForOwner,
   type CreatedProfileResult,
@@ -54,12 +57,33 @@ export const createCreateProfileHandler = (dependencies: CreateProfileDependenci
     let authPayload: { sub: string };
     try {
       authPayload = await dependencies.verifyToken(bearerToken(request));
-      await dependencies.getAuthUser(
-        dependencies.getAuth(dependencies.readEnvironment),
-        authPayload.sub,
-      );
     } catch {
       return json(401, { status: 'error' });
+    }
+
+    let adminAuth: Auth;
+    try {
+      adminAuth = dependencies.getAuth(dependencies.readEnvironment);
+    } catch (error) {
+      console.error(
+        'create-profile Auth configuration error:',
+        error instanceof Error ? error.name : 'unknown',
+      );
+      return json(500, { status: 'error' });
+    }
+    try {
+      await dependencies.getAuthUser(adminAuth, authPayload.sub);
+    } catch (error) {
+      if (isInactiveAuthAccountError(error)) {
+        return json(401, { status: 'error' });
+      }
+      console.error(
+        'create-profile Auth lookup error:',
+        typeof (error as { code?: unknown })?.code === 'string'
+          ? (error as { code: string }).code
+          : error instanceof Error ? error.name : 'unknown',
+      );
+      return json(500, { status: 'error' });
     }
 
     let body: { name?: unknown; requestId?: unknown };

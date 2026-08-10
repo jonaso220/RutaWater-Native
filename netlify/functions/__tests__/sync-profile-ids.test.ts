@@ -44,10 +44,30 @@ describe('sync-profile-ids Netlify Function', () => {
     expect(invalid.dependencies.sync).not.toHaveBeenCalled();
 
     const deleted = makeHandler({
-      getAuthUser: jest.fn(async () => { throw new Error('auth/user-not-found'); }),
+      getAuthUser: jest.fn(async () => {
+        throw Object.assign(new Error('deleted'), { code: 'auth/user-not-found' });
+      }),
     });
     expect((await deleted.handler(request('POST'))).status).toBe(401);
     expect(deleted.dependencies.sync).not.toHaveBeenCalled();
+  });
+
+  test('reports Auth infrastructure failures as server errors, not invalid users', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const unavailable = makeHandler({
+      getAuth: jest.fn(() => { throw new Error('module unavailable'); }),
+    });
+    expect((await unavailable.handler(request('POST'))).status).toBe(500);
+    expect(unavailable.dependencies.sync).not.toHaveBeenCalled();
+
+    const lookupFailure = makeHandler({
+      getAuthUser: jest.fn(async () => {
+        throw Object.assign(new Error('permission denied'), { code: 'auth/internal-error' });
+      }),
+    });
+    expect((await lookupFailure.handler(request('POST'))).status).toBe(500);
+    expect(lookupFailure.dependencies.sync).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   test('uses only the token uid and returns its minimal profile index', async () => {

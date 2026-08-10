@@ -517,6 +517,10 @@ describeWithEmulator('account cleanup service against Firestore emulator', () =>
       db.doc('settings/owner').set({ personal: true }),
       db.doc('aiUsage/owner').set({ count: 8 }),
       db.doc('premiumOverrides/owner').set({ active: true }),
+      db.doc('appCompatibility/owner').set({
+        status: 'compatible',
+        installations: { digest: { buildNumber: 55 } },
+      }),
     ]);
     const adminAuth = { getUser: jest.fn() } as unknown as Auth;
 
@@ -543,6 +547,7 @@ describeWithEmulator('account cleanup service against Firestore emulator', () =>
       'settings/owner',
       'aiUsage/owner',
       'premiumOverrides/owner',
+      'appCompatibility/owner',
     ]) {
       expect((await db.doc(path).get()).exists).toBe(false);
     }

@@ -44,6 +44,12 @@ export const API_ENDPOINTS = {
   createProfile: `${PROD_BASE_URL}/api/create-profile`,
   joinProfile: `${PROD_BASE_URL}/api/join-profile`,
   syncProfileIds: `${PROD_BASE_URL}/api/sync-profile-ids`,
+  // Server-only compatibility evidence for the guarded data-scope rollout.
+  // The endpoint stores a keyed digest of the Firebase Installation ID, never
+  // the raw identifier, and a failure must not block normal app startup.
+  // Debug/Simulator must never contaminate production adoption evidence with
+  // its local build number. Release/TestFlight/App Store builds report here.
+  reportAppVersion: __DEV__ ? null : `${PROD_BASE_URL}/api/report-app-version`,
   parseOrder: __DEV__
     ? `${API_BASE_URL}/parse-order`
     : `${API_BASE_URL}/api/parse-order`,

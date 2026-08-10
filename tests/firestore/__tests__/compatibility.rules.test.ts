@@ -224,4 +224,14 @@ describeWithEmulator('1.48 to 1.49 compatibility Firestore rules', () => {
     await assertSucceeds(legacyDb.doc('appConfig/dataScope').get());
     await assertFails(legacyDb.doc('appConfig/dataScope').set({ readVersion: 1 }));
   });
+
+  test('keeps per-installation compatibility evidence Admin-only', async () => {
+    const legacyDb = testEnvironment.authenticatedContext('legacy').firestore();
+
+    await assertFails(legacyDb.doc('appCompatibility/legacy').get());
+    await assertFails(legacyDb.doc('appCompatibility/legacy').set({
+      status: 'compatible',
+      installations: { forged: { buildNumber: 9999 } },
+    }));
+  });
 });

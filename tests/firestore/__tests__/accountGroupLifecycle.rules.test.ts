@@ -493,6 +493,16 @@ describeWithEmulator('account and group lifecycle Firestore rules', () => {
     }));
   });
 
+  test('compatibility evidence cannot be read or forged by its account owner', async () => {
+    const outsiderDb = testEnvironment.authenticatedContext('outsider').firestore();
+
+    await assertFails(outsiderDb.doc('appCompatibility/outsider').get());
+    await assertFails(outsiderDb.doc('appCompatibility/outsider').set({
+      status: 'compatible',
+      policyVersion: 1,
+    }));
+  });
+
   test('the global gate makes accounts created after verification strict by default', async () => {
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
       const adminDb = context.firestore();

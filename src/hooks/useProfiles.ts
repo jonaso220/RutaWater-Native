@@ -6,7 +6,10 @@ import { db } from '../config/firebase';
 import { API_ENDPOINTS } from '../config/api';
 import { reportError } from '../lib/crashReporting';
 import i18n from '../i18n';
+import { recoverProfileIndex } from '../services/profileIndexRecovery';
 import { Profile, ProfileMember, PRIMARY_PROFILE_ID } from '../stores/profileStore';
+
+const PROFILE_INDEX_REQUEST_TIMEOUT_MS = 10_000;
 
 /**
  * Maneja la lista de perfiles del usuario, el perfil activo, y el ABM.
@@ -143,34 +146,33 @@ export const useProfiles = (
     ) return;
     syncAttemptedForUserRef.current = syncKey;
     let cancelled = false;
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        reject(new Error('PROFILE_INDEX_TIMEOUT'));
+      }, PROFILE_INDEX_REQUEST_TIMEOUT_MS);
+    });
     void (async () => {
       try {
         const currentUser = auth().currentUser;
         if (!currentUser || currentUser.uid !== userId) {
           throw new Error('PROFILE_INDEX_AUTH_CHANGED');
         }
-        const token = await currentUser.getIdToken();
-        const response = await fetch(API_ENDPOINTS.syncProfileIds, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({}),
-        });
-        const payload = await response.json().catch(() => ({})) as {
-          status?: string;
-          profileIds?: unknown;
-          profileIndexVersion?: unknown;
-        };
-        if (!response.ok || payload.status !== 'ok' || !Array.isArray(payload.profileIds)) {
-          throw new Error('PROFILE_INDEX_SYNC_FAILED');
-        }
-        setStoredProfileIds(payload.profileIds.filter((id): id is string => typeof id === 'string'));
+        const recovered = await Promise.race([
+          recoverProfileIndex({
+            user: currentUser,
+            expectedUid: userId,
+            endpoint: API_ENDPOINTS.syncProfileIds,
+            signal: controller.signal,
+          }),
+          timeoutPromise,
+        ]);
+        if (cancelled || auth().currentUser?.uid !== userId) return;
+        setStoredProfileIds(recovered.profileIds);
         setProfileIdsInitialized(true);
-        setProfileIndexVersion(
-          typeof payload.profileIndexVersion === 'number' ? payload.profileIndexVersion : 1,
-        );
+        setProfileIndexVersion(recovered.profileIndexVersion);
         profileSyncRetryCountRef.current = 0;
       } catch (error) {
         if (cancelled) return;
@@ -187,10 +189,14 @@ export const useProfiles = (
           profileSyncRetryTimerRef.current = null;
           setProfileSyncRetryNonce((value) => value + 1);
         }, retryDelayMs);
+      } finally {
+        if (timeout) clearTimeout(timeout);
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort();
+      if (timeout) clearTimeout(timeout);
     };
   }, [loaded, needsLegacyOwnerRepair, profileIndexVersion, profileSyncRetryNonce, userId]);
 
@@ -203,6 +209,10 @@ export const useProfiles = (
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
+      if (profileSyncRetryTimerRef.current) {
+        clearTimeout(profileSyncRetryTimerRef.current);
+        profileSyncRetryTimerRef.current = null;
+      }
       profileSyncRetryCountRef.current = 0;
       syncAttemptedForUserRef.current = null;
       setProfileSyncRetryNonce((value) => value + 1);
@@ -224,7 +234,17 @@ export const useProfiles = (
   const profiles = useMemo<Profile[]>(() => [primary, ...customProfiles], [primary, customProfiles]);
 
   const activeProfile = useMemo<Profile>(
-    () => profiles.find((p) => p.id === activeProfileId) || primary,
+    () => profiles.find((p) => p.id === activeProfileId) || (
+      activeProfileId === PRIMARY_PROFILE_ID
+        ? primary
+        : {
+          id: activeProfileId,
+          name: i18n.t('settings.defaultProfileName'),
+          isPrimary: false,
+          scopeGroupId: activeProfileId,
+          isOwner: false,
+        }
+    ),
     [profiles, activeProfileId, primary],
   );
 

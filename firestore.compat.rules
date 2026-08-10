@@ -280,6 +280,12 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.ownerId == uid();
     }
 
+    // Build evidence is Admin-only even under the transitional policy. A user
+    // must never be able to self-certify compatibility in users/{uid}.
+    match /appCompatibility/{document=**} {
+      allow read, write: if false;
+    }
+
     // The 1.49 app probes this public flag. Until strict activation, absence of
     // the document means version 0 and legacy userId queries remain selected.
     match /appConfig/dataScope {

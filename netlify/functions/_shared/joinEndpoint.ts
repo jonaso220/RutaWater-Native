@@ -33,7 +33,26 @@ export interface JoinEndpointDependencies {
 
 export const confirmJoinAuthUser = async (adminAuth: Auth, uid: string): Promise<void> => {
   const user = await adminAuth.getUser(uid);
-  if (user.disabled) throw new Error('AUTH_USER_DISABLED');
+  if (user.disabled) {
+    throw Object.assign(new Error('AUTH_USER_DISABLED'), { code: 'auth/user-disabled' });
+  }
+};
+
+export const isInactiveAuthAccountError = (error: unknown): boolean => {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? (error as { code?: unknown }).code
+    : undefined;
+  return code === 'auth/user-not-found'
+    || code === 'auth/user-disabled'
+    || (error instanceof Error && error.message === 'AUTH_USER_DISABLED');
+};
+
+const safeAuthErrorLabel = (error: unknown): string => {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? (error as { code?: unknown }).code
+    : undefined;
+  if (typeof code === 'string' && code) return code;
+  return error instanceof Error ? error.name : 'unknown';
 };
 
 // A small in-memory limiter adds no paid service or billable Firestore writes.
@@ -90,11 +109,19 @@ export const createJoinEndpointHandler = (dependencies: JoinEndpointDependencies
     // Firebase ID tokens remain cryptographically valid for a short window
     // after Auth deletion. Confirm the account still exists before any Admin
     // write so a stale token can never recreate users/{uid} or memberships.
+    let adminAuth: Auth;
     try {
-      const adminAuth = dependencies.getAuth(dependencies.readEnvironment);
+      adminAuth = dependencies.getAuth(dependencies.readEnvironment);
+    } catch (error) {
+      console.error(`${dependencies.logLabel} Auth configuration error:`, safeAuthErrorLabel(error));
+      return json(500, 'error');
+    }
+    try {
       await dependencies.getAuthUser(adminAuth, authPayload.sub);
-    } catch {
-      return json(401, 'error');
+    } catch (error) {
+      if (isInactiveAuthAccountError(error)) return json(401, 'error');
+      console.error(`${dependencies.logLabel} Auth lookup error:`, safeAuthErrorLabel(error));
+      return json(500, 'error');
     }
     if (!dependencies.allowAttempt(authPayload.sub)) return json(429, 'error');
 

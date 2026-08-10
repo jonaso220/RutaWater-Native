@@ -109,6 +109,18 @@ describe.each(factories)('join-%s Netlify Function', (_kind, createHandler) => {
     expect(dependencies.join).not.toHaveBeenCalled();
   });
 
+  test('returns a server error when Admin Auth is unavailable', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { handler, dependencies } = makeHandler({
+      getAuth: jest.fn(() => { throw new Error('module unavailable'); }),
+    });
+    const response = await handler(request('POST', { code: 'ABC234' }));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ status: 'error' });
+    expect(dependencies.join).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   test('rate-limits authenticated code guessing before opening Firestore', async () => {
     const { handler, dependencies } = makeHandler({ allowAttempt: jest.fn(() => false) });
     const response = await handler(request('POST', { code: 'ABC234' }));

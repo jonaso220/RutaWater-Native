@@ -66,7 +66,9 @@ describe('create-profile Netlify Function', () => {
 
   test('requires a live Auth user and hides backend details', async () => {
     const unauthorized = makeHandler({
-      getAuthUser: jest.fn(async () => { throw new Error('deleted'); }),
+      getAuthUser: jest.fn(async () => {
+        throw Object.assign(new Error('deleted'), { code: 'auth/user-not-found' });
+      }),
     });
     expect((await unauthorized.handler(request('POST', {
       name: 'Ruta', requestId: 'request_abcdefghijklmnop',
@@ -79,6 +81,19 @@ describe('create-profile Netlify Function', () => {
     }));
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ status: 'error' });
+    errorSpy.mockRestore();
+  });
+
+  test('does not misclassify Auth infrastructure failures as deleted users', async () => {
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const unavailable = makeHandler({
+      getAuth: jest.fn(() => { throw new Error('module unavailable'); }),
+    });
+    const response = await unavailable.handler(request('POST', {
+      name: 'Ruta', requestId: 'request_abcdefghijklmnop',
+    }));
+    expect(response.status).toBe(500);
+    expect(unavailable.dependencies.create).not.toHaveBeenCalled();
     errorSpy.mockRestore();
   });
 });

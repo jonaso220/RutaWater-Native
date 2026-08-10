@@ -8,6 +8,11 @@ import {
   backfillDataScopePage,
   DATA_SCOPE_COLLECTIONS,
 } from './dataScopeBackfillService';
+import { dataScopeActivationEligibility } from './dataScopeAccountEligibility';
+export {
+  dataScopeActivationEligibility,
+  DataScopeActivationEligibility,
+} from './dataScopeAccountEligibility';
 
 const MIGRATION_PATH = 'systemMigrations/dataScopeV1';
 const PUBLIC_SCOPE_CONFIG_PATH = 'appConfig/dataScope';
@@ -172,23 +177,6 @@ const assertVerified = (state: MigrationState) => {
   ) {
     throw new DataScopeMigrationError('MIGRATION_NOT_VERIFIED', 'El audit sellado no terminó.');
   }
-};
-
-type ActivationEligibility = 'eligible' | 'inactive' | 'blocked';
-
-const activationEligibility = (user: Record<string, any>): ActivationEligibility => {
-  const accountState = user.accountState;
-  if (accountState === 'deleting' || accountState === 'deleted') return 'inactive';
-  if (accountState !== undefined && accountState !== null && accountState !== 'active') {
-    return 'blocked';
-  }
-  if (
-    (typeof user.pendingGroupId === 'string' && user.pendingGroupId.trim().length > 0)
-    || (user.pendingGroupId !== undefined && user.pendingGroupId !== null
-      && typeof user.pendingGroupId !== 'string')
-    || (typeof user.groupMigrationState === 'string' && user.groupMigrationState.length > 0)
-  ) return 'blocked';
-  return 'eligible';
 };
 
 const releaseOwnedLease = async (
@@ -406,7 +394,10 @@ export const activateStrictScopeReadsForUser = async (
   const userSnapshot = await transaction.get(userRef);
   const state = stateFrom(migrationSnapshot.data());
   assertVerified(state);
-  if (!userSnapshot.exists || activationEligibility(userSnapshot.data() || {}) !== 'eligible') {
+  if (
+    !userSnapshot.exists
+    || dataScopeActivationEligibility(userSnapshot.data() || {}) !== 'eligible'
+  ) {
     throw new DataScopeMigrationError('USER_NOT_READY', 'La cuenta no puede activarse ahora.');
   }
   if (userSnapshot.data()?.scopeReadVersion !== 1) {
@@ -473,7 +464,7 @@ export const advanceStrictScopeActivation = async (
       let skippedInactive = 0;
       let blocked = 0;
       users.docs.forEach((user) => {
-        const classification = activationEligibility(user.data() || {});
+        const classification = dataScopeActivationEligibility(user.data() || {});
         if (classification === 'inactive') {
           skippedInactive += 1;
           return;

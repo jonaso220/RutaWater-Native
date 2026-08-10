@@ -1,6 +1,11 @@
 import { timingSafeEqual } from 'crypto';
 import type { Config } from '@netlify/functions';
 import type { Firestore } from 'firebase-admin/firestore';
+import { getAppCompatibilityCoverage } from './_shared/appCompatibilityService';
+import {
+  appCompatibilityPolicyLabel,
+  readAppCompatibilityPolicy,
+} from './_shared/appCompatibilityPolicy';
 import { EnvironmentReader, getAdminFirestore } from './_shared/firebaseAdmin';
 import {
   activateStrictScopeReadsForUser,
@@ -26,6 +31,7 @@ type MigrationAction =
 
 interface MigrationOperations {
   status: typeof getDataScopeMigrationStatus;
+  compatibility: typeof getAppCompatibilityCoverage;
   advance: typeof advanceDataScopeMigration;
   seal: typeof sealDataScopeWrites;
   restartAudit: typeof restartDataScopeAudit;
@@ -62,6 +68,7 @@ const bearerToken = (request: Request): string =>
 
 const DEFAULT_OPERATIONS: MigrationOperations = {
   status: getDataScopeMigrationStatus,
+  compatibility: getAppCompatibilityCoverage,
   advance: advanceDataScopeMigration,
   seal: sealDataScopeWrites,
   restartAudit: restartDataScopeAudit,
@@ -101,11 +108,33 @@ export const createMigrateDataScopesHandler = (dependencies: HandlerDependencies
       return json(400, { status: 'error', code: 'ACTION_INVALID' });
     }
 
+    const requiresCompatibilityGate = [
+      'seal',
+      'activate_user',
+      'activate_batch',
+      'finalize_activation',
+    ].includes(action);
+    const irreversibleActionsEnabled =
+      dependencies.readEnvironment('DATA_SCOPE_IRREVERSIBLE_ACTIONS_ENABLED') === 'true';
+    if (requiresCompatibilityGate && !irreversibleActionsEnabled) {
+      return json(409, {
+        status: 'error',
+        code: 'IRREVERSIBLE_ACTIONS_DISABLED',
+      });
+    }
+    const compatibilityPolicy = readAppCompatibilityPolicy(dependencies.readEnvironment);
+
     let serverProofVerified = false;
     let minimumAppBuild = '';
     if (action === 'seal' || action === 'finalize_activation') {
-      minimumAppBuild = dependencies.readEnvironment('DATA_SCOPE_MINIMUM_APP_BUILD')?.trim() || '';
-      serverProofVerified = Boolean(minimumAppBuild) && secureSecretMatches(
+      const configuredMinimumAppBuild =
+        dependencies.readEnvironment('DATA_SCOPE_MINIMUM_APP_BUILD')?.trim() || '';
+      minimumAppBuild = compatibilityPolicy
+        ? appCompatibilityPolicyLabel(compatibilityPolicy)
+        : '';
+      serverProofVerified = Boolean(minimumAppBuild)
+        && configuredMinimumAppBuild === minimumAppBuild
+        && secureSecretMatches(
         dependencies.readEnvironment('DATA_SCOPE_MINIMUM_VERSION_PROOF'),
         typeof body.minimumVersionProof === 'string' ? body.minimumVersionProof : '',
       );
@@ -119,8 +148,42 @@ export const createMigrateDataScopesHandler = (dependencies: HandlerDependencies
     const operations = dependencies.operations || DEFAULT_OPERATIONS;
     try {
       const db = dependencies.getFirestore(dependencies.readEnvironment);
+      const compatibility = action === 'status' || requiresCompatibilityGate
+        ? compatibilityPolicy
+          ? await operations.compatibility(db, compatibilityPolicy)
+          : null
+        : null;
       if (action === 'status') {
-        return json(200, { status: 'ok', migration: await operations.status(db) });
+        return json(200, {
+          status: 'ok',
+          migration: await operations.status(db),
+          compatibility: compatibilityPolicy && compatibility
+            ? {
+              configured: true,
+              policyVersion: compatibilityPolicy.policyVersion,
+              minimumBuilds: compatibilityPolicy.minimumBuilds,
+              ...compatibility,
+              signalCoverageComplete: compatibility.readyForCutover,
+              irreversibleActionsEnabled,
+              readyForCutover:
+                irreversibleActionsEnabled && compatibility.readyForCutover,
+            }
+            : {
+              configured: false,
+              signalCoverageComplete: false,
+              irreversibleActionsEnabled,
+              readyForCutover: false,
+            },
+        });
+      }
+      if (
+        requiresCompatibilityGate
+        && (!compatibilityPolicy || !compatibility?.readyForCutover)
+      ) {
+        return json(409, {
+          status: 'error',
+          code: 'APP_ADOPTION_NOT_VERIFIED',
+        });
       }
       if (action === 'advance') {
         return json(200, { status: 'ok', migration: await operations.advance(db) });

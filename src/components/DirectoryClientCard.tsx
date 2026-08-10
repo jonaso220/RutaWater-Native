@@ -178,10 +178,10 @@ const DirectoryClientCard = ({
                   accessibilityLabel={`${t('clientCard.openMaps')}: ${item.name}. ${item.address}`}
                 >
                   <Ionicons name="location-sharp" size={14} color={colors.primary} />
-                  <Text style={styles.addressLinkText} numberOfLines={1}>{item.address}</Text>
+                  <Text style={styles.addressLinkText} numberOfLines={wideLayout ? 1 : 3}>{item.address}</Text>
                 </TouchableOpacity>
               ) : (
-                <Text style={styles.clientAddress} numberOfLines={1}>
+                <Text style={styles.clientAddress} numberOfLines={wideLayout ? 1 : 3}>
                   <Ionicons name="location-sharp" size={13} /> {item.address}
                 </Text>
               )

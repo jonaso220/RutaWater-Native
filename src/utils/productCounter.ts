@@ -32,11 +32,3 @@ export const calculateProductTotals = (
 
   return totals;
 };
-
-export const countProductReferences = (
-  clients: readonly ProductQuantitiesSource[],
-  productId: string,
-): number => clients.reduce(
-  (count, client) => count + (positiveQuantity(client.products?.[productId]) > 0 ? 1 : 0),
-  0,
-);

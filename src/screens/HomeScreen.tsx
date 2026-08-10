@@ -24,6 +24,11 @@ import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString, parseDate, settingsDocId } from '../utils/helpers';
+import {
+  ScopedWhatsAppTemplates,
+  normalizeWhatsAppTemplates,
+  templatesForScope,
+} from '../utils/whatsAppTemplates';
 import { hapticLight, hapticSelection } from '../utils/haptics';
 import { db } from '../config/firebase';
 import { dataScopeQuery } from '../utils/dataScope';
@@ -485,7 +490,12 @@ const HomeScreen = () => {
       setRefreshing(false);
     }
   }, [user?.uid, activeScopeGroupId, groupData?.groupId, scopeReadVersion]);
-  const [appSettings, setAppSettings] = useState<Record<string, string> | null>(null);
+  const settingsScopeKey = user?.uid ? settingsDocId(user.uid, groupData?.groupId) : '';
+  const [appSettingsSnapshot, setAppSettingsSnapshot] = useState<ScopedWhatsAppTemplates>({
+    scopeKey: '',
+    data: null,
+  });
+  const appSettings = templatesForScope(settingsScopeKey, appSettingsSnapshot);
   // Queue of undo entries: each "Listo" tap pushes one. Banner shows the
   // newest; tapping Undo pops the newest. Each entry self-expires after 5s.
   // This avoids losing undo capability when the user marks several clients
@@ -531,13 +541,27 @@ const HomeScreen = () => {
 
   // Load WhatsApp templates (real-time listener)
   useEffect(() => {
-    if (!user?.uid) return;
-    const docId = settingsDocId(user.uid, groupData?.groupId);
+    let active = true;
+    const docId = settingsScopeKey;
+    setAppSettingsSnapshot({ scopeKey: docId, data: null });
+    if (!docId) return () => { active = false; };
+
     const unsubscribe = db.collection('settings').doc(docId).onSnapshot((doc) => {
-      if (doc.exists) setAppSettings(doc.data() as Record<string, string>);
-    }, () => {});
-    return () => unsubscribe();
-  }, [user?.uid, groupData?.groupId]);
+      if (!active) return;
+      setAppSettingsSnapshot({
+        scopeKey: docId,
+        data: doc.exists ? normalizeWhatsAppTemplates(doc.data()) : null,
+      });
+    }, (error) => {
+      if (!active) return;
+      setAppSettingsSnapshot({ scopeKey: docId, data: null });
+      reportError(error, 'Error loading WhatsApp templates');
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [settingsScopeKey]);
 
   const handleSelectDay = useCallback((day: string) => {
     setShowFilters(false);

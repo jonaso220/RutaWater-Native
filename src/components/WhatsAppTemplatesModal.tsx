@@ -8,6 +8,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
   useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
@@ -52,6 +53,10 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
     setWaDeuda,
     waRecordatorio,
     setWaRecordatorio,
+    waLoaded,
+    waLoadError,
+    reloadTemplates,
+    discardDraft,
     handleSaveTemplates,
     handleResetTemplates,
   } = useWhatsAppTemplates(uid, groupId);
@@ -59,15 +64,15 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
   const savingRef = useRef(false);
 
   const runTemplateAction = async (
-    action: () => Promise<void>,
+    action: () => Promise<boolean | void>,
     closeAfterSuccess: boolean,
   ) => {
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     try {
-      await action();
-      if (closeAfterSuccess) onClose();
+      const shouldClose = await action();
+      if (closeAfterSuccess && shouldClose !== false) onClose();
     } catch {
       // The hook reports the persistence error. Keep the user's draft open so
       // the same action can be retried without retyping it.
@@ -78,7 +83,10 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
   };
 
   const requestClose = () => {
-    if (!savingRef.current) onClose();
+    if (!savingRef.current) {
+      discardDraft();
+      onClose();
+    }
   };
 
   const handleSave = () => {
@@ -103,7 +111,28 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
+          {!waLoaded ? (
+            <View style={styles.loadingBox}>
+              {waLoadError ? (
+                <>
+                  <Text style={styles.loadingText}>{t('settings.templatesLoadError')}</Text>
+                  <TouchableOpacity
+                    style={styles.retryBtn}
+                    onPress={reloadTemplates}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('settings.retryLoad')}
+                  >
+                    <Text style={styles.retryBtnText}>{t('settings.retryLoad')}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <ActivityIndicator color={colors.primary} />
+                  <Text style={styles.loadingText}>{t('settings.templatesLoadingMsg')}</Text>
+                </>
+              )}
+            </View>
+          ) : <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
             <Text style={styles.subtitle}>{t('settings.whatsappSubtitle')}</Text>
 
             <Text style={styles.templateLabel}>{t('settings.enCaminoLabel')}</Text>
@@ -165,7 +194,7 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
                 <Text style={styles.templateResetBtnText}>{t('settings.resetTemplates')}</Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
+          </ScrollView>}
         </View>
       </KeyboardAvoidingView>
     </ModalOverlay>
@@ -213,6 +242,31 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     },
     closeBtnText: { fontSize: s(18), color: colors.textMuted },
     body: { padding: s(16) },
+    loadingBox: {
+      minHeight: s(220),
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: s(12),
+      paddingHorizontal: s(24),
+    },
+    loadingText: {
+      color: colors.textMuted,
+      fontSize: s(13),
+      textAlign: 'center',
+    },
+    retryBtn: {
+      minHeight: s(44),
+      paddingHorizontal: s(18),
+      borderRadius: s(10),
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    retryBtnText: {
+      color: colors.textWhite,
+      fontSize: s(14),
+      fontWeight: '700',
+    },
     subtitle: { fontSize: s(14), color: colors.textMuted, marginBottom: s(14) },
     templateDivider: {
       height: 1,

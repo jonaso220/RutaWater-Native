@@ -1,4 +1,4 @@
-import { calculateProductTotals, countProductReferences } from '../productCounter';
+import { calculateProductTotals } from '../productCounter';
 
 const products = [
   { id: 'b20' },
@@ -49,12 +49,4 @@ describe('calculateProductTotals', () => {
     ], products)).toMatchObject({ custom_deleted: 5 });
   });
 
-  test('counts only clients with a positive reference before deleting a product', () => {
-    expect(countProductReferences([
-      { products: { custom_ice: 2 } },
-      { products: { custom_ice: '1' } },
-      { products: { custom_ice: 0 } },
-      { products: { custom_ice: 'invalid' } },
-    ], 'custom_ice')).toBe(2);
-  });
 });

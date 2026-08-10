@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
   useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
@@ -16,7 +17,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
-import { getModalWidth } from '../utils/helpers';
+import { getModalWidth, settingsDocId } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import {
   useAllProducts,
@@ -24,8 +25,8 @@ import {
 } from '../stores/productCatalogStore';
 import ProductIcon, { STICKER_PREFIX } from './ProductIcon';
 import { STICKER_IDS } from '../assets/stickers';
-import { useClientsStore } from '../stores/clientsStore';
-import { countProductReferences } from '../utils/productCounter';
+import { useAuthContext } from '../context/AuthContext';
+import { isReadySettingsGeneration } from '../utils/settingsScope';
 
 interface ProductCatalogModalProps {
   visible: boolean;
@@ -184,6 +185,7 @@ const NEW_TARGET = '__new__';
 const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onClose }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { user, groupData } = useAuthContext();
   const { width: windowWidth } = useWindowDimensions();
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
@@ -194,14 +196,25 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
 
   const allProducts = useAllProducts();
   const hidden = useProductCatalogStore((s) => s.hidden);
-  const customProducts = useProductCatalogStore((s) => s.customProducts);
+  const catalogScopeKey = useProductCatalogStore((s) => s.scopeKey);
+  const catalogGeneration = useProductCatalogStore((s) => s.generation);
+  const catalogLoaded = useProductCatalogStore((s) => s.loaded);
+  const catalogLoadError = useProductCatalogStore((s) => s.loadError);
+  const reloadCatalog = useProductCatalogStore((s) => s.reload);
   const renameProduct = useProductCatalogStore((s) => s.renameProduct);
   const setProductEmoji = useProductCatalogStore((s) => s.setProductEmoji);
   const setProductHidden = useProductCatalogStore((s) => s.setProductHidden);
   const addProduct = useProductCatalogStore((s) => s.addProduct);
-  const removeCustomProduct = useProductCatalogStore((s) => s.removeCustomProduct);
   const moveProduct = useProductCatalogStore((s) => s.moveProduct);
-  const clientsLoading = useClientsStore((s) => s.loading);
+  const expectedScopeKey = user?.uid ? settingsDocId(user.uid, groupData?.groupId) : '';
+  const expectedScopeKeyRef = useRef(expectedScopeKey);
+  expectedScopeKeyRef.current = expectedScopeKey;
+  const catalogReady = Boolean(
+    expectedScopeKey
+    && catalogGeneration > 0
+    && catalogLoaded
+    && catalogScopeKey === expectedScopeKey,
+  );
 
   const [newEmoji, setNewEmoji] = useState('');
   const [newName, setNewName] = useState('');
@@ -215,6 +228,22 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
   const [emojiTarget, setEmojiTarget] = useState<string | null>(null);
   const [emojiDraft, setEmojiDraft] = useState('');
   const [emojiSearch, setEmojiSearch] = useState('');
+  const previousScopeKeyRef = useRef(expectedScopeKey);
+
+  useEffect(() => {
+    const previousScopeKey = previousScopeKeyRef.current;
+    previousScopeKeyRef.current = expectedScopeKey;
+    if (!previousScopeKey || previousScopeKey === expectedScopeKey) return;
+
+    setNewEmoji('');
+    setNewName('');
+    setNewShort('');
+    setNameDrafts({});
+    setEmojiTarget(null);
+    setEmojiDraft('');
+    setEmojiSearch('');
+    if (visible) onClose();
+  }, [expectedScopeKey, onClose, visible]);
 
   // null = not searching (show categories); array = flat search results
   // (stickers + emojis) matched by keyword.
@@ -231,22 +260,42 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
     setEmojiSearch('');
   };
 
-  const isCustom = (id: string) => customProducts.some((c) => c.id === id);
-
   const runCatalogAction = async (
     action: () => Promise<void>,
     onSuccess?: () => void,
   ): Promise<boolean> => {
+    const operationScopeKey = expectedScopeKeyRef.current;
+    const initialCatalog = useProductCatalogStore.getState();
+    const operationGeneration = initialCatalog.generation;
+    if (!isReadySettingsGeneration(
+      operationScopeKey,
+      operationGeneration,
+      initialCatalog,
+    )) {
+      Alert.alert(t('settings.productsLoadingTitle'), t('settings.productsLoadingMsg'));
+      return false;
+    }
     pendingActionsRef.current += 1;
     savingRef.current = true;
     setSaving(true);
     const queued = actionQueueRef.current.then(async () => {
+      const latestCatalog = useProductCatalogStore.getState();
+      if (
+        expectedScopeKeyRef.current !== operationScopeKey
+        || !isReadySettingsGeneration(
+          operationScopeKey,
+          operationGeneration,
+          latestCatalog,
+        )
+      ) return false;
       try {
         await action();
-        onSuccess?.();
+        if (expectedScopeKeyRef.current === operationScopeKey) onSuccess?.();
         return true;
       } catch {
-        Alert.alert(t('error'), t('settings.productsSaveError'));
+        if (expectedScopeKeyRef.current === operationScopeKey) {
+          Alert.alert(t('error'), t('settings.productsSaveError'));
+        }
         return false;
       }
     });
@@ -290,37 +339,6 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
     );
   };
 
-  const handleDelete = (id: string, name: string) => {
-    const canDeleteLatestProduct = (): boolean => {
-      const { clients: latestClients, loading } = useClientsStore.getState();
-      if (loading) {
-        Alert.alert(t('settings.productUsageLoadingTitle'), t('settings.productUsageLoadingMsg'));
-        return false;
-      }
-      const referenceCount = countProductReferences(latestClients, id);
-      if (referenceCount <= 0) return true;
-      Alert.alert(
-        t('settings.productInUseTitle'),
-        t('settings.productInUseMsg', { name, count: referenceCount }),
-      );
-      return false;
-    };
-
-    if (!canDeleteLatestProduct()) return;
-    Alert.alert(t('settings.deleteProductTitle'), t('settings.deleteProductMsg', { name }), [
-      { text: t('cancel'), style: 'cancel' },
-      {
-        text: t('delete'),
-        style: 'destructive',
-        onPress: () => {
-          if (canDeleteLatestProduct()) {
-            void runCatalogAction(() => removeCustomProduct(id));
-          }
-        },
-      },
-    ]);
-  };
-
   return (
     <ModalOverlay visible={visible} onClose={requestClose} animationType="slide">
       <KeyboardAvoidingView
@@ -338,6 +356,28 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
           <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
             <Text style={styles.subtitle}>{t('settings.productsSubtitle')}</Text>
 
+            {!catalogReady ? (
+              <View style={styles.loadingBox}>
+                {catalogLoadError && catalogScopeKey === expectedScopeKey ? (
+                  <>
+                    <Text style={styles.loadingText}>{t('settings.productsLoadError')}</Text>
+                    <TouchableOpacity
+                      style={styles.retryBtn}
+                      onPress={reloadCatalog}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('settings.retryLoad')}
+                    >
+                      <Text style={styles.retryBtnText}>{t('settings.retryLoad')}</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <ActivityIndicator color={colors.primary} />
+                    <Text style={styles.loadingText}>{t('settings.productsLoadingMsg')}</Text>
+                  </>
+                )}
+              </View>
+            ) : <>
             {allProducts.map((p, index) => {
               const isHidden = hidden.includes(p.id);
               const isFirst = index === 0;
@@ -415,16 +455,6 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
                       color={isHidden ? colors.textHint : colors.primary}
                     />
                   </TouchableOpacity>
-                  {isCustom(p.id) && (
-                    <TouchableOpacity
-                      onPress={() => handleDelete(p.id, p.label)}
-                      disabled={saving || clientsLoading}
-                      style={styles.iconBtn}
-                      accessibilityLabel={t('delete')}
-                    >
-                      <Ionicons name="trash-outline" size={20} color={colors.danger} />
-                    </TouchableOpacity>
-                  )}
                 </View>
               );
             })}
@@ -470,6 +500,7 @@ const ProductCatalogModal: React.FC<ProductCatalogModalProps> = ({ visible, onCl
               <Ionicons name="add" size={18} color={colors.textWhite} />
               <Text style={styles.addBtnText}>{t('settings.addProductBtn')}</Text>
             </TouchableOpacity>
+            </>}
           </ScrollView>
 
           <View style={styles.footer}>
@@ -635,6 +666,31 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     },
     closeBtnText: { fontSize: s(18), color: colors.textMuted },
     body: { padding: s(16) },
+    loadingBox: {
+      minHeight: s(220),
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: s(12),
+      paddingHorizontal: s(24),
+    },
+    loadingText: {
+      color: colors.textMuted,
+      fontSize: s(13),
+      textAlign: 'center',
+    },
+    retryBtn: {
+      minHeight: s(44),
+      paddingHorizontal: s(18),
+      borderRadius: s(10),
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    retryBtnText: {
+      color: colors.textWhite,
+      fontSize: s(14),
+      fontWeight: '700',
+    },
     subtitle: { fontSize: s(14), color: colors.textMuted, marginBottom: s(14) },
     row: {
       flexDirection: 'row',

@@ -18,12 +18,15 @@ interface ProductCatalogStore {
   customProducts: Product[];
   hidden: string[];
   productNames: Record<string, string>;
+  scopeKey: string;
+  generation: number;
   loaded: boolean;
+  loadError: boolean;
+  reload: () => void;
   renameProduct: (id: string, label: string) => Promise<void>;
   setProductEmoji: (id: string, emoji: string) => Promise<void>;
   setProductHidden: (id: string, hidden: boolean) => Promise<void>;
   addProduct: (p: { label: string; emoji: string; short: string }) => Promise<void>;
-  removeCustomProduct: (id: string) => Promise<void>;
   // Move a product one slot up (dir = -1) or down (dir = +1) within the full list.
   moveProduct: (id: string, dir: -1 | 1) => Promise<void>;
 }
@@ -36,12 +39,15 @@ export const useProductCatalogStore = create<ProductCatalogStore>()(() => ({
   customProducts: [],
   hidden: [],
   productNames: {},
+  scopeKey: '',
+  generation: 0,
   loaded: false,
+  loadError: false,
+  reload: () => {},
   renameProduct: noop,
   setProductEmoji: noop,
   setProductHidden: noop,
   addProduct: noop,
-  removeCustomProduct: noop,
   moveProduct: noop,
 }));
 

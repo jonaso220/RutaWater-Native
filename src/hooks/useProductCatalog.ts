@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { db } from '../config/firebase';
 import { reportError } from '../lib/crashReporting';
 import { Product, PRODUCTS } from '../constants/products';
 import { settingsDocId } from '../utils/helpers';
+import firestore from '@react-native-firebase/firestore';
 
 /**
  * Loads and mutates the editable product catalog stored in the shared
@@ -15,20 +16,57 @@ import { settingsDocId } from '../utils/helpers';
  * Built-in ids are never mutated, so previously-saved client orders stay valid.
  */
 export const useProductCatalog = (uid: string, groupId: string | undefined) => {
+  const scopeKey = uid ? settingsDocId(uid, groupId) : '';
   const [productNames, setProductNames] = useState<Record<string, string>>({});
   const [productEmojis, setProductEmojis] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<string[]>([]);
   const [customProducts, setCustomProducts] = useState<Product[]>([]);
   const [order, setOrder] = useState<string[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [loadedScopeKey, setLoadedScopeKey] = useState('');
+  const [generation, setGeneration] = useState(0);
+  const [loadedGeneration, setLoadedGeneration] = useState(0);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const currentScopeKeyRef = useRef(scopeKey);
+  const readyScopeKeyRef = useRef('');
+  const generationRef = useRef(0);
+  const readyGenerationRef = useRef(0);
+  currentScopeKeyRef.current = scopeKey;
+  const loaded = Boolean(
+    scopeKey
+    && loadedScopeKey === scopeKey
+    && generation > 0
+    && loadedGeneration === generation,
+  );
 
   useEffect(() => {
-    if (!uid) return;
+    let active = true;
+    const effectGeneration = generationRef.current + 1;
+    generationRef.current = effectGeneration;
+    readyGenerationRef.current = 0;
+    setGeneration(effectGeneration);
+    setLoadedGeneration(0);
+    setProductNames({});
+    setProductEmojis({});
+    setHidden([]);
+    setCustomProducts([]);
+    setOrder([]);
+    readyScopeKeyRef.current = '';
+    setLoadedScopeKey('');
+    setLoadError(false);
+
+    if (!scopeKey) return () => { active = false; };
+
     const unsub = db
       .collection('settings')
-      .doc(settingsDocId(uid, groupId))
+      .doc(scopeKey)
       .onSnapshot(
         (doc) => {
+          if (
+            !active
+            || currentScopeKeyRef.current !== scopeKey
+            || generationRef.current !== effectGeneration
+          ) return;
           const data = doc.data() || {};
           setProductNames(
             data.productNames && typeof data.productNames === 'object' ? data.productNames : {},
@@ -39,15 +77,36 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
           setHidden(Array.isArray(data.productHidden) ? data.productHidden : []);
           setCustomProducts(Array.isArray(data.customProducts) ? data.customProducts : []);
           setOrder(Array.isArray(data.productOrder) ? data.productOrder : []);
-          setLoaded(true);
+          readyScopeKeyRef.current = scopeKey;
+          readyGenerationRef.current = effectGeneration;
+          setLoadError(false);
+          setLoadedScopeKey(scopeKey);
+          setLoadedGeneration(effectGeneration);
         },
         (e) => {
+          if (
+            !active
+            || currentScopeKeyRef.current !== scopeKey
+            || generationRef.current !== effectGeneration
+          ) return;
+          readyScopeKeyRef.current = '';
+          readyGenerationRef.current = 0;
+          setLoadedScopeKey('');
+          setLoadedGeneration(0);
+          setLoadError(true);
+          setProductNames({});
+          setProductEmojis({});
+          setHidden([]);
+          setCustomProducts([]);
+          setOrder([]);
           reportError(e, 'Error loading product catalog');
-          setLoaded(true);
         },
       );
-    return unsub;
-  }, [uid, groupId]);
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [loadAttempt, scopeKey]);
 
   const applyOverrides = useCallback(
     (p: Product): Product => ({
@@ -74,18 +133,37 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
 
   const persist = useCallback(
     async (patch: Record<string, any>) => {
-      if (!uid) throw new Error('PRODUCT_CATALOG_USER_REQUIRED');
+      if (!scopeKey) throw new Error('PRODUCT_CATALOG_USER_REQUIRED');
+      if (
+        currentScopeKeyRef.current !== scopeKey
+        || readyScopeKeyRef.current !== scopeKey
+        || loadedScopeKey !== scopeKey
+        || generation <= 0
+        || generationRef.current !== generation
+        || readyGenerationRef.current !== generation
+        || loadedGeneration !== generation
+      ) throw new Error('PRODUCT_CATALOG_SCOPE_NOT_READY');
       try {
         await db
           .collection('settings')
-          .doc(settingsDocId(uid, groupId))
+          .doc(scopeKey)
           .set(patch, { merge: true });
       } catch (e) {
         reportError(e, 'Error saving product catalog');
         throw e;
       }
     },
-    [uid, groupId],
+    [generation, loadedGeneration, loadedScopeKey, scopeKey],
+  );
+
+  const canApplyLocalResult = useCallback(
+    () => (
+      currentScopeKeyRef.current === scopeKey
+      && readyScopeKeyRef.current === scopeKey
+      && generationRef.current === generation
+      && readyGenerationRef.current === generation
+    ),
+    [generation, scopeKey],
   );
 
   const renameProduct = useCallback(
@@ -100,9 +178,10 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
         next[id] = trimmed;
       }
       await persist({ productNames: next });
+      if (!canApplyLocalResult()) return;
       setProductNames(next);
     },
-    [productNames, persist],
+    [canApplyLocalResult, productNames, persist],
   );
 
   const setProductEmoji = useCallback(
@@ -118,18 +197,20 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
         next[id] = value;
       }
       await persist({ productEmojis: next });
+      if (!canApplyLocalResult()) return;
       setProductEmojis(next);
     },
-    [productEmojis, persist],
+    [canApplyLocalResult, productEmojis, persist],
   );
 
   const setProductHidden = useCallback(
     async (id: string, hide: boolean) => {
       const next = hide ? [...new Set([...hidden, id])] : hidden.filter((h) => h !== id);
       await persist({ productHidden: next });
+      if (!canApplyLocalResult()) return;
       setHidden(next);
     },
-    [hidden, persist],
+    [canApplyLocalResult, hidden, persist],
   );
 
   const addProduct = useCallback(
@@ -137,42 +218,21 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
       const name = label.trim();
       if (!name) return;
       const newProduct: Product = {
-        id: `custom_${Date.now()}`,
+        id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         label: name,
         icon: 'cube',
         emoji: emoji.trim() || '📦',
         short: (short.trim() || name).slice(0, 12),
       };
-      const next = [...customProducts, newProduct];
-      await persist({ customProducts: next });
-      setCustomProducts(next);
+      await persist({ customProducts: firestore.FieldValue.arrayUnion(newProduct) });
+      if (!canApplyLocalResult()) return;
+      setCustomProducts((current) => (
+        current.some((product) => product.id === newProduct.id)
+          ? current
+          : [...current, newProduct]
+      ));
     },
-    [customProducts, persist],
-  );
-
-  const removeCustomProduct = useCallback(
-    async (id: string) => {
-      const nextCustom = customProducts.filter((c) => c.id !== id);
-      const nextNames = { ...productNames };
-      delete nextNames[id];
-      const nextEmojis = { ...productEmojis };
-      delete nextEmojis[id];
-      const nextHidden = hidden.filter((h) => h !== id);
-      const nextOrder = order.filter((o) => o !== id);
-      await persist({
-        customProducts: nextCustom,
-        productNames: nextNames,
-        productEmojis: nextEmojis,
-        productHidden: nextHidden,
-        productOrder: nextOrder,
-      });
-      setCustomProducts(nextCustom);
-      setProductNames(nextNames);
-      setProductEmojis(nextEmojis);
-      setHidden(nextHidden);
-      setOrder(nextOrder);
-    },
-    [customProducts, productNames, productEmojis, hidden, order, persist],
+    [canApplyLocalResult, persist],
   );
 
   const moveProduct = useCallback(
@@ -184,9 +244,10 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
       if (idx === -1 || target < 0 || target >= ids.length) return;
       [ids[idx], ids[target]] = [ids[target], ids[idx]];
       await persist({ productOrder: ids });
+      if (!canApplyLocalResult()) return;
       setOrder(ids);
     },
-    [allProducts, persist],
+    [allProducts, canApplyLocalResult, persist],
   );
 
   return {
@@ -197,12 +258,15 @@ export const useProductCatalog = (uid: string, groupId: string | undefined) => {
     productNames,
     productEmojis,
     order,
+    scopeKey,
+    generation,
     loaded,
+    loadError,
+    reload: () => setLoadAttempt((attempt) => attempt + 1),
     renameProduct,
     setProductEmoji,
     setProductHidden,
     addProduct,
-    removeCustomProduct,
     moveProduct,
   };
 };

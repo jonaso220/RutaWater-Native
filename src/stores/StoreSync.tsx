@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo } from 'react';
 import { useAuthContext } from '../context/AuthContext';
 import { useClients } from '../hooks/useClients';
 import { useDebts } from '../hooks/useDebts';
@@ -176,22 +176,25 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   // cuenta y se comparte entre repartos — ver el contrato de scopes arriba.
   const catalog = useProductCatalog(userId, groupId);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     useProductCatalogStore.setState({
       products: catalog.products,
       allProducts: catalog.allProducts,
       customProducts: catalog.customProducts,
       hidden: catalog.hidden,
       productNames: catalog.productNames,
+      scopeKey: catalog.scopeKey,
+      generation: catalog.generation,
       loaded: catalog.loaded,
+      loadError: catalog.loadError,
+      reload: catalog.reload,
       renameProduct: catalog.renameProduct,
       setProductEmoji: catalog.setProductEmoji,
       setProductHidden: catalog.setProductHidden,
       addProduct: catalog.addProduct,
-      removeCustomProduct: catalog.removeCustomProduct,
       moveProduct: catalog.moveProduct,
     });
-  }, [catalog.products, catalog.allProducts, catalog.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [catalog.products, catalog.allProducts, catalog.scopeKey, catalog.generation, catalog.loaded, catalog.loadError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Profiles store bridge ---
   useEffect(() => {

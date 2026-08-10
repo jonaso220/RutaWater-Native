@@ -1,5 +1,9 @@
 const { AiPlanUnavailableError } = require('../_shared/aiQuota');
-const { createParseOrderHandler } = require('../parse-order');
+const {
+  config,
+  createModernParseOrderHandler,
+  createParseOrderHandler,
+} = require('../parse-order');
 
 const validEvent = (overrides: Record<string, unknown> = {}) => ({
   httpMethod: 'POST',
@@ -129,5 +133,45 @@ describe('parse-order quota enforcement', () => {
     expect(JSON.parse(result.body).code).toBe('AI_PLAN_UNAVAILABLE');
     expect(dependencies.reserveUsage).not.toHaveBeenCalled();
     expect(dependencies.parse).not.toHaveBeenCalled();
+  });
+});
+
+describe('parse-order modern Netlify adapter', () => {
+  test('preserves status, headers and body through the Request/Response contract', async () => {
+    const legacyHandler = jest.fn(async () => ({
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ status: 'ok' }),
+    }));
+    const handler = createModernParseOrderHandler(legacyHandler);
+    const response = await handler(new Request('https://example.test/api/parse-order', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'pedido' }),
+    }));
+
+    expect(config.path).toBe('/api/parse-order');
+    expect(legacyHandler).toHaveBeenCalledWith(expect.objectContaining({
+      httpMethod: 'POST',
+      body: JSON.stringify({ text: 'pedido' }),
+      headers: expect.objectContaining({ authorization: 'Bearer token' }),
+    }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('access-control-allow-origin')).toBe('*');
+    await expect(response.json()).resolves.toEqual({ status: 'ok' });
+  });
+
+  test('uses a null body for 204 preflight responses', async () => {
+    const handler = createModernParseOrderHandler(async () => ({
+      statusCode: 204,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: '',
+    }));
+    const response = await handler(new Request('https://example.test/api/parse-order', {
+      method: 'OPTIONS',
+    }));
+
+    expect(response.status).toBe(204);
+    expect(await response.text()).toBe('');
   });
 });

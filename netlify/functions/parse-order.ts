@@ -1,3 +1,5 @@
+import type { Config } from '@netlify/functions';
+
 const crypto = require('crypto');
 const { parseOrder } = require('./_shared/orderParser');
 const { authenticateEvent } = require('./_shared/firebaseAuth');
@@ -26,7 +28,7 @@ const json = (statusCode, body) => ({
 
 const readEnvironment = (name) => process.env[name];
 
-const createParseOrderHandler = (dependencies = {}) => {
+export const createParseOrderHandler = (dependencies = {}) => {
   const environment = dependencies.readEnvironment || readEnvironment;
   const authenticate = dependencies.authenticate || authenticateEvent;
   const parse = dependencies.parse || parseOrder;
@@ -160,5 +162,30 @@ const createParseOrderHandler = (dependencies = {}) => {
   };
 };
 
-exports.createParseOrderHandler = createParseOrderHandler;
-exports.handler = createParseOrderHandler();
+const productionLegacyHandler = createParseOrderHandler();
+
+// Keep the proven quota/parser core above while exposing the web-standard
+// Request/Response contract required by the modern Netlify Functions runtime.
+// This removes the legacy Lambda environment-size limit without changing the
+// mobile API response shape.
+export const createModernParseOrderHandler = (legacyHandler = productionLegacyHandler) =>
+  async (request: Request): Promise<Response> => {
+    const legacyResponse = await legacyHandler({
+      httpMethod: request.method,
+      headers: Object.fromEntries(request.headers.entries()),
+      body: request.method === 'POST' ? await request.text() : '',
+    });
+    return new Response(
+      legacyResponse.statusCode === 204 ? null : legacyResponse.body,
+      {
+        status: legacyResponse.statusCode,
+        headers: legacyResponse.headers,
+      },
+    );
+  };
+
+export default createModernParseOrderHandler();
+
+export const config: Config = {
+  path: '/api/parse-order',
+};

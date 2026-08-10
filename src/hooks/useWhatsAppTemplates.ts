@@ -12,7 +12,6 @@ import {
   shouldClearTemplateDirtyField,
 } from '../utils/whatsAppTemplates';
 
-export const DEFAULT_EN_CAMINO = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
 export const DEFAULT_DEUDA = 'La deuda es de ${total}. Saludos';
 export const DEFAULT_RECORDATORIO = 'Hola, buenas \nEste es un mensaje automatico para informarle que, segun nuestros registros, quedo pendiente un saldo por regularizar.\nCuando pueda, le agradecemos que nos indique en que fecha podriamos saldarlo. Si necesita nuevamente los datos de la cuenta, con gusto se los enviamos.\nMuchas gracias.';
 
@@ -20,6 +19,7 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
   const { t } = useTranslation();
   const scopeKey = uid ? settingsDocId(uid, groupId) : '';
   const [waEnCamino, setWaEnCamino] = useState('');
+  const [waTomorrowVisit, setWaTomorrowVisit] = useState('');
   const [waDeuda, setWaDeuda] = useState('');
   const [waRecordatorio, setWaRecordatorio] = useState('');
   const [loadedScopeKey, setLoadedScopeKey] = useState('');
@@ -28,6 +28,7 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
   const dirtyFieldsRef = useRef<Set<WhatsAppTemplateField>>(new Set());
   const editRevisionRef = useRef<Record<WhatsAppTemplateField, number>>({
     whatsappEnCamino: 0,
+    whatsappTomorrowVisit: 0,
     whatsappDeuda: 0,
     whatsappRecordatorio: 0,
   });
@@ -49,11 +50,13 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
 
     if (scopeChanged) {
       setWaEnCamino('');
+      setWaTomorrowVisit('');
       setWaDeuda('');
       setWaRecordatorio('');
       dirtyFieldsRef.current.clear();
       editRevisionRef.current = {
         whatsappEnCamino: 0,
+        whatsappTomorrowVisit: 0,
         whatsappDeuda: 0,
         whatsappRecordatorio: 0,
       };
@@ -72,6 +75,9 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
         latestValuesRef.current = { scopeKey, values };
         if (!dirtyFieldsRef.current.has('whatsappEnCamino')) {
           setWaEnCamino(values.whatsappEnCamino);
+        }
+        if (!dirtyFieldsRef.current.has('whatsappTomorrowVisit')) {
+          setWaTomorrowVisit(values.whatsappTomorrowVisit);
         }
         if (!dirtyFieldsRef.current.has('whatsappDeuda')) {
           setWaDeuda(values.whatsappDeuda);
@@ -100,6 +106,7 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
     dirtyFieldsRef.current.add(field);
     editRevisionRef.current[field] += 1;
     if (field === 'whatsappEnCamino') setWaEnCamino(value);
+    if (field === 'whatsappTomorrowVisit') setWaTomorrowVisit(value);
     if (field === 'whatsappDeuda') setWaDeuda(value);
     if (field === 'whatsappRecordatorio') setWaRecordatorio(value);
   };
@@ -121,6 +128,7 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
       );
       const settings = buildWhatsAppTemplatePatch({
         whatsappEnCamino: waEnCamino,
+        whatsappTomorrowVisit: waTomorrowVisit,
         whatsappDeuda: waDeuda,
         whatsappRecordatorio: waRecordatorio,
       }, dirtyFields);
@@ -154,11 +162,17 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
     try {
       if (!uid) throw new Error('WHATSAPP_TEMPLATES_USER_REQUIRED');
       await db.collection('settings').doc(operationScopeKey).set(
-        { whatsappEnCamino: null, whatsappDeuda: null, whatsappRecordatorio: null },
+        {
+          whatsappEnCamino: null,
+          whatsappTomorrowVisit: null,
+          whatsappDeuda: null,
+          whatsappRecordatorio: null,
+        },
         { merge: true },
       );
       if (currentScopeKeyRef.current !== operationScopeKey) return false;
       setWaEnCamino(EMPTY_WHATSAPP_TEMPLATES.whatsappEnCamino);
+      setWaTomorrowVisit(EMPTY_WHATSAPP_TEMPLATES.whatsappTomorrowVisit);
       setWaDeuda(EMPTY_WHATSAPP_TEMPLATES.whatsappDeuda);
       setWaRecordatorio(EMPTY_WHATSAPP_TEMPLATES.whatsappRecordatorio);
       dirtyFieldsRef.current.clear();
@@ -177,6 +191,7 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
     dirtyFieldsRef.current.clear();
     editRevisionRef.current = {
       whatsappEnCamino: 0,
+      whatsappTomorrowVisit: 0,
       whatsappDeuda: 0,
       whatsappRecordatorio: 0,
     };
@@ -184,6 +199,7 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
       ? latestValuesRef.current.values
       : EMPTY_WHATSAPP_TEMPLATES;
     setWaEnCamino(latest.whatsappEnCamino);
+    setWaTomorrowVisit(latest.whatsappTomorrowVisit);
     setWaDeuda(latest.whatsappDeuda);
     setWaRecordatorio(latest.whatsappRecordatorio);
     setLoadAttempt((attempt) => attempt + 1);
@@ -192,6 +208,8 @@ export const useWhatsAppTemplates = (uid: string, groupId: string | undefined) =
   return {
     waEnCamino,
     setWaEnCamino: (value: string) => updateTemplate('whatsappEnCamino', value),
+    waTomorrowVisit,
+    setWaTomorrowVisit: (value: string) => updateTemplate('whatsappTomorrowVisit', value),
     waDeuda,
     setWaDeuda: (value: string) => updateTemplate('whatsappDeuda', value),
     waRecordatorio,

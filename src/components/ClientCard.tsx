@@ -14,6 +14,10 @@ import ModalOverlay from './ModalOverlay';
 import { ProductIcon } from './ProductIcon';
 import { getFreqLabel } from '../constants/products';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
+import {
+  buildWhatsAppMessageUrl,
+  resolveClientCardWhatsAppMessage,
+} from '../utils/whatsAppTemplates';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
 
@@ -48,6 +52,8 @@ interface ClientCardProps {
   hasPendingTransfer?: boolean;
   hasRelationships?: boolean;
   enCaminoMessage?: string;
+  tomorrowVisitMessage?: string;
+  isTomorrowVisit?: boolean;
   onMarkDone: () => void;
   onEdit: () => void;
   onEditProducts?: () => void;
@@ -82,6 +88,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
   onRelationships,
   onChangePosition,
   enCaminoMessage,
+  tomorrowVisitMessage,
+  isTomorrowVisit = false,
   fontScale = 1,
   wideLayout = false,
 }) => {
@@ -114,12 +122,15 @@ const ClientCard: React.FC<ClientCardProps> = ({
     setShowPositionPrompt(true);
   };
 
-  const sendEnCamino = () => {
+  const sendContextualWhatsAppMessage = () => {
     if (!client.phone) return;
     const cleanPhone = normalizePhone(client.phone);
-    const defaultMsg = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
-    const msg = encodeURIComponent(enCaminoMessage || defaultMsg);
-    Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
+    const message = resolveClientCardWhatsAppMessage(
+      isTomorrowVisit,
+      enCaminoMessage,
+      tomorrowVisitMessage,
+    );
+    Linking.openURL(buildWhatsAppMessageUrl(cleanPhone, message));
   };
 
   const openWhatsAppCamera = () => {
@@ -531,7 +542,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
           </Text>
         </View>
 
-        {/* Action bar (narrow phones): Call | Camera | En camino | Listo below */}
+        {/* Action bar: tomorrow swaps "En camino" for the visit reminder. */}
         {!wideLayout && (
           <View style={styles.actionBar}>
             {client.phone ? (
@@ -553,14 +564,29 @@ const ClientCard: React.FC<ClientCardProps> = ({
                   <Ionicons name="logo-whatsapp" size={s(20)} color={colors.successMedium} />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={sendEnCamino}
-                  style={styles.enCaminoBtn}
+                  onPress={sendContextualWhatsAppMessage}
+                  style={[styles.enCaminoBtn, isTomorrowVisit && styles.tomorrowVisitBtn]}
                   activeOpacity={0.7}
                   accessibilityRole="button"
-                  accessibilityLabel={t('clientCard.onTheWay')}
+                  accessibilityLabel={isTomorrowVisit
+                    ? t('clientCard.notifyTomorrowFor', { name: client.name })
+                    : t('clientCard.onTheWay')}
+                  accessibilityHint={isTomorrowVisit
+                    ? t('clientCard.notifyTomorrowHint')
+                    : undefined}
+                  hitSlop={isTomorrowVisit ? { top: 2, bottom: 2 } : undefined}
                 >
-                  <Ionicons name="navigate-outline" size={s(15)} color={colors.successText} />
-                  <Text style={styles.enCaminoText}>{t('clientCard.onTheWay')}</Text>
+                  <Ionicons
+                    name={isTomorrowVisit ? 'calendar-outline' : 'navigate-outline'}
+                    size={s(15)}
+                    color={isTomorrowVisit ? colors.primaryText : colors.successText}
+                  />
+                  <Text style={[
+                    styles.enCaminoText,
+                    isTomorrowVisit && styles.tomorrowVisitText,
+                  ]}>
+                    {t(isTomorrowVisit ? 'clientCard.notify' : 'clientCard.onTheWay')}
+                  </Text>
                 </TouchableOpacity>
               </>
             ) : (
@@ -594,9 +620,30 @@ const ClientCard: React.FC<ClientCardProps> = ({
                   <Ionicons name="logo-whatsapp" size={s(19)} color={colors.successMedium} />
                 </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={sendEnCamino} style={styles.enCaminoBtnWide} activeOpacity={0.7}>
-                <Ionicons name="navigate-outline" size={s(15)} color={colors.successText} />
-                <Text style={styles.enCaminoText}>{t('clientCard.onTheWay')}</Text>
+              <TouchableOpacity
+                onPress={sendContextualWhatsAppMessage}
+                style={[styles.enCaminoBtnWide, isTomorrowVisit && styles.tomorrowVisitBtn]}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={isTomorrowVisit
+                  ? t('clientCard.notifyTomorrowFor', { name: client.name })
+                  : t('clientCard.onTheWay')}
+                accessibilityHint={isTomorrowVisit
+                  ? t('clientCard.notifyTomorrowHint')
+                  : undefined}
+                hitSlop={isTomorrowVisit ? { top: 2, bottom: 2 } : undefined}
+              >
+                <Ionicons
+                  name={isTomorrowVisit ? 'calendar-outline' : 'navigate-outline'}
+                  size={s(15)}
+                  color={isTomorrowVisit ? colors.primaryText : colors.successText}
+                />
+                <Text style={[
+                  styles.enCaminoText,
+                  isTomorrowVisit && styles.tomorrowVisitText,
+                ]}>
+                  {t(isTomorrowVisit ? 'clientCard.notify' : 'clientCard.onTheWay')}
+                </Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -974,6 +1021,13 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.successText,
       fontSize: s(13),
       fontWeight: '700',
+    },
+    tomorrowVisitBtn: {
+      backgroundColor: colors.primaryLighter,
+      borderColor: colors.primaryBorder,
+    },
+    tomorrowVisitText: {
+      color: colors.primaryText,
     },
     addPhoneBtn: {
       flex: 1,

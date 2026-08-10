@@ -90,6 +90,9 @@ const DaySelector = React.memo<DaySelectorProps>(({
                 isToday && !isSelected && styles.dayChipToday,
               ]}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`${getDayLabel(day)}: ${count}`}
+              accessibilityState={{ selected: isSelected }}
             >
               <Text
                 style={[

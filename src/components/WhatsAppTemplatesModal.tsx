@@ -20,10 +20,10 @@ import { getModalWidth } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import {
   useWhatsAppTemplates,
-  DEFAULT_EN_CAMINO,
   DEFAULT_DEUDA,
   DEFAULT_RECORDATORIO,
 } from '../hooks/useWhatsAppTemplates';
+import { DEFAULT_EN_CAMINO, DEFAULT_TOMORROW_VISIT } from '../utils/whatsAppTemplates';
 
 interface WhatsAppTemplatesModalProps {
   visible: boolean;
@@ -49,6 +49,8 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
   const {
     waEnCamino,
     setWaEnCamino,
+    waTomorrowVisit,
+    setWaTomorrowVisit,
     waDeuda,
     setWaDeuda,
     waRecordatorio,
@@ -144,6 +146,21 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
               placeholderTextColor={colors.textDisabled}
               multiline
               numberOfLines={3}
+              editable={!saving}
+            />
+
+            <View style={styles.templateDivider} />
+
+            <Text style={styles.templateLabel}>{t('settings.tomorrowVisitLabel')}</Text>
+            <TextInput
+              style={styles.templateInput}
+              value={waTomorrowVisit}
+              onChangeText={setWaTomorrowVisit}
+              placeholder={DEFAULT_TOMORROW_VISIT}
+              placeholderTextColor={colors.textDisabled}
+              accessibilityLabel={t('settings.tomorrowVisitLabel')}
+              multiline
+              numberOfLines={5}
               editable={!saving}
             />
 

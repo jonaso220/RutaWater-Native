@@ -1,5 +1,23 @@
+export const DEFAULT_EN_CAMINO = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
+export const DEFAULT_TOMORROW_VISIT = 'Buenas 👋 Te escribo para recordarte que mañana andaremos por tu casa 🚛💧\n\nEn caso de que ya sepas lo que vas a necesitar, te agradezco que me lo digas así lo pongo en la agenda 📝✅\n\n¡Saludos! 😃';
+
+export const resolveClientCardWhatsAppMessage = (
+  isTomorrowVisit: boolean,
+  enCaminoMessage?: string,
+  tomorrowVisitMessage?: string,
+): string => (
+  isTomorrowVisit
+    ? (tomorrowVisitMessage || DEFAULT_TOMORROW_VISIT)
+    : (enCaminoMessage || DEFAULT_EN_CAMINO)
+);
+
+export const buildWhatsAppMessageUrl = (normalizedPhone: string, message: string): string => (
+  `whatsapp://send?phone=${normalizedPhone}&text=${encodeURIComponent(message)}`
+);
+
 export const WHATSAPP_TEMPLATE_FIELDS = [
   'whatsappEnCamino',
+  'whatsappTomorrowVisit',
   'whatsappDeuda',
   'whatsappRecordatorio',
 ] as const;
@@ -15,6 +33,7 @@ export interface ScopedWhatsAppTemplates {
 
 export const EMPTY_WHATSAPP_TEMPLATES: WhatsAppTemplateValues = {
   whatsappEnCamino: '',
+  whatsappTomorrowVisit: '',
   whatsappDeuda: '',
   whatsappRecordatorio: '',
 };
@@ -26,6 +45,7 @@ export const normalizeWhatsAppTemplates = (data: unknown): WhatsAppTemplateValue
 
   return {
     whatsappEnCamino: typeof source.whatsappEnCamino === 'string' ? source.whatsappEnCamino : '',
+    whatsappTomorrowVisit: typeof source.whatsappTomorrowVisit === 'string' ? source.whatsappTomorrowVisit : '',
     whatsappDeuda: typeof source.whatsappDeuda === 'string' ? source.whatsappDeuda : '',
     whatsappRecordatorio: typeof source.whatsappRecordatorio === 'string' ? source.whatsappRecordatorio : '',
   };

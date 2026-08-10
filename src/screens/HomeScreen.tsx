@@ -29,6 +29,7 @@ import {
   normalizeWhatsAppTemplates,
   templatesForScope,
 } from '../utils/whatsAppTemplates';
+import { millisecondsUntilNextLocalDay, nextLocalDateKey } from '../utils/localDayClock';
 import { hapticLight, hapticSelection } from '../utils/haptics';
 import { db } from '../config/firebase';
 import { dataScopeQuery } from '../utils/dataScope';
@@ -68,7 +69,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 type ListItem =
   | { type: 'header'; key: string; title: string; count: number; isToday: boolean }
-  | { type: 'client'; key: string; client: Client }
+  | { type: 'client'; key: string; client: Client; sectionDateKey: string }
   | { type: 'gridrow'; key: string; clients: Client[]; sectionDateKey: string };
 
 // --- Memoized SectionHeader to avoid re-renders ---
@@ -121,6 +122,8 @@ interface ClientItemProps {
   hasPendingTransfer: boolean;
   hasRelationships: boolean;
   enCaminoMessage?: string;
+  tomorrowVisitMessage?: string;
+  isTomorrowVisit: boolean;
   fontScale?: number;
   wideLayout?: boolean;
   selectedDay: string;
@@ -145,6 +148,8 @@ const ClientItem = React.memo<ClientItemProps>(({
   hasPendingTransfer,
   hasRelationships,
   enCaminoMessage,
+  tomorrowVisitMessage,
+  isTomorrowVisit,
   fontScale,
   wideLayout,
   selectedDay,
@@ -195,6 +200,8 @@ const ClientItem = React.memo<ClientItemProps>(({
       onRelationships={handleRelationships}
       onChangePosition={handleChangePosition}
       enCaminoMessage={enCaminoMessage}
+      tomorrowVisitMessage={tomorrowVisitMessage}
+      isTomorrowVisit={isTomorrowVisit}
       fontScale={fontScale}
       wideLayout={wideLayout}
     />
@@ -262,6 +269,8 @@ const HomeScreen = () => {
   const [selectedDay, setSelectedDay] = useState(() => {
     return getTodayDayName();
   });
+  const [localTodayKey, setLocalTodayKey] = useState(() => toLocalDateString(new Date()));
+  const tomorrowDateKey = useMemo(() => nextLocalDateKey(localTodayKey), [localTodayKey]);
   // Deferred day: tab highlights instantly, list updates in background
   const deferredDay = useDeferredValue(selectedDay);
   const isDayPending = selectedDay !== deferredDay;
@@ -513,12 +522,18 @@ const HomeScreen = () => {
   const selectedDayRef = useRef(selectedDay);
   selectedDayRef.current = selectedDay;
 
-  // Fix 3: Detect cross-midnight day change
+  // Keep both the selected weekday and contextual date actions correct across
+  // local midnight, including after the app returns from the background.
   useEffect(() => {
     let lastKnownToday = getTodayDayName();
+    let rolloverTimer: ReturnType<typeof setTimeout> | undefined;
 
     const checkDay = () => {
       const currentToday = getTodayDayName();
+      const currentTodayKey = toLocalDateString(new Date());
+      setLocalTodayKey((previousKey) => (
+        previousKey === currentTodayKey ? previousKey : currentTodayKey
+      ));
       if (currentToday !== lastKnownToday) {
         // Day changed! Only auto-switch if user was viewing the old "today"
         if (selectedDay === lastKnownToday) {
@@ -527,8 +542,27 @@ const HomeScreen = () => {
         lastKnownToday = currentToday;
       }
     };
-    const interval = setInterval(checkDay, 60000);
-    return () => clearInterval(interval);
+
+    const scheduleNextRollover = () => {
+      if (rolloverTimer) clearTimeout(rolloverTimer);
+      rolloverTimer = setTimeout(() => {
+        checkDay();
+        scheduleNextRollover();
+      }, millisecondsUntilNextLocalDay() + 50);
+    };
+
+    checkDay();
+    scheduleNextRollover();
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return;
+      checkDay();
+      scheduleNextRollover();
+    });
+
+    return () => {
+      if (rolloverTimer) clearTimeout(rolloverTimer);
+      appStateSubscription.remove();
+    };
   }, [selectedDay]);
 
   // Fix 4: Debounce search input
@@ -638,11 +672,10 @@ const HomeScreen = () => {
 
   // Group clients by next visit date for section headers
   const clientSections = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = new Date(`${localTodayKey}T00:00:00`);
     // Local date keys: toISOString() is UTC and would shift the day in
     // timezones east of Greenwich (harmless in UTC-3, wrong in Europe).
-    const todayKey = toLocalDateString(today);
+    const todayKey = localTodayKey;
 
     const groups: Record<string, Client[]> = {};
 
@@ -683,7 +716,7 @@ const HomeScreen = () => {
           data: groups[dateKey],
         };
       });
-  }, [visibleClients, deferredDay]);
+  }, [visibleClients, deferredDay, localTodayKey, t]);
 
   // Clients for the nearest date only (for the product counter)
   const nearestDateClients = useMemo(() => {
@@ -707,6 +740,7 @@ const HomeScreen = () => {
           type: 'client',
           key: client.id,
           client,
+          sectionDateKey: section.dateKey,
         });
       });
     });
@@ -1042,6 +1076,8 @@ const HomeScreen = () => {
           hasPendingTransfer={transferMap[client.id] ?? false}
           hasRelationships={relationshipMap[client.id] ?? false}
           enCaminoMessage={appSettings?.whatsappEnCamino}
+          tomorrowVisitMessage={appSettings?.whatsappTomorrowVisit}
+          isTomorrowVisit={item.sectionDateKey === tomorrowDateKey}
           fontScale={fontScale}
           wideLayout={wideCard}
           selectedDay={deferredDay}
@@ -1072,6 +1108,7 @@ const HomeScreen = () => {
       debtMap,
       transferMap,
       relationshipMap,
+      tomorrowDateKey,
     ],
   );
 
@@ -1142,6 +1179,8 @@ const HomeScreen = () => {
                 hasPendingTransfer={transferMap[client.id] ?? false}
                 hasRelationships={relationshipMap[client.id] ?? false}
                 enCaminoMessage={appSettings?.whatsappEnCamino}
+                tomorrowVisitMessage={appSettings?.whatsappTomorrowVisit}
+                isTomorrowVisit={item.sectionDateKey === tomorrowDateKey}
                 fontScale={gridFontScale}
                 selectedDay={deferredDay}
                 onMarkDone={stableHandlers.onMarkDone}
@@ -1177,6 +1216,7 @@ const HomeScreen = () => {
       debtMap,
       transferMap,
       relationshipMap,
+      tomorrowDateKey,
       stableHandlers,
       numColumns,
       styles,

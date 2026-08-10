@@ -21,8 +21,8 @@ import { ProductLabel } from './ProductIcon';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { Frequency, getDayLabel, getFreqLabel } from '../constants/products';
-import { useAllProducts } from '../stores/productCatalogStore';
-import { getModalWidth, getDayIndex, sanitizePhone } from '../utils/helpers';
+import { useAllProducts, useProductCatalogStore } from '../stores/productCatalogStore';
+import { getModalWidth, getDayIndex, sanitizePhone, toLocalDateString } from '../utils/helpers';
 import { formatShortDate } from '../utils/format';
 import { hasGoogleLocationLinkText, normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { useLayout } from '../hooks/useLayout';
@@ -30,6 +30,16 @@ import { useAiParse, ParseResult, NotesMode } from '../hooks/useAiParse';
 import { useAiUsageStore } from '../stores/aiUsageStore';
 import { useClientsStore } from '../stores/clientsStore';
 import { isValidCalendarDate, isValidScheduleDate } from '../utils/scheduling';
+import i18n from '../i18n';
+import {
+  applyAiProductChange,
+  buildAiClientPayload,
+  buildAiProductCatalog,
+  fingerprintCatalog,
+  fingerprintClientState,
+  getAiLocale,
+  validateAiProductResult,
+} from '../utils/aiProducts';
 
 interface SmartOrderModalProps {
   visible: boolean;
@@ -73,16 +83,6 @@ const normalizeDayName = (d: string): string => {
   return idx >= 0 ? DAY_CANON[idx] : '';
 };
 
-// Set absoluto de productos de la IA: solo enteros positivos razonables.
-const cleanProductSet = (p: Record<string, number> | undefined): Record<string, number> => {
-  const out: Record<string, number> = {};
-  Object.entries(p || {}).forEach(([k, v]) => {
-    const n = Math.round(Number(v));
-    if (Number.isFinite(n) && n > 0 && n <= 9999) out[k] = n;
-  });
-  return out;
-};
-
 const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) => {
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -96,6 +96,17 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   const [result, setResult] = useState<ParseResult | null>(null);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const savingRef = useRef(false);
+  const interpretationEpochRef = useRef(0);
+  const textRef = useRef(text);
+
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
+
+  useEffect(() => {
+    if (!visible) interpretationEpochRef.current += 1;
+  }, [visible]);
 
   const { parsing, parse, error, limitReached, reset } = useAiParse();
   const usage = useAiUsageStore();
@@ -103,7 +114,6 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   const scheduleFromDirectory = useClientsStore((s) => s.scheduleFromDirectory);
   const updateClient = useClientsStore((s) => s.updateClient);
   const addNote = useClientsStore((s) => s.addNote);
-  const clients = useClientsStore((s) => s.clients);
   const canAddClient = useClientsStore((s) => s.canAddClient);
 
   useEffect(() => {
@@ -140,9 +150,9 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   };
 
   const handleClose = useCallback(() => {
+    interpretationEpochRef.current += 1;
     setText('');
     setResult(null);
-    setSaving(false);
     reset();
     onClose();
   }, [onClose, reset]);
@@ -156,13 +166,19 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
       Alert.alert(t('smartOrder.missingTextTitle'), t('smartOrder.missingTextMsg'));
       return;
     }
+    const sourceText = text.trim();
+    const interpretationEpoch = ++interpretationEpochRef.current;
     setResult(null);
-    const r = await parse(text.trim());
-    if (r) {
+    const r = await parse(sourceText);
+    if (
+      r
+      && interpretationEpoch === interpretationEpochRef.current
+      && textRef.current.trim() === sourceText
+    ) {
       // La preview y el guardado deben usar exactamente el mismo link válido.
       // Si el modelo lo omitió o añadió puntuación, recuperarlo del texto pegado.
       if (r.tool === 'create_new_client' || r.tool === 'update_client_data') {
-        const mapsLink = normalizeGoogleMapsLink(r.input.mapsLink, text);
+        const mapsLink = normalizeGoogleMapsLink(r.input.mapsLink, sourceText);
         setResult({ ...r, input: { ...r.input, mapsLink } } as ParseResult);
       } else {
         setResult(r);
@@ -171,11 +187,55 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   }, [text, parse, t]);
 
   const handleConfirm = useCallback(async () => {
-    if (!result) return;
+    if (!result || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
-      if (result.tool === 'create_new_client') {
-        const i = result.input;
+      const context = result.context;
+      const catalogState = useProductCatalogStore.getState();
+      const clientsState = useClientsStore.getState();
+      let catalog;
+      let latestClients;
+      try {
+        catalog = buildAiProductCatalog(catalogState.allProducts, catalogState.hidden);
+        latestClients = buildAiClientPayload(clientsState.clients);
+      } catch {
+        Alert.alert(t('smartOrder.reinterpretTitle'), t('smartOrder.catalogChangedReinterpret'));
+        setResult(null);
+        return;
+      }
+      const currentLocale = getAiLocale(i18n.resolvedLanguage || i18n.language);
+      const contextIsCurrent = Boolean(
+        context
+        && context.sourceText === text.trim()
+        && context.todayIso === toLocalDateString(new Date())
+        && catalogState.loaded
+        && !catalogState.loadError
+        && context.catalogScopeKey === catalogState.scopeKey
+        && context.catalogGeneration === catalogState.generation
+        && context.catalogFingerprint === fingerprintCatalog(catalog)
+        && !clientsState.loading
+        && context.clientsScopeKey === clientsState.scopeKey
+        && context.clientsFingerprint === fingerprintClientState(clientsState.clients)
+        && context.locale === currentLocale
+      );
+      if (!contextIsCurrent) {
+        Alert.alert(t('smartOrder.reinterpretTitle'), t('smartOrder.previewChangedReinterpret'));
+        setResult(null);
+        return;
+      }
+
+      let confirmedResult: ParseResult;
+      try {
+        confirmedResult = validateAiProductResult(result, catalog, latestClients);
+      } catch {
+        Alert.alert(t('smartOrder.reinterpretTitle'), t('smartOrder.invalidProductsReinterpret'));
+        setResult(null);
+        return;
+      }
+
+      if (confirmedResult.tool === 'create_new_client') {
+        const i = confirmedResult.input;
         // La IA también crea documentos de cliente: respeta el límite del
         // plan free igual que el botón "+" (antes era un bypass).
         if (!canAddClient) {
@@ -212,7 +272,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           address: i.address || '',
           mapsLink,
           notes: i.notes || '',
-          products: cleanProductSet(i.products),
+          products: applyAiProductChange({}, { products: i.products }, catalog).products,
           freq: i.freq as Frequency,
           visitDay: newVisitDay,
           specificDate: i.specificDate || '',
@@ -231,34 +291,24 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         return;
       }
 
-      if (result.tool === 'merge_products_into_order') {
-        const i = result.input;
-        const client = clients.find((c) => c.id === i.matched_client_id);
+      if (confirmedResult.tool === 'merge_products_into_order') {
+        const i = confirmedResult.input;
+        const client = clientsState.clients.find((c) => c.id === i.matched_client_id);
         if (!client) {
           Alert.alert(t('error'), t('smartOrder.clientNotFound'));
           setSaving(false);
           return;
         }
-        // Partimos de los productos actuales, sumamos add_products y restamos remove_products.
-        const merged: Record<string, number> = {};
-        const current = (client.products || {}) as Record<string, string | number>;
-        Object.entries(current).forEach(([k, v]) => {
-          const n = typeof v === 'number' ? v : parseInt(String(v), 10);
-          if (n > 0) merged[k] = n;
-        });
-        Object.entries(i.add_products || {}).forEach(([k, v]) => {
-          if (v > 0) merged[k] = (merged[k] || 0) + v;
-        });
-        Object.entries(i.remove_products || {}).forEach(([k, v]) => {
-          if (v > 0 && merged[k]) {
-            const next = merged[k] - v;
-            if (next > 0) merged[k] = next;
-            else delete merged[k];
-          }
-        });
-        const updates: any = { products: merged, updatedAt: new Date() };
+        const productChange = applyAiProductChange(client.products, i, catalog);
+        const updates: any = {};
+        if (productChange.changed) updates.products = productChange.products;
         const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
-        if (nextNotes !== undefined) updates.notes = nextNotes;
+        if (nextNotes !== undefined && nextNotes !== (client.notes || '')) updates.notes = nextNotes;
+        if (Object.keys(updates).length === 0) {
+          Alert.alert(t('smartOrder.noChangesTitle'), t('smartOrder.noChangesMsg'));
+          return;
+        }
+        updates.updatedAt = new Date();
         const mergedOk = await updateClient(client.id, updates);
         if (!mergedOk) {
           Alert.alert(t('error'), t('smartOrder.mergeFailed'));
@@ -276,9 +326,9 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         return;
       }
 
-      if (result.tool === 'update_client_data') {
-        const i = result.input;
-        const client = clients.find((c) => c.id === i.matched_client_id);
+      if (confirmedResult.tool === 'update_client_data') {
+        const i = confirmedResult.input;
+        const client = clientsState.clients.find((c) => c.id === i.matched_client_id);
         if (!client) {
           Alert.alert(t('error'), t('smartOrder.clientNotFoundDirectory'));
           setSaving(false);
@@ -291,11 +341,12 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        if (mapsLink) updates.mapsLink = mapsLink;
-        if (i.address) updates.address = i.address;
-        if (i.phone) updates.phone = sanitizePhone(i.phone);
+        if (mapsLink && mapsLink !== (client.mapsLink || '')) updates.mapsLink = mapsLink;
+        if (i.address && i.address !== (client.address || '')) updates.address = i.address;
+        const nextPhone = i.phone ? sanitizePhone(i.phone) : '';
+        if (nextPhone && nextPhone !== sanitizePhone(client.phone || '')) updates.phone = nextPhone;
         const nextNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
-        if (nextNotes !== undefined) updates.notes = nextNotes;
+        if (nextNotes !== undefined && nextNotes !== (client.notes || '')) updates.notes = nextNotes;
         if (Object.keys(updates).length === 0) {
           Alert.alert(t('smartOrder.noChangesTitle'), t('smartOrder.noChangesMsg'));
           setSaving(false);
@@ -312,12 +363,17 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         return;
       }
 
-      if (result.tool === 'schedule_existing_client') {
-        const i = result.input;
-        const client = clients.find((c) => c.id === i.matched_client_id);
+      if (confirmedResult.tool === 'schedule_existing_client') {
+        const i = confirmedResult.input;
+        const client = clientsState.clients.find((c) => c.id === i.matched_client_id);
         if (!client) {
           Alert.alert(t('error'), t('smartOrder.clientNotFoundRetry'));
           setSaving(false);
+          return;
+        }
+        if (client.freq !== 'on_demand' && i.schedule_mode !== 'add' && i.schedule_mode !== 'replace') {
+          Alert.alert(t('smartOrder.reinterpretTitle'), t('smartOrder.scheduleModeRequired'));
+          setResult(null);
           return;
         }
         // Defensa contra cancelación silenciosa: si la IA pasa freq='on_demand' o vacía
@@ -375,40 +431,23 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         // If undefined → keep current; otherwise pass the resolved value.
         const resolvedNotes = resolveNotes(client.notes as any, i.notes, i.notes_mode, text);
         const notesToPass = resolvedNotes !== undefined ? resolvedNotes : (client.notes || '');
-        // Products precedence:
-        //   1. If `products` is non-empty → absolute set replacement.
-        //   2. Else start from client's current products and apply add_products / remove_products.
-        //   3. Else (no signals) just keep client's current products.
-        const hasAbsoluteSet = i.products && typeof i.products === 'object' && Object.keys(i.products).length > 0;
-        const hasDelta = (i.add_products && Object.keys(i.add_products).length > 0)
-                      || (i.remove_products && Object.keys(i.remove_products).length > 0);
-        let productsToPass: Record<string, number>;
-        if (hasAbsoluteSet) {
-          productsToPass = cleanProductSet(i.products);
-        } else if (hasDelta) {
-          productsToPass = {};
-          const current = (client.products || {}) as Record<string, string | number>;
-          Object.entries(current).forEach(([k, v]) => {
-            const n = typeof v === 'number' ? v : parseInt(String(v), 10);
-            if (n > 0) productsToPass[k] = n;
-          });
-          Object.entries(i.add_products || {}).forEach(([k, v]) => {
-            if (v > 0) productsToPass[k] = (productsToPass[k] || 0) + v;
-          });
-          Object.entries(i.remove_products || {}).forEach(([k, v]) => {
-            if (v > 0 && productsToPass[k]) {
-              const next = productsToPass[k] - v;
-              if (next > 0) productsToPass[k] = next;
-              else delete productsToPass[k];
-            }
-          });
-        } else {
-          productsToPass = (client.products as Record<string, number>) || {};
-        }
-        // Default to 'replace' (move) when the AI doesn't specify schedule_mode — the AI is
-        // expected to set it explicitly, but this matches the most common intent ("movélo a X").
-        // If the current client is on_demand the store already updates in place regardless.
+        const productChange = applyAiProductChange(client.products, i, catalog);
+        const productsToPass = productChange.products;
         const scheduleMode: 'add' | 'replace' = i.schedule_mode === 'add' ? 'add' : 'replace';
+        const currentDays = client.visitDays && client.visitDays.length
+          ? client.visitDays
+          : (client.visitDay ? [client.visitDay] : []);
+        const sameDays = currentDays.length === days.length
+          && currentDays.every((day) => days.includes(day));
+        const scheduleChanged = client.freq !== freq
+          || (client.specificDate || '') !== (i.specificDate || '')
+          || !sameDays
+          || (client.notes || '') !== notesToPass
+          || productChange.changed;
+        if (scheduleMode === 'replace' && !scheduleChanged) {
+          Alert.alert(t('smartOrder.noChangesTitle'), t('smartOrder.noChangesMsg'));
+          return;
+        }
         const scheduledOk = await scheduleFromDirectory(
           client,
           days,
@@ -429,8 +468,8 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         return;
       }
 
-      if (result.tool === 'add_standalone_note') {
-        const i = result.input;
+      if (confirmedResult.tool === 'add_standalone_note') {
+        const i = confirmedResult.input;
         if (!i.notes?.trim() || !i.specificDate) {
           Alert.alert(t('error'), t('smartOrder.noteMissing'));
           setSaving(false);
@@ -456,9 +495,10 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
     } catch (e: any) {
       Alert.alert(t('error'), e?.message || t('smartOrder.saveFailed'));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
-  }, [result, aiCreateClient, scheduleFromDirectory, updateClient, addNote, clients, canAddClient, handleClose, text, t]);
+  }, [result, aiCreateClient, scheduleFromDirectory, updateClient, addNote, canAddClient, handleClose, text, t]);
 
   const remainingUses = Math.max(0, usage.limit - usage.count);
 

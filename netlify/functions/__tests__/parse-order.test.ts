@@ -49,6 +49,58 @@ describe('parse-order quota enforcement', () => {
     expect(dependencies.reserveUsage).not.toHaveBeenCalled();
   });
 
+  test('passes a validated custom catalog and locale to the parser', async () => {
+    const { handler, dependencies } = makeHandler();
+    const catalog = [
+      { id: 'custom_1', label: 'Retornable grande', short: 'RetG', hidden: false },
+      { id: 'hidden_old', label: 'Producto anterior', short: 'Old', hidden: true },
+    ];
+    const result = await handler(validEvent({
+      body: JSON.stringify({
+        text: 'Adicione dois retornáveis',
+        clients: [],
+        todayIso: '2026-08-04',
+        catalog,
+        locale: 'pt',
+      }),
+    }));
+
+    expect(result.statusCode).toBe(200);
+    expect(dependencies.parse).toHaveBeenCalledWith(expect.objectContaining({
+      productCatalog: catalog,
+      locale: 'pt',
+    }));
+  });
+
+  test.each([
+    [{ id: 'dup', label: 'Uno', short: 'U', hidden: false }, { id: 'dup', label: 'Dos', short: 'D', hidden: false }],
+    [{ id: 'bad id', label: 'Uno', short: 'U', hidden: false }],
+  ])('rejects an invalid catalog before Firestore or quota', async (catalog) => {
+    const { handler, dependencies } = makeHandler();
+    const result = await handler(validEvent({
+      body: JSON.stringify({ text: 'Pedido', clients: [], todayIso: '2026-08-04', catalog }),
+    }));
+    expect(result.statusCode).toBe(400);
+    expect(dependencies.getFirestore).not.toHaveBeenCalled();
+    expect(dependencies.reserveUsage).not.toHaveBeenCalled();
+    expect(dependencies.parse).not.toHaveBeenCalled();
+  });
+
+  test('rejects an unsupported locale and an oversized body before quota', async () => {
+    const first = makeHandler();
+    const invalidLocale = await first.handler(validEvent({
+      body: JSON.stringify({ text: 'Pedido', clients: [], todayIso: '2026-08-04', locale: 'fr' }),
+    }));
+    expect(invalidLocale.statusCode).toBe(400);
+    expect(first.dependencies.reserveUsage).not.toHaveBeenCalled();
+
+    const second = makeHandler();
+    const oversized = await second.handler(validEvent({ body: 'x'.repeat(400_001) }));
+    expect(oversized.statusCode).toBe(413);
+    expect(second.dependencies.getFirestore).not.toHaveBeenCalled();
+    expect(second.dependencies.reserveUsage).not.toHaveBeenCalled();
+  });
+
   test('uses only the verified Firebase uid for plan and reservation', async () => {
     const { handler, dependencies } = makeHandler();
     const result = await handler(validEvent({

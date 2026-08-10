@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useClientsStore } from '../stores/clientsStore';
 import { useAiUsageStore } from '../stores/aiUsageStore';
 import { API_ENDPOINTS } from '../config/api';
@@ -6,6 +6,18 @@ import { toLocalDateString } from '../utils/helpers';
 import { fbAuth } from '../config/firebase';
 import { looksLikeCompleteClientCardText, parseDirectoryContactCard } from '../utils/googleMapsLink';
 import { isAiLimitResponse, quotaFromResponseBody } from '../utils/aiQuota';
+import i18n from '../i18n';
+import { useProductCatalogStore } from '../stores/productCatalogStore';
+import {
+  AiParseContext,
+  AiProductError,
+  buildAiClientPayload,
+  buildAiProductCatalog,
+  fingerprintCatalog,
+  fingerprintClientState,
+  getAiLocale,
+  validateAiProductResult,
+} from '../utils/aiProducts';
 
 export interface CreateNewClientInput {
   name: string;
@@ -69,7 +81,7 @@ export interface AddStandaloneNoteInput {
   specificDate: string;
 }
 
-export type ParseResult =
+type ParseResultPayload =
   | { tool: 'create_new_client'; input: CreateNewClientInput }
   | { tool: 'schedule_existing_client'; input: ScheduleExistingClientInput }
   | { tool: 'merge_products_into_order'; input: MergeProductsInput }
@@ -77,6 +89,8 @@ export type ParseResult =
   | { tool: 'add_standalone_note'; input: AddStandaloneNoteInput }
   | { tool: 'report_not_found'; input: ReportNotFoundInput }
   | { tool: 'report_no_action'; input: ReportNoActionInput };
+
+export type ParseResult = ParseResultPayload & { context?: AiParseContext };
 
 interface UseAiParseReturn {
   parsing: boolean;
@@ -90,24 +104,55 @@ export const useAiParse = (): UseAiParseReturn => {
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [limitReached, setLimitReached] = useState(false);
+  const requestEpochRef = useRef(0);
 
   const reset = useCallback(() => {
+    requestEpochRef.current += 1;
+    setParsing(false);
     setError(null);
     setLimitReached(false);
   }, []);
 
   const parse = useCallback(async (text: string): Promise<ParseResult | null> => {
+    const requestEpoch = ++requestEpochRef.current;
+    const isCurrentRequest = () => requestEpoch === requestEpochRef.current;
     setParsing(true);
     setError(null);
     setLimitReached(false);
 
     try {
+      const sourceText = text.trim();
+      const catalogState = useProductCatalogStore.getState();
+      if (!catalogState.loaded || catalogState.loadError || !catalogState.scopeKey) {
+        throw new Error(i18n.t('smartOrder.catalogNotReady'));
+      }
+      const catalog = buildAiProductCatalog(catalogState.allProducts, catalogState.hidden);
+      const clientsState = useClientsStore.getState();
+      if (clientsState.loading || !clientsState.scopeKey) {
+        throw new Error(i18n.t('smartOrder.clientsNotReady'));
+      }
+      const clients = buildAiClientPayload(clientsState.clients);
+      const locale = getAiLocale(i18n.resolvedLanguage || i18n.language);
+      // Local date: toISOString() is UTC and already says "tomorrow" after
+      // 21:00 in UTC-3, shifting every relative date the AI resolves.
+      const todayIso = toLocalDateString(new Date());
+      const context: AiParseContext = {
+        sourceText,
+        todayIso,
+        locale,
+        catalogScopeKey: catalogState.scopeKey,
+        catalogGeneration: catalogState.generation,
+        catalogFingerprint: fingerprintCatalog(catalog),
+        clientsScopeKey: clientsState.scopeKey,
+        clientsFingerprint: fingerprintClientState(clientsState.clients),
+      };
+
       // Una ficha sin nombre separado no necesita interpretación semántica:
       // dirección + Maps + teléfono ya determinan exactamente el alta pedida.
       // Resolverla antes del fetch evita que un backend publicado con un prompt
       // anterior vuelva a responder "cliente no encontrado". Además no consume
       // un parseo de IA porque en este camino no se consulta ningún modelo.
-      const localCard = parseDirectoryContactCard(text);
+      const localCard = parseDirectoryContactCard(sourceText);
       if (localCard?.usedAddressAsName) {
         const { usedAddressAsName: _usedAddressAsName, ...contact } = localCard;
         return {
@@ -120,57 +165,12 @@ export const useAiParse = (): UseAiParseReturn => {
             visitDay: '',
             specificDate: '',
           },
+          context,
         };
       }
-
-      // 2) Construir lista de clientes con estado del pedido pendiente.
-      //    Un mismo cliente puede aparecer en MÚLTIPLES filas: una por cada pedido
-      //    activo (ej: "Farmacia Central" puede tener un pedido semanal de lunes Y
-      //    un pedido puntual de sábado al mismo tiempo, son docs separados).
-      //    Si solo tiene la "ficha" en directorio (on_demand), aparece una sola fila.
-      //    Pero si hay duplicados con on_demand + alguno activo, omitimos el on_demand
-      //    para no confundir a la IA cuando claramente hay un pedido pendiente.
-      const allClients = useClientsStore.getState().clients.filter((c) => c.name && !c.isNote);
-      const groupedByKey = new Map<string, typeof allClients>();
-      for (const c of allClients) {
-        const key = `${(c.name || '').toLowerCase().trim()}|${(c.phone || '').replace(/\D/g, '')}`;
-        const arr = groupedByKey.get(key) || [];
-        arr.push(c);
-        groupedByKey.set(key, arr);
-      }
-      const visibleClients: typeof allClients = [];
-      for (const group of groupedByKey.values()) {
-        const hasActive = group.some((c) => c.freq && c.freq !== 'on_demand');
-        for (const c of group) {
-          // Si existe versión activa, omitimos las on_demand (son la "ficha" duplicada)
-          if (hasActive && c.freq === 'on_demand') continue;
-          visibleClients.push(c);
-        }
-      }
-      const clients = visibleClients.map((c) => {
-        const products: Record<string, number> = {};
-        if (c.products) {
-          Object.entries(c.products).forEach(([k, v]) => {
-            const n = typeof v === 'number' ? v : parseInt(String(v), 10);
-            if (n > 0) products[k] = n;
-          });
-        }
-        return {
-          id: c.id,
-          name: c.name,
-          address: c.address || '',
-          freq: c.freq || 'on_demand',
-          visitDay: c.visitDay || '',
-          specificDate: c.specificDate || '',
-          products,
-          notes: c.notes || '',
-        };
-      });
-      // Local date: toISOString() is UTC and already says "tomorrow" after
-      // 21:00 in UTC-3, shifting every relative date the AI resolves.
-      const todayIso = toLocalDateString(new Date());
 
       const idToken = await fbAuth.currentUser?.getIdToken();
+      if (!isCurrentRequest()) return null;
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (idToken) headers.Authorization = `Bearer ${idToken}`;
 
@@ -179,7 +179,13 @@ export const useAiParse = (): UseAiParseReturn => {
         const requestInit = {
           method: 'POST',
           headers,
-          body: JSON.stringify({ text: requestText, clients, todayIso }),
+          body: JSON.stringify({
+            text: requestText,
+            clients,
+            todayIso,
+            catalog,
+            locale,
+          }),
         };
         try {
           let response = await fetch(API_ENDPOINTS.parseOrder, requestInit);
@@ -195,24 +201,25 @@ export const useAiParse = (): UseAiParseReturn => {
         }
       };
 
-      let res = await requestParse(text);
+      let res = await requestParse(sourceText);
+      if (!isCurrentRequest()) return null;
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({} as any));
         const quota = quotaFromResponseBody(body);
-        if (quota) {
+        if (quota && isCurrentRequest()) {
           useAiUsageStore.setState({ ...quota, loading: false });
         }
         if (isAiLimitResponse(res.status, body)) {
-          setLimitReached(true);
+          if (isCurrentRequest()) setLimitReached(true);
           return null;
         }
         throw new Error(body.error || `HTTP ${res.status}`);
       }
 
-      let data = (await res.json()) as ParseResult & { quota?: unknown };
+      let data = (await res.json()) as ParseResultPayload & { quota?: unknown };
       const firstQuota = quotaFromResponseBody(data);
-      if (firstQuota) {
+      if (firstQuota && isCurrentRequest()) {
         useAiUsageStore.setState({ ...firstQuota, loading: false });
       }
 
@@ -220,8 +227,8 @@ export const useAiParse = (): UseAiParseReturn => {
       // aun devuelve report_not_found, la ficha suficientemente estructurada
       // se recupera en forma local: no hacemos una segunda llamada facturable
       // ni consumimos dos cupos por una sola acción del usuario.
-      if (data.tool === 'report_not_found' && looksLikeCompleteClientCardText(text)) {
-        const card = parseDirectoryContactCard(text);
+      if (data.tool === 'report_not_found' && looksLikeCompleteClientCardText(sourceText)) {
+        const card = parseDirectoryContactCard(sourceText);
         if (card) {
           const { usedAddressAsName: _usedAddressAsName, ...contact } = card;
           data = {
@@ -238,18 +245,24 @@ export const useAiParse = (): UseAiParseReturn => {
         }
       }
 
-      return data;
+      const validated = validateAiProductResult(data, catalog, clients);
+      if (!isCurrentRequest()) return null;
+      return { ...validated, context } as ParseResult;
     } catch (e: any) {
       const raw = e?.message || 'Error desconocido';
       const isNetwork = /network request failed|failed to fetch|abort/i.test(raw);
-      const msg = isNetwork
-        ? 'Sin conexión. Verificá tu internet e intentá de nuevo.'
-        : raw;
-      console.warn('[useAiParse] error:', raw);
-      setError(msg);
+      const msg = e instanceof AiProductError
+        ? i18n.t('smartOrder.invalidProductsReinterpret')
+        : isNetwork
+          ? i18n.t('smartOrder.networkError')
+          : raw;
+      if (isCurrentRequest()) {
+        console.warn('[useAiParse] error:', raw);
+        setError(msg);
+      }
       return null;
     } finally {
-      setParsing(false);
+      if (isCurrentRequest()) setParsing(false);
     }
   }, []);
 

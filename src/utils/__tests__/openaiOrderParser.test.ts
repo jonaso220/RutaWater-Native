@@ -1,6 +1,6 @@
 const {
   extractToolUse,
-  normalizeToolInput,
+  MAX_OUTPUT_TOKENS,
   sumUsage,
   toOpenAITools,
 } = require('../../../netlify/functions/_shared/openai');
@@ -29,6 +29,31 @@ describe('adaptador OpenAI de Pedido IA', () => {
       expect(schema.additionalProperties).toBe(false);
       expect(schema.required).toHaveLength(8);
     }
+  });
+
+  test('reserva salida suficiente para el catálogo máximo en strict mode', () => {
+    const ids = Array.from({ length: 64 }, (_, index) => {
+      const prefix = `p${String(index).padStart(2, '0')}_`;
+      return `${prefix}${'x'.repeat(80 - prefix.length)}`;
+    });
+    const zeroMap = Object.fromEntries(ids.map((id) => [id, 0]));
+    const worstCaseArguments = JSON.stringify({
+      matched_client_id: 'client',
+      matched_client_name: 'Cliente',
+      products: zeroMap,
+      add_products: zeroMap,
+      remove_products: zeroMap,
+      freq: 'weekly',
+      visitDay: 'Lunes',
+      specificDate: '',
+      schedule_mode: 'replace',
+      notes: '',
+      notes_mode: 'keep',
+    });
+
+    // One token per ASCII character is deliberately conservative, and the
+    // extra 4096 tokens leave space for low-effort reasoning/tool metadata.
+    expect(MAX_OUTPUT_TOKENS).toBeGreaterThan(worstCaseArguments.length + 4096);
   });
 
   test('usa un resultado informativo para pedidos incompletos sin ensuciar notas', () => {
@@ -105,18 +130,6 @@ describe('adaptador OpenAI de Pedido IA', () => {
     expect(SYSTEM_RULES).toContain('Nunca supongas replace ni add');
     expect(SYSTEM_RULES).toContain('preguntando si quiere mover el pedido actual o agregar uno nuevo');
     expect(SYSTEM_RULES).not.toContain("schedule_mode: 'replace' por default");
-  });
-
-  test('quita ceros, cantidades inválidas y productos desconocidos', () => {
-    expect(normalizeToolInput({
-      products: { b20: 2, b12: 0, soda: -1, inventado: 5 },
-      add_products: { bombita: 1.4 },
-      remove_products: null,
-    })).toEqual({
-      products: { b20: 2 },
-      add_products: { bombita: 1 },
-      remove_products: {},
-    });
   });
 
   test('extrae y parsea una única function call', () => {

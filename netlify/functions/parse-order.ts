@@ -2,6 +2,11 @@ import type { Config } from '@netlify/functions';
 
 const crypto = require('crypto');
 const { parseOrder } = require('./_shared/orderParser');
+const {
+  AiProductValidationError,
+  normalizeLocale,
+  normalizeProductCatalog,
+} = require('./_shared/aiProductCatalog');
 const { authenticateEvent } = require('./_shared/firebaseAuth');
 const {
   AiAccountInactiveError,
@@ -13,6 +18,10 @@ const {
 
 const MAX_TEXT_LENGTH = 8000;
 const MAX_CLIENTS = 1200;
+// The largest current production-shaped payload remains below 200 KB. A
+// 400 KB ceiling leaves ample growth room while keeping the request compatible
+// with the smaller Anthropic fallback context before quota is used.
+const MAX_BODY_BYTES = 400_000;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -67,14 +76,30 @@ export const createParseOrderHandler = (dependencies = {}) => {
       return json(401, { error: 'No autorizado.' });
     }
 
+    const rawBody = event.body || '';
+    if (Buffer.byteLength(rawBody, 'utf8') > MAX_BODY_BYTES) {
+      return json(413, { error: `El body supera el máximo de ${MAX_BODY_BYTES} bytes.` });
+    }
+
     let payload;
     try {
-      payload = JSON.parse(event.body || '{}');
+      payload = JSON.parse(rawBody || '{}');
     } catch {
       return json(400, { error: 'Body inválido (no es JSON).' });
     }
 
     const { text, clients, todayIso } = payload;
+    let productCatalog;
+    let locale;
+    try {
+      productCatalog = normalizeProductCatalog(payload.catalog ?? payload.productCatalog);
+      locale = normalizeLocale(payload.locale);
+    } catch (error) {
+      if (error instanceof AiProductValidationError) {
+        return json(400, { code: error.code, error: 'Catálogo o idioma inválido.' });
+      }
+      throw error;
+    }
 
     if (typeof text !== 'string' || !text.trim()) {
       return json(400, { error: 'Falta `text` (string no vacío).' });
@@ -150,7 +175,14 @@ export const createParseOrderHandler = (dependencies = {}) => {
         .update(authPayload.sub)
         .digest('hex')
         .slice(0, 32)}`;
-      const result = await parse({ text, clients, todayIso, safetyIdentifier });
+      const result = await parse({
+        text,
+        clients,
+        todayIso,
+        safetyIdentifier,
+        productCatalog,
+        locale,
+      });
       return json(200, { ...result, quota: reservation });
     } catch (err) {
       console.error('parse-order error:', err);

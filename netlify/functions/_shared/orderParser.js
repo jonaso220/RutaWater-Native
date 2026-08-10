@@ -6,6 +6,13 @@ const {
   parseOrder: parseWithOpenAI,
   MODEL: OPENAI_MODEL,
 } = require('./openai');
+const {
+  AiProductValidationError,
+  invalidProductToolUse,
+  normalizeLocale,
+  normalizeProductCatalog,
+  normalizeToolUse,
+} = require('./aiProductCatalog');
 
 const hasOpenAI = () => Boolean(process.env.OPENAI_API_KEY);
 const hasAnthropic = () => Boolean(process.env.ANTHROPIC_API_KEY);
@@ -24,25 +31,49 @@ function getModel() {
 }
 
 async function parseOrder(args) {
+  // Build an immutable request-scoped catalog. Never mutate the provider
+  // globals: a warm Netlify process can parse different accounts concurrently.
+  const productCatalog = normalizeProductCatalog(args.productCatalog);
+  const locale = normalizeLocale(args.locale);
+  const providerArgs = { ...args, productCatalog, locale };
+  let result;
+
   if (hasOpenAI()) {
     try {
-      return await parseWithOpenAI(args);
+      result = await parseWithOpenAI(providerArgs);
     } catch (error) {
       if (!hasAnthropic()) throw error;
       console.error('OpenAI parse failed; using Anthropic fallback:', errorSummary(error));
     }
   }
 
-  if (!hasAnthropic()) {
+  if (!result && !hasAnthropic()) {
     throw new Error('Falta configurar OPENAI_API_KEY o ANTHROPIC_API_KEY');
   }
 
-  const result = await parseWithAnthropic(args);
-  return {
-    ...result,
-    provider: 'anthropic',
-    model: ANTHROPIC_MODEL,
-  };
+  if (!result) {
+    result = await parseWithAnthropic(providerArgs);
+    result = {
+      ...result,
+      provider: 'anthropic',
+      model: ANTHROPIC_MODEL,
+    };
+  }
+
+  // One strict normalizer protects both providers and both retry paths. A
+  // mixed valid/invalid response becomes a complete no-action, never a subset.
+  try {
+    const normalized = normalizeToolUse(
+      { name: result.tool, input: result.input },
+      productCatalog,
+      args.clients,
+    );
+    return { ...result, tool: normalized.name, input: normalized.input };
+  } catch (error) {
+    if (!(error instanceof AiProductValidationError)) throw error;
+    const noAction = invalidProductToolUse(locale);
+    return { ...result, tool: noAction.name, input: noAction.input };
+  }
 }
 
 module.exports = {

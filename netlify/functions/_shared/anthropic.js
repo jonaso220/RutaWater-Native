@@ -1,5 +1,10 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { repairOrRetryDecision } = require('./orderHeuristics');
+const {
+  LEGACY_PRODUCT_CATALOG,
+  buildProductAwareSystemRules,
+  buildProductAwareTools,
+} = require('./aiProductCatalog');
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -447,7 +452,9 @@ function buildClientsBlock(clients) {
     if (c.address) parts.push(c.address);
 
     const status = [];
-    if (c.freq && c.freq !== 'on_demand') {
+    if (c.isCompleted === true) {
+      status.push('pedido completado (historial; no se puede modificar con IA)');
+    } else if (c.freq && c.freq !== 'on_demand') {
       let when = '';
       if (c.specificDate) when = `${c.freq} ${c.specificDate}`;
       else if (c.visitDay) when = `${c.freq} ${c.visitDay}`;
@@ -481,11 +488,21 @@ function buildTodayBlock(todayIso) {
   return `FECHA ACTUAL: ${todayIso} (${dayName})`;
 }
 
-async function parseOrder({ text, clients, todayIso }) {
+async function parseOrder({
+  text,
+  clients,
+  todayIso,
+  productCatalog = LEGACY_PRODUCT_CATALOG,
+  locale = 'es',
+}) {
+  // Both values are fresh per request. Do not mutate SYSTEM_RULES or TOOLS:
+  // Netlify may concurrently reuse this module for unrelated accounts.
+  const requestSystemRules = buildProductAwareSystemRules(SYSTEM_RULES, productCatalog, locale);
+  const requestTools = buildProductAwareTools(TOOLS, productCatalog);
   const systemBlocks = [
     {
       type: 'text',
-      text: SYSTEM_RULES,
+      text: requestSystemRules,
       cache_control: { type: 'ephemeral' },
     },
     {
@@ -501,7 +518,7 @@ async function parseOrder({ text, clients, todayIso }) {
     model: MODEL,
     max_tokens: 1024,
     system: systemBlocks,
-    tools: TOOLS,
+    tools: requestTools,
     tool_choice: { type: 'any' },
     messages: [{ role: 'user', content: userMessage }],
   };

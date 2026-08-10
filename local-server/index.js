@@ -3,12 +3,18 @@ require('dotenv').config({ path: path.join(__dirname, '.env'), override: true })
 const express = require('express');
 const cors = require('cors');
 const { parseOrder, getModel } = require('./lib/orderParser');
+const {
+  AiProductValidationError,
+  normalizeLocale,
+  normalizeProductCatalog,
+} = require('../netlify/functions/_shared/aiProductCatalog');
 
 // Mismos límites que producción (netlify/functions/parse-order.js): un pedido
 // que funciona acá no debe fallar con 413 en prod. La diferencia que queda es
 // que prod además exige token de Firebase (acá no, para simplificar el dev).
 const MAX_TEXT_LENGTH = 8000;
 const MAX_CLIENTS = 1200;
+const MAX_BODY_BYTES = 400_000;
 
 if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
   console.error('ERROR: falta OPENAI_API_KEY o ANTHROPIC_API_KEY en .env');
@@ -17,14 +23,32 @@ if (!process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) {
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: MAX_BODY_BYTES }));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, model: getModel() });
 });
 
 app.post('/parse-order', async (req, res) => {
-  const { text, clients, todayIso } = req.body || {};
+  const {
+    text,
+    clients,
+    todayIso,
+    catalog: rawCatalog,
+    productCatalog: legacyCatalogField,
+    locale: rawLocale,
+  } = req.body || {};
+  let productCatalog;
+  let locale;
+  try {
+    productCatalog = normalizeProductCatalog(rawCatalog ?? legacyCatalogField);
+    locale = normalizeLocale(rawLocale);
+  } catch (error) {
+    if (error instanceof AiProductValidationError) {
+      return res.status(400).json({ code: error.code, error: 'Catálogo o idioma inválido.' });
+    }
+    throw error;
+  }
 
   if (typeof text !== 'string' || !text.trim()) {
     return res.status(400).json({ error: 'Falta `text` (string no vacío).' });
@@ -43,7 +67,7 @@ app.post('/parse-order', async (req, res) => {
   }
 
   try {
-    const result = await parseOrder({ text, clients, todayIso });
+    const result = await parseOrder({ text, clients, todayIso, productCatalog, locale });
     res.json(result);
   } catch (err) {
     console.error('parse-order error:', err);
@@ -55,5 +79,5 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✓ Servidor local en http://localhost:${PORT}`);
   console.log(`  - GET  /health`);
-  console.log(`  - POST /parse-order  body: { text, clients, todayIso }`);
+  console.log(`  - POST /parse-order  body: { text, clients, todayIso, catalog?, locale? }`);
 });

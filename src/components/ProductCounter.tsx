@@ -2,10 +2,11 @@ import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Client } from '../types';
-import { useProducts } from '../stores/productCatalogStore';
+import { useAllProducts } from '../stores/productCatalogStore';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
+import { calculateProductTotals } from '../utils/productCounter';
 
 interface ProductCounterProps {
   clients: Client[];
@@ -16,22 +17,14 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1 
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const styles = React.useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
-  const products = useProducts();
+  // Existing scheduled quantities must remain in the truck load even after a
+  // product is hidden from pickers.
+  const products = useAllProducts();
 
-  const totals = React.useMemo(() => {
-    const result: Record<string, number> = {};
-    products.forEach((p) => {
-      result[p.id] = 0;
-    });
-    clients.forEach((c) => {
-      if (!c.products) return;
-      products.forEach((p) => {
-        const qty = parseInt(String(c.products[p.id] || 0), 10);
-        if (qty > 0) result[p.id] += qty;
-      });
-    });
-    return result;
-  }, [clients, products]);
+  const totals = React.useMemo(
+    () => calculateProductTotals(clients, products),
+    [clients, products],
+  );
 
   const hasAny = Object.values(totals).some((v) => v > 0);
   if (!hasAny) return null;

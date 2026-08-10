@@ -45,8 +45,8 @@ export const useProductCatalogStore = create<ProductCatalogStore>()(() => ({
   moveProduct: noop,
 }));
 
-/** Visible products (built-in + custom, minus hidden). Use in pickers/counters. */
+/** Visible products (built-in + custom, minus hidden). Use in pickers. */
 export const useProducts = () => useProductCatalogStore((s) => s.products);
 
-/** All products including hidden ones. Use to resolve labels on existing data. */
+/** All products including hidden ones. Use for existing data and load totals. */
 export const useAllProducts = () => useProductCatalogStore((s) => s.allProducts);

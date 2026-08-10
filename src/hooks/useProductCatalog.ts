@@ -9,7 +9,7 @@ import { settingsDocId } from '../utils/helpers';
  * `settings/{groupId||uid}` document (same doc as the WhatsApp templates).
  * Four independent fields layer on top of the built-in PRODUCTS:
  *   - productNames:  { [id]: customLabel }   rename built-in or custom products
- *   - productHidden: string[]                ids to hide from pickers/counter
+ *   - productHidden: string[]                ids to hide from product pickers
  *   - customProducts: Product[]              extra products added by the user
  *   - productOrder:  string[]                explicit display order of ids
  * Built-in ids are never mutated, so previously-saved client orders stay valid.

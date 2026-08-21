@@ -20,6 +20,7 @@ import {
 } from '../utils/backupRestorePlan';
 import { dataScopeQuery } from '../utils/dataScope';
 import { belongsToProfileScope } from '../utils/profileScope';
+import { createClientDocuments } from '../services/clientCreation';
 
 interface UseDataRestoreArgs {
   userId: string;
@@ -41,9 +42,21 @@ const localPathFromUri = (uri: string): string => {
 };
 
 const commitOperations = async (operations: RestoreWriteOperation[]) => {
-  for (let offset = 0; offset < operations.length; offset += BATCH_SIZE) {
+  // Las fichas nuevas pasan por el backend de cupo. Las notas no consumen el
+  // límite y los clientes ya existentes siguen siendo merges normales.
+  const newClientOperations = operations.filter(({ collection, data }) =>
+    collection === 'clients' && typeof data.userId === 'string' && data.isNote !== true,
+  );
+  if (newClientOperations.length > 0) {
+    await createClientDocuments(newClientOperations.map(({ id, data }) => ({ id, data })));
+  }
+  const serverCreated = new Set(newClientOperations);
+  const directOperations = operations.filter((operation) =>
+    !serverCreated.has(operation),
+  );
+  for (let offset = 0; offset < directOperations.length; offset += BATCH_SIZE) {
     const batch = db.batch();
-    operations.slice(offset, offset + BATCH_SIZE).forEach(({ collection, id, data }) => {
+    directOperations.slice(offset, offset + BATCH_SIZE).forEach(({ collection, id, data }) => {
       batch.set(db.collection(collection).doc(id), data, { merge: true });
     });
     await batch.commit();

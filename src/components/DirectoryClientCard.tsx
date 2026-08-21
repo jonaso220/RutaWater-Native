@@ -11,6 +11,7 @@ import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { useTranslation } from 'react-i18next';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
+import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 
 const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
 const ACTION_HIT_SLOP = { top: 3, bottom: 3, left: 3, right: 3 };
@@ -72,7 +73,12 @@ const DirectoryClientCard = ({
         Alert.alert(t('error'), t('directory.errorMaps'));
       });
     } else if (client.mapsLink) {
-      Linking.openURL(client.mapsLink).catch(() => {
+      const mapsLink = normalizeGoogleMapsLink(client.mapsLink);
+      if (!mapsLink) {
+        Alert.alert(t('error'), t('directory.errorMapsLink'));
+        return;
+      }
+      Linking.openURL(mapsLink).catch(() => {
         Alert.alert(t('error'), t('directory.errorMapsLink'));
       });
     }

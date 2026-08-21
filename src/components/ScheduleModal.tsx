@@ -26,6 +26,8 @@ import { getModalWidth, getDayIndex, toLocalDateString } from '../utils/helpers'
 import { useLayout } from '../hooks/useLayout';
 import { getHouseholdMembers } from '../utils/recency';
 import { getClientAddresses } from '../utils/clientAddresses';
+import { scheduleNeedsNewClientDocument } from '../utils/clientCreationLimit';
+import { isClientLimitError } from '../services/clientCreation';
 
 // Nombres de día indexados por Date.getDay() (0 = Domingo).
 const ALL_DAYS_BY_INDEX = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -47,6 +49,8 @@ interface ScheduleModalProps {
   ) => boolean | void | Promise<boolean | void>;
   onClose: () => void;
   allClients?: Client[];
+  canAddClient?: boolean;
+  onClientLimitReached?: () => void;
 }
 
 const ScheduleModal: React.FC<ScheduleModalProps> = ({
@@ -55,6 +59,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
   onSave,
   onClose,
   allClients = [],
+  canAddClient = true,
+  onClientLimitReached,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
@@ -226,6 +232,13 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       Alert.alert(t('error'), t('scheduleModal.errorDays'));
       return;
     }
+    if (
+      !canAddClient
+      && scheduleNeedsNewClientDocument(client, allClients, localFreq, 'add')
+    ) {
+      onClientLimitReached?.();
+      return;
+    }
     savingRef.current = true;
     setSaving(true);
     const cleanProducts: Record<string, number> = {};
@@ -233,6 +246,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       if (val > 0) cleanProducts[key] = val;
     });
     let saveFailed = false;
+    let clientLimitReached = false;
     const failedHouseholdIds: string[] = [];
     try {
       // Periódico: la fecha (si se eligió) va como ancla de inicio de la frecuencia.
@@ -278,13 +292,19 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
         }
       }
     } catch (e) {
-      saveFailed = true;
-      reportError(e, 'Schedule save error');
+      if (isClientLimitError(e)) {
+        clientLimitReached = true;
+      } else {
+        saveFailed = true;
+        reportError(e, 'Schedule save error');
+      }
     } finally {
       savingRef.current = false;
       setSaving(false);
     }
-    if (failedHouseholdIds.length > 0) {
+    if (clientLimitReached) {
+      onClientLimitReached?.();
+    } else if (failedHouseholdIds.length > 0) {
       // The primary and any non-failed relatives are already committed. Keep
       // the exact draft visible, freeze it, and retry only the failed member
       // IDs so a second tap cannot duplicate the primary one-time order.

@@ -5,6 +5,7 @@ import { db } from '../config/firebase';
 import { Client, ClientAddress, RELATIONSHIP_INVERSE } from '../types';
 import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, toLocalDateString, parseDate, alarmScheduleFields } from '../utils/helpers';
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
+import { alarmTargetsDay } from '../utils/alarmReconciliation';
 import { findExactClientMatch, planDuplicateClientCleanup } from '../utils/clientDuplicates';
 import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../utils/recency';
 import { ALL_DAYS, Frequency } from '../constants/products';
@@ -26,6 +27,7 @@ import { useClientsStore } from '../stores/clientsStore';
 import { toExistingClientUpdate } from '../utils/clientWriteData';
 import { dataScopeFields, dataScopeQuery } from '../utils/dataScope';
 import { getRelatedClientReference } from '../utils/clientIdentity';
+import { createClientDocument, isClientLimitError } from '../services/clientCreation';
 
 interface UseClientsProps {
   userId: string;
@@ -39,6 +41,10 @@ const alarmSnapshotForClient = (
   ownerUid?: string,
 ): ClientAlarmSnapshot | null => {
   if (!client?.alarm) return null;
+  if (
+    typeof client.alarmScheduledFor === 'number'
+    && client.alarmScheduledFor <= Date.now()
+  ) return null;
   const targetDay = client.alarmDay
     || preferredDay
     || (client.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
@@ -53,6 +59,9 @@ const alarmSnapshotForClient = (
     specificDate: timing.specificDate,
     nextVisitDate: timing.nextVisitDate,
     intervalWeeks: timing.intervalWeeks,
+    scheduledFor: typeof client.alarmScheduledFor === 'number'
+      ? client.alarmScheduledFor
+      : undefined,
     scopeKey: client.groupId || client.userId,
     ownerUid,
   };
@@ -120,9 +129,14 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
   // Evita race condition cuando se asignan posiciones rápidamente
   const clientsRef = useRef<Client[]>(clients);
   clientsRef.current = clients;
-  const setClientAlarmCache = useCallback((clientId: string, alarm: string, alarmDay = '') => {
+  const setClientAlarmCache = useCallback((
+    clientId: string,
+    alarm: string,
+    alarmDay = '',
+    alarmScheduledFor: number | null = null,
+  ) => {
     const applyAlarm = (list: Client[]): Client[] => list.map((client) =>
-      client.id === clientId ? { ...client, alarm, alarmDay } : client,
+      client.id === clientId ? { ...client, alarm, alarmDay, alarmScheduledFor } : client,
     );
     clientsRef.current = applyAlarm(clientsRef.current);
     setClientsCache(applyAlarm);
@@ -275,6 +289,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
               updatedAt: deliveredAt,
               alarm: '',
               alarmDay: '',
+              alarmScheduledFor: null,
               isStarred: false,
             });
           } else {
@@ -289,6 +304,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
               lastDeliveredAt: deliveredAt,
               alarm: '',
               alarmDay: '',
+              alarmScheduledFor: null,
             };
 
             const pendingOccurrence = getNextVisitDate(client, forDay);
@@ -382,6 +398,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
               ...historyUpdate,
               alarm: '',
               alarmDay: '',
+              alarmScheduledFor: null,
               updatedAt: new Date(),
             });
           }
@@ -421,10 +438,24 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
       if (currentDays.length > 1) {
         // Client has multiple days — only remove this one
         const remainingDays = currentDays.filter((d) => d !== day);
-        await db.collection('clients').doc(clientId).update({
+        const update: Partial<Client> = {
           visitDays: remainingDays,
           visitDay: remainingDays[0],
-        });
+        };
+        if (client && alarmTargetsDay(client, day)) {
+          update.alarm = '';
+          update.alarmDay = '';
+          update.alarmScheduledFor = null;
+          await cancelAlarmsThenMutate(
+            () => alarmSnapshotsForClients([
+              clientsRef.current.find((candidate) => candidate.id === clientId) || client,
+            ], userId),
+            () => db.collection('clients').doc(clientId).update(update),
+            [clientId],
+          );
+        } else {
+          await db.collection('clients').doc(clientId).update(update);
+        }
       } else {
         // Last (or only) day — move to directory. Sale de la ruta: su alarma
         // pendiente ya no corresponde (se cancela el trigger y el campo).
@@ -448,6 +479,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
             ...historyUpdate,
             alarm: '',
             alarmDay: '',
+            alarmScheduledFor: null,
           }),
           [clientId],
         );
@@ -455,7 +487,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
     } catch (e) {
       reportError(e, 'Error deleting from day');
     }
-  }, []);
+  }, [userId]);
 
   // Generic update for client fields. Devuelve true si el write llegó a
   // Firestore — los callers de la IA lo usan para no mostrar "Listo" en falso.
@@ -541,6 +573,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         isInactive: false,
         alarm: '',
         alarmDay: '',
+        alarmScheduledFor: null,
         products: newProducts || {},
         // completedAt pertenece al estado de un pedido once ya entregado. Al
         // abrir una agenda nueva se promueve al historial canónico y se limpia.
@@ -714,8 +747,8 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
           // parentescos (evita que la copia aparezca como otro familiar).
           newData.lastDeliveredAt = getLastVisitDate(clientData);
           newData.createdAt = new Date();
-          const created = await db.collection('clients').add(newData);
-          syncScheduledClientRef(created.id, {
+          const createdId = await createClientDocument(newData);
+          syncScheduledClientRef(createdId, {
             ...clientData,
             relationships: {},
             sameHousehold: {},
@@ -725,6 +758,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
       return true;
     } catch (e) {
       reportError(e, 'Error scheduling client');
+      if (isClientLimitError(e)) throw e;
       return false;
     }
   }, [groupId, userId]);
@@ -788,6 +822,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
             () => db.collection('clients').doc(clientId).update({
               alarm: time,
               alarmDay: resolvedDay || '',
+              alarmScheduledFor: fireAt.getTime(),
             }),
             () => cancelClientAlarm(clientId),
             previousAlarm
@@ -796,7 +831,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
           );
           // Keep the synchronous source authoritative for any already-queued
           // save/remove operation; the Firestore listener may arrive later.
-          setClientAlarmCache(clientId, time, resolvedDay || '');
+          setClientAlarmCache(clientId, time, resolvedDay || '', fireAt.getTime());
           return fireAt;
         });
       } else {
@@ -812,7 +847,11 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
             if (snapshots.length === 0) {
               await cancelClientAlarm(clientId);
             }
-            await db.collection('clients').doc(clientId).update({ alarm: '', alarmDay: '' });
+            await db.collection('clients').doc(clientId).update({
+              alarm: '',
+              alarmDay: '',
+              alarmScheduledFor: null,
+            });
           },
           [clientId],
         );
@@ -1014,6 +1053,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         isNote: false,
         alarm: '',
         alarmDay: '',
+        alarmScheduledFor: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -1039,7 +1079,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         return;
       }
 
-      await db.collection('clients').add(newClientData);
+      await createClientDocument(newClientData);
     } catch (e) {
       reportError(e, 'Error adding client');
       // The modal owns the draft. Propagate the failure so it can keep the
@@ -1140,6 +1180,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         isNote: false,
         alarm: '',
         alarmDay: '',
+        alarmScheduledFor: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -1168,10 +1209,11 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         return true;
       }
 
-      await db.collection('clients').add(newClientData);
+      await createClientDocument(newClientData);
       return true;
     } catch (e) {
       reportError(e, 'Error in aiCreateClient');
+      if (isClientLimitError(e)) throw e;
       return false;
     }
   }, [groupId, userId]);
@@ -1567,13 +1609,14 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         isNote: false,
         alarm: '',
         alarmDay: '',
+        alarmScheduledFor: null,
         // La copia representa otra agenda del mismo cliente humano, pero no
         // hereda parentescos: eso haría aparecer la copia como otro familiar.
         lastDeliveredAt: getLastVisitDate(client),
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      await db.collection('clients').add(newData);
+      await createClientDocument(newData);
     } catch (e) {
       reportError(e, 'Error cloning client');
       // DirectoryScreen announces success only after this promise resolves.

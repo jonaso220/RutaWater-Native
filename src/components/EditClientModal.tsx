@@ -354,6 +354,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     const dateMoved = savedDate !== undefined && savedDate !== (client.specificDate || '');
     const shouldRescheduleAlarm = !!client.alarm && (dayMoved || dateMoved);
     const previousAlarm: ClientAlarmSnapshot | null = client.alarm
+      && !(typeof client.alarmScheduledFor === 'number' && client.alarmScheduledFor <= Date.now())
       ? {
         clientId: client.id,
         clientName: client.name || '',
@@ -366,6 +367,10 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             || (client.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
             || client.visitDay,
         ),
+        scheduledFor: typeof client.alarmScheduledFor === 'number'
+          && client.alarmScheduledFor > Date.now()
+          ? client.alarmScheduledFor
+          : undefined,
         scopeKey: client.groupId || client.userId,
         ownerUid: auth().currentUser?.uid,
       }
@@ -406,6 +411,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             await restoreClientAlarmSnapshots([previousAlarm]).catch(() => {});
             return false;
           }
+          data.alarmScheduledFor = fireAt.getTime();
           await persistAlarmOrRollbackTrigger(
             persistChanges,
             () => cancelClientAlarm(client.id),

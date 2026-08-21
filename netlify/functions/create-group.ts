@@ -14,6 +14,8 @@ import {
   GroupCreationResult,
 } from './_shared/groupCreationService';
 
+const { AiPlanUnavailableError, resolveAiPlan } = require('./_shared/aiQuota');
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
@@ -43,6 +45,15 @@ interface CreateGroupHandlerDependencies {
   getAuth: (readEnvironment: EnvironmentReader) => Auth;
   getAuthUser: (adminAuth: Auth, uid: string) => Promise<ConfirmedAdminUser>;
   getFirestore: (readEnvironment: EnvironmentReader) => Firestore;
+  resolvePlan: (input: {
+    db: Firestore;
+    uid: string;
+    readEnvironment: EnvironmentReader;
+    fetchImpl?: typeof fetch;
+    nowMillis?: number;
+  }) => Promise<'free' | 'monthly' | 'annual'>;
+  fetchImpl?: typeof fetch;
+  now?: () => Date;
   createGroup: (input: {
     db: Firestore;
     identity: GroupCreationIdentity;
@@ -120,6 +131,16 @@ export const createCreateGroupHandler = (dependencies: CreateGroupHandlerDepende
 
     try {
       const db = dependencies.getFirestore(dependencies.readEnvironment);
+      const plan = await dependencies.resolvePlan({
+        db,
+        uid: confirmedUser.uid,
+        readEnvironment: dependencies.readEnvironment,
+        fetchImpl: dependencies.fetchImpl,
+        nowMillis: (dependencies.now?.() || new Date()).getTime(),
+      });
+      if (plan === 'free') {
+        return json(403, { success: false, code: 'PREMIUM_REQUIRED' });
+      }
       const result = await dependencies.createGroup({
         db,
         identity: confirmedUser,
@@ -130,6 +151,11 @@ export const createCreateGroupHandler = (dependencies: CreateGroupHandlerDepende
         code: result.code,
       });
     } catch (error) {
+      const planUnavailable = error instanceof AiPlanUnavailableError
+        || (error instanceof Error && error.name === 'AiPlanUnavailableError');
+      if (planUnavailable) {
+        return json(503, { success: false, code: 'PLAN_UNAVAILABLE' });
+      }
       if (error instanceof GroupCreationError) {
         if (error.code === 'ALREADY_IN_GROUP') {
           return json(409, { success: false, code: 'ALREADY_IN_GROUP' });
@@ -162,6 +188,7 @@ const productionHandler = createCreateGroupHandler({
   getAuth: getAdminAuth,
   getAuthUser: confirmCreateGroupAuthUser,
   getFirestore: getAdminFirestore,
+  resolvePlan: resolveAiPlan,
   createGroup: createGroupWithFirestore,
 });
 

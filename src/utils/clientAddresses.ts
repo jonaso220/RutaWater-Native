@@ -1,11 +1,13 @@
 import { Client, ClientAddress, ClientAddressType } from '../types';
+import { normalizeGoogleMapsLink } from './googleMapsLink';
 
 const VALID_TYPES = new Set<ClientAddressType>(['home', 'work', 'other']);
 
 const cleanText = (value: unknown, maxLength: number): string =>
   typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
 
-const cleanMapsLink = (value: unknown): string => cleanText(value, 2048);
+const cleanMapsLink = (value: unknown): string =>
+  normalizeGoogleMapsLink(cleanText(value, 2048));
 
 export const createClientAddress = (
   id: string,

@@ -43,6 +43,9 @@ export interface Client {
   // Día canónico elegido para la alarma (importante en clientes con varios días).
   // Opcional para documentos anteriores; en ese caso se deriva de visitDays/visitDay.
   alarmDay?: string;
+  // Instante exacto (epoch ms) del único disparo pendiente. Las alarmas no se
+  // repiten: después de este momento se limpian y deben programarse de nuevo.
+  alarmScheduledFor?: number | null;
   lastVisited: FirebaseFirestoreTypes.Timestamp | null;
   // Fecha canónica de la última entrega REAL. A diferencia de lastVisited,
   // nunca se usa como estado interno para calcular/reiniciar la agenda.

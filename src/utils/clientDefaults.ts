@@ -25,6 +25,7 @@ export const withDefaults = (id: string, data: any): Client => ({
   isPinned: false,
   isNote: false,
   alarm: '',
+  alarmScheduledFor: null,
   lastVisited: null,
   lastDeliveredAt: null,
   previousDeliveredAt: null,

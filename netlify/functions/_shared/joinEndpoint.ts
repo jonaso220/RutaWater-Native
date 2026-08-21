@@ -27,6 +27,11 @@ export interface JoinEndpointDependencies {
   getAuthUser: (adminAuth: Auth, uid: string) => Promise<void>;
   allowAttempt: (uid: string) => boolean;
   getFirestore: (readEnvironment: EnvironmentReader) => Firestore;
+  authorize?: (input: {
+    db: Firestore;
+    uid: string;
+    readEnvironment: EnvironmentReader;
+  }) => Promise<boolean>;
   join: (input: { db: Firestore; uid: string; code: string }) => Promise<JoinStatus>;
   logLabel: string;
 }
@@ -127,6 +132,13 @@ export const createJoinEndpointHandler = (dependencies: JoinEndpointDependencies
 
     try {
       const db = dependencies.getFirestore(dependencies.readEnvironment);
+      if (dependencies.authorize && !await dependencies.authorize({
+        db,
+        uid: authPayload.sub,
+        readEnvironment: dependencies.readEnvironment,
+      })) {
+        return json(403, 'error');
+      }
       const status = await dependencies.join({
         db,
         uid: authPayload.sub,

@@ -192,7 +192,9 @@ const DebtModal: React.FC<DebtModalProps> = ({
     const template = debtTemplate || defaultTemplate;
     const text = template.replace('${total}', formatMoney(total));
     const msg = encodeURIComponent(text);
-    Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
+    Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`).catch(() => {
+      Alert.alert(t('error'), t('directory.errorWhatsApp'));
+    });
   };
 
   const sendDebtReminder = () => {
@@ -200,7 +202,9 @@ const DebtModal: React.FC<DebtModalProps> = ({
     const cleanPhone = normalizePhone(client.phone);
     const defaultMsg = 'Hola, buenas \nEste es un mensaje automatico para informarle que, segun nuestros registros, quedo pendiente un saldo por regularizar.\nCuando pueda, le agradecemos que nos indique en que fecha podriamos saldarlo. Si necesita nuevamente los datos de la cuenta, con gusto se los enviamos.\nMuchas gracias.';
     const msg = encodeURIComponent(reminderTemplate || defaultMsg);
-    Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`);
+    Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`).catch(() => {
+      Alert.alert(t('error'), t('directory.errorWhatsApp'));
+    });
   };
 
   const requestClose = () => {

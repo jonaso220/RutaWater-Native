@@ -99,6 +99,14 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/systemMigrations/dataScopeV1)
         && get(/databases/$(database)/documents/systemMigrations/dataScopeV1).data.get('writeVersion', 0) == 1;
     }
+    // Corte compatible para el cupo de clientes. La app nueva crea fichas por
+    // Admin/Netlify; mientras conviven builds anteriores, el documento queda
+    // ausente. Tras verificar adopción se activa `enforced: true` y toda ficha
+    // real debe entrar por el backend transaccional. Las notas no consumen cupo.
+    function serverClientCreatesRequired() {
+      return exists(/databases/$(database)/documents/systemMigrations/clientCreateV1)
+        && get(/databases/$(database)/documents/systemMigrations/clientCreateV1).data.get('enforced', false) == true;
+    }
     function hasCanonicalScopeKey(data) {
       let ownerId = data.get('userId', null);
       let groupId = data.get('groupId', null);
@@ -170,6 +178,7 @@ service cloud.firestore {
     match /clients/{id} {
       allow read:   if inScope(resource.data);
       allow create: if accountCanWrite()
+        && (request.resource.data.get('isNote', false) == true || !serverClientCreatesRequired())
         && request.resource.data.get('userId', null) == uid()
         && validScopeKeyForWrite(request.resource.data)
         && inScope(request.resource.data) && writableScope(request.resource.data);

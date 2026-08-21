@@ -8,6 +8,8 @@ import {
 } from './_shared/joinEndpoint';
 import { joinGroupByCode } from './_shared/joinService';
 
+const { resolveAiPlan } = require('./_shared/aiQuota');
+
 export const createJoinGroupHandler = createJoinEndpointHandler;
 
 export default createJoinGroupHandler({
@@ -17,6 +19,9 @@ export default createJoinGroupHandler({
   getAuthUser: confirmJoinAuthUser,
   allowAttempt: allowJoinAttempt,
   getFirestore: getAdminFirestore,
+  authorize: async ({ db, uid, readEnvironment }) => (
+    await resolveAiPlan({ db, uid, readEnvironment })
+  ) !== 'free',
   join: joinGroupByCode,
   logLabel: 'join-group',
 });

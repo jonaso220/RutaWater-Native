@@ -25,6 +25,8 @@ export interface BackupClientRecord {
   isNote: boolean;
   isInactive: boolean;
   alarm: string;
+  alarmDay: string;
+  alarmScheduledFor: number | null;
   lastVisited: Date | null;
   lastDeliveredAt: Date | null;
   previousDeliveredAt: Date | null;
@@ -166,6 +168,11 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
   const doneFor = typeof value.doneFor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.doneFor)
     ? value.doneFor
     : '';
+  const rawAlarmScheduledFor = finiteNumber(value.alarmScheduledFor, 0);
+  const alarmScheduledFor = rawAlarmScheduledFor > 0 ? rawAlarmScheduledFor : null;
+  // Legacy backups stored only the display time. Without the exact one-shot
+  // instant there is no safe trigger to restore, so do not create a stale bell.
+  const alarm = alarmScheduledFor ? sanitizeString(value.alarm, 10) : '';
 
   return {
     id: value.id,
@@ -192,7 +199,9 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
     isPinned: value.isPinned === true,
     isNote: value.isNote === true,
     isInactive: value.isInactive === true,
-    alarm: sanitizeString(value.alarm, 10),
+    alarm,
+    alarmDay: alarm ? sanitizeString(value.alarmDay, 20) : '',
+    alarmScheduledFor: alarm ? alarmScheduledFor : null,
     lastVisited: parseDate(value.lastVisited),
     lastDeliveredAt: parseDate(value.lastDeliveredAt),
     previousDeliveredAt: parseDate(value.previousDeliveredAt),

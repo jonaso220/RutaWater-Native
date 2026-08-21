@@ -96,4 +96,33 @@ describe('backup validation', () => {
     });
     expect(backup.clients[0].mapsLink).toBe('');
   });
+
+  test('restores only alarms that carry an exact one-shot instant', () => {
+    const legacy = validateBackup({
+      clients: [{ ...validBackup.clients[0], alarm: '09:30', alarmDay: 'Lunes' }],
+      debts: [],
+      transfers: [],
+    });
+    expect(legacy.clients[0]).toMatchObject({
+      alarm: '',
+      alarmDay: '',
+      alarmScheduledFor: null,
+    });
+
+    const scheduled = validateBackup({
+      clients: [{
+        ...validBackup.clients[0],
+        alarm: '09:30',
+        alarmDay: 'Lunes',
+        alarmScheduledFor: 4102448400000,
+      }],
+      debts: [],
+      transfers: [],
+    });
+    expect(scheduled.clients[0]).toMatchObject({
+      alarm: '09:30',
+      alarmDay: 'Lunes',
+      alarmScheduledFor: 4102448400000,
+    });
+  });
 });

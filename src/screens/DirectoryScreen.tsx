@@ -35,6 +35,7 @@ import { ThemeColors } from '../theme/colors';
 import { FlashList } from '@shopify/flash-list';
 import { useLayout } from '../hooks/useLayout';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
+import { isClientLimitError } from '../services/clientCreation';
 
 const DirectoryScreen = () => {
   const { colors } = useTheme();
@@ -198,6 +199,17 @@ const DirectoryScreen = () => {
 
   const isRecurrenciaMode = activeFilter === 'recurrencia';
 
+  const showClientLimit = useCallback(() => {
+    Alert.alert(
+      t('home.limitReached'),
+      t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
+      ],
+    );
+  }, [navigation, t]);
+
   const FILTERS = [
     { key: 'all', label: t('directory.filterAll') },
     { key: 'weekly', label: t('directory.filterWeekly') },
@@ -215,14 +227,7 @@ const DirectoryScreen = () => {
     // Clonar crea un doc nuevo: respeta el límite de clientes del plan free
     // igual que el botón "+" (antes era un bypass).
     if (!canAddClient) {
-      Alert.alert(
-        t('home.limitReached'),
-        t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
-        [
-          { text: t('cancel'), style: 'cancel' },
-          { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
-        ],
-      );
+      showClientLimit();
       return;
     }
     Alert.alert(
@@ -236,8 +241,12 @@ const DirectoryScreen = () => {
             try {
               await cloneClient(client);
               Alert.alert(t('done'), t('directory.cloneDone', { name: client.name }));
-            } catch {
-              Alert.alert(t('error'), t('directory.cloneError'));
+            } catch (error) {
+              if (isClientLimitError(error)) {
+                showClientLimit();
+              } else {
+                Alert.alert(t('error'), t('directory.cloneError'));
+              }
             }
           },
         },
@@ -308,14 +317,7 @@ const DirectoryScreen = () => {
             accessibilityLabel={t('home.newClient')}
             onPress={() => {
               if (!canAddClient) {
-                Alert.alert(
-                  t('home.limitReached'),
-                  t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
-                  [
-                    { text: t('cancel'), style: 'cancel' },
-                    { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
-                  ],
-                );
+                showClientLimit();
                 return;
               }
               setShowNewClient(true);
@@ -421,6 +423,8 @@ const DirectoryScreen = () => {
         visible={!!scheduleClient}
         client={scheduleClient}
         allClients={clients}
+        canAddClient={canAddClient}
+        onClientLimitReached={showClientLimit}
         onSave={scheduleFromDirectory}
         onClose={() => setScheduleClient(null)}
       />

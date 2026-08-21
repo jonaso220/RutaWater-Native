@@ -5,17 +5,16 @@ import auth from '@react-native-firebase/auth';
 import { useClientsStore } from '../stores/clientsStore';
 import { useProfileStore } from '../stores/profileStore';
 import {
-  cancelAlarmsThenMutate,
   cancelClientAlarm,
   cancelForeignScheduledAlarms,
   cancelScheduledAlarmsForOwner,
-  ClientAlarmSnapshot,
   getAlarmPermissionIssue,
   getScheduledClientAlarms,
   runSerializedAlarmMutation,
   scheduleClientAlarm,
 } from '../services/notifications';
 import { hapticWarning } from '../utils/haptics';
+import { clearDeliveredClientAlarm } from '../services/alarmDelivery';
 import {
   getAlarmReconciliationAction,
   getAlarmReconciliationSignature,
@@ -63,6 +62,8 @@ export const useAlarmChecker = () => {
           alarmTime?: string;
           clientName?: string;
           clientAddress?: string;
+          alarmTargetDay?: string;
+          alarmScheduledFor?: string;
           alarmOwnerUid?: string;
           alarmScopeKey?: string;
         }
@@ -79,6 +80,7 @@ export const useAlarmChecker = () => {
         clientState.scopeKey,
         new Set(clientState.clients.map((client) => client.id)),
       )) return;
+      void clearDeliveredClientAlarm(data);
       setActiveAlarm({
         clientId: data.clientId,
         name: data.clientName || detail.notification?.title || 'Cliente',
@@ -91,14 +93,9 @@ export const useAlarmChecker = () => {
     return unsubscribe;
   }, []);
 
-  // Reconciliación de alarmas "fantasma": el trigger de notifee es one-shot y
-  // vive solo en el dispositivo que lo programó. Si un cliente tiene el campo
-  // `alarm` seteado pero acá no hay trigger pendiente (ya sonó con la app
-  // cerrada, o lo programó otro dispositivo del reparto), la campana quedaba
-  // encendida para siempre sin que nada fuera a sonar. Al abrir/volver a la
-  // app: re-armamos el trigger para la próxima ocurrencia del día del cliente
-  // (la alarma pasa a repetirse por ciclo y suena en cada dispositivo), y para
-  // pedidos 'once' con fecha ya pasada apagamos el campo.
+  // Las alarmas son one-shot. La reconciliación replica únicamente un disparo
+  // futuro con fecha exacta; si ya venció, limpia la campana y nunca lo mueve
+  // al próximo ciclo. Los triggers legacy sin fecha exacta tampoco se rearman.
   const reconciling = useRef(false);
   const reconcilePending = useRef(false);
   const reconcileAlarms = useCallback(async () => {
@@ -133,7 +130,19 @@ export const useAlarmChecker = () => {
       for (const c of canonicalClients) {
         const localAlarm = scheduled.get(c.id);
         const action = getAlarmReconciliationAction(c, localAlarm, currentUserId);
-        if (action === 'keep') continue;
+        if (action === 'keep') {
+          // Migra triggers legacy todavía pendientes para que, cuando suenen,
+          // puedan limpiarse con la misma semántica one-shot.
+          if (
+            c.alarm
+            && typeof localAlarm?.timestamp === 'number'
+            && localAlarm.timestamp > Date.now()
+            && localAlarm.timestamp !== c.alarmScheduledFor
+          ) {
+            await updateClient(c.id, { alarmScheduledFor: localAlarm.timestamp } as any);
+          }
+          continue;
+        }
 
         if (action === 'schedule') {
           if (canScheduleOnDevice === null) {
@@ -162,18 +171,24 @@ export const useAlarmChecker = () => {
             const targetDay = latest.alarmDay
               || (latest.visitDays && latest.visitDays.length > 0 ? latest.visitDays[0] : undefined)
               || latest.visitDay;
-            await scheduleClientAlarm(
+            const fireAt = await scheduleClientAlarm(
               latest.id,
               latest.name || '',
               latest.address || '',
               latest.alarm,
               {
                 ...alarmScheduleFields(latest, targetDay),
+                scheduledFor: typeof latest.alarmScheduledFor === 'number'
+                  ? latest.alarmScheduledFor
+                  : undefined,
                 scopeKey: latest.groupId || latest.userId || activeScopeKey,
                 ownerUid: currentUserId,
                 permissionAlreadyChecked: true,
               },
             );
+            if (fireAt && typeof latest.alarmScheduledFor !== 'number') {
+              await updateClient(latest.id, { alarmScheduledFor: fireAt.getTime() } as any);
+            }
           });
           // A valid shared alarm remains in Firestore even if this device could
           // not schedule it (missing exact-alarm access, denied notifications,
@@ -201,38 +216,22 @@ export const useAlarmChecker = () => {
           continue;
         }
 
-        // Only intrinsically invalid/expired alarm data is cleared. Device
-        // permission or scheduling failures never reach this branch.
+        // Invalid, inactive or already-fired one-shot alarms are cleared. No
+        // compensation may recreate them in a later recurrence.
         try {
-          await cancelAlarmsThenMutate(
-            () => {
+          await runSerializedAlarmMutation(c.id, async () => {
               const latest = useClientsStore.getState().clients.find((client) => client.id === c.id);
               if (!latest?.alarm || getAlarmReconciliationAction(latest, false) !== 'clear') {
-                return [];
+                return;
               }
-              const previousAlarm: ClientAlarmSnapshot = {
-                clientId: latest.id,
-                clientName: latest.name || '',
-                address: latest.address || '',
-                time: latest.alarm,
-                ...alarmScheduleFields(latest, latest.alarmDay
-                  || (latest.visitDays && latest.visitDays.length > 0
-                    ? latest.visitDays[0]
-                    : undefined) || latest.visitDay),
-              };
-              previousAlarm.scopeKey = latest.groupId || latest.userId || activeScopeKey;
-              previousAlarm.ownerUid = currentUserId;
-              return [previousAlarm];
-            },
-            async (snapshots) => {
-              // Empty means a newer valid alarm won while this reconciliation
-              // was queued; leave both Firestore and its trigger untouched.
-              if (snapshots.length === 0) return;
-              const updated = await updateClient(c.id, { alarm: '', alarmDay: '' } as any);
+              await cancelClientAlarm(c.id).catch(() => {});
+              const updated = await updateClient(c.id, {
+                alarm: '',
+                alarmDay: '',
+                alarmScheduledFor: null,
+              } as any);
               if (!updated) throw new Error('ALARM_CLEAR_PERSIST_FAILED');
-            },
-            [c.id],
-          );
+          });
         } catch {
           // Keep Firestore/UI unchanged while the local trigger may still
           // exist. A later foreground reconciliation can retry cancellation.
@@ -310,8 +309,8 @@ export const useAlarmChecker = () => {
   }, [activeProfileScope, profilesLoaded, reconcileAlarms]);
 
   const dismissAlarm = useCallback(() => {
-    // "Entendido" only dismisses the delivered foreground banner. The
-    // canonical recurring alarm remains active and reconciliation rearms it.
+    // "Entendido" solo cierra el aviso visual. La alarma one-shot ya se limpió
+    // al entregarse y no se volverá a programar automáticamente.
     Vibration.cancel();
     setActiveAlarm(null);
   }, []);

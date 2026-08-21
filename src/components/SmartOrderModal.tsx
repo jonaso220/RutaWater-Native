@@ -40,6 +40,8 @@ import {
   getAiLocale,
   validateAiProductResult,
 } from '../utils/aiProducts';
+import { scheduleNeedsNewClientDocument } from '../utils/clientCreationLimit';
+import { isClientLimitError } from '../services/clientCreation';
 
 interface SmartOrderModalProps {
   visible: boolean;
@@ -434,6 +436,13 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
         const productChange = applyAiProductChange(client.products, i, catalog);
         const productsToPass = productChange.products;
         const scheduleMode: 'add' | 'replace' = i.schedule_mode === 'add' ? 'add' : 'replace';
+        if (
+          !canAddClient
+          && scheduleNeedsNewClientDocument(client, clientsState.clients, freq, scheduleMode)
+        ) {
+          Alert.alert(t('smartOrder.clientLimitTitle'), t('smartOrder.clientLimitMsg'));
+          return;
+        }
         const currentDays = client.visitDays && client.visitDays.length
           ? client.visitDays
           : (client.visitDay ? [client.visitDay] : []);
@@ -493,7 +502,11 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
 
       // Los resultados informativos nunca llegan acá (no tienen botón de confirmar).
     } catch (e: any) {
-      Alert.alert(t('error'), e?.message || t('smartOrder.saveFailed'));
+      if (isClientLimitError(e)) {
+        Alert.alert(t('smartOrder.clientLimitTitle'), t('smartOrder.clientLimitMsg'));
+      } else {
+        Alert.alert(t('error'), e?.message || t('smartOrder.saveFailed'));
+      }
     } finally {
       savingRef.current = false;
       setSaving(false);

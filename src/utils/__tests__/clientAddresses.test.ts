@@ -25,10 +25,18 @@ describe('client addresses', () => {
     expect(sanitizeClientAddresses([
       { id: 'home', type: 'home', address: '  Casa  ', mapsLink: '' },
       { id: 'empty', type: 'work', address: ' ', mapsLink: ' ' },
-      { id: 'office', type: 'invalid', address: 'Trabajo', mapsLink: ' https://maps.example/work ' },
+      { id: 'office', type: 'invalid', address: 'Trabajo', mapsLink: ' maps.app.goo.gl/work ' },
     ])).toEqual([
       { id: 'home', type: 'home', address: 'Casa', mapsLink: '', lat: '', lng: '' },
-      { id: 'office', type: 'other', address: 'Trabajo', mapsLink: 'https://maps.example/work', lat: '', lng: '' },
+      { id: 'office', type: 'other', address: 'Trabajo', mapsLink: 'https://maps.app.goo.gl/work', lat: '', lng: '' },
+    ]);
+  });
+
+  test('drops a non-Google URL instead of persisting an unopenable map link', () => {
+    expect(sanitizeClientAddresses([
+      { id: 'home', type: 'home', address: 'Casa', mapsLink: 'maps.example/work' },
+    ])).toEqual([
+      { id: 'home', type: 'home', address: 'Casa', mapsLink: '', lat: '', lng: '' },
     ]);
   });
 

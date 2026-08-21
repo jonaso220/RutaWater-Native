@@ -20,6 +20,8 @@ import { getModalWidth } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import { useProfileStore } from '../stores/profileStore';
 import { useAuthContext } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
+import { useSubscriptionStore } from '../stores/subscriptionStore';
 
 interface ProfilesModalProps {
   visible: boolean;
@@ -33,6 +35,7 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { user } = useAuthContext();
+  const navigation = useNavigation<any>();
   const { width: windowWidth } = useWindowDimensions();
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
@@ -48,6 +51,8 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
   const joinProfile = useProfileStore((s) => s.joinProfile);
   const removeMember = useProfileStore((s) => s.removeMember);
   const leaveProfile = useProfileStore((s) => s.leaveProfile);
+  const isPremium = useSubscriptionStore((s) => s.isPremium);
+  const subscriptionLoading = useSubscriptionStore((s) => s.loading || s.promoLoading);
 
   const [newName, setNewName] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -86,6 +91,19 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
+    if (!isPremium) {
+      Alert.alert(t('settings.profilesPremiumTitle'), t('settings.profilesPremiumMsg'), [
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: t('home.seePremium'),
+          onPress: () => {
+            onClose();
+            navigation.navigate('Paywall');
+          },
+        },
+      ]);
+      return;
+    }
     await runMutation('create', async () => {
       await createProfile(newName);
       setNewName('');
@@ -118,6 +136,19 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
 
   const handleJoin = async () => {
     if (!joinCode.trim()) return;
+    if (!isPremium) {
+      Alert.alert(t('settings.profilesPremiumTitle'), t('settings.profilesPremiumMsg'), [
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: t('home.seePremium'),
+          onPress: () => {
+            onClose();
+            navigation.navigate('Paywall');
+          },
+        },
+      ]);
+      return;
+    }
     await runMutation('join', async () => {
       const res = await joinProfile(joinCode);
       if (res === 'ok') setJoinCode('');
@@ -271,8 +302,8 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
               />
               <TouchableOpacity
                 onPress={handleCreate}
-                style={[styles.addBtn, (!newName.trim() || !!savingAction) && styles.addBtnDisabled]}
-                disabled={!newName.trim() || !!savingAction}
+                style={[styles.addBtn, (!newName.trim() || !!savingAction || subscriptionLoading) && styles.addBtnDisabled]}
+                disabled={!newName.trim() || !!savingAction || subscriptionLoading}
               >
                 <Ionicons name="add" size={18} color={colors.textWhite} />
                 <Text style={styles.addBtnText}>{t('settings.createProfileBtn')}</Text>
@@ -294,8 +325,8 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
               />
               <TouchableOpacity
                 onPress={handleJoin}
-                style={[styles.addBtn, (!joinCode.trim() || !!savingAction) && styles.addBtnDisabled]}
-                disabled={!joinCode.trim() || !!savingAction}
+                style={[styles.addBtn, (!joinCode.trim() || !!savingAction || subscriptionLoading) && styles.addBtnDisabled]}
+                disabled={!joinCode.trim() || !!savingAction || subscriptionLoading}
               >
                 <Ionicons name="enter-outline" size={18} color={colors.textWhite} />
                 <Text style={styles.addBtnText}>{t('settings.joinProfileBtn')}</Text>

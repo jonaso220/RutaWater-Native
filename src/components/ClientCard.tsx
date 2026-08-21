@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking, Pressable } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking, Pressable, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -18,6 +18,7 @@ import {
   buildWhatsAppMessageUrl,
   resolveClientCardWhatsAppMessage,
 } from '../utils/whatsAppTemplates';
+import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
 
@@ -26,7 +27,7 @@ const formatClientName = (name: string) => name
   .toLocaleLowerCase()
   .replace(/(^|[\s'-])\S/g, (letter) => letter.toLocaleUpperCase());
 
-const parseTextWithLinks = (text: string, linkColor: string) => {
+const parseTextWithLinks = (text: string, linkColor: string, onOpenError: () => void) => {
   const parts = text.split(URL_REGEX);
   return parts.map((part, i) => {
     if (URL_REGEX.test(part)) {
@@ -34,7 +35,7 @@ const parseTextWithLinks = (text: string, linkColor: string) => {
         <Text
           key={i}
           style={{ color: linkColor, textDecorationLine: 'underline' }}
-          onPress={() => Linking.openURL(part)}
+          onPress={() => Linking.openURL(part).catch(onOpenError)}
         >
           {part}
         </Text>
@@ -130,31 +131,46 @@ const ClientCard: React.FC<ClientCardProps> = ({
       enCaminoMessage,
       tomorrowVisitMessage,
     );
-    Linking.openURL(buildWhatsAppMessageUrl(cleanPhone, message));
+    Linking.openURL(buildWhatsAppMessageUrl(cleanPhone, message)).catch(() => {
+      Alert.alert(t('error'), t('directory.errorWhatsApp'));
+    });
   };
 
   const openWhatsAppCamera = () => {
     if (!client.phone) return;
     const cleanPhone = normalizePhone(client.phone);
-    Linking.openURL(`whatsapp://send?phone=${cleanPhone}`);
+    Linking.openURL(`whatsapp://send?phone=${cleanPhone}`).catch(() => {
+      Alert.alert(t('error'), t('directory.errorWhatsApp'));
+    });
   };
 
   const callClient = () => {
     if (!client.phone) return;
-    Linking.openURL(`tel:${client.phone}`);
+    Linking.openURL(`tel:${client.phone}`).catch(() => {
+      Alert.alert(t('error'), t('directory.errorCall'));
+    });
   };
 
   const openMaps = () => {
     if (client.lat && client.lng) {
       Linking.openURL(
         `https://www.google.com/maps/dir/?api=1&destination=${client.lat},${client.lng}`,
-      );
+      ).catch(() => {
+        Alert.alert(t('error'), t('directory.errorMaps'));
+      });
     } else if (client.mapsLink) {
-      Linking.openURL(client.mapsLink);
+      const mapsLink = normalizeGoogleMapsLink(client.mapsLink);
+      if (!mapsLink) {
+        Alert.alert(t('error'), t('directory.errorMapsLink'));
+        return;
+      }
+      Linking.openURL(mapsLink).catch(() => {
+        Alert.alert(t('error'), t('directory.errorMapsLink'));
+      });
     }
   };
 
-  const hasLocation = !!(client.lat && client.lng) || !!client.mapsLink;
+  const hasLocation = !!(client.lat && client.lng) || !!normalizeGoogleMapsLink(client.mapsLink);
 
   const runMenuAction = (action?: () => void) => {
     setShowActionsMenu(false);
@@ -311,7 +327,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
             </View>
           </View>
           <Text style={styles.noteText}>
-            {parseTextWithLinks(client.notes || '', colors.primary)}
+            {parseTextWithLinks(client.notes || '', colors.primary, () => {
+              Alert.alert(t('error'), t('directory.errorLink'));
+            })}
           </Text>
           {wideLayout ? (
             <View style={styles.freqRow}>
@@ -496,7 +514,11 @@ const ClientCard: React.FC<ClientCardProps> = ({
             accessibilityLabel={t('clientCard.editNote')}
           >
             <Ionicons name="document-text" size={s(14)} color={colors.warningDark} />
-            <Text style={styles.notesText} numberOfLines={3}>{parseTextWithLinks(client.notes, colors.primary)}</Text>
+            <Text style={styles.notesText} numberOfLines={3}>
+              {parseTextWithLinks(client.notes, colors.primary, () => {
+                Alert.alert(t('error'), t('directory.errorLink'));
+              })}
+            </Text>
             <View style={styles.quickEditIconCompact}>
               <Ionicons name="pencil" size={s(13)} color={colors.textMuted} />
             </View>

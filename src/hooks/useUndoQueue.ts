@@ -91,6 +91,7 @@ export const useUndoQueue = () => {
         // El campo se activa recién después de crear el trigger local.
         alarm: '',
         alarmDay: '',
+        alarmScheduledFor: null,
         isStarred: previousData.isStarred ?? false,
         updatedAt: new Date(),
       }
@@ -101,6 +102,7 @@ export const useUndoQueue = () => {
         specificDate: previousData.specificDate,
         alarm: '',
         alarmDay: '',
+        alarmScheduledFor: null,
         isStarred: previousData.isStarred,
       };
 
@@ -123,6 +125,7 @@ export const useUndoQueue = () => {
                 { ...client, ...restoreData } as Client,
                 previousData.alarmDay || entry.sectionDay,
               ),
+              scheduledFor: previousData.alarmScheduledFor || undefined,
               scopeKey: client.groupId || client.userId,
               ownerUid: auth().currentUser?.uid,
             },
@@ -134,6 +137,7 @@ export const useUndoQueue = () => {
                   const alarmPersisted = await updateClient(client.id, {
                     alarm: previousAlarm,
                     alarmDay: previousData.alarmDay || entry.sectionDay,
+                    alarmScheduledFor: fireAt.getTime(),
                   } as any);
                   if (!alarmPersisted) throw new Error('UNDO_ALARM_PERSIST_FAILED');
                 },

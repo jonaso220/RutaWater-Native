@@ -41,6 +41,9 @@ export const API_ENDPOINTS = {
   // en el backend; así los códigos y documentos ajenos no son listables desde
   // una app modificada. Estas Functions caben en el plan gratuito de Netlify.
   joinGroup: `${PROD_BASE_URL}/api/join-group`,
+  // Las altas de clientes pasan por backend para aplicar el cupo Free de forma
+  // transaccional y global, incluso entre repartos y escrituras simultáneas.
+  createClient: `${PROD_BASE_URL}/api/create-client`,
   createProfile: `${PROD_BASE_URL}/api/create-profile`,
   joinProfile: `${PROD_BASE_URL}/api/join-profile`,
   syncProfileIds: `${PROD_BASE_URL}/api/sync-profile-ids`,

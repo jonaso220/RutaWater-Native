@@ -16,6 +16,8 @@ import {
   type CreatedProfileResult,
 } from './_shared/profileCreationService';
 
+const { AiPlanUnavailableError, resolveAiPlan } = require('./_shared/aiQuota');
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
@@ -39,6 +41,15 @@ interface CreateProfileDependencies {
   getAuth: (readEnvironment: EnvironmentReader) => Auth;
   getAuthUser: (adminAuth: Auth, uid: string) => Promise<void>;
   getFirestore: (readEnvironment: EnvironmentReader) => Firestore;
+  resolvePlan: (input: {
+    db: Firestore;
+    uid: string;
+    readEnvironment: EnvironmentReader;
+    fetchImpl?: typeof fetch;
+    nowMillis?: number;
+  }) => Promise<'free' | 'monthly' | 'annual'>;
+  fetchImpl?: typeof fetch;
+  now?: () => Date;
   create: (
     db: Firestore,
     uid: string,
@@ -101,19 +112,34 @@ export const createCreateProfileHandler = (dependencies: CreateProfileDependenci
     ) return json(400, { status: 'error' });
 
     try {
+      const db = dependencies.getFirestore(dependencies.readEnvironment);
+      const plan = await dependencies.resolvePlan({
+        db,
+        uid: authPayload.sub,
+        readEnvironment: dependencies.readEnvironment,
+        fetchImpl: dependencies.fetchImpl,
+        nowMillis: (dependencies.now?.() || new Date()).getTime(),
+      });
+      if (plan === 'free') {
+        return json(403, { status: 'premium_required' });
+      }
       const result = await dependencies.create(
-        dependencies.getFirestore(dependencies.readEnvironment),
+        db,
         authPayload.sub,
         body.name.trim(),
         body.requestId,
       );
       return json(200, { status: 'ok', ...result });
     } catch (error) {
+      const planUnavailable = error instanceof AiPlanUnavailableError
+        || (error instanceof Error && error.name === 'AiPlanUnavailableError');
       console.error(
         'create-profile error:',
         error instanceof Error ? error.message : 'unknown',
       );
-      return json(500, { status: 'error' });
+      return json(planUnavailable ? 503 : 500, {
+        status: planUnavailable ? 'plan_unavailable' : 'error',
+      });
     }
   };
 
@@ -123,6 +149,7 @@ export default createCreateProfileHandler({
   getAuth: getAdminAuth,
   getAuthUser: confirmJoinAuthUser,
   getFirestore: getAdminFirestore,
+  resolvePlan: resolveAiPlan,
   create: (db, uid, name, requestId) => createProfileForOwner({
     db,
     uid,

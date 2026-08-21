@@ -142,6 +142,30 @@ describe('Android exact-alarm permission', () => {
     const payload = mockNotifee.createTriggerNotification.mock.calls[0][0];
     expect(payload.data.alarmNextVisitDate).toBe('2099-12-18');
     expect(payload.data.alarmIntervalWeeks).toBe('2');
+    expect(payload.data.alarmScheduledFor).toBe(String(fireAt!.getTime()));
+    expect(payload.android.smallIcon).toBe('ic_notification');
+  });
+
+  test('mirrors the exact future one-shot instant and rejects it after it expires', async () => {
+    const scheduledFor = new Date('2099-12-18T08:00:00').getTime();
+    await expect(scheduleClientAlarm(
+      'client-1',
+      'Cliente',
+      'Direccion',
+      '08:00',
+      { scheduledFor, permissionAlreadyChecked: true },
+    )).resolves.toEqual(new Date(scheduledFor));
+
+    expect(mockNotifee.createTriggerNotification.mock.calls[0][1].timestamp).toBe(scheduledFor);
+    jest.clearAllMocks();
+    await expect(scheduleClientAlarm(
+      'client-1',
+      'Cliente',
+      'Direccion',
+      '08:00',
+      { scheduledFor: 1, permissionAlreadyChecked: true },
+    )).resolves.toBeNull();
+    expect(mockNotifee.createTriggerNotification).not.toHaveBeenCalled();
   });
 
   test('does not collapse a past nextVisitDate to the upcoming weekday', async () => {

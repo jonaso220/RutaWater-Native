@@ -142,12 +142,16 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   };
 
   const callClient = (phone: string) => {
-    Linking.openURL(`tel:${phone}`);
+    Linking.openURL(`tel:${phone}`).catch(() => {
+      Alert.alert(t('error'), t('directory.errorCall'));
+    });
   };
 
   const openWhatsApp = (phone: string) => {
     const cleanPhone = normalizePhone(phone);
-    Linking.openURL(`whatsapp://send?phone=${cleanPhone}`);
+    Linking.openURL(`whatsapp://send?phone=${cleanPhone}`).catch(() => {
+      Alert.alert(t('error'), t('directory.errorWhatsApp'));
+    });
   };
 
   const resetAddState = () => {

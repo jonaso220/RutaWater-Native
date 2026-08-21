@@ -8,6 +8,8 @@ import {
 } from './_shared/joinEndpoint';
 import { joinProfileByCode } from './_shared/joinService';
 
+const { resolveAiPlan } = require('./_shared/aiQuota');
+
 export const createJoinProfileHandler = createJoinEndpointHandler;
 
 export default createJoinProfileHandler({
@@ -17,6 +19,9 @@ export default createJoinProfileHandler({
   getAuthUser: confirmJoinAuthUser,
   allowAttempt: allowJoinAttempt,
   getFirestore: getAdminFirestore,
+  authorize: async ({ db, uid, readEnvironment }) => (
+    await resolveAiPlan({ db, uid, readEnvironment })
+  ) !== 'free',
   join: joinProfileByCode,
   logLabel: 'join-profile',
 });

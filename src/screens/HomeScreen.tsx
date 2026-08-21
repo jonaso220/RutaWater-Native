@@ -773,6 +773,7 @@ const HomeScreen = () => {
         specificDate: client.specificDate ?? '',
         alarm: client.alarm ?? '',
         alarmDay: client.alarmDay ?? '',
+        alarmScheduledFor: client.alarmScheduledFor ?? null,
         isStarred: client.isStarred ?? false,
       };
 

@@ -109,7 +109,7 @@ export const useDataExport = (user: ExportUser) => {
 
       const identityIndex = buildClientIdentityIndex(clients);
       const backup = {
-        schemaVersion: 4,
+        schemaVersion: 5,
         exportDate: new Date().toISOString().split('T')[0],
         exportedBy: user.email || user.uid,
         profileName: user.profileName || '',
@@ -122,7 +122,9 @@ export const useDataExport = (user: ExportUser) => {
           specificDate: c.specificDate || '', notes: c.notes || '',
           products: c.products || {}, isStarred: c.isStarred || false,
           isPinned: c.isPinned || false,
-          alarm: c.alarm || '', mapsLink: c.mapsLink || '', isNote: c.isNote || false,
+          alarm: c.alarm || '', alarmDay: c.alarmDay || '',
+          alarmScheduledFor: c.alarmScheduledFor ?? null,
+          mapsLink: c.mapsLink || '', isNote: c.isNote || false,
           hasDebt: getClientDebtTotal(c.id) > 0,
           // Estado de ciclo y orden de ruta: sin estos campos el backup no
           // permitía restaurar qué se entregó ni el orden de cada día.

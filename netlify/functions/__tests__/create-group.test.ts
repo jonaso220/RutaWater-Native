@@ -30,6 +30,7 @@ const makeHandler = (overrides: Record<string, any> = {}) => {
       displayName: 'Canonical Name',
     })),
     getFirestore: jest.fn(() => fakeDb),
+    resolvePlan: jest.fn(async () => 'monthly' as const),
     createGroup: jest.fn(async () => ({
       groupId: 'group_1234567890abcdef1234567890abcdef',
       code: 'ABC234',
@@ -113,6 +114,16 @@ describe('create-group Netlify Function', () => {
         displayName: 'Canonical Name',
       },
     });
+  });
+
+  test('rejects Free group creation before starting migration', async () => {
+    const { handler, dependencies } = makeHandler({
+      resolvePlan: jest.fn(async () => 'free' as const),
+    });
+    const response = await handler(request('POST', {}));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ success: false, code: 'PREMIUM_REQUIRED' });
+    expect(dependencies.createGroup).not.toHaveBeenCalled();
   });
 
   test('does not open Firestore when Admin Auth configuration or lookup fails', async () => {

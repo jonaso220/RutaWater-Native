@@ -130,6 +130,18 @@ describe.each(factories)('join-%s Netlify Function', (_kind, createHandler) => {
     expect(dependencies.join).not.toHaveBeenCalled();
   });
 
+  test('supports a server-side Premium gate before joining', async () => {
+    const authorize = jest.fn(async () => false);
+    const { handler, dependencies } = makeHandler({ authorize });
+    const response = await handler(request('POST', { code: 'ABC234' }));
+    expect(response.status).toBe(403);
+    expect(authorize).toHaveBeenCalledWith(expect.objectContaining({
+      db: fakeDb,
+      uid: 'token-owner',
+    }));
+    expect(dependencies.join).not.toHaveBeenCalled();
+  });
+
   test.each(['not_found', 'already', 'error'] as const)(
     'returns only the generic %s business result',
     async (status) => {

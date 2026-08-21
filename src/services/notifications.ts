@@ -143,6 +143,7 @@ export const scheduleClientAlarm = async (
     specificDate?: string;
     nextVisitDate?: string;
     intervalWeeks?: number;
+    scheduledFor?: number;
     scopeKey?: string;
     ownerUid?: string;
     permissionAlreadyChecked?: boolean;
@@ -154,7 +155,12 @@ export const scheduleClientAlarm = async (
   const id = notificationIdFor(clientId);
 
   let fireAt: Date | null = null;
-  if (options?.specificDate !== undefined) {
+  if (typeof options?.scheduledFor === 'number') {
+    fireAt = Number.isFinite(options.scheduledFor) && options.scheduledFor > Date.now()
+      ? new Date(options.scheduledFor)
+      : null;
+    if (!fireAt) return null;
+  } else if (options?.specificDate !== undefined) {
     fireAt = occurrenceForSpecificDate(options.specificDate, parsed.hours, parsed.minutes);
     // A supplied one-time date is authoritative. If it is malformed, does not
     // exist, or is already past, silently falling back to a weekly/daily alarm
@@ -208,6 +214,7 @@ export const scheduleClientAlarm = async (
           alarmSpecificDate: options?.specificDate || '',
           alarmNextVisitDate: options?.nextVisitDate || '',
           alarmIntervalWeeks: String(options?.intervalWeeks || ''),
+          alarmScheduledFor: String(fireAt.getTime()),
           alarmScopeKey: options?.scopeKey || '',
           alarmOwnerUid: options?.ownerUid || '',
         },
@@ -215,7 +222,7 @@ export const scheduleClientAlarm = async (
           channelId,
           importance: AndroidImportance.HIGH,
           pressAction: { id: 'default' },
-          smallIcon: 'ic_launcher',
+          smallIcon: 'ic_notification',
           sound: 'default',
         },
         ios: {
@@ -251,6 +258,7 @@ export interface ClientAlarmSnapshot {
   specificDate?: string;
   nextVisitDate?: string;
   intervalWeeks?: number;
+  scheduledFor?: number;
   scopeKey?: string;
   ownerUid?: string;
 }
@@ -268,6 +276,7 @@ export const restoreClientAlarmSnapshots = async (
       specificDate: snapshot.specificDate,
       nextVisitDate: snapshot.nextVisitDate,
       intervalWeeks: snapshot.intervalWeeks,
+      scheduledFor: snapshot.scheduledFor,
       scopeKey: snapshot.scopeKey,
       ownerUid: snapshot.ownerUid,
       // These snapshots came from triggers that existed immediately before

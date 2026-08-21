@@ -22,6 +22,7 @@ const makeHandler = (overrides: Record<string, any> = {}) => {
     getAuth: jest.fn(() => fakeAuth),
     getAuthUser: jest.fn(async () => {}),
     getFirestore: jest.fn(() => fakeDb),
+    resolvePlan: jest.fn(async () => 'monthly' as const),
     create: jest.fn(async () => ({
       profileId: 'profile_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       code: 'ABC234',
@@ -82,6 +83,18 @@ describe('create-profile Netlify Function', () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ status: 'error' });
     errorSpy.mockRestore();
+  });
+
+  test('rejects Free profile creation before the mutation', async () => {
+    const { handler, dependencies } = makeHandler({
+      resolvePlan: jest.fn(async () => 'free' as const),
+    });
+    const response = await handler(request('POST', {
+      name: 'Ruta', requestId: 'request_abcdefghijklmnop',
+    }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ status: 'premium_required' });
+    expect(dependencies.create).not.toHaveBeenCalled();
   });
 
   test('does not misclassify Auth infrastructure failures as deleted users', async () => {

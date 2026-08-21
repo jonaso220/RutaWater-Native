@@ -45,7 +45,20 @@ export const shouldPresentDeliveredAlarm = (
 type AlarmClient = Pick<
   Client,
   'alarm' | 'freq' | 'isCompleted' | 'isNote' | 'specificDate'
-> & Partial<Pick<Client, 'id' | 'alarmDay' | 'visitDay' | 'visitDays' | 'groupId' | 'userId' | 'lastVisited' | 'doneFor'>>;
+> & Partial<Pick<Client, 'id' | 'alarmDay' | 'alarmScheduledFor' | 'visitDay' | 'visitDays' | 'groupId' | 'userId' | 'lastVisited' | 'doneFor'>>;
+
+export const isAlarmScheduleExpired = (client: AlarmClient, now = Date.now()): boolean =>
+  typeof client.alarmScheduledFor === 'number'
+  && Number.isFinite(client.alarmScheduledFor)
+  && client.alarmScheduledFor <= now;
+
+export const alarmTargetsDay = (client: AlarmClient, day: string): boolean =>
+  !!client.alarm
+  && (
+    client.alarmDay
+    || (client.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
+    || client.visitDay
+  ) === day;
 
 export const getAlarmReconciliationSignature = (
   clients: AlarmClient[],
@@ -56,6 +69,7 @@ export const getAlarmReconciliationSignature = (
     client.id || '',
     client.alarm || '',
     client.alarmDay || '',
+    client.alarmScheduledFor || 0,
     client.freq,
     !!client.isCompleted,
     client.specificDate || '',
@@ -98,7 +112,34 @@ export const getAlarmReconciliationAction = (
     );
   if (!isActivePeriodic && !futureOnceOccurrence) return 'clear';
 
-  if (!hasScheduledTrigger) return 'schedule';
+  // A native timestamp trigger is intentionally one-shot. Once its canonical
+  // instant has passed, clear the shared bell instead of arming another cycle.
+  if (isAlarmScheduleExpired(client)) {
+    // An older app can replace a trigger without knowing alarmScheduledFor.
+    // If this device proves there is a newer pending trigger for the same
+    // alarm, keep it long enough to migrate its timestamp instead of clearing.
+    if (
+      typeof scheduledOnDevice !== 'boolean'
+      && typeof scheduledOnDevice?.timestamp === 'number'
+      && scheduledOnDevice.timestamp > Date.now()
+      && scheduledOnDevice.time === client.alarm
+      && scheduledOnDevice.targetDay === (
+        client.alarmDay
+        || (client.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
+        || client.visitDay
+      )
+      && scheduledOnDevice.scopeKey === (client.groupId || client.userId)
+      && (!expectedOwnerUid || scheduledOnDevice.ownerUid === expectedOwnerUid)
+    ) return 'keep';
+    return 'clear';
+  }
+
+  if (!hasScheduledTrigger) {
+    // New alarms persist their exact future instant and can be mirrored safely
+    // on another signed-in device. Legacy alarms without it are left visible
+    // but never auto-rearmed; the user can remove or program them again.
+    return typeof client.alarmScheduledFor === 'number' ? 'schedule' : 'keep';
+  }
   // Boolean callers retain the legacy existence-only behavior. Production
   // reconciliation supplies metadata and replaces stale remote time/day data.
   if (typeof scheduledOnDevice === 'boolean') return 'keep';
@@ -117,6 +158,10 @@ export const getAlarmReconciliationAction = (
     || scheduledOnDevice.scopeKey !== expectedScopeKey
     || (!!expectedOwnerUid && scheduledOnDevice.ownerUid !== expectedOwnerUid)
     || (
+      typeof client.alarmScheduledFor === 'number'
+      && scheduledOnDevice.timestamp !== client.alarmScheduledFor
+    )
+    || (
       !!scheduledOnDevice.nextVisitDate
       && scheduledOnDevice.nextVisitDate !== expectedTiming.nextVisitDate
     )
@@ -124,7 +169,11 @@ export const getAlarmReconciliationAction = (
     return 'schedule';
   }
 
-  if (typeof scheduledOnDevice.timestamp === 'number' && expectedTiming.nextVisitDate) {
+  if (
+    typeof client.alarmScheduledFor !== 'number'
+    && typeof scheduledOnDevice.timestamp === 'number'
+    && expectedTiming.nextVisitDate
+  ) {
     const expectedFire = occurrenceForVisitDate(
       expectedTiming.nextVisitDate,
       parsed.hours,

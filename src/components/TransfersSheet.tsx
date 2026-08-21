@@ -13,13 +13,14 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Transfer } from '../types';
-import { normalizePhone, getModalWidth } from '../utils/helpers';
+import { getModalWidth } from '../utils/helpers';
 import { formatShortDateTime } from '../utils/format';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
+import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 
 interface TransfersSheetProps {
   visible: boolean;
@@ -78,9 +79,18 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
     if (transfer.clientLat && transfer.clientLng) {
       Linking.openURL(
         `https://www.google.com/maps/dir/?api=1&destination=${transfer.clientLat},${transfer.clientLng}`,
-      );
+      ).catch(() => {
+        Alert.alert(t('error'), t('directory.errorMaps'));
+      });
     } else if (transfer.clientMapsLink) {
-      Linking.openURL(transfer.clientMapsLink);
+      const mapsLink = normalizeGoogleMapsLink(transfer.clientMapsLink);
+      if (!mapsLink) {
+        Alert.alert(t('error'), t('directory.errorMapsLink'));
+        return;
+      }
+      Linking.openURL(mapsLink).catch(() => {
+        Alert.alert(t('error'), t('directory.errorMapsLink'));
+      });
     }
   };
 

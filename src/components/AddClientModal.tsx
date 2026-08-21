@@ -22,6 +22,8 @@ import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
 import { getModalWidth } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
+import { FREE_CLIENT_LIMIT } from '../constants/subscription';
+import { isClientLimitError } from '../services/clientCreation';
 
 interface AddClientModalProps {
   visible: boolean;
@@ -320,7 +322,12 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
       resetForm();
       onClose();
     } catch (e) {
-      Alert.alert(t('error'), t('addModal.saveError'));
+      Alert.alert(
+        isClientLimitError(e) ? t('home.limitReached') : t('error'),
+        isClientLimitError(e)
+          ? t('home.limitMessage', { limit: FREE_CLIENT_LIMIT })
+          : t('addModal.saveError'),
+      );
     } finally {
       savingRef.current = false;
       setSaving(false);

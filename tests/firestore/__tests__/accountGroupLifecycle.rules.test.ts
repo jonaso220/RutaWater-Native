@@ -493,6 +493,31 @@ describeWithEmulator('account and group lifecycle Firestore rules', () => {
     }));
   });
 
+  test('the client-create cutover blocks direct client docs but keeps notes compatible', async () => {
+    const joinerDb = testEnvironment.authenticatedContext('joiner').firestore();
+    const clientData = {
+      userId: 'joiner',
+      scopeKey: 'user:joiner',
+      name: 'Direct client',
+      isNote: false,
+    };
+
+    // Compatibility phase: published builds still create directly.
+    await assertSucceeds(joinerDb.doc('clients/before-cutover').set(clientData));
+
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().doc('systemMigrations/clientCreateV1').set({ enforced: true });
+    });
+
+    await assertFails(joinerDb.doc('clients/after-cutover').set(clientData));
+    await assertSucceeds(joinerDb.doc('clients/note-after-cutover').set({
+      userId: 'joiner',
+      scopeKey: 'user:joiner',
+      name: 'NOTA',
+      isNote: true,
+    }));
+  });
+
   test('compatibility evidence cannot be read or forged by its account owner', async () => {
     const outsiderDb = testEnvironment.authenticatedContext('outsider').firestore();
 

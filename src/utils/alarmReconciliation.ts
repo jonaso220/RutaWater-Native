@@ -1,5 +1,6 @@
 import type { Client } from '../types';
-import { occurrenceForSpecificDate, parseTime } from './scheduling';
+import { occurrenceForSpecificDate, occurrenceForVisitDate, parseTime } from './scheduling';
+import { alarmScheduleFields, intervalWeeksForFreq } from './helpers';
 
 export type AlarmReconciliationAction = 'keep' | 'schedule' | 'clear' | 'cancel';
 
@@ -7,8 +8,11 @@ export interface ScheduledAlarmMetadata {
   time: string;
   targetDay?: string;
   specificDate?: string;
+  nextVisitDate?: string;
+  intervalWeeks?: number;
   scopeKey?: string;
   ownerUid?: string;
+  timestamp?: number;
 }
 
 export interface DeliveredAlarmMetadata {
@@ -41,7 +45,7 @@ export const shouldPresentDeliveredAlarm = (
 type AlarmClient = Pick<
   Client,
   'alarm' | 'freq' | 'isCompleted' | 'isNote' | 'specificDate'
-> & Partial<Pick<Client, 'id' | 'alarmDay' | 'visitDay' | 'visitDays' | 'groupId' | 'userId'>>;
+> & Partial<Pick<Client, 'id' | 'alarmDay' | 'visitDay' | 'visitDays' | 'groupId' | 'userId' | 'lastVisited' | 'doneFor'>>;
 
 export const getAlarmReconciliationSignature = (
   clients: AlarmClient[],
@@ -57,6 +61,8 @@ export const getAlarmReconciliationSignature = (
     client.specificDate || '',
     client.visitDay || '',
     (client.visitDays || []).join(','),
+    client.doneFor || '',
+    String((client as { lastVisited?: unknown }).lastVisited ?? ''),
   ])
   .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
 
@@ -103,14 +109,38 @@ export const getAlarmReconciliationAction = (
     || client.visitDay;
   const expectedSpecificDate = client.freq === 'once' ? (client.specificDate || undefined) : undefined;
   const expectedScopeKey = client.groupId || client.userId;
+  const expectedTiming = alarmScheduleFields(client as Client, expectedTargetDay);
   if (
     scheduledOnDevice.time !== client.alarm
     || scheduledOnDevice.targetDay !== expectedTargetDay
     || scheduledOnDevice.specificDate !== expectedSpecificDate
     || scheduledOnDevice.scopeKey !== expectedScopeKey
     || (!!expectedOwnerUid && scheduledOnDevice.ownerUid !== expectedOwnerUid)
+    || (
+      !!scheduledOnDevice.nextVisitDate
+      && scheduledOnDevice.nextVisitDate !== expectedTiming.nextVisitDate
+    )
   ) {
     return 'schedule';
+  }
+
+  if (typeof scheduledOnDevice.timestamp === 'number' && expectedTiming.nextVisitDate) {
+    const expectedFire = occurrenceForVisitDate(
+      expectedTiming.nextVisitDate,
+      parsed.hours,
+      parsed.minutes,
+      expectedTiming.intervalWeeks ?? intervalWeeksForFreq(client.freq),
+    );
+    if (expectedFire) {
+      const scheduledAt = new Date(scheduledOnDevice.timestamp);
+      if (
+        scheduledAt.getFullYear() !== expectedFire.getFullYear()
+        || scheduledAt.getMonth() !== expectedFire.getMonth()
+        || scheduledAt.getDate() !== expectedFire.getDate()
+      ) {
+        return 'schedule';
+      }
+    }
   }
   return 'keep';
 };

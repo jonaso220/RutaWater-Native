@@ -3,6 +3,7 @@ import {
   nextOccurrence,
   nextOccurrenceForDay,
   occurrenceForSpecificDate,
+  occurrenceForVisitDate,
   isValidCalendarDate,
   isValidScheduleDate,
 } from '../scheduling';
@@ -153,6 +154,41 @@ describe('nextOccurrenceForDay', () => {
     const result = nextOccurrenceForDay('Marteddì', 14, 0);
     expect(result.getDate()).toBe(4);
     expect(result.getHours()).toBe(14);
+  });
+});
+
+describe('occurrenceForVisitDate', () => {
+  test('uses the visit calendar day, not the next weekday', () => {
+    // FAKE_NOW is Wednesday 10:00. Next Saturday is the 7th; a biweekly
+    // visit two weeks out is Saturday the 21st.
+    const result = occurrenceForVisitDate('2026-03-21', 8, 0, 2);
+    expect(result).not.toBeNull();
+    expect(result!.getFullYear()).toBe(2026);
+    expect(result!.getMonth()).toBe(2);
+    expect(result!.getDate()).toBe(21);
+    expect(result!.getHours()).toBe(8);
+  });
+
+  test('advances whole cycles when the visit-day time already passed', () => {
+    // Wednesday 08:00 already passed at 10:00. Weekly → next Wednesday.
+    const weekly = occurrenceForVisitDate('2026-03-04', 8, 0, 1);
+    expect(weekly!.getDate()).toBe(11);
+    expect(weekly!.getHours()).toBe(8);
+
+    // Biweekly skips the in-between Wednesday.
+    const biweekly = occurrenceForVisitDate('2026-03-04', 8, 0, 2);
+    expect(biweekly!.getDate()).toBe(18);
+  });
+
+  test('keeps today when the visit time is still ahead', () => {
+    const result = occurrenceForVisitDate(new Date(2026, 2, 4), 15, 0, 2);
+    expect(result!.getDate()).toBe(4);
+    expect(result!.getHours()).toBe(15);
+  });
+
+  test('rejects malformed visit dates', () => {
+    expect(occurrenceForVisitDate('2026-03-32', 8, 0, 1)).toBeNull();
+    expect(occurrenceForVisitDate('', 8, 0, 1)).toBeNull();
   });
 });
 

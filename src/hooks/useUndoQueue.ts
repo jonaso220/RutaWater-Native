@@ -9,6 +9,7 @@ import {
   runSerializedAlarmMutation,
   scheduleClientAlarm,
 } from '../services/notifications';
+import { alarmScheduleFields } from '../utils/helpers';
 import i18n from '../i18n';
 
 export interface UndoEntry {
@@ -118,8 +119,10 @@ export const useUndoQueue = () => {
             client.address || '',
             previousAlarm,
             {
-              targetDay: previousData.alarmDay || entry.sectionDay,
-              specificDate: client.freq === 'once' ? previousData.specificDate : undefined,
+              ...alarmScheduleFields(
+                { ...client, ...restoreData } as Client,
+                previousData.alarmDay || entry.sectionDay,
+              ),
               scopeKey: client.groupId || client.userId,
               ownerUid: auth().currentUser?.uid,
             },

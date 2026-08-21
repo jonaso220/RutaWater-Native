@@ -62,6 +62,38 @@ describe('alarm reconciliation safety', () => {
     })).toBe('keep');
   });
 
+  test('replaces a biweekly trigger armed for this weekday instead of the next visit', () => {
+    jest.useFakeTimers({ now: new Date(2026, 2, 4, 10, 0, 0, 0).getTime() });
+    try {
+      const client = alarmClient({
+        freq: 'biweekly',
+        alarm: '08:00',
+        visitDay: 'Sábado',
+        visitDays: ['Sábado'],
+        userId: 'user-1',
+        lastVisited: new Date(2026, 1, 28, 10, 0, 0, 0),
+        doneFor: '2026-02-28',
+      });
+      const thisSaturday = new Date(2026, 2, 7, 8, 0, 0, 0).getTime();
+      const nextVisitSaturday = new Date(2026, 2, 14, 8, 0, 0, 0).getTime();
+      expect(getAlarmReconciliationAction(client, {
+        time: '08:00',
+        targetDay: 'Sábado',
+        scopeKey: 'user-1',
+        timestamp: thisSaturday,
+      })).toBe('schedule');
+      expect(getAlarmReconciliationAction(client, {
+        time: '08:00',
+        targetDay: 'Sábado',
+        scopeKey: 'user-1',
+        nextVisitDate: '2026-03-14',
+        timestamp: nextVisitSaturday,
+      })).toBe('keep');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test('cancels this device trigger after a remote alarm clear', () => {
     const client = alarmClient({
       alarm: '',

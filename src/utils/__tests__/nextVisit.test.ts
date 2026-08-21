@@ -1,4 +1,4 @@
-import { getNextVisitDate, toLocalDateString } from '../helpers';
+import { getNextVisitDate, toLocalDateString, alarmScheduleFields, intervalWeeksForFreq } from '../helpers';
 import { Client } from '../../types';
 
 // Monday 2026-06-29 10:00 local time. The scenarios below revolve around a
@@ -190,5 +190,35 @@ describe('getNextVisitDate — casos base sin lastVisited', () => {
   test("freq 'once' con specificDate malformada devuelve null", () => {
     const c = makeClient({ freq: 'once', specificDate: 'garbage' });
     expect(getNextVisitDate(c)).toBeNull();
+  });
+});
+
+describe('alarmScheduleFields', () => {
+  test('maps frequency to interval weeks', () => {
+    expect(intervalWeeksForFreq('weekly')).toBe(1);
+    expect(intervalWeeksForFreq('biweekly')).toBe(2);
+    expect(intervalWeeksForFreq('triweekly')).toBe(3);
+    expect(intervalWeeksForFreq('monthly')).toBe(4);
+  });
+
+  test('biweekly next visit is two weeks out, not this Saturday', () => {
+    const c = makeClient({
+      freq: 'biweekly',
+      lastVisited: new Date(2026, 5, 27, 10, 0) as any,
+      doneFor: '2026-06-27',
+    });
+    expect(alarmScheduleFields(c, 'Sábado')).toEqual({
+      targetDay: 'Sábado',
+      nextVisitDate: '2026-07-11',
+      intervalWeeks: 2,
+    });
+  });
+
+  test('once clients keep specificDate and do not send a periodic visit', () => {
+    const c = makeClient({ freq: 'once', specificDate: '2026-07-10' });
+    expect(alarmScheduleFields(c)).toEqual({
+      targetDay: 'Sábado',
+      specificDate: '2026-07-10',
+    });
   });
 });

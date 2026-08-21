@@ -22,6 +22,7 @@ import {
   isAlarmScopeReady,
   shouldPresentDeliveredAlarm,
 } from '../utils/alarmReconciliation';
+import { alarmScheduleFields } from '../utils/helpers';
 
 export interface AlarmData {
   clientId: string;
@@ -167,8 +168,7 @@ export const useAlarmChecker = () => {
               latest.address || '',
               latest.alarm,
               {
-                targetDay,
-                specificDate: latest.freq === 'once' ? latest.specificDate : undefined,
+                ...alarmScheduleFields(latest, targetDay),
                 scopeKey: latest.groupId || latest.userId || activeScopeKey,
                 ownerUid: currentUserId,
                 permissionAlreadyChecked: true,
@@ -215,11 +215,11 @@ export const useAlarmChecker = () => {
                 clientName: latest.name || '',
                 address: latest.address || '',
                 time: latest.alarm,
-                targetDay: latest.alarmDay || (latest.visitDays && latest.visitDays.length > 0
-                  ? latest.visitDays[0]
-                  : undefined) || latest.visitDay,
-                specificDate: latest.freq === 'once' ? latest.specificDate : undefined,
-                };
+                ...alarmScheduleFields(latest, latest.alarmDay
+                  || (latest.visitDays && latest.visitDays.length > 0
+                    ? latest.visitDays[0]
+                    : undefined) || latest.visitDay),
+              };
               previousAlarm.scopeKey = latest.groupId || latest.userId || activeScopeKey;
               previousAlarm.ownerUid = currentUserId;
               return [previousAlarm];

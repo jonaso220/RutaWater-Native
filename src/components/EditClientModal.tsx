@@ -25,7 +25,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
-import { getModalWidth, getNextVisitDate } from '../utils/helpers';
+import { getModalWidth, getNextVisitDate, alarmScheduleFields } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import {
   cancelClientAlarm,
@@ -359,11 +359,13 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
         clientName: client.name || '',
         address: client.address || '',
         time: client.alarm,
-        targetDay: client.alarmDay
-          || scheduledDay
-          || (client.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
-          || client.visitDay,
-        specificDate: client.freq === 'once' ? client.specificDate : undefined,
+        ...alarmScheduleFields(
+          client,
+          client.alarmDay
+            || scheduledDay
+            || (client.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
+            || client.visitDay,
+        ),
         scopeKey: client.groupId || client.userId,
         ownerUid: auth().currentUser?.uid,
       }
@@ -387,8 +389,15 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
             (data.address ?? (showClientInfo ? locationFields(sanitizeClientAddresses(addresses)[0]).address : client.address)) || '',
             client.alarm,
             {
-              targetDay: savedDay || client.alarmDay || client.visitDay,
-              specificDate: freq === 'once' ? (savedDate || client.specificDate) : undefined,
+              ...alarmScheduleFields(
+                {
+                  ...client,
+                  ...data,
+                  freq,
+                  specificDate: savedDate || data.specificDate || client.specificDate,
+                } as Client,
+                savedDay || client.alarmDay || client.visitDay,
+              ),
               scopeKey: client.groupId || client.userId,
               ownerUid: auth().currentUser?.uid,
             },

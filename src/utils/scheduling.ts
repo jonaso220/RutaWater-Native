@@ -81,6 +81,38 @@ export const nextOccurrenceForDay = (
   return target;
 };
 
+export const occurrenceForVisitDate = (
+  visitDate: Date | string,
+  hours: number,
+  minutes: number,
+  intervalWeeks = 1,
+): Date | null => {
+  let year: number;
+  let month: number;
+  let day: number;
+  if (typeof visitDate === 'string') {
+    const parts = parseCalendarDateParts(visitDate);
+    if (!parts) return null;
+    ({ year, month, day } = parts);
+  } else {
+    if (!(visitDate instanceof Date) || Number.isNaN(visitDate.getTime())) return null;
+    year = visitDate.getFullYear();
+    month = visitDate.getMonth();
+    day = visitDate.getDate();
+  }
+
+  const target = new Date(year, month, day, hours, minutes, 0, 0);
+  if (Number.isNaN(target.getTime())) return null;
+
+  const stepDays = Math.max(1, intervalWeeks) * 7;
+  const now = Date.now();
+  for (let i = 0; i < 52 && target.getTime() <= now; i += 1) {
+    target.setDate(target.getDate() + stepDays);
+  }
+  if (target.getTime() <= now) return null;
+  return target;
+};
+
 export const occurrenceForSpecificDate = (
   specificDate: string,
   hours: number,

@@ -13,6 +13,7 @@ import {
   nextOccurrence,
   nextOccurrenceForDay,
   occurrenceForSpecificDate,
+  occurrenceForVisitDate,
 } from '../utils/scheduling';
 
 const ANDROID_CHANNEL_ID = 'visit-alarms';
@@ -140,6 +141,8 @@ export const scheduleClientAlarm = async (
   options?: {
     targetDay?: string;
     specificDate?: string;
+    nextVisitDate?: string;
+    intervalWeeks?: number;
     scopeKey?: string;
     ownerUid?: string;
     permissionAlreadyChecked?: boolean;
@@ -156,6 +159,16 @@ export const scheduleClientAlarm = async (
     // A supplied one-time date is authoritative. If it is malformed, does not
     // exist, or is already past, silently falling back to a weekly/daily alarm
     // would schedule a different reminder than the user requested.
+    if (!fireAt) return null;
+  } else if (options?.nextVisitDate) {
+    fireAt = occurrenceForVisitDate(
+      options.nextVisitDate,
+      parsed.hours,
+      parsed.minutes,
+      options.intervalWeeks ?? 1,
+    );
+    // Same contract as specificDate: a known visit day must not silently
+    // collapse to "next weekday" or the driver goes to a house that is not due.
     if (!fireAt) return null;
   } else if (options?.targetDay) {
     fireAt = nextOccurrenceForDay(options.targetDay, parsed.hours, parsed.minutes);
@@ -193,6 +206,8 @@ export const scheduleClientAlarm = async (
           clientAddress: address,
           alarmTargetDay: options?.targetDay || '',
           alarmSpecificDate: options?.specificDate || '',
+          alarmNextVisitDate: options?.nextVisitDate || '',
+          alarmIntervalWeeks: String(options?.intervalWeeks || ''),
           alarmScopeKey: options?.scopeKey || '',
           alarmOwnerUid: options?.ownerUid || '',
         },
@@ -234,6 +249,8 @@ export interface ClientAlarmSnapshot {
   time: string;
   targetDay?: string;
   specificDate?: string;
+  nextVisitDate?: string;
+  intervalWeeks?: number;
   scopeKey?: string;
   ownerUid?: string;
 }
@@ -249,6 +266,8 @@ export const restoreClientAlarmSnapshots = async (
     {
       targetDay: snapshot.targetDay,
       specificDate: snapshot.specificDate,
+      nextVisitDate: snapshot.nextVisitDate,
+      intervalWeeks: snapshot.intervalWeeks,
       scopeKey: snapshot.scopeKey,
       ownerUid: snapshot.ownerUid,
       // These snapshots came from triggers that existed immediately before
@@ -348,6 +367,8 @@ export interface ScheduledClientAlarm {
   time: string;
   targetDay?: string;
   specificDate?: string;
+  nextVisitDate?: string;
+  intervalWeeks?: number;
   scopeKey?: string;
   ownerUid?: string;
   timestamp?: number;
@@ -377,6 +398,12 @@ export const getScheduledClientAlarms = async (): Promise<Map<string, ScheduledC
           : undefined,
         specificDate: typeof data.alarmSpecificDate === 'string' && data.alarmSpecificDate
           ? data.alarmSpecificDate
+          : undefined,
+        nextVisitDate: typeof data.alarmNextVisitDate === 'string' && data.alarmNextVisitDate
+          ? data.alarmNextVisitDate
+          : undefined,
+        intervalWeeks: typeof data.alarmIntervalWeeks === 'string' && data.alarmIntervalWeeks
+          ? Number(data.alarmIntervalWeeks) || undefined
           : undefined,
         scopeKey: typeof data.alarmScopeKey === 'string' && data.alarmScopeKey
           ? data.alarmScopeKey

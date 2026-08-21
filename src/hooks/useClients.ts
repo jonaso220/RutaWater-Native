@@ -3,7 +3,7 @@ import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firest
 import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
 import { Client, ClientAddress, RELATIONSHIP_INVERSE } from '../types';
-import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, toLocalDateString, parseDate } from '../utils/helpers';
+import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, toLocalDateString, parseDate, alarmScheduleFields } from '../utils/helpers';
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { findExactClientMatch, planDuplicateClientCleanup } from '../utils/clientDuplicates';
 import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../utils/recency';
@@ -43,13 +43,16 @@ const alarmSnapshotForClient = (
     || preferredDay
     || (client.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
     || client.visitDay;
+  const timing = alarmScheduleFields(client, targetDay);
   return {
     clientId: client.id,
     clientName: client.name || '',
     address: client.address || '',
     time: client.alarm,
-    targetDay,
-    specificDate: client.freq === 'once' ? client.specificDate : undefined,
+    targetDay: timing.targetDay,
+    specificDate: timing.specificDate,
+    nextVisitDate: timing.nextVisitDate,
+    intervalWeeks: timing.intervalWeeks,
     scopeKey: client.groupId || client.userId,
     ownerUid,
   };
@@ -761,8 +764,9 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
             client?.address || '',
             time,
             {
-              targetDay: resolvedDay,
-              specificDate: client?.freq === 'once' ? client?.specificDate : undefined,
+              ...(client
+                ? alarmScheduleFields(client, resolvedDay)
+                : { targetDay: resolvedDay }),
               scopeKey: groupId || userId,
               ownerUid: userId,
             },

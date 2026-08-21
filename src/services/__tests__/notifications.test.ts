@@ -118,6 +118,48 @@ describe('Android exact-alarm permission', () => {
     expect(mockNotifee.createTriggerNotification).not.toHaveBeenCalled();
   });
 
+  test('schedules a biweekly alarm on the next visit, not this weekday', async () => {
+    const fireAt = await scheduleClientAlarm(
+      'client-1',
+      'Cliente',
+      'Direccion',
+      '08:00',
+      {
+        targetDay: 'Sábado',
+        nextVisitDate: '2099-12-18',
+        intervalWeeks: 2,
+        permissionAlreadyChecked: true,
+      },
+    );
+
+    expect(fireAt).toBeInstanceOf(Date);
+    expect(fireAt!.getFullYear()).toBe(2099);
+    expect(fireAt!.getMonth()).toBe(11);
+    expect(fireAt!.getDate()).toBe(18);
+    expect(fireAt!.getHours()).toBe(8);
+    const trigger = mockNotifee.createTriggerNotification.mock.calls[0][1];
+    expect(trigger.timestamp).toBe(fireAt!.getTime());
+    const payload = mockNotifee.createTriggerNotification.mock.calls[0][0];
+    expect(payload.data.alarmNextVisitDate).toBe('2099-12-18');
+    expect(payload.data.alarmIntervalWeeks).toBe('2');
+  });
+
+  test('does not collapse a past nextVisitDate to the upcoming weekday', async () => {
+    await expect(scheduleClientAlarm(
+      'client-1',
+      'Cliente',
+      'Direccion',
+      '08:00',
+      {
+        targetDay: 'Sábado',
+        nextVisitDate: '2000-01-01',
+        intervalWeeks: 2,
+        permissionAlreadyChecked: true,
+      },
+    )).resolves.toBeNull();
+    expect(mockNotifee.createTriggerNotification).not.toHaveBeenCalled();
+  });
+
   test('returns true on cancellation and propagates native cancellation failures', async () => {
     await expect(cancelClientAlarm('client-1')).resolves.toBe(true);
     expect(mockNotifee.cancelTriggerNotification).toHaveBeenCalledWith('alarm-client-1');

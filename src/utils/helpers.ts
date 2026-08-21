@@ -380,6 +380,44 @@ export const getDayIndex = (dayName: string): number => {
 // antes de saltar sola al próximo ciclo, como si se hubiera marcado Listo.
 const LATE_GRACE_DAYS = 2;
 
+export const intervalWeeksForFreq = (
+  freq: Client['freq'] | string | undefined,
+): number => {
+  if (freq === 'biweekly') return 2;
+  if (freq === 'triweekly') return 3;
+  if (freq === 'monthly') return 4;
+  return 1;
+};
+
+/** Native-trigger fields so a periodic alarm fires on the next visit, not the next weekday. */
+export const alarmScheduleFields = (
+  client: Client,
+  forDay?: string,
+): {
+  targetDay?: string;
+  specificDate?: string;
+  nextVisitDate?: string;
+  intervalWeeks?: number;
+} => {
+  const targetDay = forDay
+    || client.alarmDay
+    || (client.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
+    || client.visitDay
+    || undefined;
+  if (client.freq === 'once') {
+    return {
+      targetDay,
+      specificDate: client.specificDate || undefined,
+    };
+  }
+  const visit = getNextVisitDate(client, targetDay);
+  return {
+    targetDay,
+    nextVisitDate: visit ? toLocalDateString(visit) : undefined,
+    intervalWeeks: intervalWeeksForFreq(client.freq),
+  };
+};
+
 export const getNextVisitDate = (client: Client, forDay?: string): Date | null => {
   // Only use specificDate as-is for 'once' clients (one-time orders).
   // For periodic clients, specificDate is a start-date hint and should not
@@ -408,10 +446,7 @@ export const getNextVisitDate = (client: Client, forDay?: string): Date | null =
 
   const lastVisited = parseDate(client.lastVisited);
 
-  let intervalWeeks = 1;
-  if (client.freq === 'biweekly') intervalWeeks = 2;
-  if (client.freq === 'triweekly') intervalWeeks = 3;
-  if (client.freq === 'monthly') intervalWeeks = 4;
+  const intervalWeeks = intervalWeeksForFreq(client.freq);
 
   if (lastVisited) {
     const lastVisitedDay = new Date(lastVisited);

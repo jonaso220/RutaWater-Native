@@ -94,10 +94,15 @@ export type ParseResult = ParseResultPayload & { context?: AiParseContext };
 
 interface UseAiParseReturn {
   parsing: boolean;
-  parse: (text: string) => Promise<ParseResult | null>;
+  parse: (text: string, options?: AiParseOptions) => Promise<ParseResult | null>;
   error: string | null;
   limitReached: boolean;
   reset: () => void;
+}
+
+interface AiParseOptions {
+  correction?: string;
+  previousResult?: ParseResult;
 }
 
 export const useAiParse = (): UseAiParseReturn => {
@@ -113,7 +118,7 @@ export const useAiParse = (): UseAiParseReturn => {
     setLimitReached(false);
   }, []);
 
-  const parse = useCallback(async (text: string): Promise<ParseResult | null> => {
+  const parse = useCallback(async (text: string, options?: AiParseOptions): Promise<ParseResult | null> => {
     const requestEpoch = ++requestEpochRef.current;
     const isCurrentRequest = () => requestEpoch === requestEpochRef.current;
     setParsing(true);
@@ -153,7 +158,7 @@ export const useAiParse = (): UseAiParseReturn => {
       // anterior vuelva a responder "cliente no encontrado". Además no consume
       // un parseo de IA porque en este camino no se consulta ningún modelo.
       const localCard = parseDirectoryContactCard(sourceText);
-      if (localCard?.usedAddressAsName) {
+      if (!options?.correction && localCard?.usedAddressAsName) {
         const { usedAddressAsName: _usedAddressAsName, ...contact } = localCard;
         return {
           tool: 'create_new_client',
@@ -185,6 +190,13 @@ export const useAiParse = (): UseAiParseReturn => {
             todayIso,
             catalog,
             locale,
+            ...(options?.correction && options.previousResult ? {
+              correction: options.correction,
+              previousResult: {
+                tool: options.previousResult.tool,
+                input: options.previousResult.input,
+              },
+            } : {}),
           }),
         };
         try {

@@ -66,6 +66,7 @@ import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { Frequency } from '../constants/products';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { getClientPhoneSearchText } from '../utils/clientPhones';
 
 type ListItem =
   | { type: 'header'; key: string; title: string; count: number; isToday: boolean }
@@ -236,6 +237,9 @@ const HomeScreen = () => {
   const setProfileSwitcherVisible = useProfileStore((s) => s.setSwitcherVisible);
   const clients = useClientsStore((s) => s.clients);
   const loading = useClientsStore((s) => s.loading);
+  const hasLoadedClientsRef = useRef(!loading);
+  if (!loading) hasLoadedClientsRef.current = true;
+  const isInitialClientsLoading = loading && !hasLoadedClientsRef.current;
   const getVisibleClients = useClientsStore((s) => s.getVisibleClients);
   const getCompletedClients = useClientsStore((s) => s.getCompletedClients);
   const markAsDone = useClientsStore((s) => s.markAsDone);
@@ -638,7 +642,7 @@ const HomeScreen = () => {
     // Fuzzy search filter (debounced)
     if (debouncedSearchTerm.trim()) {
       const matcher = fuzzyMatch(debouncedSearchTerm);
-      filtered = filtered.filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
+      filtered = filtered.filter((c) => matcher(c.name || '', c.address || '', getClientPhoneSearchText(c)));
     }
 
     // Active filters (type filters: AND, freq filters: OR, product filters: OR — matches webapp)
@@ -1224,7 +1228,7 @@ const HomeScreen = () => {
     ],
   );
 
-  if (loading) {
+  if (isInitialClientsLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: 12 }}>
         {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -1744,8 +1748,16 @@ const HomeScreen = () => {
         )}
           </View>
         </Animated.View>
-        {/* Client list — single-column on phones, multi-column grid on wide screens */}
-        {numColumns > 1 ? (
+        {/* Al cambiar de reparto, mantener la cabecera y la navegación activas.
+            Solo el contenido dependiente del nuevo scope muestra carga. */}
+        {loading ? (
+          <View style={styles.scopeLoadingContainer} accessibilityRole="progressbar">
+            <Text style={styles.loadingText}>{t('loading')}</Text>
+            {[0, 1, 2, 3].map((i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </View>
+        ) : numColumns > 1 ? (
           <Animated.FlatList
             ref={scrollRef}
             data={gridData}
@@ -2054,6 +2066,10 @@ const getStyles = (
     marginTop: 12,
     color: colors.textMuted,
     fontSize: s(16),
+  },
+  scopeLoadingContainer: {
+    flex: 1,
+    paddingTop: s(4),
   },
   actionPanel: {
     flexGrow: 0,

@@ -4,6 +4,7 @@ import {
   applyAiProductChange,
   buildAiClientPayload,
   buildAiProductCatalog,
+  classifyAiClientIdentity,
   fingerprintClientState,
   fingerprintCatalog,
   getAiLocale,
@@ -34,6 +35,15 @@ const client = {
 } as unknown as Client;
 
 const aiClients = buildAiClientPayload([client]);
+
+const create = (overrides: Record<string, unknown> = {}) => ({
+  tool: 'create_new_client',
+  input: {
+    name: 'Ana', phone: '099111222', address: 'Calle 1', mapsLink: '', notes: '', products: {},
+    freq: 'on_demand', visitDay: '', specificDate: '',
+    ...overrides,
+  },
+});
 
 const merge = (overrides: Record<string, unknown> = {}) => ({
   tool: 'merge_products_into_order',
@@ -155,6 +165,30 @@ describe('productos de Pedido IA en la app', () => {
     expect(fingerprintClientState([{ ...client, isCompleted: true } as Client])).not.toBe(base);
   });
 
+  test('sends every phone and address so the AI can distinguish namesakes', () => {
+    const payload = buildAiClientPayload([{
+      ...client,
+      phone: '099111222',
+      phones: [
+        { id: 'primary', number: '099111222', isPrimary: true },
+        { id: 'secondary', number: '098333444', isPrimary: false },
+      ],
+      addresses: [
+        { id: 'home', type: 'home', address: 'Calle 1', mapsLink: '', lat: '', lng: '' },
+        { id: 'work', type: 'work', address: 'Calle 2', mapsLink: 'https://maps.app.goo.gl/work123', lat: '', lng: '' },
+      ],
+    } as Client])[0];
+
+    expect(payload).toMatchObject({
+      phone: '099111222',
+      phones: ['099111222', '098333444'],
+      address: 'Calle 1',
+      addresses: ['Calle 1', 'Calle 2'],
+      mapsLink: 'https://maps.app.goo.gl/work123',
+      mapsLinks: ['https://maps.app.goo.gl/work123'],
+    });
+  });
+
   test('never mutates a completed order returned by a stale or old backend', () => {
     const completed = buildAiClientPayload([{ ...client, isCompleted: true } as Client]);
     expect(() => validateAiProductResult(
@@ -177,14 +211,39 @@ describe('productos de Pedido IA en la app', () => {
     )).not.toThrow();
   });
 
-  test.each(['on_demand', 'weekly'] as const)('rejects creating an existing client (%s)', (freq) => {
+  test.each(['on_demand', 'weekly'] as const)('rejects the same name and normalized phone (%s)', (freq) => {
     const existing = buildAiClientPayload([{ ...client, freq } as Client]);
-    expect(() => validateAiProductResult({
-      tool: 'create_new_client',
-      input: {
-        name: 'ÁNA', phone: '', address: '', mapsLink: '', notes: '', products: {},
-        freq: 'on_demand', visitDay: '', specificDate: '',
-      },
-    }, catalog, existing)).toThrow('AI_CLIENT_ALREADY_EXISTS');
+    expect(() => validateAiProductResult(
+      create({ name: 'ÁNA', phone: '+598 99 111 222', address: 'Otra calle' }),
+      catalog,
+      existing,
+    )).toThrow('AI_CLIENT_ALREADY_EXISTS');
+  });
+
+  test('allows a same-name client when phone and address are both distinct', () => {
+    expect(classifyAiClientIdentity(
+      { name: 'Ána', phone: '098333444', address: 'Calle 9' },
+      aiClients,
+    )).toBe('new');
+    expect(() => validateAiProductResult(
+      create({ name: 'Ána', phone: '098333444', address: 'Calle 9' }),
+      catalog,
+      aiClients,
+    )).not.toThrow();
+  });
+
+  test.each([
+    { name: 'Ana', phone: '', address: 'Calle 9' },
+    { name: 'Ana', phone: '098333444', address: 'Calle 1' },
+    { name: 'Ana', phone: '098333444', address: '' },
+    {
+      name: 'Ana', phone: '098333444', address: 'Calle 9',
+      mapsLink: 'https://maps.example/a?shared=true',
+    },
+  ])('asks for clarification when a repeated name has incomplete or conflicting identity: %o', (identity) => {
+    expect(classifyAiClientIdentity(identity, aiClients)).toBe('ambiguous');
+    expect(() => validateAiProductResult(create(identity), catalog, aiClients)).toThrow(
+      'AI_CLIENT_IDENTITY_AMBIGUOUS',
+    );
   });
 });

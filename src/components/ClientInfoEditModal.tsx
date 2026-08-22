@@ -16,17 +16,19 @@ import { ThemeColors } from '../theme/colors';
 import { useTranslation } from 'react-i18next';
 import { getModalWidth } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
+import ClientPhonesEditor from './ClientPhonesEditor';
+import { ClientPhone } from '../types';
 
 interface ClientInfoEditModalProps {
   visible: boolean;
   onClose: () => void;
   name: string;
   address: string;
-  phone: string;
+  phones: ClientPhone[];
   mapsLink: string;
   setName: (s: string) => void;
   setAddress: (s: string) => void;
-  setPhone: (s: string) => void;
+  setPhones: (phones: ClientPhone[]) => void;
   setMapsLink: (s: string) => void;
 }
 
@@ -35,11 +37,11 @@ const ClientInfoEditModal: React.FC<ClientInfoEditModalProps> = ({
   onClose,
   name,
   address,
-  phone,
+  phones,
   mapsLink,
   setName,
   setAddress,
-  setPhone,
+  setPhones,
   setMapsLink,
 }) => {
   const { colors } = useTheme();
@@ -93,21 +95,8 @@ const ClientInfoEditModal: React.FC<ClientInfoEditModalProps> = ({
                 </TouchableOpacity>
               )}
             </View>
-            <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
-              <TextInput
-                style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
-                value={phone}
-                onChangeText={setPhone}
-                placeholder={t('editModal.phonePlaceholder')}
-                placeholderTextColor={colors.textHint}
-                keyboardType="phone-pad"
-              />
-              {phone.length > 0 && (
-                <TouchableOpacity onPress={() => setPhone('')} style={{ padding: 10 }}>
-                  <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <Text style={styles.sectionTitle}>{t('clientPhones.title')}</Text>
+            <ClientPhonesEditor phones={phones} onChange={setPhones} />
             <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
               <TextInput
                 style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
@@ -198,6 +187,13 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     borderWidth: 1,
     borderColor: colors.inputBorder,
     marginBottom: s(10),
+  },
+  sectionTitle: {
+    fontSize: s(14),
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginTop: s(8),
+    marginBottom: s(9),
   },
   footer: {
     padding: s(16),

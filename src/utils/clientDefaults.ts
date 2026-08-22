@@ -6,6 +6,7 @@ import { Client } from '../types';
 export const withDefaults = (id: string, data: any): Client => ({
   id,
   name: '',
+  phones: [],
   phone: '',
   address: '',
   addresses: [],

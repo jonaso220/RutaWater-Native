@@ -8,6 +8,7 @@ import { reportError } from '../lib/crashReporting';
 import i18n from '../i18n';
 import { recoverProfileIndex } from '../services/profileIndexRecovery';
 import { Profile, ProfileMember, PRIMARY_PROFILE_ID } from '../stores/profileStore';
+import { switchProfileOptimistically } from '../utils/profileSwitch';
 
 const PROFILE_INDEX_REQUEST_TIMEOUT_MS = 10_000;
 
@@ -37,6 +38,7 @@ export const useProfiles = (
   const [profileIndexVersion, setProfileIndexVersion] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [profileSyncRetryNonce, setProfileSyncRetryNonce] = useState(0);
+  const activeProfileIdRef = useRef<string>(PRIMARY_PROFILE_ID);
   const syncAttemptedForUserRef = useRef<string | null>(null);
   const profileSyncRetryCountRef = useRef(0);
   const profileSyncRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -115,7 +117,9 @@ export const useProfiles = (
       .onSnapshot(
         (doc) => {
           const data = doc.data() || {};
-          setActiveProfileId(data.activeProfileId || PRIMARY_PROFILE_ID);
+          const nextActiveProfileId = data.activeProfileId || PRIMARY_PROFILE_ID;
+          activeProfileIdRef.current = nextActiveProfileId;
+          setActiveProfileId(nextActiveProfileId);
           setPrimaryName(data.primaryProfileName || '');
           const hasProfileIds = Array.isArray(data.profileIds);
           setStoredProfileIds(hasProfileIds ? data.profileIds : []);
@@ -252,8 +256,18 @@ export const useProfiles = (
     async (id: string) => {
       if (!userId) return;
       try {
-        await db.collection('users').doc(userId).set({ activeProfileId: id }, { merge: true });
-        setActiveProfileId(id);
+        await switchProfileOptimistically({
+          nextId: id,
+          getCurrentId: () => activeProfileIdRef.current,
+          applyId: (nextId) => {
+            activeProfileIdRef.current = nextId;
+            setActiveProfileId(nextId);
+          },
+          persistId: (nextId) => db
+            .collection('users')
+            .doc(userId)
+            .set({ activeProfileId: nextId }, { merge: true }),
+        });
       } catch (e) {
         reportError(e, 'Error setting active profile');
         throw e;
@@ -337,7 +351,10 @@ export const useProfiles = (
           ...(activeProfileId === id ? { activeProfileId: PRIMARY_PROFILE_ID } : {}),
         }, { merge: true });
         await batch.commit();
-        if (activeProfileId === id) setActiveProfileId(PRIMARY_PROFILE_ID);
+        if (activeProfileId === id) {
+          activeProfileIdRef.current = PRIMARY_PROFILE_ID;
+          setActiveProfileId(PRIMARY_PROFILE_ID);
+        }
       } catch (e) {
         reportError(e, 'Error leaving profile');
         throw e;
@@ -416,7 +433,10 @@ export const useProfiles = (
           ...(activeProfileId === id ? { activeProfileId: PRIMARY_PROFILE_ID } : {}),
         }, { merge: true });
         await finalBatch.commit();
-        if (activeProfileId === id) setActiveProfileId(PRIMARY_PROFILE_ID);
+        if (activeProfileId === id) {
+          activeProfileIdRef.current = PRIMARY_PROFILE_ID;
+          setActiveProfileId(PRIMARY_PROFILE_ID);
+        }
       } catch (e) {
         reportError(e, 'Error deleting profile');
         throw e;

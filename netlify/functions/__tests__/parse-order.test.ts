@@ -72,6 +72,50 @@ describe('parse-order quota enforcement', () => {
     }));
   });
 
+  test('passes a validated incremental correction to the parser', async () => {
+    const { handler, dependencies } = makeHandler();
+    const previousResult = {
+      tool: 'report_no_action',
+      input: { message: 'Interpretación anterior' },
+      context: { sourceText: 'no debe salir del dispositivo' },
+    };
+    const result = await handler(validEvent({
+      body: JSON.stringify({
+        text: 'Pedido original',
+        clients: [],
+        todayIso: '2026-08-04',
+        correction: 'La entrega es el sábado',
+        previousResult,
+      }),
+    }));
+
+    expect(result.statusCode).toBe(200);
+    expect(dependencies.parse).toHaveBeenCalledWith(expect.objectContaining({
+      correction: 'La entrega es el sábado',
+      previousResult: {
+        tool: 'report_no_action',
+        input: { message: 'Interpretación anterior' },
+      },
+    }));
+  });
+
+  test('rejects an incomplete correction before Firestore or quota', async () => {
+    const { handler, dependencies } = makeHandler();
+    const result = await handler(validEvent({
+      body: JSON.stringify({
+        text: 'Pedido original',
+        clients: [],
+        todayIso: '2026-08-04',
+        correction: 'Cambiar el producto',
+      }),
+    }));
+
+    expect(result.statusCode).toBe(400);
+    expect(dependencies.getFirestore).not.toHaveBeenCalled();
+    expect(dependencies.reserveUsage).not.toHaveBeenCalled();
+    expect(dependencies.parse).not.toHaveBeenCalled();
+  });
+
   test.each([
     [{ id: 'dup', label: 'Uno', short: 'U', hidden: false }, { id: 'dup', label: 'Dos', short: 'D', hidden: false }],
     [{ id: 'bad id', label: 'Uno', short: 'U', hidden: false }],

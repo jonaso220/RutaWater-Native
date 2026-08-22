@@ -35,7 +35,24 @@ async function parseOrder(args) {
   // globals: a warm Netlify process can parse different accounts concurrently.
   const productCatalog = normalizeProductCatalog(args.productCatalog);
   const locale = normalizeLocale(args.locale);
-  const providerArgs = { ...args, productCatalog, locale };
+  let previousResult;
+  if (args.previousResult) {
+    const normalizedPrevious = normalizeToolUse(
+      { name: args.previousResult.tool, input: args.previousResult.input },
+      productCatalog,
+      args.clients,
+    );
+    previousResult = {
+      tool: normalizedPrevious.name,
+      input: normalizedPrevious.input,
+    };
+  }
+  const providerArgs = {
+    ...args,
+    productCatalog,
+    locale,
+    ...(previousResult ? { previousResult } : {}),
+  };
   let result;
 
   if (hasOpenAI()) {

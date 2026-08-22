@@ -110,15 +110,18 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
     });
   };
 
-  const handleSwitch = async (id: string) => {
+  const handleSwitch = (id: string) => {
     if (id === activeProfileId) {
       onClose();
       return;
     }
-    await runMutation(`switch:${id}`, async () => {
-      await setActiveProfile(id);
-      onClose();
+    // El cambio de perfil es optimista: se aplica localmente en el mismo toque.
+    // No usa el bloqueo general de mutaciones porque una escritura pendiente no
+    // debe impedir volver a abrir el selector ni elegir otro reparto.
+    void setActiveProfile(id).catch(() => {
+      Alert.alert(t('error'), t('settings.profileOperationError'));
     });
+    onClose();
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -225,6 +228,9 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
                     onPress={() => handleSwitch(p.id)}
                     style={[styles.quickRow, isActive && styles.quickRowActive]}
                     disabled={!!savingAction}
+                    accessibilityRole="button"
+                    accessibilityLabel={p.name}
+                    accessibilityState={{ selected: isActive, disabled: !!savingAction }}
                   >
                     <Ionicons
                       name={isActive ? 'radio-button-on' : 'radio-button-off'}

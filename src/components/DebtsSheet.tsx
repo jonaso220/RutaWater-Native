@@ -29,6 +29,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
+import { getClientPhoneSearchText } from '../utils/clientPhones';
 
 interface DebtsSheetProps {
   visible: boolean;
@@ -181,10 +182,10 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   // buried below generic fuzzy matches.
   const addPanelClients = useMemo(() => {
     const matcher = fuzzyMatch(addSearch);
-    const filtered = clients.filter((c) => matcher(c.name || '', c.address || '', c.phone || ''));
+    const filtered = clients.filter((c) => matcher(c.name || '', c.address || '', getClientPhoneSearchText(c)));
     if (!addSearch.trim()) return filtered;
     return filtered
-      .map((c) => ({ c, score: matchScore(addSearch, c.name || '', c.address || '', c.phone || '') }))
+      .map((c) => ({ c, score: matchScore(addSearch, c.name || '', c.address || '', getClientPhoneSearchText(c)) }))
       .sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || ''))
       .map((entry) => entry.c);
   }, [clients, addSearch]);

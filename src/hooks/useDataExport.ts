@@ -12,6 +12,7 @@ import {
   buildClientIdentityIndex,
   getRelatedRecordStableClientId,
 } from '../utils/clientIdentity';
+import { getClientPhones } from '../utils/clientPhones';
 
 interface ExportUser {
   uid: string;
@@ -51,7 +52,7 @@ export const useDataExport = (user: ExportUser) => {
         return;
       }
 
-      const headers = ['Nombre', 'Teléfono', 'Dirección', 'Día', 'Frecuencia', 'Productos', 'Notas', 'Tiene Deuda', 'Favorito', 'Link Maps'];
+      const headers = ['Nombre', 'Teléfonos', 'Dirección', 'Día', 'Frecuencia', 'Productos', 'Notas', 'Tiene Deuda', 'Favorito', 'Link Maps'];
 
       const products = useProductCatalogStore.getState().allProducts;
       const rows = allClients.map((c) => {
@@ -66,7 +67,7 @@ export const useDataExport = (user: ExportUser) => {
 
         return [
           escapeCsv(c.name),
-          escapeCsv(c.phone),
+          escapeCsv(getClientPhones(c).map((phone) => phone.number).join(' / ')),
           escapeCsv(c.address),
           // visitDays primero: un cliente multi-día exportaba un solo día
           // (visitDay siempre está seteado y ganaba la precedencia).
@@ -109,13 +110,13 @@ export const useDataExport = (user: ExportUser) => {
 
       const identityIndex = buildClientIdentityIndex(clients);
       const backup = {
-        schemaVersion: 5,
+        schemaVersion: 6,
         exportDate: new Date().toISOString().split('T')[0],
         exportedBy: user.email || user.uid,
         profileName: user.profileName || '',
         clients: allClients.map((c) => ({
           id: c.id, customerId: c.customerId || c.id,
-          name: c.name, phone: c.phone || '', address: c.address || '',
+          name: c.name, phone: c.phone || '', phones: getClientPhones(c), address: c.address || '',
           addresses: c.addresses || [],
           lat: c.lat || '', lng: c.lng || '', freq: c.freq || '',
           visitDay: c.visitDay || '', visitDays: c.visitDays || [],

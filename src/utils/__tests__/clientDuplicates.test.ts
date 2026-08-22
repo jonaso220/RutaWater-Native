@@ -101,4 +101,16 @@ describe('findExactClientMatch', () => {
     const existing = makeClient({ id: 'existing', phone: '' });
     expect(findExactClientMatch([existing], 'Ana Pérez', '')).toBeUndefined();
   });
+
+  test('matches any saved phone, not only the primary one', () => {
+    const existing = makeClient({
+      id: 'existing',
+      phone: '099111222',
+      phones: [
+        { id: 'primary', number: '099111222', isPrimary: true },
+        { id: 'secondary', number: '098333444', isPrimary: false },
+      ],
+    });
+    expect(findExactClientMatch([existing], 'Ana Pérez', '+598 98 333 444')?.id).toBe('existing');
+  });
 });

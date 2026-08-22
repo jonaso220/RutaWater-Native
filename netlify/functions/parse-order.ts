@@ -7,6 +7,7 @@ const {
   normalizeLocale,
   normalizeProductCatalog,
 } = require('./_shared/aiProductCatalog');
+const { normalizeCorrectionRequest } = require('./_shared/orderCorrection');
 const { authenticateEvent } = require('./_shared/firebaseAuth');
 const {
   AiAccountInactiveError,
@@ -91,14 +92,16 @@ export const createParseOrderHandler = (dependencies = {}) => {
     const { text, clients, todayIso } = payload;
     let productCatalog;
     let locale;
+    let correctionRequest;
     try {
       productCatalog = normalizeProductCatalog(payload.catalog ?? payload.productCatalog);
       locale = normalizeLocale(payload.locale);
+      correctionRequest = normalizeCorrectionRequest(payload.correction, payload.previousResult);
     } catch (error) {
       if (error instanceof AiProductValidationError) {
         return json(400, { code: error.code, error: 'Catálogo o idioma inválido.' });
       }
-      throw error;
+      return json(400, { error: error.message || 'Corrección inválida.' });
     }
 
     if (typeof text !== 'string' || !text.trim()) {
@@ -182,6 +185,7 @@ export const createParseOrderHandler = (dependencies = {}) => {
         safetyIdentifier,
         productCatalog,
         locale,
+        ...(correctionRequest || {}),
       });
       return json(200, { ...result, quota: reservation });
     } catch (err) {

@@ -96,8 +96,12 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
 
   const [text, setText] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
+  const [correctionText, setCorrectionText] = useState('');
+  const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [parseAction, setParseAction] = useState<'interpret' | 'correct' | null>(null);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<TextInput>(null);
+  const correctionInputRef = useRef<TextInput>(null);
   const savingRef = useRef(false);
   const interpretationEpochRef = useRef(0);
   const textRef = useRef(text);
@@ -109,6 +113,12 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
   useEffect(() => {
     if (!visible) interpretationEpochRef.current += 1;
   }, [visible]);
+
+  useEffect(() => {
+    if (!correctionOpen) return;
+    const frame = requestAnimationFrame(() => correctionInputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [correctionOpen]);
 
   const { parsing, parse, error, limitReached, reset } = useAiParse();
   const usage = useAiUsageStore();
@@ -155,6 +165,9 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
     interpretationEpochRef.current += 1;
     setText('');
     setResult(null);
+    setCorrectionText('');
+    setCorrectionOpen(false);
+    setParseAction(null);
     reset();
     onClose();
   }, [onClose, reset]);
@@ -171,22 +184,60 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
     const sourceText = text.trim();
     const interpretationEpoch = ++interpretationEpochRef.current;
     setResult(null);
-    const r = await parse(sourceText);
-    if (
-      r
-      && interpretationEpoch === interpretationEpochRef.current
-      && textRef.current.trim() === sourceText
-    ) {
-      // La preview y el guardado deben usar exactamente el mismo link válido.
-      // Si el modelo lo omitió o añadió puntuación, recuperarlo del texto pegado.
-      if (r.tool === 'create_new_client' || r.tool === 'update_client_data') {
-        const mapsLink = normalizeGoogleMapsLink(r.input.mapsLink, sourceText);
-        setResult({ ...r, input: { ...r.input, mapsLink } } as ParseResult);
-      } else {
-        setResult(r);
+    setCorrectionText('');
+    setCorrectionOpen(false);
+    setParseAction('interpret');
+    try {
+      const r = await parse(sourceText);
+      if (
+        r
+        && interpretationEpoch === interpretationEpochRef.current
+        && textRef.current.trim() === sourceText
+      ) {
+        // La preview y el guardado deben usar exactamente el mismo link válido.
+        // Si el modelo lo omitió o añadió puntuación, recuperarlo del texto pegado.
+        if (r.tool === 'create_new_client' || r.tool === 'update_client_data') {
+          const mapsLink = normalizeGoogleMapsLink(r.input.mapsLink, sourceText);
+          setResult({ ...r, input: { ...r.input, mapsLink } } as ParseResult);
+        } else {
+          setResult(r);
+        }
       }
+    } finally {
+      if (interpretationEpoch === interpretationEpochRef.current) setParseAction(null);
     }
   }, [text, parse, t]);
+
+  const handleCorrection = useCallback(async () => {
+    const correction = correctionText.trim();
+    if (!result || !correction || !text.trim()) return;
+
+    correctionInputRef.current?.blur();
+    Keyboard.dismiss();
+    const sourceText = text.trim();
+    const previousResult = result;
+    const interpretationEpoch = ++interpretationEpochRef.current;
+    setParseAction('correct');
+    try {
+      const corrected = await parse(sourceText, { correction, previousResult });
+      if (
+        corrected
+        && interpretationEpoch === interpretationEpochRef.current
+        && textRef.current.trim() === sourceText
+      ) {
+        if (corrected.tool === 'create_new_client' || corrected.tool === 'update_client_data') {
+          const mapsLink = normalizeGoogleMapsLink(corrected.input.mapsLink, sourceText);
+          setResult({ ...corrected, input: { ...corrected.input, mapsLink } } as ParseResult);
+        } else {
+          setResult(corrected);
+        }
+        setCorrectionText('');
+        setCorrectionOpen(false);
+      }
+    } finally {
+      if (interpretationEpoch === interpretationEpochRef.current) setParseAction(null);
+    }
+  }, [correctionText, parse, result, text]);
 
   const handleConfirm = useCallback(async () => {
     if (!result || savingRef.current) return;
@@ -541,6 +592,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
 
           <ScrollView
             style={styles.body}
+            contentContainerStyle={correctionOpen ? styles.bodyCorrectionContent : undefined}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -581,7 +633,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
               accessibilityLabel={t('smartOrder.interpretBtn')}
               accessibilityState={{ disabled: parsing || !text.trim(), busy: parsing }}
             >
-              {parsing ? (
+              {parseAction === 'interpret' ? (
                 <ActivityIndicator color={colors.textWhite} />
               ) : (
                 <>
@@ -612,14 +664,127 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
 
             {/* Result preview */}
             {result && <ResultPreview result={result} sourceText={text} colors={colors} styles={styles} />}
+
+            {/* Incremental correction: preserves the current preview as context. */}
+            {result && (
+              <View style={styles.correctionSection}>
+                {correctionOpen ? (
+                  <View style={styles.correctionCard}>
+                    <View style={styles.correctionHeader}>
+                      <View style={styles.correctionTitleRow}>
+                        <Ionicons name="create-outline" size={18} color={colors.primary} />
+                        <Text style={styles.correctionTitle}>{t('smartOrder.correctionTitle')}</Text>
+                      </View>
+                      <View style={styles.correctionHeaderActions}>
+                        <TouchableOpacity
+                          style={[
+                            styles.correctionQuickApply,
+                            (parsing || !correctionText.trim()) && styles.primaryBtnDisabled,
+                          ]}
+                          onPress={handleCorrection}
+                          disabled={parsing || !correctionText.trim()}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('smartOrder.applyCorrectionBtn')}
+                          accessibilityState={{
+                            disabled: parsing || !correctionText.trim(),
+                            busy: parseAction === 'correct',
+                          }}
+                        >
+                          {parseAction === 'correct' ? (
+                            <ActivityIndicator size="small" color={colors.textWhite} />
+                          ) : (
+                            <>
+                              <Ionicons name="checkmark" size={14} color={colors.textWhite} />
+                              <Text style={styles.correctionQuickApplyText}>
+                                {t('smartOrder.applyCorrectionShort')}
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setCorrectionOpen(false);
+                            setCorrectionText('');
+                            Keyboard.dismiss();
+                          }}
+                          disabled={parsing}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('cancel')}
+                        >
+                          <Ionicons name="close" size={20} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <Text style={styles.correctionHint}>{t('smartOrder.correctionHint')}</Text>
+                    <TextInput
+                      ref={correctionInputRef}
+                      style={styles.correctionInput}
+                      value={correctionText}
+                      onChangeText={setCorrectionText}
+                      placeholder={t('smartOrder.correctionPlaceholder')}
+                      placeholderTextColor={colors.textHint}
+                      multiline
+                      maxLength={1000}
+                      textAlignVertical="top"
+                      autoCapitalize="sentences"
+                      editable={!parsing}
+                      accessibilityLabel={t('smartOrder.correctionTitle')}
+                    />
+                    <TouchableOpacity
+                      style={[
+                        styles.correctionApplyBtn,
+                        (parsing || !correctionText.trim()) && styles.primaryBtnDisabled,
+                      ]}
+                      onPress={handleCorrection}
+                      disabled={parsing || !correctionText.trim()}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('smartOrder.applyCorrectionBtn')}
+                      accessibilityState={{
+                        disabled: parsing || !correctionText.trim(),
+                        busy: parseAction === 'correct',
+                      }}
+                    >
+                      {parseAction === 'correct' ? (
+                        <ActivityIndicator color={colors.textWhite} />
+                      ) : (
+                        <>
+                          <Ionicons name="sparkles" size={15} color={colors.textWhite} />
+                          <Text style={styles.correctionApplyText}>{t('smartOrder.applyCorrectionBtn')}</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.correctionTrigger}
+                    onPress={() => setCorrectionOpen(true)}
+                    disabled={parsing || saving}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('smartOrder.correctBtn')}
+                    accessibilityState={{ disabled: parsing || saving }}
+                  >
+                    <View style={styles.correctionTitleRow}>
+                      <Ionicons name="create-outline" size={18} color={colors.primary} />
+                      <Text style={styles.correctionTriggerText}>{t('smartOrder.correctBtn')}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </ScrollView>
 
           {/* Footer with confirm/cancel */}
-          {result && result.tool !== 'report_not_found' && result.tool !== 'report_no_action' && (
+          {result && !correctionOpen && result.tool !== 'report_not_found' && result.tool !== 'report_no_action' && (
             <View style={styles.footer}>
               <TouchableOpacity
                 style={styles.secondaryBtn}
-                onPress={() => setResult(null)}
+                onPress={() => {
+                  setResult(null);
+                  setCorrectionText('');
+                  setCorrectionOpen(false);
+                }}
                 disabled={saving}
                 accessibilityRole="button"
                 accessibilityLabel={t('back')}
@@ -647,7 +812,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
             </View>
           )}
 
-          {result && (result.tool === 'report_not_found' || result.tool === 'report_no_action') && (
+          {result && !correctionOpen && (result.tool === 'report_not_found' || result.tool === 'report_no_action') && (
             <View style={styles.footer}>
               <TouchableOpacity
                 style={[styles.confirmBtn, { flex: 1 }]}
@@ -935,6 +1100,9 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     body: {
       padding: s(16),
     },
+    bodyCorrectionContent: {
+      paddingBottom: s(24),
+    },
     usageBanner: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1036,6 +1204,106 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     resultText: {
       fontSize: s(14),
       color: colors.textSecondary,
+    },
+    correctionSection: {
+      marginTop: s(12),
+      marginBottom: s(4),
+    },
+    correctionTrigger: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: s(14),
+      paddingVertical: s(13),
+      borderRadius: s(10),
+      borderWidth: 1,
+      borderColor: colors.primaryBorder,
+      backgroundColor: colors.primaryLighter,
+    },
+    correctionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: s(7),
+      flexShrink: 1,
+    },
+    correctionTriggerText: {
+      color: colors.primaryText,
+      fontSize: s(14),
+      fontWeight: '700',
+    },
+    correctionCard: {
+      padding: s(14),
+      borderRadius: s(12),
+      borderWidth: 1,
+      borderColor: colors.primaryBorder,
+      backgroundColor: colors.primaryLighter,
+    },
+    correctionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: s(8),
+    },
+    correctionHeaderActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: s(8),
+    },
+    correctionQuickApply: {
+      minHeight: s(30),
+      paddingHorizontal: s(9),
+      borderRadius: s(8),
+      backgroundColor: colors.primary,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: s(4),
+    },
+    correctionQuickApplyText: {
+      color: colors.textWhite,
+      fontSize: s(12),
+      fontWeight: '700',
+    },
+    correctionTitle: {
+      color: colors.textPrimary,
+      fontSize: s(15),
+      fontWeight: '700',
+      flexShrink: 1,
+    },
+    correctionHint: {
+      marginTop: s(6),
+      color: colors.textMuted,
+      fontSize: s(12),
+      lineHeight: s(17),
+    },
+    correctionInput: {
+      minHeight: s(68),
+      marginTop: s(10),
+      paddingHorizontal: s(11),
+      paddingVertical: s(9),
+      borderRadius: s(9),
+      borderWidth: 1,
+      borderColor: colors.inputBorder,
+      backgroundColor: colors.inputBackground,
+      color: colors.textPrimary,
+      fontSize: s(14),
+    },
+    correctionApplyBtn: {
+      marginTop: s(10),
+      minHeight: s(42),
+      paddingHorizontal: s(14),
+      paddingVertical: s(10),
+      borderRadius: s(9),
+      backgroundColor: colors.primary,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: s(7),
+    },
+    correctionApplyText: {
+      color: colors.textWhite,
+      fontSize: s(14),
+      fontWeight: '700',
     },
     fieldRow: {
       flexDirection: 'row',

@@ -1,11 +1,13 @@
-import { ClientAddress, ClientAddressType, RELATIONSHIP_TYPES } from '../types';
+import { ClientAddress, ClientAddressType, ClientPhone, RELATIONSHIP_TYPES } from '../types';
 import { parseDate, sanitizePhone, sanitizeProductQty, sanitizeString } from './helpers';
+import { sanitizeClientPhones } from './clientPhones';
 
 export interface BackupClientRecord {
   id: string;
   customerId: string;
   name: string;
   phone: string;
+  phones: ClientPhone[];
   address: string;
   addresses: ClientAddress[];
   notes: string;
@@ -179,6 +181,7 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
     customerId: validId(value.customerId) ? value.customerId : value.id,
     name,
     phone: sanitizePhone(value.phone),
+    phones: sanitizeClientPhones(value.phones),
     address: sanitizeString(value.address, 200),
     addresses: sanitizeAddresses(value.addresses),
     notes: sanitizeString(value.notes, 500),

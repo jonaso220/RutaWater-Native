@@ -26,6 +26,7 @@ const ALLOWED_FIELDS = new Set([
   'customerId',
   'name',
   'phone',
+  'phones',
   'address',
   'addresses',
   'notes',

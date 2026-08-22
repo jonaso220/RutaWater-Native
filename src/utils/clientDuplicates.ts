@@ -1,5 +1,6 @@
 import { Client } from '../types';
 import { getClientMatchKey, parseDate } from './helpers';
+import { getClientPhones } from './clientPhones';
 
 export interface DuplicateClientDetail {
   name: string;
@@ -22,7 +23,9 @@ export const findExactClientMatch = (
   return clients.find(
     (client) =>
       !client.isNote &&
-      getClientMatchKey(client.name || '', client.phone || '', client.id) === candidateKey,
+      getClientPhones(client).some(
+        (entry) => getClientMatchKey(client.name || '', entry.number, client.id) === candidateKey,
+      ),
   );
 };
 

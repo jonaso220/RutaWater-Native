@@ -8,6 +8,7 @@ const {
   normalizeLocale,
   normalizeProductCatalog,
 } = require('../netlify/functions/_shared/aiProductCatalog');
+const { normalizeCorrectionRequest } = require('../netlify/functions/_shared/orderCorrection');
 
 // Mismos límites que producción (netlify/functions/parse-order.js): un pedido
 // que funciona acá no debe fallar con 413 en prod. La diferencia que queda es
@@ -37,17 +38,21 @@ app.post('/parse-order', async (req, res) => {
     catalog: rawCatalog,
     productCatalog: legacyCatalogField,
     locale: rawLocale,
+    correction,
+    previousResult,
   } = req.body || {};
   let productCatalog;
   let locale;
+  let correctionRequest;
   try {
     productCatalog = normalizeProductCatalog(rawCatalog ?? legacyCatalogField);
     locale = normalizeLocale(rawLocale);
+    correctionRequest = normalizeCorrectionRequest(correction, previousResult);
   } catch (error) {
     if (error instanceof AiProductValidationError) {
       return res.status(400).json({ code: error.code, error: 'Catálogo o idioma inválido.' });
     }
-    throw error;
+    return res.status(400).json({ error: error.message || 'Corrección inválida.' });
   }
 
   if (typeof text !== 'string' || !text.trim()) {
@@ -67,7 +72,14 @@ app.post('/parse-order', async (req, res) => {
   }
 
   try {
-    const result = await parseOrder({ text, clients, todayIso, productCatalog, locale });
+    const result = await parseOrder({
+      text,
+      clients,
+      todayIso,
+      productCatalog,
+      locale,
+      ...(correctionRequest || {}),
+    });
     res.json(result);
   } catch (err) {
     console.error('parse-order error:', err);

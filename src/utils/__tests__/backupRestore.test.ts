@@ -7,6 +7,10 @@ const validBackup = {
     id: 'client-1',
     name: 'Cliente Uno',
     phone: '099 123 456',
+    phones: [
+      { id: 'primary', number: '099 123 456', isPrimary: true },
+      { id: 'secondary', number: '098 111 222', isPrimary: false },
+    ],
     mapsLink: 'https://maps.app.goo.gl/example',
     addresses: [
       { id: 'home', type: 'home', address: 'Casa', mapsLink: 'https://maps.app.goo.gl/home' },
@@ -33,6 +37,10 @@ describe('backup validation', () => {
     expect(backup.clients[0].relationships).toEqual({ 'client-2': 'hermano_a' });
     expect(backup.clients[0].sameHousehold).toEqual({ 'client-2': false });
     expect(backup.clients[0].customerId).toBe('client-1');
+    expect(backup.clients[0].phones).toEqual([
+      { id: 'primary', number: '099 123 456', isPrimary: true },
+      { id: 'secondary', number: '098 111 222', isPrimary: false },
+    ]);
     expect(backup.clients[0].addresses).toEqual([
       { id: 'home', type: 'home', address: 'Casa', mapsLink: 'https://maps.app.goo.gl/home', lat: '', lng: '' },
       { id: 'work', type: 'work', address: 'Trabajo', mapsLink: '', lat: '', lng: '' },

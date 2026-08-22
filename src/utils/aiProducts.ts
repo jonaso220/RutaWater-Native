@@ -1,5 +1,8 @@
 import { Product } from '../constants/products';
 import { Client } from '../types';
+import { getClientAddresses } from './clientAddresses';
+import { getClientPhones } from './clientPhones';
+import { normalizePhoneForComparison } from './helpers';
 
 export type AiLocale = 'es' | 'en' | 'pt';
 
@@ -13,7 +16,12 @@ export interface AiProductCatalogItem {
 export interface AiClientPayload {
   id: string;
   name: string;
+  phone: string;
+  phones: string[];
   address: string;
+  addresses: string[];
+  mapsLink: string;
+  mapsLinks: string[];
   freq: string;
   visitDay: string;
   visitDays: string[];
@@ -22,6 +30,8 @@ export interface AiClientPayload {
   notes: string;
   isCompleted: boolean;
 }
+
+export type AiClientIdentity = 'new' | 'existing' | 'ambiguous';
 
 export interface AiParseContext {
   sourceText: string;
@@ -132,18 +142,30 @@ export const buildAiClientPayload = (source: Client[]): AiClientPayload[] => {
     }
   }
 
-  return visible.map((client) => ({
-    id: client.id,
-    name: client.name,
-    address: client.address || '',
-    freq: client.freq || 'on_demand',
-    visitDay: client.visitDay || '',
-    visitDays: client.visitDays || [],
-    specificDate: client.specificDate || '',
-    products: positiveProductMap(client.products),
-    notes: client.notes || '',
-    isCompleted: Boolean(client.isCompleted),
-  }));
+  return visible.map((client) => {
+    const phones = getClientPhones(client).map((entry) => entry.number);
+    const locations = getClientAddresses(client);
+    const addresses = [...new Set(locations.map((location) => location.address).filter(Boolean))];
+    const mapsLinks = [...new Set(locations.map((location) => location.mapsLink).filter(Boolean))];
+    const mapsLink = mapsLinks[0] || client.mapsLink || '';
+    return {
+      id: client.id,
+      name: client.name,
+      phone: phones[0] || client.phone || '',
+      phones,
+      address: addresses[0] || client.address || '',
+      addresses,
+      mapsLink,
+      mapsLinks,
+      freq: client.freq || 'on_demand',
+      visitDay: client.visitDay || '',
+      visitDays: client.visitDays || [],
+      specificDate: client.specificDate || '',
+      products: positiveProductMap(client.products),
+      notes: client.notes || '',
+      isCompleted: Boolean(client.isCompleted),
+    };
+  });
 };
 
 const stableValue = (value: unknown): unknown => {
@@ -186,6 +208,7 @@ export const fingerprintClientState = (clients: Client[]): string => fingerprint
       customerId: client.customerId || '',
       name: client.name,
       phone: client.phone || '',
+      phones: client.phones || [],
       address: client.address || '',
       addresses: client.addresses || [],
       mapsLink: client.mapsLink || '',
@@ -246,6 +269,72 @@ const normalizeClientName = (value: unknown): string => String(value || '')
   .replace(/\s+/g, ' ')
   .trim();
 
+const normalizeClientAddress = (value: unknown): string => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9\s]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const normalizedClientPhones = (client: AiClientPayload): string[] => [...new Set(
+  [client.phone, ...(Array.isArray(client.phones) ? client.phones : [])]
+    .map((phone) => normalizePhoneForComparison(phone || ''))
+    .filter(Boolean),
+)];
+
+const normalizedClientAddresses = (client: AiClientPayload): string[] => [...new Set(
+  [client.address, ...(Array.isArray(client.addresses) ? client.addresses : [])]
+    .map(normalizeClientAddress)
+    .filter(Boolean),
+)];
+
+const normalizeClientMapsLink = (value: unknown): string => String(value || '')
+  .trim()
+  .toLowerCase()
+  .replace(/[?#].*$/, '')
+  .replace(/\/+$/, '');
+
+const normalizedClientMapsLinks = (client: AiClientPayload): string[] => [...new Set(
+  [client.mapsLink, ...(Array.isArray(client.mapsLinks) ? client.mapsLinks : [])]
+    .map(normalizeClientMapsLink)
+    .filter(Boolean),
+)];
+
+/**
+ * A repeated name is not enough to identify a person. The phone is the strong
+ * identifier; a namesake is safe to create only when both its phone and address
+ * are present and differ from every same-name record.
+ */
+export const classifyAiClientIdentity = (
+  input: Pick<AiClientPayload, 'name' | 'phone' | 'address'> & { mapsLink?: string },
+  clients: AiClientPayload[],
+): AiClientIdentity => {
+  const sameName = clients.filter(
+    (client) => normalizeClientName(client.name) === normalizeClientName(input.name),
+  );
+  if (sameName.length === 0) return 'new';
+
+  const phone = normalizePhoneForComparison(input.phone || '');
+  const address = normalizeClientAddress(input.address);
+  const mapsLink = normalizeClientMapsLink(input.mapsLink);
+  if (phone && sameName.some((client) => normalizedClientPhones(client).includes(phone))) {
+    return 'existing';
+  }
+
+  const isDistinctNamesake = Boolean(phone && address) && sameName.every((client) => {
+    const phones = normalizedClientPhones(client);
+    const addresses = normalizedClientAddresses(client);
+    const mapsLinks = normalizedClientMapsLinks(client);
+    return phones.length > 0
+      && addresses.length > 0
+      && !phones.includes(phone)
+      && !addresses.includes(address)
+      && (!mapsLink || !mapsLinks.includes(mapsLink));
+  });
+  return isDistinctNamesake ? 'new' : 'ambiguous';
+};
+
 const assertString = (
   input: Record<string, unknown>,
   key: string,
@@ -295,9 +384,16 @@ const assertToolShape = (
     if (!FREQUENCIES.has(input.freq as string) || !VISIT_DAYS.has(input.visitDay as string)) {
       throw new AiProductError('AI_TOOL_INPUT_INVALID');
     }
-    if (clients.some((client) => normalizeClientName(client.name) === normalizeClientName(input.name))) {
+    const identity = classifyAiClientIdentity({
+      name: input.name as string,
+      phone: input.phone as string,
+      address: input.address as string,
+      mapsLink: input.mapsLink as string,
+    }, clients);
+    if (identity === 'existing') {
       throw new AiProductError('AI_CLIENT_ALREADY_EXISTS');
     }
+    if (identity === 'ambiguous') throw new AiProductError('AI_CLIENT_IDENTITY_AMBIGUOUS');
   } else if (tool === 'schedule_existing_client') {
     assertString(input, 'matched_client_id', true);
     assertString(input, 'matched_client_name', true);

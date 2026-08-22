@@ -80,10 +80,12 @@ describe('adaptador OpenAI de Pedido IA', () => {
     expect(SYSTEM_RULES).not.toContain('Van TAL CUAL en notes');
   });
 
-  test('una ficha idéntica existente informa que no hay cambios sin decir que falta el cliente', () => {
-    expect(SYSTEM_RULES).toContain('ya existe y no hay datos nuevos para actualizar');
-    expect(SYSTEM_RULES).toContain('no uses report_not_found porque el cliente sí fue encontrado');
-    expect(SYSTEM_RULES).not.toContain('report_not_found con reason="El cliente ya existe en el directorio"');
+  test('un nombre repetido se resuelve por identidad y no bloquea un homónimo válido', () => {
+    expect(SYSTEM_RULES).toContain('El nombre repetido por sí solo NO bloquea el alta');
+    expect(SYSTEM_RULES).toContain('mismo nombre normalizado + mismo teléfono normalizado');
+    expect(SYSTEM_RULES).toContain('teléfono NO vacío distinto Y dirección NO vacía distinta');
+    expect(SYSTEM_RULES).toContain('homónima nueva válida; create_new_client');
+    expect(SYSTEM_RULES).toContain('No exijas que un pedido cotidiano repita los datos de contacto');
   });
 
   test('mantiene cancelaciones manuales y muestra el aviso correcto', () => {
@@ -94,22 +96,21 @@ describe('adaptador OpenAI de Pedido IA', () => {
   });
 
   test('una coincidencia ambigua enumera clientes sin tratarlos como inexistentes', () => {
-    expect(SYSTEM_RULES).toContain('Encontré a Maria Lopez y Maria Gonzalez');
-    expect(SYSTEM_RULES).toContain('no usar report_not_found porque los clientes sí existen');
+    expect(SYSTEM_RULES).toContain('Varios homónimos existentes');
+    expect(SYSTEM_RULES).toContain('primero desambiguá por teléfono; después por dirección o mapsLink');
     expect(SYSTEM_RULES).not.toContain('usar report_not_found con reason explicando ambas opciones');
   });
 
   test('un posible error ortográfico nunca autoriza una modificación', () => {
-    expect(SYSTEM_RULES).toContain('Errores ortográficos — NO modificar automáticamente');
-    expect(SYSTEM_RULES).toContain('NO hacer matching difuso');
-    expect(SYSTEM_RULES).toContain('No modificar nada hasta que el usuario escriba un nombre inequívoco');
+    expect(SYSTEM_RULES).toContain('Errores ortográficos');
+    expect(SYSTEM_RULES).toContain('no hagas matching difuso');
+    expect(SYSTEM_RULES).toContain('No crear ni modificar');
     expect(SYSTEM_RULES).not.toContain('variantes con tildes/typos leves');
   });
 
   test('una ficha diferente no sobrescribe datos existentes sin una orden explícita', () => {
-    expect(SYSTEM_RULES).toContain('NO autoriza por sí sola a sobrescribir datos');
-    expect(SYSTEM_RULES).toContain('indicá qué campos difieren');
-    expect(SYSTEM_RULES).toContain('No llames update_client_data en ese caso');
+    expect(SYSTEM_RULES).toContain('solo usar **update_client_data** cuando contenga verbos explícitos');
+    expect(SYSTEM_RULES).toContain('Nunca convertir una posible actualización en un alta duplicada');
     expect(SYSTEM_RULES).not.toContain('esos son datos a actualizar, no razón para crear duplicado');
   });
 

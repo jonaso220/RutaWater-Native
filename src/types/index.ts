@@ -11,6 +11,12 @@ export interface ClientAddress {
   lng?: string;
 }
 
+export interface ClientPhone {
+  id: string;
+  number: string;
+  isPrimary: boolean;
+}
+
 // Client document in Firestore 'clients' collection
 export interface Client {
   id: string;
@@ -18,6 +24,9 @@ export interface Client {
   // de documento propio, pero comparten customerId con la ficha original.
   customerId?: string;
   name: string;
+  // Lista de contacto opcional. `phone` sigue siendo el numero principal
+  // efectivo para WhatsApp, llamadas y compatibilidad con versiones previas.
+  phones?: ClientPhone[];
   phone: string;
   address: string;
   // Ubicaciones guardadas en la ficha. `address/mapsLink/lat/lng` continúan

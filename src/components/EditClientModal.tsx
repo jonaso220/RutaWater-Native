@@ -16,9 +16,10 @@ import { ProductLabel } from './ProductIcon';
 import ClientInfoEditModal from './ClientInfoEditModal';
 import FrequencyEditModal from './FrequencyEditModal';
 import ClientAddressesEditor from './ClientAddressesEditor';
+import ClientPhonesEditor from './ClientPhonesEditor';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import auth from '@react-native-firebase/auth';
-import { Client, ClientAddress } from '../types';
+import { Client, ClientAddress, ClientPhone } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
 import { FREQUENCIES, Frequency, getFreqLabel } from '../constants/products';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -41,6 +42,12 @@ import {
   locationFields,
   sanitizeClientAddresses,
 } from '../utils/clientAddresses';
+import {
+  getClientPhones,
+  getEditableClientPhones,
+  getPrimaryClientPhone,
+  sanitizeClientPhones,
+} from '../utils/clientPhones';
 
 interface EditClientModalProps {
   visible: boolean;
@@ -84,7 +91,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phones, setPhones] = useState<ClientPhone[]>([]);
   const [mapsLink, setMapsLink] = useState('');
   const [addresses, setAddresses] = useState<ClientAddress[]>([]);
   const [products, setProducts] = useState<Record<string, number>>({});
@@ -106,7 +113,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       setSaving(false);
       setName(client.name || '');
       setAddress(client.address || '');
-      setPhone(client.phone || '');
+      setPhones(getEditableClientPhones(client));
       setMapsLink(client.mapsLink || '');
       setAddresses(getEditableClientAddresses(client));
       // Initialize products from client data. Start from whatever the client
@@ -347,7 +354,11 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       data.lng = '';
       data.addresses = sanitizeClientAddresses([primary, ...existingAddresses.slice(1)]);
     }
-    if (phone.trim() !== (client.phone || '').trim()) data.phone = phone.trim();
+    const cleanPhones = sanitizeClientPhones(phones);
+    const currentPhones = getClientPhones(client);
+    const primaryPhone = getPrimaryClientPhone(cleanPhones)?.number || '';
+    if (JSON.stringify(cleanPhones) !== JSON.stringify(currentPhones)) data.phones = cleanPhones;
+    if (primaryPhone !== (client.phone || '').trim()) data.phone = primaryPhone;
     const savedDay = (data as any).visitDay as string | undefined;
     const savedDate = (data as any).specificDate as string | undefined;
     const dayMoved = savedDay !== undefined && savedDay !== client.visitDay;
@@ -546,21 +557,10 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                     </TouchableOpacity>
                   )}
                 </View>
-                <View style={[styles.fieldInput, { flexDirection: 'row', alignItems: 'center' }]}>
-                  <TextInput
-                    style={{ flex: 1, fontSize: 16, color: colors.textPrimary, padding: 0 }}
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholder={t('editModal.phonePlaceholder')}
-                    placeholderTextColor={colors.textHint}
-                    keyboardType="phone-pad"
-                  />
-                  {phone.length > 0 && (
-                    <TouchableOpacity onPress={() => setPhone('')} style={{ padding: 10 }}>
-                      <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
+                  {t('clientPhones.title')}
+                </Text>
+                <ClientPhonesEditor phones={phones} onChange={setPhones} />
                 <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
                   {t('clientAddresses.title')}
                 </Text>
@@ -763,11 +763,11 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
         onClose={() => setInfoModalVisible(false)}
         name={name}
         address={address}
-        phone={phone}
+        phones={phones}
         mapsLink={mapsLink}
         setName={setName}
         setAddress={setAddress}
-        setPhone={setPhone}
+        setPhones={setPhones}
         setMapsLink={setMapsLink}
       />
 

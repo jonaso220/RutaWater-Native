@@ -22,6 +22,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { getDaysSince, getEffectiveLastActivityDate, sharesHouseholdWith } from '../utils/recency';
+import { getClientPhoneSearchText } from '../utils/clientPhones';
 
 interface RelationshipsModalProps {
   visible: boolean;
@@ -90,8 +91,8 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
       .filter((c) => !c.isNote)
       .filter((c) => c.id !== client.id)
       .filter((c) => !relatedIds.includes(c.id))
-      .filter((c) => matcher(c.name || '', c.address || '', c.phone || ''))
-      .map((c) => ({ c, score: matchScore(searchTerm, c.name || '', c.address || '', c.phone || '') }))
+      .filter((c) => matcher(c.name || '', c.address || '', getClientPhoneSearchText(c)))
+      .map((c) => ({ c, score: matchScore(searchTerm, c.name || '', c.address || '', getClientPhoneSearchText(c)) }))
       .sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || ''))
       .map((entry) => entry.c)
       .slice(0, 20);

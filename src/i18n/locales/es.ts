@@ -560,6 +560,17 @@ export default {
     help: 'La primera dirección queda como principal. Podés elegir cualquiera al agendar una visita.',
   },
 
+  clientPhones: {
+    title: 'Teléfonos',
+    primary: 'Principal',
+    makePrimary: 'Usar como principal',
+    add: 'Añadir otro teléfono',
+    remove: 'Eliminar teléfono',
+    clear: 'Vaciar teléfono',
+    help: 'El teléfono principal se usa para WhatsApp, llamadas y avisos.',
+    additionalCount: '+{{count}}',
+  },
+
   // Schedule Modal
   scheduleModal: {
     title: 'Agendar Visita',
@@ -600,6 +611,12 @@ export default {
     placeholder: 'Escribí un pedido o agregá un cliente nuevo. Incluí su nombre, dirección, teléfono y productos; la IA organizará los datos y lo incorporará al directorio por vos.',
     interpretBtn: 'Interpretar con IA',
     previewReady: 'Interpretación lista para revisar',
+    correctBtn: 'Corregir interpretación',
+    correctionTitle: '¿Qué querés corregir?',
+    correctionHint: 'Escribí sólo el cambio. La IA mantendrá el resto de la interpretación tal como está.',
+    correctionPlaceholder: 'Ej.: El dispensador es eléctrico nuevo',
+    applyCorrectionBtn: 'Aplicar corrección',
+    applyCorrectionShort: 'Aplicar',
     limitTitle: 'Llegaste al límite del mes',
     limitMsg: 'Ya usaste tus {{limit}} parseos de IA. Podés seguir cargando pedidos a mano y vuelve a estar disponible el 1° del próximo mes.',
     parseErrorTitle: 'Error al interpretar',

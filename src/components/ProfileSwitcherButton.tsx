@@ -29,6 +29,9 @@ const ProfileSwitcherButton: React.FC = () => {
       onPress={() => setSwitcherVisible(true)}
       style={[styles.chip, { backgroundColor: 'rgba(255,255,255,0.18)' }]}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      accessibilityRole="button"
+      accessibilityLabel={name}
+      accessibilityHint={t('settings.switchProfile')}
     >
       <Ionicons name="git-branch" size={iconSize} color={colors.headerText} style={{ marginRight: 4 }} />
       <Text style={[styles.text, { color: colors.headerText }]} numberOfLines={1}>

@@ -12,6 +12,7 @@ import { useLayout } from '../hooks/useLayout';
 import { useTranslation } from 'react-i18next';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
+import { getClientPhones } from '../utils/clientPhones';
 
 const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
 const ACTION_HIT_SLOP = { top: 3, bottom: 3, left: 3, right: 3 };
@@ -154,6 +155,7 @@ const DirectoryClientCard = ({
   const freqStyle = getFreqStyle(item.freq, colors);
   const recencyBadge = showRecency ? getRecencyBadge(item) : null;
   const scheduleAction = isOnDemand ? t('directory.schedule') : t('directory.addVisit');
+  const additionalPhoneCount = Math.max(0, getClientPhones(item).length - 1);
 
   return (
     <View style={[styles.card, debtTotal > 0 && styles.cardDebt]}>
@@ -170,7 +172,14 @@ const DirectoryClientCard = ({
                 {(item.name || '').toUpperCase()}
               </Text>
               {item.phone ? (
-                <Text style={styles.clientPhone}>{item.phone}</Text>
+                <View style={styles.clientPhoneRow}>
+                  <Text style={styles.clientPhone}>{item.phone}</Text>
+                  {additionalPhoneCount > 0 && (
+                    <Text style={styles.additionalPhoneBadge}>
+                      {t('clientPhones.additionalCount', { count: additionalPhoneCount })}
+                    </Text>
+                  )}
+                </View>
               ) : null}
             </View>
             {item.address ? (
@@ -407,6 +416,21 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     color: colors.textMuted,
     flexShrink: 0,
     fontVariant: ['tabular-nums'],
+  },
+  clientPhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  additionalPhoneBadge: {
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: colors.primaryLight,
+    color: colors.primaryText,
+    fontSize: 11,
+    fontWeight: '800',
   },
   clientAddress: {
     fontSize: s(12),

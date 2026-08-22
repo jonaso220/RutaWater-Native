@@ -1,5 +1,5 @@
 /**
- * Test: la IA debe buscar primero en LISTA DE CLIENTES antes de crear un cliente nuevo.
+ * Test: la IA debe distinguir identidades por nombre, teléfono y dirección.
  *
  * Cada caso pasa SI el tool elegido NO es `create_new_client` y matchea al cliente
  * esperado por id. Casos negativos (cliente nuevo real) sí esperan `create_new_client`.
@@ -28,7 +28,9 @@ const CLIENTS = [
     name: 'Barbara Silveira',
     address: 'Medanos de Solymar Eden Rok M22 S35, Esquina entre Jaguel e Indiana',
     mapsLink: 'https://maps.app.goo.gl/abc123',
-    phone: '',
+    phone: '099111222',
+    phones: ['099111222'],
+    addresses: ['Medanos de Solymar Eden Rok M22 S35, Esquina entre Jaguel e Indiana'],
     notes: '',
     freq: 'on_demand',
     visitDay: '',
@@ -286,6 +288,20 @@ const CASES = [
     text: 'agregá a Plasticos Mica para el viernes con 4 botellones',
     expect: { not_create_new: true, tool: 'schedule_existing_client', match_id: 'c_plasticos' },
   },
+  // 26. Homónimo real: mismo nombre, pero teléfono y dirección distintos.
+  {
+    name: 'Homónimo válido con teléfono y dirección distintos',
+    text:
+      'Juan Pérez - Calle Rivera 987, Esquina Soca - tel 098333444 - https://maps.app.goo.gl/JuanHomonym',
+    expect: { tool: 'create_new_client' },
+  },
+  // 27. Mismo teléfono: sigue siendo la misma persona aunque cambie dirección.
+  {
+    name: 'Mismo nombre y teléfono con dirección distinta',
+    text:
+      'Juan Pérez - Calle Nueva 321 - tel +598 99 000 111 - https://maps.app.goo.gl/JuanUpdate',
+    expect: { not_create_new: true, match_id: 'c_juan' },
+  },
 ];
 
 function normalize(s) {
@@ -312,16 +328,18 @@ function checkCase(testCase, result) {
     const expectedClient = CLIENTS.find((c) => c.id === match_id);
     const expectedName = normalize(expectedClient?.name);
 
-    if (tool === 'report_not_found') {
+    if (tool === 'report_not_found' || tool === 'report_no_action') {
       // Aceptamos como "match correcto" si mentioned_name o reason refieren al cliente esperado.
       const mentioned = normalize(input?.mentioned_name);
       const reason = normalize(input?.reason);
+      const message = normalize(input?.message);
       const refersToExpected =
         (mentioned && (mentioned.includes(expectedName) || expectedName.includes(mentioned))) ||
-        (reason && reason.includes(expectedName));
+        (reason && reason.includes(expectedName)) ||
+        (message && message.includes(expectedName));
       if (!refersToExpected) {
         failures.push(
-          `report_not_found pero no refiere al cliente esperado (${match_id} = "${expectedClient?.name}")`,
+          `${tool} pero no refiere al cliente esperado (${match_id} = "${expectedClient?.name}")`,
         );
       }
     } else if (input?.matched_client_id !== match_id) {

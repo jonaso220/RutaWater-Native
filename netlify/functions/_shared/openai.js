@@ -4,13 +4,13 @@ const {
   TOOLS,
   SYSTEM_RULES,
   buildClientsBlock,
-  buildTodayBlock,
 } = require('./anthropic');
 const {
   LEGACY_PRODUCT_CATALOG,
   buildProductAwareSystemRules,
   buildProductAwareTools,
 } = require('./aiProductCatalog');
+const { buildOrderUserMessage } = require('./orderCorrection');
 
 const MODEL = 'gpt-5.6-luna';
 // Strict product maps require every catalog ID (with 0 for unused entries).
@@ -81,6 +81,8 @@ async function parseOrder({
   safetyIdentifier,
   productCatalog = LEGACY_PRODUCT_CATALOG,
   locale = 'es',
+  correction,
+  previousResult,
 }) {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('Falta OPENAI_API_KEY');
@@ -92,7 +94,7 @@ async function parseOrder({
   const request = {
     model: MODEL,
     instructions: `${requestSystemRules}\n\n${buildClientsBlock(clients)}`,
-    input: `${buildTodayBlock(todayIso)}\n\nTEXTO A PARSEAR:\n\"\"\"\n${text}\n\"\"\"`,
+    input: buildOrderUserMessage({ text, todayIso, correction, previousResult }),
     tools,
     tool_choice: 'required',
     parallel_tool_calls: false,

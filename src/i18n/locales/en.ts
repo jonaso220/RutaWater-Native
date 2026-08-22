@@ -560,6 +560,17 @@ export default {
     help: 'The first address is the primary one. You can choose any address when scheduling a visit.',
   },
 
+  clientPhones: {
+    title: 'Phone numbers',
+    primary: 'Primary',
+    makePrimary: 'Set as primary',
+    add: 'Add another phone',
+    remove: 'Remove phone',
+    clear: 'Clear phone',
+    help: 'The primary phone is used for WhatsApp, calls, and notifications.',
+    additionalCount: '+{{count}}',
+  },
+
   // Schedule Modal
   scheduleModal: {
     title: 'Schedule Visit',
@@ -600,6 +611,12 @@ export default {
     placeholder: 'Enter an order or add a new client. Include their name, address, phone number, and products; AI will organize the details and add them to your directory.',
     interpretBtn: 'Interpret with AI',
     previewReady: 'Interpretation ready to review',
+    correctBtn: 'Correct interpretation',
+    correctionTitle: 'What would you like to correct?',
+    correctionHint: 'Enter only the change. AI will keep the rest of the interpretation as it is.',
+    correctionPlaceholder: 'Example: The dispenser is new and electric',
+    applyCorrectionBtn: 'Apply correction',
+    applyCorrectionShort: 'Apply',
     limitTitle: 'You reached this month\'s limit',
     limitMsg: 'You already used your {{limit}} AI parses. You can keep adding orders manually; it resets on the 1st of next month.',
     parseErrorTitle: 'Error interpreting',

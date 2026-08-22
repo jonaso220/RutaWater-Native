@@ -12,6 +12,74 @@ const normalizeName = (value) => String(value || '')
   .replace(/\s+/g, ' ')
   .trim();
 
+const normalizePhone = (value) => {
+  let digits = String(value || '').replace(/\D/g, '');
+  if (digits.startsWith('598')) digits = digits.slice(3);
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  return digits;
+};
+
+const normalizeAddress = (value) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9\s]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const clientPhones = (client) => [...new Set(
+  [client?.phone, ...(Array.isArray(client?.phones) ? client.phones : [])]
+    .map(normalizePhone)
+    .filter(Boolean),
+)];
+
+const clientAddresses = (client) => [...new Set(
+  [client?.address, ...(Array.isArray(client?.addresses) ? client.addresses : [])]
+    .map(normalizeAddress)
+    .filter(Boolean),
+)];
+
+const normalizeMapsLink = (value) => String(value || '')
+  .trim()
+  .toLowerCase()
+  .replace(/[?#].*$/, '')
+  .replace(/\/+$/, '');
+
+const clientMapsLinks = (client) => [...new Set(
+  [client?.mapsLink, ...(Array.isArray(client?.mapsLinks) ? client.mapsLinks : [])]
+    .map(normalizeMapsLink)
+    .filter(Boolean),
+)];
+
+// A name alone never proves identity. A matching phone does; a namesake is
+// safe to create only when phone and address are both present and distinct
+// from every same-name client. Everything in between needs clarification.
+const classifyClientIdentity = (input, clients = []) => {
+  const sameName = clients.filter(
+    (client) => normalizeName(client.name) === normalizeName(input?.name),
+  );
+  if (sameName.length === 0) return 'new';
+
+  const phone = normalizePhone(input?.phone);
+  const address = normalizeAddress(input?.address);
+  const mapsLink = normalizeMapsLink(input?.mapsLink);
+  if (phone && sameName.some((client) => clientPhones(client).includes(phone))) {
+    return 'existing';
+  }
+
+  const isDistinctNamesake = Boolean(phone && address) && sameName.every((client) => {
+    const phones = clientPhones(client);
+    const addresses = clientAddresses(client);
+    const mapsLinks = clientMapsLinks(client);
+    return phones.length > 0
+      && addresses.length > 0
+      && !phones.includes(phone)
+      && !addresses.includes(address)
+      && (!mapsLink || !mapsLinks.includes(mapsLink));
+  });
+  return isDistinctNamesake ? 'new' : 'ambiguous';
+};
+
 const extractCardName = (text) => {
   const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const labelled = lines.find((line) => /^(?:nombre|cliente)\s*:/i.test(line));
@@ -63,13 +131,63 @@ const looksLikeCompleteClientCard = (text) => {
   return hasMaps && hasPhone && hasAddress && !!extractCardName(raw);
 };
 
+const extractCardIdentity = (text) => {
+  const raw = String(text || '');
+  const mapsLink = raw.match(/(?:https?:\/\/)?\S*(?:maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs|share\.google|maps\.google\.[^\s/]+|google\.[^\s/]+\/maps)\S*/i)?.[0] || '';
+  const withoutUrls = raw.replace(/(?:https?:\/\/)?\S*(?:maps\.app\.goo\.gl|goo\.gl\/maps|g\.co\/kgs|share\.google|maps\.google\.[^\s/]+|google\.[^\s/]+\/maps)\S*/gi, ' ');
+  const labelledPhone = withoutUrls.match(/(?:tel[eé]fono|tel|celular|cel)\s*:?\s*(\+?\d[\d\s().-]{6,}\d)/i)?.[1];
+  const phone = labelledPhone
+    || withoutUrls.match(/(?:^|\D)(\+?\d[\d\s().-]{6,}\d)(?:\D|$)/m)?.[1]
+    || '';
+
+  const lines = withoutUrls.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const addressParts = [];
+  for (const line of lines) {
+    const addressMatch = /^(?:direcci[oó]n|domicilio)\s*:\s*(.+)$/i.exec(line);
+    const cornerMatch = /^(?:esquina|esq\.?)\s*:\s*(.+)$/i.exec(line);
+    if (addressMatch) addressParts.push(addressMatch[1]);
+    if (cornerMatch) addressParts.push(`Esquina ${cornerMatch[1]}`);
+  }
+
+  if (addressParts.length === 0) {
+    const compactParts = withoutUrls.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean);
+    const name = normalizeName(extractCardName(raw));
+    const addressCandidate = compactParts.find((part) => (
+      normalizeName(part) !== name
+      && normalizePhone(part) !== normalizePhone(phone)
+      && /[a-záéíóúñ]/i.test(part)
+      && !/^(?:tel[eé]fono|tel|celular|cel)\s*:/i.test(part)
+    ));
+    if (addressCandidate) addressParts.push(addressCandidate);
+  }
+
+  return {
+    name: extractCardName(raw),
+    phone,
+    address: addressParts.join(', '),
+    mapsLink,
+  };
+};
+
 const repairOrRetryDecision = (toolUse, text, clients) => {
   if (!toolUse || !toolUse.input) return { toolUse, retryAsCreate: false };
   const input = toolUse.input;
-  const knownIds = new Set((clients || []).map((client) => client.id));
+  const availableClients = clients || [];
+  const knownIds = new Set(availableClients.map((client) => client.id));
+  const completeCard = looksLikeCompleteClientCard(text);
+  const cardIdentity = completeCard
+    ? classifyClientIdentity(extractCardIdentity(text), availableClients)
+    : null;
+
+  if (EXISTING_CLIENT_TOOLS.has(toolUse.name) && cardIdentity === 'new') {
+    return { toolUse, retryAsCreate: true };
+  }
 
   if (EXISTING_CLIENT_TOOLS.has(toolUse.name) && !knownIds.has(input.matched_client_id)) {
-    const match = findUniqueClientNameMatch(input.matched_client_name, text, clients || []);
+    if (completeCard && cardIdentity === 'ambiguous') {
+      return { toolUse, retryAsCreate: false };
+    }
+    const match = findUniqueClientNameMatch(input.matched_client_name, text, availableClients);
     if (match) {
       return {
         toolUse: {
@@ -81,28 +199,34 @@ const repairOrRetryDecision = (toolUse, text, clients) => {
     }
     return {
       toolUse,
-      retryAsCreate: looksLikeCompleteClientCard(text)
-        && !hasPotentialClientNameMatch(input.matched_client_name, text, clients || []),
+      retryAsCreate: completeCard
+        && !hasPotentialClientNameMatch(input.matched_client_name, text, availableClients),
     };
   }
 
-  if (toolUse.name === 'report_not_found' && looksLikeCompleteClientCard(text)) {
-    const match = findUniqueClientNameMatch(input.mentioned_name, text, clients || []);
-    return {
-      toolUse,
-      retryAsCreate: !match
-        && !hasPotentialClientNameMatch(input.mentioned_name, text, clients || []),
-    };
+  if (
+    completeCard
+    && ['report_not_found', 'report_no_action'].includes(toolUse.name)
+  ) {
+    return { toolUse, retryAsCreate: cardIdentity === 'new' };
   }
 
   return { toolUse, retryAsCreate: false };
 };
 
 module.exports = {
+  classifyClientIdentity,
+  clientAddresses,
+  clientMapsLinks,
+  clientPhones,
+  extractCardIdentity,
   extractCardName,
   findUniqueClientNameMatch,
   hasPotentialClientNameMatch,
   looksLikeCompleteClientCard,
+  normalizeAddress,
+  normalizeMapsLink,
   normalizeName,
+  normalizePhone,
   repairOrRetryDecision,
 };

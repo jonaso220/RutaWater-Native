@@ -5,6 +5,7 @@ const {
   buildProductAwareSystemRules,
   buildProductAwareTools,
 } = require('./aiProductCatalog');
+const { buildOrderUserMessage, buildTodayBlock } = require('./orderCorrection');
 
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -24,7 +25,7 @@ const TOOLS = [
   {
     name: 'create_new_client',
     description:
-      'Crear un cliente NUEVO en el directorio. Usar SOLO cuando el nombre del texto NO matchea con NINGÚN cliente de la LISTA DE CLIENTES según las reglas de MATCHING DEL NOMBRE. ANTES de elegir esta tool ES OBLIGATORIO recorrer la LISTA buscando el nombre — una ficha completa (NOMBRE + DIRECCIÓN + ESQUINA + URL de Google Maps) no exime del chequeo. Si la ficha del cliente nuevo también contiene día/fecha/frecuencia y productos, esta misma tool debe crear al cliente YA AGENDADO con todo el pedido; no se necesita una segunda tool. Si el nombre matchea, usar la tool del cliente existente. Si dudás entre crear nuevo o matchear con uno existente, preferí pedir aclaración antes que duplicar.',
+      'Crear un cliente NUEVO en el directorio. ANTES de elegir esta tool es obligatorio comparar identidad por nombre, teléfonos y direcciones. Un nombre repetido NO alcanza para concluir que es la misma persona: si nombre coincide pero teléfono y dirección están presentes y ambos son distintos de todos los homónimos, crear el cliente nuevo. Si coincide el teléfono normalizado, es un cliente existente. Si faltan datos o hay señales cruzadas (por ejemplo misma dirección pero otro teléfono), pedir aclaración con report_no_action. Si la ficha también contiene día/fecha/frecuencia y productos, esta misma tool debe crear al cliente YA AGENDADO con todo el pedido.',
     input_schema: {
       type: 'object',
       properties: {
@@ -261,7 +262,7 @@ PRODUCTOS DISPONIBLES (usar estos IDs exactos):
 - disp_elec_chg: Dispensador eléctrico (cambio)
 - disp_nat: Dispensador natural
 
-Sinónimos comunes: "botellón/bidón 20" = b20, "botellón 12" = b12, "sifón/soda" = soda, "dispenser eléctrico nuevo" = disp_elec_new, "cambio de dispenser eléctrico" = disp_elec_chg, "dispenser de natural/red" = disp_nat.
+Sinónimos comunes: "botellón/bidón 20" = b20, "botellón 12" = b12, "sifón/soda" = soda, "dispenser eléctrico nuevo" = disp_elec_new, "Dispensador: F/C de mesa" / "F/C de mesa" / "frío-calor de mesa" = disp_elec_new (cantidad 1 si no se indica), "cambio de dispenser eléctrico" = disp_elec_chg, "dispenser de natural/red" = disp_nat.
 
 DÍAS VÁLIDOS (visitDay): "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo".
 
@@ -330,36 +331,25 @@ DÓNDE PONER las notas (qué tool elegir):
 - Cliente con pedido pendiente + cualquier cosa de notas o productos → **merge_products_into_order**.
 - Cliente sin pedido pendiente (on_demand) + actualizar nota persistente → **update_client_data** con notes + notes_mode.
 
-MATCHING DEL NOMBRE DE CLIENTE (CRÍTICO — leer 2 veces):
-Cuando el texto menciona el nombre de un cliente, buscarlo en la LISTA DE CLIENTES con ESTAS REGLAS, en orden:
+IDENTIDAD Y MATCHING DE CLIENTES (CRÍTICO — leer 2 veces):
+Antes de elegir una tool, recorré la LISTA DE CLIENTES y compará nombre, TODOS los teléfonos y TODAS las direcciones. Ignorá mayúsculas y tildes en nombres/direcciones; en teléfonos ignorá +598, 598, cero inicial, espacios, guiones y paréntesis.
 
-1. **Match exacto** (case-insensitive, ignorando tildes): el texto contiene el nombre exacto de un cliente → usar ese.
-2. **Match por contención**: el nombre completo de un cliente aparece como SUBCADENA en el texto, AUNQUE haya palabras extra alrededor. Las palabras adicionales (apellidos extra, zona, barrio, número) son ACLARACIONES — NO razón para descartar el match.
-   - texto: "agendá a Akita Pinar Viñale" + cliente "Akita Pinar" → matchear "Akita Pinar" (Viñale es aclaración de zona).
-   - texto: "movélo a Plasticos Mica Solymar" + cliente "Plasticos Mica" → match.
-   - texto: "Maria Lopez del 18" + cliente "Maria Lopez" → match.
-3. **Errores ortográficos — NO modificar automáticamente**: ignorar mayúsculas, minúsculas y tildes es seguro, pero NO hacer matching difuso ni aceptar letras cambiadas, omitidas o agregadas. Si el nombre parece contener un error ortográfico (ej: "Maria Lopes" frente a "Maria López" o "Mario López"), usar **report_no_action**. Si hay un candidato probable, preguntar "¿Te referías a Maria López? Escribí el nombre completo"; si hay varios, enumerarlos. No modificar nada hasta que el usuario escriba un nombre inequívoco.
-4. **Ambigüedad — múltiples matches**: si MÁS DE UN cliente matchea por reglas 1-3 (ej: hay "Maria Lopez" y "Maria Gonzalez" y el texto solo dice "Maria"), usar **report_no_action** y enumerar las opciones en message (ej: "Encontré a Maria Lopez y Maria Gonzalez. Indicá cuál querés modificar"). No elegir arbitrariamente y no usar report_not_found porque los clientes sí existen.
-5. **Sin match**: solo entonces report_not_found.
+Las reglas de teléfono/dirección deciden si una FICHA DE ALTA es una persona nueva o una posible actualización. No exijas que un pedido cotidiano repita los datos de contacto: si el usuario da una orden explícita sobre un cliente existente (por ejemplo "agendá a", "mové a" o "agregale") y el nombre identifica un único cliente, usá ese cliente. Si hay varios con el mismo nombre, sí es obligatorio desambiguar.
 
-PROHIBIDO descartar un match por palabras adicionales en el texto (zona, apellido extra, barrio). Esas son aclaraciones del usuario, no parte del nombre del cliente.
+1. **Misma persona**: mismo nombre normalizado + mismo teléfono normalizado → es cliente existente, aunque la dirección escrita difiera. Usá la tool del cliente existente solo si el texto pide una acción clara. Una ficha pegada nunca autoriza por sí sola a sobrescribir sus datos.
+2. **Homónimo nuevo válido**: mismo nombre normalizado, pero trae teléfono NO vacío distinto Y dirección NO vacía distinta de TODOS los clientes con ese nombre → es otra persona válida. Usá **create_new_client**. El nombre repetido por sí solo NO bloquea el alta.
+3. **Ficha de alta con identidad ambigua**: al decidir si crear desde una ficha, si tiene el mismo nombre pero falta teléfono o dirección, o las señales se cruzan (por ejemplo misma dirección con otro teléfono) → usá **report_no_action** y pedí teléfono y dirección para distinguirlo. No crear ni modificar.
+4. **Varios homónimos existentes**: primero desambiguá por teléfono; después por dirección o mapsLink. Si todavía coincide más de uno, usá **report_no_action**, enumerá opciones breves y pedí un dato inequívoco. Nunca elijas arbitrariamente.
+5. **Match por contención para acciones existentes**: el nombre completo puede aparecer como subcadena aunque haya aclaraciones de zona/barrio. Si esto produce un solo candidato, puede usarse; si produce varios, aplicá la desambiguación anterior.
+6. **Errores ortográficos**: no hagas matching difuso. Pedí que escriban el nombre completo correcto mediante **report_no_action**.
+7. **Sin candidato y sin ficha suficiente**: usar report_not_found. Si trae ficha completa de alta, usar create_new_client.
 
-PASO 0 — BÚSQUEDA OBLIGATORIA EN EL DIRECTORIO (leer ANTES que cualquier otra cosa):
-Si el texto menciona un nombre de cliente, ANTES DE TODO recorré la LISTA DE CLIENTES y comparalo contra cada nombre usando las reglas de MATCHING DEL NOMBRE (exacto, substring, inicio+apellido). Esto es OBLIGATORIO incluso si el texto tiene formato de "ficha de alta" con muchos datos (NOMBRE + DIRECCIÓN + ESQUINA + URL de Google Maps): el usuario suele copiar la ficha del directorio existente para pedirte que la agendes, NO para crear un duplicado.
+Ejemplos:
+  • LISTA: "Ana Pérez", teléfono 099111222, dirección Calle 1. Texto: "Ana Pérez, 099111222, Calle 9" → cliente existente por teléfono; no crear otro.
+  • LISTA: "Ana Pérez", teléfono 099111222, dirección Calle 1. Texto: "Ana Pérez, 098333444, Calle 9" → homónima nueva válida; create_new_client.
+  • LISTA: "Ana Pérez", teléfono 099111222, dirección Calle 1. Texto: "Ana Pérez, 098333444, Calle 1" → identidad ambigua; report_no_action.
 
-Si encontrás match → NUNCA crear un duplicado. Usar la tool del cliente existente (schedule_existing_client / merge_products_into_order / update_client_data) solo cuando el texto pida claramente esa acción.
-
-Una ficha pegada con dirección, teléfono o mapsLink diferentes NO autoriza por sí sola a sobrescribir datos del cliente existente. Si no contiene verbos explícitos como "actualizá", "cambiá", "reemplazá" o "corregí", usá **report_no_action**, indicá qué campos difieren y pedí que confirme por escrito si quiere actualizarlos. No llames update_client_data en ese caso.
-
-Solo si el nombre NO matchea con NINGÚN cliente de la LISTA, recién considerar create_new_client.
-
-PROHIBIDO: elegir create_new_client sin haber recorrido antes la LISTA buscando el nombre.
-
-Ejemplo del bug que esto previene:
-  Texto: "BARBARA SILVEIRA - MEDANOS DE SOLYMAR EDEN ROK M22 S35  Esquina: ENTRE JAGUEL E INDIANA - https://maps.app.goo.gl/..."
-  LISTA contiene "Barbara Silveira" con misma dirección.
-  ❌ MAL: create_new_client (duplicaría el cliente).
-  ✅ BIEN: si el texto pide agendar (con día/fecha/freq) → schedule_existing_client con el id de "Barbara Silveira". Si pide explícitamente actualizar un dato → update_client_data. Si solo pega la ficha y algún dato difiere → report_no_action enumerando los campos diferentes. Si todos los datos ya coinciden → report_no_action con un mensaje como "Barbara Silveira ya existe y no hay datos nuevos para actualizar". No dupliques ni modifiques al cliente y no uses report_not_found porque el cliente sí fue encontrado.
+Si una ficha corresponde a un cliente existente pero trae otros datos, solo usar **update_client_data** cuando contenga verbos explícitos como "actualizá", "cambiá", "reemplazá" o "corregí". En caso contrario, report_no_action y pedir confirmación. Nunca convertir una posible actualización en un alta duplicada.
 
 PRIMER FILTRO (leer ANTES de elegir tool):
 ¿El texto menciona un NOMBRE DE CLIENTE (un nombre propio: persona, comercio, institución como "Juan", "Farmacia Central", "Plásticos Mica")?
@@ -369,7 +359,7 @@ PRIMER FILTRO (leer ANTES de elegir tool):
 - SÍ menciona cliente → seguir con las reglas QUÉ TOOL USAR de abajo.
 
 QUÉ TOOL USAR (cuando hay cliente mencionado):
-1. **create_new_client**: el texto da datos de alta de alguien que NO está en la LISTA DE CLIENTES. Una ficha completa pegada desde WhatsApp (nombre opcional + dirección + teléfono + URL de Maps), sin verbos explícitos, IMPLICA "guardar este cliente": si no hay match en la LISTA, usar create_new_client aunque el usuario no haya escrito "guardar" o "crear".
+1. **create_new_client**: el texto da datos de alta de alguien que no corresponde a una identidad existente según nombre + teléfono + dirección. Una ficha completa pegada desde WhatsApp (nombre opcional + dirección + teléfono + URL de Maps), sin verbos explícitos, IMPLICA "guardar este cliente". Esto también aplica a un homónimo cuando su teléfono y dirección son distintos de todos los clientes con ese nombre.
    - Si la ficha NO trae pedido, usar products={}, freq='on_demand', visitDay='' y specificDate=''.
    - Si la ficha también trae productos y un día, fecha o frecuencia, extraer TODO en la misma llamada a create_new_client. El cliente debe quedar creado y agendado con esos productos al confirmar. Ejemplo: ficha nueva + "los martes, 2 bidones de 20" → products={b20:2}, freq='weekly', visitDay='Martes', specificDate=''. Ficha nueva + "el martes, 2 bidones de 20" → products={b20:2}, freq='once', visitDay='', specificDate=fecha ISO del próximo martes.
    - NO uses schedule_existing_client para una ficha nueva: esa tool exige un id que todavía no existe.
@@ -449,7 +439,12 @@ function buildClientsBlock(clients) {
   }
   const lines = clients.map((c) => {
     const parts = [c.id, c.name];
-    if (c.address) parts.push(c.address);
+    const phones = [...new Set([c.phone, ...(Array.isArray(c.phones) ? c.phones : [])].filter(Boolean))];
+    const addresses = [...new Set([c.address, ...(Array.isArray(c.addresses) ? c.addresses : [])].filter(Boolean))];
+    if (phones.length > 0) parts.push(`teléfonos: ${phones.join(', ')}`);
+    if (addresses.length > 0) parts.push(`direcciones: ${addresses.join(' / ')}`);
+    const mapsLinks = [...new Set([c.mapsLink, ...(Array.isArray(c.mapsLinks) ? c.mapsLinks : [])].filter(Boolean))];
+    if (mapsLinks.length > 0) parts.push(`maps: ${mapsLinks.join(' / ')}`);
 
     const status = [];
     if (c.isCompleted === true) {
@@ -478,14 +473,7 @@ function buildClientsBlock(clients) {
 
     return `- ${parts.join(' | ')}`;
   });
-  return `LISTA DE CLIENTES (id | nombre | dirección | estado | notas actuales):\n${lines.join('\n')}`;
-}
-
-function buildTodayBlock(todayIso) {
-  const date = new Date(todayIso + 'T12:00:00');
-  const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-  const dayName = dayNames[date.getDay()];
-  return `FECHA ACTUAL: ${todayIso} (${dayName})`;
+  return `LISTA DE CLIENTES (id | nombre | teléfonos | direcciones | maps | estado | notas actuales):\n${lines.join('\n')}`;
 }
 
 async function parseOrder({
@@ -494,6 +482,8 @@ async function parseOrder({
   todayIso,
   productCatalog = LEGACY_PRODUCT_CATALOG,
   locale = 'es',
+  correction,
+  previousResult,
 }) {
   // Both values are fresh per request. Do not mutate SYSTEM_RULES or TOOLS:
   // Netlify may concurrently reuse this module for unrelated accounts.
@@ -512,7 +502,7 @@ async function parseOrder({
     },
   ];
 
-  const userMessage = `${buildTodayBlock(todayIso)}\n\nTEXTO A PARSEAR:\n"""\n${text}\n"""`;
+  const userMessage = buildOrderUserMessage({ text, todayIso, correction, previousResult });
 
   const request = {
     model: MODEL,

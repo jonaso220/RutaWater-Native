@@ -17,6 +17,12 @@ const catalog = [
 const client = {
   id: 'client-1',
   name: 'Ana',
+  phone: '099111222',
+  phones: ['099111222', '098222333'],
+  address: 'Calle 1',
+  addresses: ['Calle 1', 'Calle 2'],
+  mapsLink: 'https://maps.example/a',
+  mapsLinks: ['https://maps.example/a', 'https://maps.example/b'],
   freq: 'weekly',
   products: { b20: 2, old_hidden: 1 },
 };
@@ -55,6 +61,16 @@ describe('catálogo dinámico de Pedido IA', () => {
     expect(prompt).toContain('Retornable grande');
     expect(prompt).toContain('portugués');
     expect(prompt).toContain('galão de água 20 litros');
+  });
+
+  test('maps F/C de mesa to one new electric dispenser in Spanish', () => {
+    const prompt = buildProductAwareSystemRules(SYSTEM_RULES, LEGACY_PRODUCT_CATALOG, 'es');
+    expect(prompt).toContain(
+      '- disp_elec_new: dispenser o dispensador eléctrico nuevo; "Dispensador: F/C de mesa"',
+    );
+    expect(prompt).toContain('SIEMPRE significan disp_elec_new');
+    expect(prompt).toContain('si no indican cantidad, usar 1');
+    expect(prompt).not.toContain('- disp_elec_chg: "Dispensador: F/C de mesa"');
   });
 
   test('allows removing a known hidden product only when it is present', () => {
@@ -147,10 +163,44 @@ describe('catálogo dinámico de Pedido IA', () => {
     expect(() => normalizeToolUse({
       name: 'create_new_client',
       input: {
-        name: 'ÁNA', phone: '', address: '', mapsLink: '', notes: '', products: {},
+        name: 'ÁNA', phone: '+598 99 111 222', address: 'Otra calle', mapsLink: '', notes: '', products: {},
         freq: 'on_demand', visitDay: '', specificDate: '',
       },
     }, catalog, [{ ...client, freq }])).toThrow('AI_CLIENT_ALREADY_EXISTS');
+  });
+
+  test('allows a namesake only when both phone and address differ', () => {
+    expect(() => normalizeToolUse({
+      name: 'create_new_client',
+      input: {
+        name: 'ÁNA', phone: '097444555', address: 'Calle 9', mapsLink: '', notes: '', products: {},
+        freq: 'on_demand', visitDay: '', specificDate: '',
+      },
+    }, catalog, [client])).not.toThrow();
+
+    expect(() => normalizeToolUse({
+      name: 'create_new_client',
+      input: {
+        name: 'ÁNA', phone: '097444555', address: 'Calle 2', mapsLink: '', notes: '', products: {},
+        freq: 'on_demand', visitDay: '', specificDate: '',
+      },
+    }, catalog, [client])).toThrow('AI_CLIENT_IDENTITY_AMBIGUOUS');
+
+    expect(() => normalizeToolUse({
+      name: 'create_new_client',
+      input: {
+        name: 'ÁNA', phone: '097444555', address: 'Calle 9',
+        mapsLink: 'https://maps.example/a?shared=true', notes: '', products: {},
+        freq: 'on_demand', visitDay: '', specificDate: '',
+      },
+    }, catalog, [client])).toThrow('AI_CLIENT_IDENTITY_AMBIGUOUS');
+  });
+
+  test('shows all contact data in the model context', () => {
+    const block = buildClientsBlock([client]);
+    expect(block).toContain('teléfonos: 099111222, 098222333');
+    expect(block).toContain('direcciones: Calle 1 / Calle 2');
+    expect(block).toContain('maps: https://maps.example/a / https://maps.example/b');
   });
 
   test('builds concurrent request catalogs without mutating shared prompt or tools', async () => {

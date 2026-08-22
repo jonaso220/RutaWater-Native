@@ -28,6 +28,7 @@ import { toExistingClientUpdate } from '../utils/clientWriteData';
 import { dataScopeFields, dataScopeQuery } from '../utils/dataScope';
 import { getRelatedClientReference } from '../utils/clientIdentity';
 import { createClientDocument, isClientLimitError } from '../services/clientCreation';
+import { getClientPhoneSearchText, getClientPhones } from '../utils/clientPhones';
 
 interface UseClientsProps {
   userId: string;
@@ -213,12 +214,12 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         if (filter === 'sin_frecuencia') return c.freq === 'once' || c.freq === 'on_demand';
         return c.freq === filter;
       })
-      .filter((c) => matcher(c.name || '', getClientAddressSearchText(c), c.phone || ''));
+      .filter((c) => matcher(c.name || '', getClientAddressSearchText(c), getClientPhoneSearchText(c)));
     if (!hasSearch) {
       return matched.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     }
     return matched
-      .map((c) => ({ c, score: matchScore(searchTerm, c.name || '', getClientAddressSearchText(c), c.phone || '') }))
+      .map((c) => ({ c, score: matchScore(searchTerm, c.name || '', getClientAddressSearchText(c), getClientPhoneSearchText(c)) }))
       .sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || ''))
       .map((entry) => entry.c);
   }, [clients]);
@@ -557,6 +558,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         customerId: clientData.customerId || clientData.id,
         name: clientData.name,
         phone: clientData.phone,
+        phones: getClientPhones(clientData),
         addresses: savedAddresses,
         ...scheduledLocationFields,
         ...scope,
@@ -1036,6 +1038,9 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         name,
         address,
         phone,
+        phones: phone.trim()
+          ? [{ id: 'primary', number: phone.trim(), isPrimary: true }]
+          : [],
         lat: '',
         lng: '',
         mapsLink: mapsLink || '',
@@ -1163,6 +1168,9 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         name: data.name,
         address: data.address,
         phone: data.phone,
+        phones: data.phone.trim()
+          ? [{ id: 'primary', number: data.phone.trim(), isPrimary: true }]
+          : [],
         notes: data.notes,
         lat: '',
         lng: '',
@@ -1591,6 +1599,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         customerId: client.customerId || client.id,
         name: client.name,
         phone: client.phone || '',
+        phones: getClientPhones(client),
         address: client.address || '',
         lat: client.lat || '',
         lng: client.lng || '',

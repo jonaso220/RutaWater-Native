@@ -7,7 +7,7 @@ const SUPPORTED_LOCALES = new Set(['es', 'en', 'pt']);
 const SAFE_PRODUCT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
-const { normalizeName } = require('./orderHeuristics');
+const { classifyClientIdentity, normalizeName } = require('./orderHeuristics');
 const TOOL_NAMES = new Set([
   'create_new_client',
   'schedule_existing_client',
@@ -173,7 +173,7 @@ const TRUSTED_ALIASES = {
     b6: 'bidón 6, agua 6 litros',
     soda: 'sifón, soda',
     bombita: 'bombita, bomba manual',
-    disp_elec_new: 'dispenser o dispensador eléctrico nuevo',
+    disp_elec_new: 'dispenser o dispensador eléctrico nuevo; "Dispensador: F/C de mesa", "F/C de mesa" y "frío/calor de mesa" SIEMPRE significan disp_elec_new (si no indican cantidad, usar 1)',
     disp_elec_chg: 'cambio de dispenser o dispensador eléctrico',
     disp_nat: 'dispenser o dispensador natural/de red',
   },
@@ -306,8 +306,12 @@ function assertToolInputShape(name, input, clients) {
     if (!FREQUENCIES.has(input.freq) || !VISIT_DAYS.has(input.visitDay)) {
       throw new AiProductValidationError('AI_TOOL_INPUT_INVALID');
     }
-    if (clients.some((client) => normalizeName(client.name) === normalizeName(input.name))) {
+    const identity = classifyClientIdentity(input, clients);
+    if (identity === 'existing') {
       throw new AiProductValidationError('AI_CLIENT_ALREADY_EXISTS');
+    }
+    if (identity === 'ambiguous') {
+      throw new AiProductValidationError('AI_CLIENT_IDENTITY_AMBIGUOUS');
     }
   } else if (name === 'schedule_existing_client') {
     for (const key of ['matched_client_id', 'matched_client_name']) assertString(input, key, { nonEmpty: true });

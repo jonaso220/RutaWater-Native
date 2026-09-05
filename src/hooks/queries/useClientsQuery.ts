@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Alert, AppState } from 'react-native';
+import i18n from '../../i18n';
+import { projectVisitCommands } from '../../utils/visitCompletion';
+import { consumeVisitResults, flushVisitCommands } from '../../services/visitCompletion';
 import { reportError } from '../../lib/crashReporting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
@@ -43,6 +47,16 @@ export const useClientsQuery = ({
 
   useEffect(() => {
     if (!userId) return;
+    const pending = new Set<string>();
+    const flush = () => {
+      if (AppState.currentState === 'active') {
+        pending.forEach((id) => { void flushVisitCommands(id, scopeKey, userId); });
+      }
+    };
+    const retryTimer = setInterval(flush, 15000);
+    const foreground = AppState.addEventListener('change', (state) => {
+      if (state === 'active') flush();
+    });
     const { field: scopeField, value: scopeValue, additionalFilter } = dataScopeQuery(
       userId,
       groupId,
@@ -81,6 +95,16 @@ export const useClientsQuery = ({
           const visibleDocs = snapshot.docs.filter((doc) =>
             belongsToProfileScope(doc.data(), userId, groupId),
           );
+          pending.clear();
+          visibleDocs.forEach((doc) => {
+            const data = doc.data();
+            if (data.visitCommands?.length) pending.add(doc.id);
+            const notices = consumeVisitResults(data.visitResults || [], userId);
+            if (notices.length) Alert.alert(i18n.t('home.visitUpdatedTitle'),
+              i18n.t(notices.some((result) => result.outcome === 'stale')
+                ? 'home.visitUpdatedMessage' : 'home.visitConfirmedByOther'));
+          });
+          flush();
           const prev = queryClient.getQueryData<Client[]>(queryKey);
           const prevById = new Map((prev ?? []).map((c) => [c.id, c]));
           // Docs added/modified in this snapshot must get a fresh object.
@@ -90,11 +114,12 @@ export const useClientsQuery = ({
               .filter((ch) => ch.type !== 'removed')
               .map((ch) => ch.doc.id),
           );
-          const next = visibleDocs.map((doc) => {
+          const next = visibleDocs.flatMap((doc) => {
             const existing = prevById.get(doc.id);
-            return existing && !changedIds.has(doc.id)
+            const client = existing && !changedIds.has(doc.id)
               ? existing
-              : withDefaults(doc.id, doc.data());
+              : projectVisitCommands(withDefaults(doc.id, doc.data()));
+            return client ? [client] : [];
           });
           queryClient.setQueryData<Client[]>(queryKey, next);
           setReadyGeneration(generation);
@@ -116,7 +141,7 @@ export const useClientsQuery = ({
           setReadyGeneration(generation);
         },
       );
-    return () => unsubscribe();
+    return () => { unsubscribe(); clearInterval(retryTimer); foreground.remove(); };
   }, [userId, groupId, scopeReadVersion, queryClient, queryKey, generation]);
 
   const query = useQuery<Client[]>({

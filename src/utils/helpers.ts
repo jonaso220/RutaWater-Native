@@ -418,6 +418,16 @@ export const alarmScheduleFields = (
   };
 };
 
+// Excludes contact/products/alarm edits, which must not invalidate a delivery.
+// Includes legacy fields too: an older app's completion invalidates stale intents.
+export const visitStateKey = (client: Client): string => JSON.stringify([
+  client.scheduleRevision || '', client.freq, client.visitDay,
+  [...(client.visitDays || [])].sort(), client.specificDate || '',
+  parseDate(client.lastVisited)?.getTime() ?? null, client.doneFor || '',
+  !!client.isCompleted, parseDate(client.completedAt)?.getTime() ?? null,
+  parseDate(client.lastDeliveredAt)?.getTime() ?? null,
+]);
+
 export const getNextVisitDate = (client: Client, forDay?: string): Date | null => {
   // Only use specificDate as-is for 'once' clients (one-time orders).
   // For periodic clients, specificDate is a start-date hint and should not
@@ -483,7 +493,12 @@ export const getNextVisitDate = (client: Client, forDay?: string): Date | null =
         // At write time the pending occurrence sits between today−grace and
         // one full cycle ahead; anything outside means lastVisited was
         // updated later without doneFor → fall back to the heuristic.
-        if (drift >= -(LATE_GRACE_DAYS + 1) && drift <= intervalWeeks * 7) {
+        // New shared completions carry an exact receipt. This also covers a
+        // deliberately confirmed early delivery more than one cycle ahead.
+        const confirmedOccurrence = client.visitReceipt?.after === visitStateKey(client)
+          && client.visitReceipt.occurrence === client.doneFor
+          && Object.keys(client.visitReceipt.confirmations).length > 0;
+        if (confirmedOccurrence || (drift >= -(LATE_GRACE_DAYS + 1) && drift <= intervalWeeks * 7)) {
           attributed = doneForDate;
         }
       }

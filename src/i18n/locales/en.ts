@@ -112,6 +112,12 @@ export default {
 
   // Home Screen
   home: {
+    completeEarlyTitle: 'Complete a visit early',
+    completeEarlyMessage: 'Complete the visit for {{name}} on {{date}}? The next visit will be calculated from that date.',
+    completeEarlyConfirm: 'Complete this visit',
+    visitUpdatedTitle: 'Route updated',
+    visitUpdatedMessage: 'This visit changed on another device. The latest schedule was preserved; check the current date.',
+    visitConfirmedByOther: 'Another member also confirmed this delivery. Their confirmation remains and the visit stays completed.',
     title: 'RutaWater',
     markDoneFailed: 'Could not mark as done. Check your connection and try again.',
     searchPlaceholder: 'Search by name or address...',

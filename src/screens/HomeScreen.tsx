@@ -22,8 +22,9 @@ import {
 import ModalOverlay from '../components/ModalOverlay';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
+import { createVisitCommand } from '../utils/visitCompletion';
 import { useProducts } from '../stores/productCatalogStore';
-import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString, parseDate, settingsDocId } from '../utils/helpers';
+import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString, settingsDocId } from '../utils/helpers';
 import {
   ScopedWhatsAppTemplates,
   normalizeWhatsAppTemplates,
@@ -128,7 +129,7 @@ interface ClientItemProps {
   fontScale?: number;
   wideLayout?: boolean;
   selectedDay: string;
-  onMarkDone: (client: Client) => void;
+  onMarkDone: (client: Client, forDay?: string) => void;
   onEdit: (client: Client) => void;
   onEditProducts: (client: Client) => void;
   onEditNotes: (client: Client) => void;
@@ -166,7 +167,7 @@ const ClientItem = React.memo<ClientItemProps>(({
   onRelationships,
   onChangePosition,
 }) => {
-  const handleMarkDone = useCallback(() => onMarkDone(client), [onMarkDone, client]);
+  const handleMarkDone = useCallback(() => onMarkDone(client, selectedDay), [onMarkDone, client, selectedDay]);
   const handleEdit = useCallback(() => onEdit(client), [onEdit, client]);
   const handleEditProducts = useCallback(() => onEditProducts(client), [onEditProducts, client]);
   const handleEditNotes = useCallback(() => onEditNotes(client), [onEditNotes, client]);
@@ -762,45 +763,32 @@ const HomeScreen = () => {
   }, [deferredDay, resetHeaderScrollTracking, setCollapsibleHeaderVisible, androidHeaderScrollY]);
 
   const handleMarkDone = useCallback(
-    (client: Client) => {
-      // Capture ALL fields markAsDone may modify, regardless of current
-      // freq, so undo restores correctly even if freq changed concurrently.
-      // parseDate: el undo reescribe estos valores en Firestore, que acepta
-      // Date pero no el objeto Timestamp leído; null si el campo estaba vacío.
-      const previousData: Record<string, any> = {
-        isCompleted: client.isCompleted ?? false,
-        completedAt: parseDate(client.completedAt),
-        lastVisited: parseDate(client.lastVisited),
-        lastDeliveredAt: parseDate(client.lastDeliveredAt),
-        previousDeliveredAt: parseDate(client.previousDeliveredAt),
-        doneFor: client.doneFor ?? '',
-        specificDate: client.specificDate ?? '',
-        alarm: client.alarm ?? '',
-        alarmDay: client.alarmDay ?? '',
-        alarmScheduledFor: client.alarmScheduledFor ?? null,
-        isStarred: client.isStarred ?? false,
-      };
-
-      hapticLight();
-      // Optimista a propósito (offline el promise queda pendiente y no debe
-      // bloquear); si el servidor rechaza el write, avisar — el listener ya
-      // habrá vuelto a mostrar el cliente.
-      markAsDone(client.id, client, selectedDayRef.current).then((ok) => {
-        if (!ok) {
-          Alert.alert(t('error'), t('home.markDoneFailed'));
-        }
-      });
-      // Las notas de una sola vez se borran definitivamente. Las recurrentes
-      // avanzan al próximo ciclo y sí pueden deshacerse como cualquier agenda.
-      if (!client.isNote || client.freq !== 'once') {
-        pushUndo({
-          client,
-          previousData,
-          sectionDay: selectedDayRef.current,
+    (client: Client, forDay?: string) => {
+      const day = forDay || selectedDayRef.current;
+      // Capture before opening the confirmation: a server echo must never
+      // change which occurrence this tap will complete.
+      const command = createVisitCommand(client, user?.uid || '', day);
+      if (!command) return;
+      const complete = () => {
+        hapticLight();
+        markAsDone(client.id, client, day, command).then((ok) => {
+          if (!ok) Alert.alert(t('error'), t('home.markDoneFailed'));
         });
+        if (!client.isNote || client.freq !== 'once') {
+          pushUndo({ client, command, sectionDay: day });
+        }
+      };
+      if (command.occurrence > toLocalDateString(new Date())) {
+        const [year, month, date] = command.occurrence.split('-');
+        Alert.alert(t('home.completeEarlyTitle'),
+          t('home.completeEarlyMessage', { name: client.name, date: `${date}/${month}/${year}` }),
+          [{ text: t('cancel'), style: 'cancel' },
+            { text: t('home.completeEarlyConfirm'), onPress: complete }]);
+      } else {
+        complete();
       }
     },
-    [markAsDone, pushUndo, t],
+    [markAsDone, pushUndo, t, user?.uid],
   );
 
   const handleDelete = useCallback(
@@ -1014,7 +1002,7 @@ const HomeScreen = () => {
 
   const stableHandlers = useMemo(
     () => ({
-      onMarkDone: (c: Client) => handlersRef.current.handleMarkDone(c),
+      onMarkDone: (c: Client, day?: string) => handlersRef.current.handleMarkDone(c, day),
       onEdit: (c: Client) => handlersRef.current.handleEditCb(c),
       onEditProducts: (c: Client) => handlersRef.current.handleEditProductsCb(c),
       onEditNotes: (c: Client) => handlersRef.current.handleEditNotesCb(c),

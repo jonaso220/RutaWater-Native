@@ -1,4 +1,8 @@
 import { useCallback, useRef, useMemo } from 'react';
+import { Alert } from 'react-native';
+import i18n from '../i18n';
+import { enqueueVisitCommand } from '../services/visitCompletion';
+import { createVisitCommand, undoForCompletedClient, newVisitId, scheduleChanged, VisitCommand } from '../utils/visitCompletion';
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
@@ -260,110 +264,38 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
 
   // --- MUTATION FUNCTIONS ---
 
-  // Mark a client as done for the day. `forDay` is the day-tab the client was
-  // shown under (matters for multi-day clients); defaults to the client's own
-  // visit day. Devuelve false si el write falló, para que la UI pueda avisar
-  // en vez de dejar la percepción de éxito.
-  const markAsDone = useCallback(async (clientId: string, client: Client, forDay?: string): Promise<boolean> => {
+  // The immutable occurrence comes from the card the user tapped. Only the
+  // command is queued offline; a shared transaction applies the delivery.
+  const markAsDone = useCallback(async (
+    clientId: string, client: Client, forDay?: string, intent?: VisitCommand,
+  ): Promise<boolean> => {
+    const command = intent || createVisitCommand(client, userId, forDay);
+    if (!command) return false;
     if (markingDoneRef.current.has(clientId)) return true;
     markingDoneRef.current.add(clientId);
     try {
-      await cancelAlarmsThenMutate(
-        () => {
-          const latest = clientsRef.current.find((candidate) => candidate.id === clientId) || client;
-          const previousAlarm = alarmSnapshotForClient(latest, forDay, userId);
-          return previousAlarm ? [previousAlarm] : [];
-        },
-        async () => {
-          if (client.isNote && client.freq === 'once') {
-            // One-time notes are finished forever and do not belong in the directory.
-            await db.collection('clients').doc(clientId).delete();
-          } else if (client.freq === 'once') {
-            // Once: mark as completed permanently
-            const deliveredAt = new Date();
-            const previousDeliveredAt = getLastVisitDate(client);
-            await db.collection('clients').doc(clientId).update({
-              isCompleted: true,
-              completedAt: deliveredAt,
-              lastDeliveredAt: deliveredAt,
-              previousDeliveredAt,
-              updatedAt: deliveredAt,
-              alarm: '',
-              alarmDay: '',
-              alarmScheduledFor: null,
-              isStarred: false,
-            });
-          } else {
-            // Periodic: update lastVisited to hide until next cycle.
-            // doneFor pins WHICH scheduled occurrence this tap completed (the one
-            // the card was displayed under), so getNextVisitDate reschedules by
-            // one full cycle from it even when the delivery happens days away
-            // from the visit day (e.g. a Saturday client marked done on Monday).
-            const deliveredAt = new Date();
-            const updates: Record<string, any> = {
-              lastVisited: deliveredAt,
-              lastDeliveredAt: deliveredAt,
-              alarm: '',
-              alarmDay: '',
-              alarmScheduledFor: null,
-            };
-
-            const pendingOccurrence = getNextVisitDate(client, forDay);
-            if (pendingOccurrence) {
-              const todayStart = new Date();
-              todayStart.setHours(0, 0, 0, 0);
-              const daysAhead = Math.round(
-                (pendingOccurrence.getTime() - todayStart.getTime()) / 86400000,
-              );
-              const intervalWeeks =
-                client.freq === 'biweekly' ? 2 : client.freq === 'triweekly' ? 3 :
-                client.freq === 'monthly' ? 4 : 1;
-              // Never pin more than one cycle ahead: a repeat tap on a client that
-              // already advanced keeps the previous doneFor (idempotent) instead
-              // of ratcheting the schedule one extra cycle per tap.
-              if (daysAhead < intervalWeeks * 7) {
-                updates.doneFor = toLocalDateString(pendingOccurrence);
-              }
-            }
-
-            if (client.specificDate) {
-              updates.specificDate = '';
-            }
-
-            if (client.isStarred) {
-              updates.isStarred = false;
-            }
-
-            await db.collection('clients').doc(clientId).update(updates);
-          }
-        },
-        [clientId],
-      );
-      return true;
+      // Do not hold the alarm mutex while a Firestore write waits offline:
+      // the user's Undo command must remain available in that interval.
+      await runSerializedAlarmMutation(clientId, () => cancelClientAlarm(clientId));
+      return await enqueueVisitCommand(clientId, command);
     } catch (e) {
       reportError(e, 'Error marking as done');
       return false;
     } finally {
       markingDoneRef.current.delete(clientId);
     }
-  }, []);
+  }, [userId]);
 
-  // Undo a completed client (only for 'once' freq)
   const undoComplete = useCallback(async (client: Client) => {
-    try {
-      // previousDeliveredAt se guarda al completar para que este deshacer siga
-      // siendo exacto aunque la ficha haya limpiado su estado de agenda.
-      await db.collection('clients').doc(client.id).update({
-        isCompleted: false,
-        completedAt: null,
-        lastDeliveredAt: parseDate(client.previousDeliveredAt),
-        previousDeliveredAt: null,
-        updatedAt: new Date(),
-      });
-    } catch (e) {
-      reportError(e, 'Error undoing complete');
+    const command = undoForCompletedClient(client, userId);
+    if (!command) {
+      Alert.alert(i18n.t('home.visitUpdatedTitle'), i18n.t('home.visitConfirmedByOther'));
+      return;
     }
-  }, []);
+    if (!await enqueueVisitCommand(client.id, command)) {
+      Alert.alert(i18n.t('error'), i18n.t('editModal.saveError'));
+    }
+  }, [userId]);
 
   // Clear all completed clients for a day:
   // - Notes (isNote): delete permanently
@@ -387,6 +319,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
             // Real clients: move to directory instead of deleting
             const historyUpdate = getDirectoryDeliveryHistoryUpdate(c);
             batch.update(ref, {
+              scheduleRevision: newVisitId(),
               freq: 'on_demand',
               visitDay: 'Sin Asignar',
               visitDays: [],
@@ -440,6 +373,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         // Client has multiple days — only remove this one
         const remainingDays = currentDays.filter((d) => d !== day);
         const update: Partial<Client> = {
+          scheduleRevision: newVisitId(),
           visitDays: remainingDays,
           visitDay: remainingDays[0],
         };
@@ -468,6 +402,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
             clientsRef.current.find((candidate) => candidate.id === clientId) || client,
           ], userId),
           () => db.collection('clients').doc(clientId).update({
+            scheduleRevision: newVisitId(),
             freq: 'on_demand',
             visitDay: 'Sin Asignar',
             visitDays: [],
@@ -494,7 +429,10 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
   // Firestore — los callers de la IA lo usan para no mostrar "Listo" en falso.
   const updateClient = useCallback(async (clientId: string, data: Partial<Client>): Promise<boolean> => {
     try {
-      await db.collection('clients').doc(clientId).update(data);
+      const current = clientsRef.current.find((candidate) => candidate.id === clientId);
+      const updates = current && scheduleChanged(current, data)
+        ? { ...data, scheduleRevision: newVisitId() } : data;
+      await db.collection('clients').doc(clientId).update(updates);
     } catch (e) {
       reportError(e, 'Error updating client');
       return false;
@@ -564,6 +502,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         ...scope,
         userId,
         freq: newFreq,
+        scheduleRevision: newVisitId(),
         updatedAt: new Date(),
         notes: newNotes,
         isPinned: false,
@@ -976,6 +915,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         updatedAt: new Date() as any,
       };
       if (scheduleChanged) {
+        updates.scheduleRevision = newVisitId();
         updates.isCompleted = false;
         updates.completedAt = null;
         updates.lastVisited = null;

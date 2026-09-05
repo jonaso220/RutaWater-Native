@@ -13,6 +13,7 @@ describe('toExistingClientUpdate', () => {
     });
 
     expect(update).toEqual({
+      scheduleRevision: expect.any(String),
       freq: 'weekly',
       visitDay: 'Lunes',
       products: { water: 2 },

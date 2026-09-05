@@ -1,3 +1,5 @@
+import { newVisitId } from './visitCompletion';
+
 /**
  * Fields that identify a client's owner/scope and determine delete privileges
  * are immutable after creation. Shared-route edits must never reattribute a
@@ -12,5 +14,8 @@ export const toExistingClientUpdate = (
   delete updateData.scopeKey;
   delete updateData.createdAt;
   delete updateData.isNote;
+  if (['freq', 'visitDay', 'visitDays', 'specificDate'].some((key) => key in updateData)) {
+    updateData.scheduleRevision = newVisitId();
+  }
   return updateData;
 };

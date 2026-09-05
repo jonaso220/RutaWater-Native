@@ -112,6 +112,12 @@ export default {
 
   // Home Screen
   home: {
+    completeEarlyTitle: 'Concluir uma visita antecipada',
+    completeEarlyMessage: 'Concluir a visita de {{name}} do dia {{date}}? A próxima será calculada a partir dessa data.',
+    completeEarlyConfirm: 'Concluir esta visita',
+    visitUpdatedTitle: 'Rota atualizada',
+    visitUpdatedMessage: 'Esta visita mudou em outro dispositivo. A agenda mais recente foi mantida; confira a data atual.',
+    visitConfirmedByOther: 'Outro integrante também confirmou esta entrega. A confirmação dele permanece e a visita continua concluída.',
     title: 'RutaWater',
     markDoneFailed: 'Não foi possível marcar como concluído. Verifique a conexão e tente novamente.',
     searchPlaceholder: 'Buscar por nome ou endereco...',

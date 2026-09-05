@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Client, ClientAddress } from '../types';
+import type { VisitCommand } from '../utils/visitCompletion';
 import { Frequency } from '../constants/products';
 
 interface ClientsStore {
@@ -14,7 +15,7 @@ interface ClientsStore {
   getFilteredDirectory: (term: string, filter?: string) => Client[];
   directoryCounts: Record<string, number>;
   // Devuelve false si el write falló (la UI avisa en vez de asumir éxito).
-  markAsDone: (clientId: string, client: Client, forDay?: string) => Promise<boolean>;
+  markAsDone: (clientId: string, client: Client, forDay?: string, intent?: VisitCommand) => Promise<boolean>;
   undoComplete: (client: Client) => Promise<void>;
   deleteAllCompleted: (day: string) => Promise<void>;
   deleteFromDay: (clientId: string, day: string) => Promise<void>;

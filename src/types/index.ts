@@ -1,4 +1,5 @@
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import type { VisitCommand, VisitReceipt, VisitResult } from '../utils/visitCompletion';
 
 export type ClientAddressType = 'home' | 'work' | 'other';
 
@@ -66,6 +67,10 @@ export interface Client {
   doneFor?: string; // yyyy-mm-dd de la ocurrencia agendada que completó el último "Listo".
                     // Permite reagendar exacto aunque la entrega sea días antes/después
                     // del día de visita (ver getNextVisitDate). Vacío/ausente = usar heurística.
+  scheduleRevision?: string;
+  visitCommands?: VisitCommand[];
+  visitReceipt?: VisitReceipt | null;
+  visitResults?: VisitResult[];
   completedAt: FirebaseFirestoreTypes.Timestamp | null;
   updatedAt: FirebaseFirestoreTypes.Timestamp | null;
   userId: string;

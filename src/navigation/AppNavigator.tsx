@@ -1,5 +1,6 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -21,6 +22,8 @@ const Stack = createNativeStackNavigator();
 const TabNavigator = () => {
   const { colors } = useTheme();
   const { fontScale, width } = useLayout();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Platform.OS === 'android' ? insets.bottom : 0;
   const { t } = useTranslation();
   const { activeAlarm, dismissAlarm } = useAlarmChecker();
 
@@ -59,11 +62,11 @@ const TabNavigator = () => {
           tabBarStyle: {
             backgroundColor: colors.tabBarBackground,
             borderTopColor: colors.tabBarBorder,
-            // Wide screens: symmetric padding (keeps the stack centered) + a
-            // taller bar. Phone keeps its original values untouched.
+            // Keep Android controls above the system navigation area when
+            // Android 15+ enforces edge-to-edge rendering.
             paddingTop: isWideNav ? s(10) : 0,
-            paddingBottom: isWideNav ? s(10) : 4,
-            height: isWideNav ? s(74) : s(56),
+            paddingBottom: (isWideNav ? s(10) : 4) + bottomInset,
+            height: (isWideNav ? s(74) : s(56)) + bottomInset,
           },
           tabBarActiveTintColor: colors.tabActive,
           tabBarInactiveTintColor: colors.tabInactive,

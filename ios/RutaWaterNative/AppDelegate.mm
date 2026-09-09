@@ -1,6 +1,7 @@
 #import "AppDelegate.h"
 
 #import <React/RCTBundleURLProvider.h>
+#import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <Firebase.h>
 
 @implementation AppDelegate
@@ -9,6 +10,7 @@
 {
   [FIRApp configure];
   self.moduleName = @"RutaWaterNative";
+  self.dependencyProvider = [RCTAppDependencyProvider new];
   self.initialProps = @{};
 
   return [super application:application didFinishLaunchingWithOptions:launchOptions];

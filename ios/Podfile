@@ -39,7 +39,10 @@ target 'RutaWaterNative' do
         if File.exist?(fmt_base)
           content = File.read(fmt_base)
           patched = content.gsub('#if FMT_USE_CONSTEVAL', '#if FMT_USE_CONSTEVAL && !defined(__APPLE__)')
-          File.write(fmt_base, patched) if content != patched
+          if content != patched
+            File.chmod(File.stat(fmt_base).mode | 0200, fmt_base)
+            File.write(fmt_base, patched)
+          end
         end
     end
 end

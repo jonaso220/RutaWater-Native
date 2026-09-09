@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   ActivityIndicator,
+  StatusBar,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -95,6 +96,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      {Platform.OS === 'android' && (
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      )}
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"

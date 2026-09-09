@@ -59,6 +59,7 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
   const [shareProfileId, setShareProfileId] = useState<string | null>(null);
   const [savingAction, setSavingAction] = useState<string | null>(null);
   const savingRef = useRef(false);
+  const pendingNames = useRef<Record<string, string>>({});
 
   const myUid = user?.uid || '';
   // Panel de compartir embebido (NO un segundo Modal: en iOS apilar modales
@@ -81,8 +82,24 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
     }
   };
 
-  const handleRequestClose = () => {
-    if (!savingRef.current) onClose();
+  const savePendingNames = async () => {
+    for (const [id, draft] of Object.entries(pendingNames.current)) {
+      const profile = profiles.find((p) => p.id === id);
+      const name = draft.trim();
+      if (profile && (profile.isPrimary || profile.isOwner) && name && name !== profile.name) {
+        await renameProfile(id, name);
+      }
+      if (pendingNames.current[id] === draft) delete pendingNames.current[id];
+    }
+  };
+
+  const handleRequestClose = async () => {
+    if (savingRef.current) return;
+    // Closing can unmount TextInput before onEndEditing is delivered on Android.
+    // Capture edits as they happen and flush them before dismissing the panel.
+    if (Object.keys(pendingNames.current).length &&
+        !await runMutation('rename', savePendingNames)) return;
+    onClose();
   };
 
   const handleRequestCloseShare = () => {
@@ -265,10 +282,10 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
                     editable={!savingAction && (p.isPrimary || !!p.isOwner)}
                     placeholder={t('settings.newProfilePlaceholder')}
                     placeholderTextColor={colors.textHint}
-                    onEndEditing={(e) => {
-                      const nextName = e.nativeEvent.text;
-                      if (nextName.trim() && nextName.trim() !== p.name) {
-                        void runMutation(`rename:${p.id}`, () => renameProfile(p.id, nextName));
+                    onChangeText={(name) => { pendingNames.current[p.id] = name; }}
+                    onEndEditing={() => {
+                      if (pendingNames.current[p.id] !== undefined) {
+                        void runMutation(`rename:${p.id}`, savePendingNames);
                       }
                     }}
                     returnKeyType="done"

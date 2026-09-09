@@ -409,6 +409,105 @@ const SettingsScreen = () => {
         </View>
       </View>
 
+      {/* Export & Maintenance */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="construct" size={20} color={colors.textMuted} />
+          <Text style={styles.sectionTitle}>{t('settings.tools')}</Text>
+        </View>
+        <View style={styles.sectionCard}>
+          {/* Export */}
+          <Text style={styles.cardGroupTitle}>{t('settings.exportDataTitle')}</Text>
+          {isPremium ? (
+            <View style={styles.cardGroupContent}>
+              <TouchableOpacity onPress={handleExportCSV} style={styles.exportBtn}>
+                <Ionicons name="share-outline" size={18} color={colors.primary} />
+                <Text style={styles.exportBtnText}>{t('settings.exportCSV')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleExportJSON} style={styles.exportBtn}>
+                <Ionicons name="save-outline" size={18} color={colors.primary} />
+                <Text style={styles.exportBtnText}>{t('settings.exportJSON')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleRestoreJSON}
+                style={[styles.exportBtn, restoring && { opacity: 0.6 }]}
+                disabled={restoring}
+              >
+                {restoring ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name="cloud-upload-outline" size={18} color={colors.primary} />
+                )}
+                <Text style={styles.exportBtnText}>
+                  {restoring ? t('settings.restoreWorking') : t('settings.restoreJSON')}
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.cardGroupHint}>{t('settings.restoreHint')}</Text>
+            </View>
+          ) : (
+            <View style={styles.lockedCard}>
+              <Ionicons name="lock-closed" size={24} color={colors.textHint} />
+              <Text style={styles.lockedText}>
+                {t('settings.exportPremiumMsg')}
+              </Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Paywall')}
+                style={styles.upgradeBtn}
+              >
+                <Ionicons name="diamond" size={16} color="#FFFFFF" />
+                <Text style={styles.upgradeBtnText}>{t('settings.getPremium')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {canManageActiveProfile && (
+            <>
+              <View style={styles.templateDivider} />
+
+              {/* Maintenance */}
+              <Text style={styles.cardGroupTitle}>{t('settings.maintenance')}</Text>
+              <TouchableOpacity onPress={handleCleanupDuplicates} style={styles.exportBtn}>
+                <Ionicons name="copy-outline" size={18} color={colors.primary} />
+                <Text style={styles.exportBtnText}>{t('settings.cleanDuplicates')}</Text>
+              </TouchableOpacity>
+              <Text style={styles.cardGroupHint}>
+                {t('settings.cleanDuplicatesHint')}
+              </Text>
+            </>
+          )}
+        </View>
+      </View>
+
+      {/* Account actions */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="person-circle-outline" size={20} color={colors.textMuted} />
+          <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
+        </View>
+        <View style={styles.sectionCard}>
+          <TouchableOpacity onPress={onSignOut} style={styles.signOutBtn}>
+            <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+            <Text style={styles.signOutText}>{t('settings.signOut')}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.templateDivider} />
+
+          <TouchableOpacity
+            onPress={handleDeleteAccount}
+            style={styles.deleteAccountBtn}
+            disabled={loading}
+          >
+            <Ionicons name="trash-outline" size={18} color={colors.textHint} />
+            <Text style={styles.deleteAccountText}>{t('settings.deleteAccount')}</Text>
+          </TouchableOpacity>
+          <Text style={styles.deleteAccountHint}>
+            {t('settings.deleteAccountHint')}
+          </Text>
+        </View>
+      </View>
+
+      <View style={{ height: 60 }} />
+    </ScrollView>
       {/* Family group — modal (same content/logic as before, moved into a modal) */}
       <ModalOverlay visible={groupModalVisible} onClose={() => setGroupModalVisible(false)} animationType="slide">
         <KeyboardAvoidingView
@@ -549,105 +648,6 @@ const SettingsScreen = () => {
         </KeyboardAvoidingView>
       </ModalOverlay>
 
-      {/* Export & Maintenance */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="construct" size={20} color={colors.textMuted} />
-          <Text style={styles.sectionTitle}>{t('settings.tools')}</Text>
-        </View>
-        <View style={styles.sectionCard}>
-          {/* Export */}
-          <Text style={styles.cardGroupTitle}>{t('settings.exportDataTitle')}</Text>
-          {isPremium ? (
-            <View style={styles.cardGroupContent}>
-              <TouchableOpacity onPress={handleExportCSV} style={styles.exportBtn}>
-                <Ionicons name="share-outline" size={18} color={colors.primary} />
-                <Text style={styles.exportBtnText}>{t('settings.exportCSV')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleExportJSON} style={styles.exportBtn}>
-                <Ionicons name="save-outline" size={18} color={colors.primary} />
-                <Text style={styles.exportBtnText}>{t('settings.exportJSON')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleRestoreJSON}
-                style={[styles.exportBtn, restoring && { opacity: 0.6 }]}
-                disabled={restoring}
-              >
-                {restoring ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Ionicons name="cloud-upload-outline" size={18} color={colors.primary} />
-                )}
-                <Text style={styles.exportBtnText}>
-                  {restoring ? t('settings.restoreWorking') : t('settings.restoreJSON')}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.cardGroupHint}>{t('settings.restoreHint')}</Text>
-            </View>
-          ) : (
-            <View style={styles.lockedCard}>
-              <Ionicons name="lock-closed" size={24} color={colors.textHint} />
-              <Text style={styles.lockedText}>
-                {t('settings.exportPremiumMsg')}
-              </Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('Paywall')}
-                style={styles.upgradeBtn}
-              >
-                <Ionicons name="diamond" size={16} color="#FFFFFF" />
-                <Text style={styles.upgradeBtnText}>{t('settings.getPremium')}</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {canManageActiveProfile && (
-            <>
-              <View style={styles.templateDivider} />
-
-              {/* Maintenance */}
-              <Text style={styles.cardGroupTitle}>{t('settings.maintenance')}</Text>
-              <TouchableOpacity onPress={handleCleanupDuplicates} style={styles.exportBtn}>
-                <Ionicons name="copy-outline" size={18} color={colors.primary} />
-                <Text style={styles.exportBtnText}>{t('settings.cleanDuplicates')}</Text>
-              </TouchableOpacity>
-              <Text style={styles.cardGroupHint}>
-                {t('settings.cleanDuplicatesHint')}
-              </Text>
-            </>
-          )}
-        </View>
-      </View>
-
-      {/* Account actions */}
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="person-circle-outline" size={20} color={colors.textMuted} />
-          <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
-        </View>
-        <View style={styles.sectionCard}>
-          <TouchableOpacity onPress={onSignOut} style={styles.signOutBtn}>
-            <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-            <Text style={styles.signOutText}>{t('settings.signOut')}</Text>
-          </TouchableOpacity>
-
-          <View style={styles.templateDivider} />
-
-          <TouchableOpacity
-            onPress={handleDeleteAccount}
-            style={styles.deleteAccountBtn}
-            disabled={loading}
-          >
-            <Ionicons name="trash-outline" size={18} color={colors.textHint} />
-            <Text style={styles.deleteAccountText}>{t('settings.deleteAccount')}</Text>
-          </TouchableOpacity>
-          <Text style={styles.deleteAccountHint}>
-            {t('settings.deleteAccountHint')}
-          </Text>
-        </View>
-      </View>
-
-      <View style={{ height: 60 }} />
-    </ScrollView>
     <ProductCatalogModal
       visible={productsModalVisible}
       onClose={() => setProductsModalVisible(false)}

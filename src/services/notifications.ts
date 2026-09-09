@@ -64,7 +64,15 @@ const ensureAndroidChannel = async (): Promise<string> => {
 };
 
 export const requestNotificationPermission = async (): Promise<boolean> => {
-  const settings = await notifee.requestPermission();
+  // RN 0.77 defers the permission-result callback until onResume. Requesting
+  // an already granted Android permission may not pause/resume the Activity,
+  // leaving this promise (and the client's alarm queue) pending indefinitely.
+  let settings = Platform.OS === 'android'
+    ? await notifee.getNotificationSettings()
+    : await notifee.requestPermission();
+  if (Platform.OS === 'android' && settings.authorizationStatus < AuthorizationStatus.AUTHORIZED) {
+    settings = await notifee.requestPermission();
+  }
   if (Platform.OS === 'android') {
     await ensureAndroidChannel();
   }

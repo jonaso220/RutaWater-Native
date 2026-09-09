@@ -57,6 +57,11 @@ const CalendarModal: React.FC<CalendarModalProps> = ({ visible, onClose }) => {
     return arr;
   }, [view]);
 
+  const weeks = useMemo(() => Array.from(
+    { length: cells.length / 7 },
+    (_, week) => cells.slice(week * 7, week * 7 + 7),
+  ), [cells]);
+
   const now = new Date();
   const isCurrentMonth =
     view.year === now.getFullYear() && view.month === now.getMonth();
@@ -112,28 +117,32 @@ const CalendarModal: React.FC<CalendarModalProps> = ({ visible, onClose }) => {
           </View>
 
           {/* Day grid */}
-          <View style={styles.grid}>
-            {cells.map((d, i) => {
-              const isToday = isCurrentMonth && d === todayDate;
-              const isSunday = i % 7 === 6;
-              return (
-                <View key={i} style={styles.cell}>
-                  {d ? (
-                    <View style={[styles.dayCircle, isToday && styles.todayCircle]}>
-                      <Text
-                        style={[
-                          styles.dayText,
-                          isSunday && styles.sundayText,
-                          isToday && styles.todayText,
-                        ]}
-                      >
-                        {d}
-                      </Text>
+          <View>
+            {weeks.map((week, weekIndex) => (
+              <View key={weekIndex} style={styles.grid}>
+                {week.map((d, i) => {
+                  const isToday = isCurrentMonth && d === todayDate;
+                  const isSunday = i % 7 === 6;
+                  return (
+                    <View key={i} style={styles.cell}>
+                      {d ? (
+                        <View style={[styles.dayCircle, isToday && styles.todayCircle]}>
+                          <Text
+                            style={[
+                              styles.dayText,
+                              isSunday && styles.sundayText,
+                              isToday && styles.todayText,
+                            ]}
+                          >
+                            {d}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
-                  ) : null}
-                </View>
-              );
-            })}
+                  );
+                })}
+              </View>
+            ))}
           </View>
 
           {/* Footer */}
@@ -215,10 +224,10 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     },
     grid: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
     },
     cell: {
-      width: `${100 / 7}%`,
+      flex: 1,
+      minWidth: 0,
       aspectRatio: 1,
       justifyContent: 'center',
       alignItems: 'center',

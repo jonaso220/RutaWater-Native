@@ -120,8 +120,8 @@ android {
         applicationId "com.rutawater.native"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 24
-        versionName "1.14"
+        versionCode 25
+        versionName "1.15"
     }
     packagingOptions {
         jniLibs {

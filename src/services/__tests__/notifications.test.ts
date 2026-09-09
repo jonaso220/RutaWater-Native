@@ -48,6 +48,9 @@ describe('Android exact-alarm permission', () => {
     mockNotifee.cancelTriggerNotification.mockResolvedValue(undefined);
     mockNotifee.createTriggerNotification.mockResolvedValue('alarm-client-1');
     mockNotifee.getTriggerNotifications.mockResolvedValue([]);
+    mockNotifee.getNotificationSettings.mockResolvedValue({
+      authorizationStatus: 1, android: { alarm: 1 },
+    });
   });
 
   test('distinguishes notification denial from exact-alarm denial', () => {
@@ -66,12 +69,33 @@ describe('Android exact-alarm permission', () => {
   });
 
   test('does not report permission success when exact alarms are disabled', async () => {
-    mockNotifee.requestPermission.mockResolvedValue({
+    mockNotifee.getNotificationSettings.mockResolvedValue({
       authorizationStatus: 1,
       android: { alarm: 0 },
     });
 
     await expect(requestNotificationPermission()).resolves.toBe(false);
+  });
+
+  test('does not wait for a redundant permission callback when Android access is already granted', async () => {
+    mockNotifee.requestPermission.mockImplementation(() => new Promise(() => {}));
+    await expect(requestNotificationPermission()).resolves.toBe(true);
+    expect(mockNotifee.requestPermission).not.toHaveBeenCalled();
+  });
+
+  test('still requests notification access when Android notifications are denied', async () => {
+    mockNotifee.getNotificationSettings.mockResolvedValue({ authorizationStatus: 0, android: { alarm: 1 } });
+    mockNotifee.requestPermission.mockResolvedValue({ authorizationStatus: 1, android: { alarm: 1 } });
+    await expect(requestNotificationPermission()).resolves.toBe(true);
+    expect(mockNotifee.requestPermission).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps the iOS permission request flow', async () => {
+    Platform.OS = 'ios';
+    mockNotifee.requestPermission.mockResolvedValue({ authorizationStatus: 1 });
+    await expect(requestNotificationPermission()).resolves.toBe(true);
+    expect(mockNotifee.getNotificationSettings).not.toHaveBeenCalled();
+    expect(mockNotifee.requestPermission).toHaveBeenCalledTimes(1);
   });
 
   test('does not create a trigger while exact-alarm access is disabled', async () => {

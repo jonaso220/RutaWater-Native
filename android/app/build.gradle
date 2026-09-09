@@ -120,8 +120,17 @@ android {
         applicationId "com.rutawater.native"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 23
-        versionName "1.13"
+        versionCode 24
+        versionName "1.14"
+    }
+    packagingOptions {
+        jniLibs {
+            // Extract native libraries at install time, including in Play-generated APKs.
+            // SoLoader 0.12.1 otherwise searches only the device's first ABI inside
+            // APKs, which can differ from the installed ARM64 ABI under translation
+            // (Crashlytics 8e737ba8c9fca0c06c92c2e230c67bde).
+            useLegacyPackaging = true
+        }
     }
     signingConfigs {
         debug {

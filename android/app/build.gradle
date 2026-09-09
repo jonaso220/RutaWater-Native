@@ -120,7 +120,7 @@ android {
         applicationId "com.rutawater.native"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 25
+        versionCode 26
         versionName "1.15"
     }
     packagingOptions {
@@ -184,6 +184,12 @@ gradle.taskGraph.whenReady { graph ->
 }
 
 dependencies {
+    // Match RNFirebase's existing BOM when configuring Firestore before JS starts.
+    def firebasePackage = new groovy.json.JsonSlurper().parse(
+        rootProject.file('../node_modules/@react-native-firebase/app/package.json'))
+    implementation platform("com.google.firebase:firebase-bom:${firebasePackage.sdkVersions.android.firebase}")
+    implementation("com.google.firebase:firebase-firestore")
+
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 

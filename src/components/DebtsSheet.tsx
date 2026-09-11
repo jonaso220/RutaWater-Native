@@ -23,6 +23,7 @@ import {
   resolveClientForStableId,
 } from '../utils/clientIdentity';
 import { formatMoney, formatShortDate } from '../utils/format';
+import { buildDebtTotalWhatsAppUrl } from '../utils/debtTotalMessage';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -43,6 +44,7 @@ interface DebtsSheetProps {
   onTransferPayment?: (clientId: string) => void;
   onAddDebt?: (client: Client, amount: number) => Promise<void>;
   reminderTemplate?: string;
+  debtTemplate?: string;
 }
 
 type SortMode = 'date' | 'amount';
@@ -71,6 +73,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   onTransferPayment,
   onAddDebt,
   reminderTemplate,
+  debtTemplate,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
@@ -304,6 +307,14 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     });
   };
 
+  const sendDebtTotal = (group: ClientDebtGroup) => {
+    const url = buildDebtTotalWhatsAppUrl(group.clientPhone, group.total, debtTemplate);
+    if (!url) return;
+    Linking.openURL(url).catch(() => {
+      Alert.alert(t('error'), t('directory.errorWhatsApp'));
+    });
+  };
+
   const sendReminder = (group: ClientDebtGroup) => {
     if (!group.clientPhone) return;
     const cleanPhone = normalizePhone(group.clientPhone);
@@ -456,13 +467,30 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
               onPress={() => onTransferPayment(item.clientId)}
               style={styles.secondaryActionBtn}
               accessibilityRole="button"
-              accessibilityLabel={t('clientCard.transfer')}
+              accessibilityLabel={t('debtsSheet.reviewTransfer')}
             >
               <MaterialCommunityIcons name="bank-outline" size={17} color={colors.textSecondary} />
-              <Text style={styles.secondaryActionText}>{t('debtsSheet.transfer')}</Text>
+              <Text style={styles.secondaryActionText}>{t('debtsSheet.review')}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
+      ) : null}
+
+      {item.clientPhone && item.total > 0 ? (
+        <TouchableOpacity
+          onPress={() => sendDebtTotal(item)}
+          style={[styles.secondaryActionBtn, styles.sendTotalBtn]}
+          accessibilityRole="button"
+          accessibilityLabel={t('debtsSheet.sendTotalWhatsApp', {
+            name: item.clientName,
+            amount: formatMoney(item.total),
+          })}
+        >
+          <Ionicons name="logo-whatsapp" size={18} color={colors.textSecondary} />
+          <Text style={styles.secondaryActionText}>
+            {t('debtModal.sendTotal', { amount: formatMoney(item.total) })}
+          </Text>
+        </TouchableOpacity>
       ) : null}
 
       {item.debts.length > 1 ? (
@@ -1114,6 +1142,11 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     fontWeight: '700',
     fontSize: s(12),
     flexShrink: 1,
+  },
+  sendTotalBtn: {
+    flex: 0,
+    marginTop: s(8),
+    paddingVertical: s(8),
   },
   primaryPaymentBtn: {
     backgroundColor: colors.success,

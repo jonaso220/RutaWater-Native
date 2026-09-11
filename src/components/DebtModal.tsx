@@ -21,6 +21,7 @@ import {
   relatedRecordBelongsToClient,
 } from '../utils/clientIdentity';
 import { formatMoney, formatShortDate } from '../utils/format';
+import { buildDebtTotalWhatsAppUrl } from '../utils/debtTotalMessage';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -186,13 +187,9 @@ const DebtModal: React.FC<DebtModalProps> = ({
   };
 
   const sendDebtTotal = () => {
-    if (!client.phone || total <= 0) return;
-    const cleanPhone = normalizePhone(client.phone);
-    const defaultTemplate = 'La deuda es de ${total}. Saludos';
-    const template = debtTemplate || defaultTemplate;
-    const text = template.replace('${total}', formatMoney(total));
-    const msg = encodeURIComponent(text);
-    Linking.openURL(`whatsapp://send?phone=${cleanPhone}&text=${msg}`).catch(() => {
+    const url = buildDebtTotalWhatsAppUrl(client.phone, total, debtTemplate);
+    if (!url) return;
+    Linking.openURL(url).catch(() => {
       Alert.alert(t('error'), t('directory.errorWhatsApp'));
     });
   };

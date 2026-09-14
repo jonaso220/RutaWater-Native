@@ -90,6 +90,10 @@ const TabNavigator = () => {
           name="Inicio"
           component={HomeScreen}
           options={{
+            headerTitleAlign: 'left',
+            headerTitleContainerStyle: {
+              maxWidth: Math.max(0, width - insets.left - insets.right - Math.min(s(160), width * 0.44) - 44),
+            },
             headerTitle: () => (
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <MaterialCommunityIcons
@@ -98,7 +102,7 @@ const TabNavigator = () => {
                   color={colors.headerText}
                   style={{ marginRight: 8 }}
                 />
-                <Text style={{ color: colors.headerText, fontWeight: '700', fontSize: s(17) }}>
+                <Text numberOfLines={1} style={{ color: colors.headerText, fontWeight: '700', fontSize: s(17), flexShrink: 1 }}>
                   RutaWater
                 </Text>
               </View>

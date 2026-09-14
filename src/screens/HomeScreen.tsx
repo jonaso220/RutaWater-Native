@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef, useDeferredValue, useTransition } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useDeferredValue, useTransition } from 'react';
 import { reportError } from '../lib/crashReporting';
 import {
   View,
@@ -19,7 +19,6 @@ import {
   UIManager,
   AppState,
 } from 'react-native';
-import ModalOverlay from '../components/ModalOverlay';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
 import { Client } from '../types';
 import { createVisitCommand } from '../utils/visitCompletion';
@@ -213,21 +212,18 @@ const ClientItem = React.memo<ClientItemProps>(({
 const HomeScreen = () => {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
-  const { fontScale, isWide, width: screenWidth } = useLayout();
+  const { fontScale, isWide, isPhoneLandscape, width: screenWidth, height: screenHeight } = useLayout();
   // Always a single column. On wide screens (Mac/iPad) the card itself switches
   // to a horizontal layout (info on the left, action buttons on the right) so it
   // uses the extra width instead of tiling into 2 narrower columns.
   const numColumns = 1;
   // Gate the card's horizontal (wide) layout: only on genuinely large screens.
-  const wideCard = screenWidth >= 900;
-  // The single-row command deck needs desktop-class width. iPad portrait is
-  // considered wide for typography, but not wide enough to keep every label.
-  const extraWideHeader = screenWidth >= 1100;
+  const wideCard = screenWidth >= 900 || (isPhoneLandscape && screenWidth >= 740);
   // Chrome (day tabs, product counter, action bar, search) scales with the
   // global fontScale, which now ramps up on wide screens (see useLayout).
   const styles = useMemo(
-    () => getStyles(colors, fontScale, isWide, extraWideHeader),
-    [colors, fontScale, isWide, extraWideHeader],
+    () => getStyles(colors, fontScale, isWide, isPhoneLandscape),
+    [colors, fontScale, isWide, isPhoneLandscape],
   );
   const chromeSize = (value: number) => Math.round(value * fontScale);
 
@@ -291,7 +287,6 @@ const HomeScreen = () => {
   const [showSmartModal, setShowSmartModal] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
-  const [showQuickActions, setShowQuickActions] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
@@ -305,12 +300,13 @@ const HomeScreen = () => {
   const lastListOffsetRef = useRef(0);
   const lastScrollDirectionRef = useRef<-1 | 0 | 1>(0);
   const scrollDirectionDistanceRef = useRef(0);
-  const [collapsibleHeaderHeight, setCollapsibleHeaderHeight] = useState(0);
+  const headerLayoutKey = `${screenWidth}:${screenHeight}:${fontScale}`;
+  const [headerMeasurement, setHeaderMeasurement] = useState({ key: headerLayoutKey, height: 0 });
+  const collapsibleHeaderHeight = headerMeasurement.key === headerLayoutKey ? headerMeasurement.height : 0;
   const [stickyControlsHeight, setStickyControlsHeight] = useState(0);
   const headerAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const reorderAnimationActiveRef = useRef(false);
   const reorderAnimationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const quickActionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -319,7 +315,6 @@ const HomeScreen = () => {
     return () => {
       headerAnimationRef.current?.stop();
       if (reorderAnimationTimerRef.current) clearTimeout(reorderAnimationTimerRef.current);
-      if (quickActionTimerRef.current) clearTimeout(quickActionTimerRef.current);
     };
   }, []);
 
@@ -376,6 +371,17 @@ const HomeScreen = () => {
     scrollDirectionDistanceRef.current = 0;
   }, []);
 
+  useLayoutEffect(() => {
+    // A rotation can interrupt a collapse animation and changes the header's
+    // natural height. Reopen it while the new layout is measured independently.
+    headerAnimationRef.current?.stop();
+    headerAnimationRef.current = null;
+    collapsibleHeaderProgress.stopAnimation();
+    setCollapsibleHeaderVisible(true, false);
+    androidHeaderScrollY.setValue(0);
+    resetHeaderScrollTracking();
+  }, [headerLayoutKey, collapsibleHeaderProgress, androidHeaderScrollY, setCollapsibleHeaderVisible, resetHeaderScrollTracking]);
+
   const requestCollapsibleHeaderVisible = useCallback((visible: boolean) => {
     setCollapsibleHeaderVisible(visible);
   }, [setCollapsibleHeaderVisible]);
@@ -416,10 +422,14 @@ const HomeScreen = () => {
   const handleCollapsibleHeaderLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);
     if (nextHeight > 0) {
-      // Never replace the complete measurement with a transient clipped one.
-      setCollapsibleHeaderHeight((currentHeight) => Math.max(currentHeight, nextHeight));
+      // Preserve full measurements during animation, but never reuse a taller
+      // header from a different orientation or window size.
+      setHeaderMeasurement((current) => ({
+        key: headerLayoutKey,
+        height: current.key === headerLayoutKey ? Math.max(current.height, nextHeight) : nextHeight,
+      }));
     }
-  }, []);
+  }, [headerLayoutKey]);
 
   const handleStickyControlsLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);
@@ -431,11 +441,17 @@ const HomeScreen = () => {
     () => Animated.diffClamp(androidHeaderScrollY, 0, androidHeaderTravel),
     [androidHeaderScrollY, androidHeaderTravel],
   );
-  const androidHeaderTranslateY = androidClampedHeaderScroll.interpolate({
+  const androidScrolledHeaderTranslateY = androidClampedHeaderScroll.interpolate({
     inputRange: [0, androidHeaderTravel],
     outputRange: [0, -androidHeaderTravel],
     extrapolate: 'clamp',
   });
+  // Android moves the header with native transforms instead of animating its
+  // height. Keep the compact filter panel visible on that path as well.
+  const compactFiltersOpen = isPhoneLandscape && showFilters;
+  const androidHeaderTranslateY = compactFiltersOpen
+    ? -collapsibleHeaderHeight
+    : androidScrolledHeaderTranslateY;
   const androidHeaderOnScroll = useMemo(
     () => Animated.event(
       [{ nativeEvent: { contentOffset: { y: androidHeaderScrollY } } }],
@@ -449,10 +465,10 @@ const HomeScreen = () => {
       // Keep the list viewport fixed on Android. Its content starts below the
       // floating header, while native transforms move the chrome out of view.
       Platform.OS === 'android' && {
-        paddingTop: collapsibleHeaderHeight + stickyControlsHeight + 12,
+        paddingTop: (compactFiltersOpen ? 0 : collapsibleHeaderHeight) + stickyControlsHeight + 12,
       },
     ],
-    [styles.listContent, collapsibleHeaderHeight, stickyControlsHeight],
+    [styles.listContent, collapsibleHeaderHeight, stickyControlsHeight, compactFiltersOpen],
   );
 
   // Pull-to-refresh: force a server-side read of clients so the user can
@@ -876,7 +892,6 @@ const HomeScreen = () => {
   );
 
   const pendingTransferCount = transfers.length;
-  const quickActionsPendingCount = pendingTransferCount;
 
   const openAddClientFlow = useCallback(() => {
     if (!canAddClient) {
@@ -892,14 +907,6 @@ const HomeScreen = () => {
     }
     setShowAddClientModal(true);
   }, [canAddClient, navigation, t]);
-
-  const openFromQuickActions = useCallback((action: () => void) => {
-    hapticSelection();
-    setShowQuickActions(false);
-    if (quickActionTimerRef.current) clearTimeout(quickActionTimerRef.current);
-    // Let the native bottom sheet finish dismissing before presenting another modal.
-    quickActionTimerRef.current = setTimeout(action, Platform.OS === 'ios' ? 220 : 0);
-  }, []);
 
   // Map client ID to its global position among ALL clients for the day.
   const globalPositionMap = useMemo(() => {
@@ -1316,6 +1323,7 @@ const HomeScreen = () => {
           ]}
         >
           <View
+            key={headerLayoutKey}
             onLayout={handleCollapsibleHeaderLayout}
             style={collapsibleHeaderHeight > 0 ? {
               // Keep the full header intact while its parent clips it, so every
@@ -1330,23 +1338,23 @@ const HomeScreen = () => {
             } : undefined}
             pointerEvents={Platform.OS === 'android' || collapsibleHeaderVisible ? 'auto' : 'none'}
           >
-          {/* Day selector */}
+          {/* Each horizontal scroller owns a full-width row. */}
           <DaySelector
             selectedDay={selectedDay}
             dayCounts={dayCounts}
             isWide={isWide}
             colors={colors}
             fontScale={fontScale}
+            compact={isPhoneLandscape}
             onSelectDay={handleSelectDay}
           />
 
           {/* Product counter — only nearest date */}
-          <ProductCounter clients={nearestDateClients} fontScale={fontScale} />
+          <ProductCounter clients={nearestDateClients} fontScale={fontScale} compact={isPhoneLandscape} />
 
           {/* Quick actions — collapse with the calendar and load summary. */}
           <View style={styles.actionPanel}>
             <View style={styles.actionPanelContent}>
-          {!isWide ? (
             <View style={styles.actionCompactStack}>
               <View style={styles.actionCompactRow}>
                 <TouchableOpacity
@@ -1366,24 +1374,39 @@ const HomeScreen = () => {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.actionCompactButton, styles.actionCompactMore]}
+                  style={[styles.actionCompactButton, styles.actionCompactClient]}
                   onPress={() => {
                     hapticSelection();
-                    setShowQuickActions(true);
+                    openAddClientFlow();
                   }}
                   activeOpacity={0.72}
                   accessibilityRole="button"
-                  accessibilityLabel={`${t('home.quickActions')}${quickActionsPendingCount > 0 ? `: ${quickActionsPendingCount}` : ''}`}
-                  accessibilityState={{ expanded: showQuickActions }}
+                  accessibilityLabel={t('home.newClient')}
                 >
-                  <Ionicons name="grid-outline" size={chromeSize(17)} color={colors.primary} />
-                  <Text style={styles.actionCompactMoreText} numberOfLines={1}>
-                    {t('home.quickActions')}
+                  <Ionicons name="person-add-outline" size={chromeSize(17)} color={colors.primary} />
+                  <Text style={styles.actionCompactClientText} numberOfLines={1}>
+                    {t('home.newClient')}
                   </Text>
-                  {quickActionsPendingCount > 0 && (
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionCompactButton, styles.actionCompactDebt]}
+                  onPress={() => {
+                    hapticSelection();
+                    setShowDebtsSheet(true);
+                  }}
+                  activeOpacity={0.72}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('home.debts')}: ${debts.length}`}
+                >
+                  <Ionicons name="cash-outline" size={chromeSize(17)} color={colors.danger} />
+                  <Text style={styles.actionCompactDebtText} numberOfLines={1}>
+                    {t('home.debts')}
+                  </Text>
+                  {debts.length > 0 && (
                     <View style={styles.actionCompactBadge}>
                       <Text style={styles.actionCompactBadgeText}>
-                        {quickActionsPendingCount > 99 ? '99+' : quickActionsPendingCount}
+                        {debts.length > 99 ? '99+' : debts.length}
                       </Text>
                     </View>
                   )}
@@ -1427,151 +1450,26 @@ const HomeScreen = () => {
                   style={styles.actionCompactShortcut}
                   onPress={() => {
                     hapticSelection();
-                    setShowDebtsSheet(true);
+                    setShowTransfersSheet(true);
                   }}
                   activeOpacity={0.72}
                   accessibilityRole="button"
-                  accessibilityLabel={`${t('home.debts')}: ${debts.length}`}
+                  accessibilityLabel={`${t('home.transfers')}: ${pendingTransferCount}`}
                 >
-                  <Ionicons name="cash-outline" size={chromeSize(17)} color={colors.danger} />
-                  <Text style={styles.actionCompactShortcutText} numberOfLines={1}>
-                    {t('home.debts')}
+                  <Ionicons name="swap-horizontal-outline" size={chromeSize(17)} color={colors.successText} />
+                  <Text style={styles.actionCompactShortcutText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+                    {t('home.transfers')}
                   </Text>
-                  {debts.length > 0 && (
-                    <View style={styles.actionCountBadge}>
-                      <Text style={styles.actionCountBadgeText}>
-                        {debts.length > 99 ? '99+' : debts.length}
+                  {pendingTransferCount > 0 && (
+                    <View style={[styles.actionCompactBadge, styles.actionCompactTransferBadge]}>
+                      <Text style={styles.actionCompactBadgeText}>
+                        {pendingTransferCount > 99 ? '99+' : pendingTransferCount}
                       </Text>
                     </View>
                   )}
                 </TouchableOpacity>
               </View>
             </View>
-          ) : (
-            <>
-          <View style={styles.actionPrimaryRow}>
-            <TouchableOpacity
-              style={[styles.actionPrimaryButton, styles.actionPrimaryAi]}
-              onPress={() => {
-                hapticSelection();
-                setShowSmartModal(true);
-              }}
-              activeOpacity={0.78}
-              accessibilityRole="button"
-              accessibilityLabel={t('home.aiOrder')}
-            >
-              <Ionicons name="sparkles" size={chromeSize(19)} color={colors.textWhite} />
-              <Text style={styles.actionPrimaryText} numberOfLines={1}>
-                {t('home.aiOrder')}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionPrimaryButton, styles.actionPrimaryClient]}
-              onPress={() => {
-                hapticSelection();
-                openAddClientFlow();
-              }}
-              activeOpacity={0.72}
-              accessibilityRole="button"
-              accessibilityLabel={t('home.newClient')}
-            >
-              <Ionicons name="person-add-outline" size={chromeSize(19)} color={colors.primary} />
-              <Text style={styles.actionPrimaryClientText} numberOfLines={1}>
-                {t('home.newClient')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.actionQuickRow}>
-            <TouchableOpacity
-              style={styles.actionQuickButton}
-              onPress={() => {
-                hapticSelection();
-                setShowNoteModal(true);
-              }}
-              activeOpacity={0.72}
-              accessibilityRole="button"
-              accessibilityLabel={t('home.newNote')}
-            >
-              <View style={[styles.actionQuickIcon, styles.actionQuickIconNote]}>
-                <Ionicons name="document-text-outline" size={chromeSize(18)} color={colors.warningDarker} />
-              </View>
-              <Text style={styles.actionQuickLabel} numberOfLines={1} adjustsFontSizeToFit>
-                {t('home.note')}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionQuickButton}
-              onPress={() => {
-                hapticSelection();
-                setShowCalendar(true);
-              }}
-              activeOpacity={0.72}
-              accessibilityRole="button"
-              accessibilityLabel={t('home.calendar')}
-            >
-              <View style={[styles.actionQuickIcon, styles.actionQuickIconCalendar]}>
-                <Ionicons name="calendar-outline" size={chromeSize(18)} color={colors.primary} />
-              </View>
-              <Text style={styles.actionQuickLabel} numberOfLines={1} adjustsFontSizeToFit>
-                {t('home.calendar')}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionQuickButton}
-              onPress={() => {
-                hapticSelection();
-                setShowDebtsSheet(true);
-              }}
-              activeOpacity={0.72}
-              accessibilityRole="button"
-              accessibilityLabel={`${t('home.debts')}: ${debts.length}`}
-            >
-              <View style={[styles.actionQuickIcon, styles.actionQuickIconDebt]}>
-                <Ionicons name="cash-outline" size={chromeSize(19)} color={colors.danger} />
-              </View>
-              <Text style={styles.actionQuickLabel} numberOfLines={1} adjustsFontSizeToFit>
-                {t('home.debts')}
-              </Text>
-              {debts.length > 0 && (
-                <View style={styles.actionCountBadge}>
-                  <Text style={styles.actionCountBadgeText} numberOfLines={1}>
-                    {debts.length > 99 ? '99+' : debts.length}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionQuickButton}
-              onPress={() => {
-                hapticSelection();
-                setShowTransfersSheet(true);
-              }}
-              activeOpacity={0.72}
-              accessibilityRole="button"
-              accessibilityLabel={`${t('home.transfers')}: ${pendingTransferCount}`}
-            >
-              <View style={[styles.actionQuickIcon, styles.actionQuickIconTransfer]}>
-                <Ionicons name="swap-horizontal-outline" size={chromeSize(19)} color={colors.successText} />
-              </View>
-              <Text style={styles.actionQuickLabel} numberOfLines={1} adjustsFontSizeToFit>
-                {t('home.transfers')}
-              </Text>
-              {pendingTransferCount > 0 && (
-                <View style={styles.actionTransferCountBadge}>
-                  <Text style={styles.actionCountBadgeText} numberOfLines={1}>
-                    {pendingTransferCount > 99 ? '99+' : pendingTransferCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-            </>
-          )}
             </View>
           </View>
           </View>
@@ -1608,7 +1506,10 @@ const HomeScreen = () => {
           </View>
           <TouchableOpacity
             style={[styles.filterToggleBtn, showFilters && styles.filterToggleBtnActive]}
-            onPress={() => setShowFilters(!showFilters)}
+            onPress={() => {
+              setShowFilters(!showFilters);
+              if (isPhoneLandscape) setCollapsibleHeaderVisible(showFilters);
+            }}
             accessibilityRole="button"
             accessibilityLabel={t('home.filters')}
             accessibilityState={{ expanded: showFilters }}
@@ -1619,7 +1520,10 @@ const HomeScreen = () => {
           </TouchableOpacity>
         </View>
         {showFilters && (
-          <View style={styles.filtersPanel}>
+          <View style={[
+            styles.filtersPanel,
+            isPhoneLandscape && { maxHeight: Math.round(screenHeight * 0.4) },
+          ]}>
             <View style={styles.filtersPanelHeader}>
               <View style={styles.filtersPanelTitleRow}>
                 <Ionicons name="options-outline" size={chromeSize(18)} color={colors.primary} />
@@ -1801,84 +1705,6 @@ const HomeScreen = () => {
       )}
       </View>
 
-      <ModalOverlay
-        visible={showQuickActions && !isWide}
-        onClose={() => setShowQuickActions(false)}
-        animationType="slide"
-      >
-        <View style={styles.quickActionsOverlay}>
-          <TouchableOpacity
-            style={styles.quickActionsBackdrop}
-            activeOpacity={1}
-            onPress={() => setShowQuickActions(false)}
-            accessibilityRole="button"
-            accessibilityLabel={t('close')}
-          />
-          <View style={styles.quickActionsSheet}>
-            <TouchableOpacity
-              style={styles.quickActionsHandleButton}
-              onPress={() => setShowQuickActions(false)}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={t('close')}
-            >
-              <View style={styles.quickActionsHandle} />
-            </TouchableOpacity>
-
-            <View style={styles.quickActionsHeader}>
-              <View style={styles.quickActionsTitleRow}>
-                <View style={styles.quickActionsHeaderIcon}>
-                  <Ionicons name="grid-outline" size={chromeSize(18)} color={colors.primary} />
-                </View>
-                <View style={styles.quickActionsHeaderCopy}>
-                  <Text style={styles.quickActionsTitle}>{t('home.quickActionsTitle')}</Text>
-                  <Text style={styles.quickActionsSubtitle}>{t('home.quickActionsHint')}</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.quickActionsGrid}>
-              <TouchableOpacity
-                style={[styles.quickActionSheetButton, styles.quickActionSheetButtonWide]}
-                onPress={() => openFromQuickActions(openAddClientFlow)}
-                activeOpacity={0.72}
-                accessibilityRole="button"
-                accessibilityLabel={t('home.newClient')}
-              >
-                <View style={[styles.quickActionSheetIcon, styles.actionQuickIconClient]}>
-                  <Ionicons name="person-add-outline" size={chromeSize(20)} color={colors.primary} />
-                </View>
-                <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
-                  {t('home.newClient')}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.quickActionSheetButton, styles.quickActionSheetButtonWide]}
-                onPress={() => openFromQuickActions(() => setShowTransfersSheet(true))}
-                activeOpacity={0.72}
-                accessibilityRole="button"
-                accessibilityLabel={`${t('home.transfers')}: ${pendingTransferCount}`}
-              >
-                <View style={[styles.quickActionSheetIcon, styles.quickActionSheetTransferIcon]}>
-                  <Ionicons name="swap-horizontal-outline" size={chromeSize(21)} color={colors.successText} />
-                </View>
-                <Text style={styles.quickActionSheetLabel} numberOfLines={1}>
-                  {t('home.transfers')}
-                </Text>
-                {pendingTransferCount > 0 && (
-                  <View style={[styles.quickActionSheetBadge, styles.quickActionSheetTransferBadge]}>
-                    <Text style={styles.quickActionSheetBadgeText}>
-                      {pendingTransferCount > 99 ? '99+' : pendingTransferCount}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </ModalOverlay>
-
       <UndoBanner queue={undoQueue} selectedDay={selectedDay} onUndo={handleUndoMarkDone} />
 
       {/* Focused order-detail editors opened directly from each card. */}
@@ -2014,9 +1840,10 @@ const getStyles = (
   colors: ThemeColors,
   scale: number = 1,
   isWide: boolean = false,
-  extraWideHeader: boolean = false,
+  isPhoneLandscape: boolean = false,
 ) => {
   const s = (v: number) => Math.round(v * scale);
+  const singleActionRow = isWide || isPhoneLandscape;
   return StyleSheet.create({
   container: {
     flex: 1,
@@ -2068,74 +1895,94 @@ const getStyles = (
     borderBottomColor: colors.cardBorder,
     paddingHorizontal: s(12),
     paddingTop: s(8),
-    paddingBottom: s(9),
+    paddingBottom: s(isPhoneLandscape ? 6 : 9),
   },
   actionPanelContent: {
     width: '100%',
     maxWidth: WIDE_CONTENT_MAX_WIDTH,
     alignSelf: 'center',
-    flexDirection: extraWideHeader ? 'row' : 'column',
+    flexDirection: 'column',
     alignItems: 'stretch',
     gap: s(8),
   },
   actionCompactRow: {
+    flex: singleActionRow ? 1 : undefined,
     flexDirection: 'row',
     alignItems: 'stretch',
     gap: s(8),
   },
   actionCompactStack: {
+    flexDirection: singleActionRow ? 'row' : 'column',
+    alignItems: 'stretch',
     gap: s(7),
   },
   actionCompactButton: {
-    minHeight: s(46),
-    borderRadius: s(12),
-    borderWidth: 1,
-    paddingHorizontal: s(9),
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: s(6),
-  },
-  actionCompactAi: {
     flex: 1,
     minWidth: 0,
+    minHeight: s(isPhoneLandscape ? 44 : 48),
+    borderRadius: s(12),
+    borderWidth: 1,
+    paddingHorizontal: s(4),
+    paddingVertical: s(isPhoneLandscape ? 4 : 6),
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: s(3),
+  },
+  actionCompactAi: {
     backgroundColor: colors.primary,
     borderColor: colors.primaryDark,
   },
   actionCompactAiText: {
-    fontSize: s(13),
+    width: '100%',
+    textAlign: 'center',
+    fontSize: s(12),
+    lineHeight: s(15),
     fontWeight: '800',
     color: colors.textWhite,
   },
-  actionCompactMore: {
-    flex: 1,
-    minWidth: 0,
+  actionCompactClient: {
     backgroundColor: colors.primaryLighter,
     borderColor: colors.primaryLight,
   },
-  actionCompactMoreText: {
-    flexShrink: 1,
-    fontSize: s(13),
+  actionCompactClientText: {
+    width: '100%',
+    textAlign: 'center',
+    fontSize: s(12),
+    lineHeight: s(15),
     fontWeight: '800',
     color: colors.primary,
   },
+  actionCompactDebt: {
+    backgroundColor: colors.dangerLight,
+    borderColor: colors.dangerBorder,
+  },
+  actionCompactDebtText: {
+    width: '100%',
+    textAlign: 'center',
+    fontSize: s(12),
+    lineHeight: s(15),
+    fontWeight: '800',
+    color: colors.danger,
+  },
   actionCompactShortcutRow: {
+    flex: singleActionRow ? 1 : undefined,
     flexDirection: 'row',
     gap: s(6),
   },
   actionCompactShortcut: {
     flex: 1,
     minWidth: 0,
-    minHeight: s(38),
+    minHeight: s(isPhoneLandscape ? 44 : isWide ? 48 : 38),
     borderRadius: s(10),
     borderWidth: 1,
     borderColor: colors.cardBorder,
     backgroundColor: colors.sectionBackground,
-    paddingHorizontal: s(7),
-    flexDirection: 'row',
+    paddingHorizontal: s(isPhoneLandscape ? 4 : 7),
+    paddingVertical: singleActionRow ? s(isPhoneLandscape ? 4 : 6) : 0,
+    flexDirection: singleActionRow ? 'column' : 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: s(5),
+    gap: s(singleActionRow ? 3 : 5),
   },
   actionCompactShortcutText: {
     flexShrink: 1,
@@ -2163,290 +2010,15 @@ const getStyles = (
     fontWeight: '900',
     color: colors.textWhite,
   },
-  actionPrimaryRow: {
-    flex: extraWideHeader ? 1.15 : undefined,
-    flexDirection: 'row',
-    gap: s(8),
-  },
-  actionPrimaryButton: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: isWide ? s(48) : s(44),
-    borderRadius: s(12),
-    borderWidth: 1,
-    paddingHorizontal: s(10),
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: s(7),
-  },
-  actionPrimaryAi: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primaryDark,
-  },
-  actionPrimaryClient: {
-    backgroundColor: colors.primaryLighter,
-    borderColor: colors.primaryLight,
-  },
-  actionPrimaryText: {
-    flexShrink: 1,
-    fontSize: isWide ? s(15) : s(14),
-    fontWeight: '800',
-    color: colors.textWhite,
-    letterSpacing: 0.1,
-  },
-  actionPrimaryClientText: {
-    flexShrink: 1,
-    fontSize: isWide ? s(15) : s(14),
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: 0.1,
-  },
-  actionQuickRow: {
-    flex: extraWideHeader ? 1 : undefined,
-    flexDirection: 'row',
-    gap: s(7),
-  },
-  actionQuickButton: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: isWide ? s(52) : s(55),
-    backgroundColor: colors.sectionBackground,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: s(11),
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: s(3),
-    paddingVertical: s(5),
-    gap: s(3),
-  },
-  actionQuickIcon: {
-    width: isWide ? s(26) : s(27),
-    height: isWide ? s(26) : s(27),
-    borderRadius: s(9),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionQuickIconClient: {
-    backgroundColor: colors.primaryLight,
-  },
-  actionQuickIconNote: {
-    backgroundColor: colors.warningAmberBg,
-  },
-  actionQuickIconCalendar: {
-    backgroundColor: colors.primaryLighter,
-  },
-  actionQuickIconDebt: {
-    backgroundColor: colors.dangerLight,
-  },
-  actionQuickIconTransfer: {
-    backgroundColor: colors.successLighter,
-  },
-  actionQuickLabel: {
-    width: '100%',
-    textAlign: 'center',
-    fontSize: isWide ? s(13) : s(11),
-    lineHeight: isWide ? s(16) : s(13),
-    fontWeight: '700',
-    color: colors.textSecondary,
-  },
-  actionCountBadge: {
-    position: 'absolute',
-    top: s(4),
-    right: s(5),
-    minWidth: s(18),
-    height: s(18),
-    borderRadius: s(9),
-    paddingHorizontal: s(4),
-    backgroundColor: colors.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.card,
-  },
-  actionCountBadgeText: {
-    fontSize: s(10),
-    lineHeight: s(12),
-    fontWeight: '800',
-    color: colors.textWhite,
-  },
-  actionTransferCountBadge: {
-    position: 'absolute',
-    top: s(4),
-    right: s(5),
-    minWidth: s(18),
-    height: s(18),
-    borderRadius: s(9),
-    paddingHorizontal: s(4),
+  actionCompactTransferBadge: {
     backgroundColor: colors.success,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.card,
-  },
-  actionTransferNotice: {
-    flex: extraWideHeader ? 0.58 : undefined,
-    minWidth: extraWideHeader ? s(180) : undefined,
-    minHeight: s(34),
-    backgroundColor: colors.successLighter,
-    borderWidth: 1,
-    borderColor: colors.successBorder,
-    borderRadius: s(10),
-    paddingHorizontal: s(10),
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  actionTransferInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: s(6),
-  },
-  actionTransferText: {
-    fontSize: s(13),
-    fontWeight: '700',
-    color: colors.successText,
-  },
-  actionTransferBadge: {
-    minWidth: s(22),
-    height: s(22),
-    borderRadius: s(11),
-    paddingHorizontal: s(5),
-    backgroundColor: colors.success,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionTransferBadgeText: {
-    fontSize: s(11),
-    fontWeight: '800',
-    color: colors.textWhite,
-  },
-  quickActionsOverlay: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-    justifyContent: 'flex-end',
-  },
-  quickActionsBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  quickActionsSheet: {
-    width: '100%',
-    backgroundColor: colors.card,
-    borderTopLeftRadius: s(24),
-    borderTopRightRadius: s(24),
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    borderColor: colors.cardBorder,
-    paddingHorizontal: s(16),
-    paddingTop: s(7),
-    paddingBottom: Platform.OS === 'ios' ? s(28) : s(18),
-  },
-  quickActionsHandleButton: {
-    alignSelf: 'center',
-    width: s(68),
-    height: s(24),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickActionsHandle: {
-    width: s(38),
-    height: s(4),
-    borderRadius: s(2),
-    backgroundColor: colors.cardBorder,
-  },
-  quickActionsHeader: {
-    paddingBottom: s(13),
-    marginBottom: s(10),
-    borderBottomWidth: 1,
-    borderBottomColor: colors.cardBorder,
-  },
-  quickActionsTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: s(10),
-  },
-  quickActionsHeaderIcon: {
-    width: s(38),
-    height: s(38),
-    borderRadius: s(12),
-    backgroundColor: colors.primaryLighter,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickActionsHeaderCopy: {
-    flex: 1,
-    gap: s(2),
-  },
-  quickActionsTitle: {
-    fontSize: s(18),
-    fontWeight: '900',
-    color: colors.textPrimary,
-  },
-  quickActionsSubtitle: {
-    fontSize: s(12),
-    color: colors.textMuted,
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: s(9),
-  },
-  quickActionSheetButton: {
-    width: '48.5%',
-    minHeight: s(66),
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: s(9),
-    paddingHorizontal: s(10),
-    paddingVertical: s(10),
-    backgroundColor: colors.sectionBackground,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    borderRadius: s(14),
-  },
-  quickActionSheetButtonWide: {
-    width: '100%',
-  },
-  quickActionSheetIcon: {
-    width: s(38),
-    height: s(38),
-    borderRadius: s(12),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickActionSheetTransferIcon: {
-    backgroundColor: colors.successLighter,
-  },
-  quickActionSheetLabel: {
-    flex: 1,
-    fontSize: s(13),
-    fontWeight: '800',
-    color: colors.textSecondary,
-  },
-  quickActionSheetBadge: {
-    minWidth: s(22),
-    height: s(22),
-    borderRadius: s(11),
-    paddingHorizontal: s(5),
-    backgroundColor: colors.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickActionSheetTransferBadge: {
-    backgroundColor: colors.success,
-  },
-  quickActionSheetBadgeText: {
-    fontSize: s(10),
-    fontWeight: '900',
-    color: colors.textWhite,
   },
   searchSection: {
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.cardBorder,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: isPhoneLandscape ? 4 : 8,
   },
   searchRow: {
     width: '100%',

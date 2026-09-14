@@ -21,9 +21,9 @@ const Stack = createNativeStackNavigator();
 
 const TabNavigator = () => {
   const { colors } = useTheme();
-  const { fontScale, width } = useLayout();
+  const { fontScale, width, isPhoneLandscape } = useLayout();
   const insets = useSafeAreaInsets();
-  const bottomInset = Platform.OS === 'android' ? insets.bottom : 0;
+  const bottomInset = Platform.OS === 'android' || isPhoneLandscape ? insets.bottom : 0;
   const { t } = useTranslation();
   const { activeAlarm, dismissAlarm } = useAlarmChecker();
 
@@ -33,7 +33,7 @@ const TabNavigator = () => {
   // On wide screens (iPad/Mac) there's no home-indicator inset and the scaled
   // emoji icons are tall, so the bar needs extra height + bottom room or the
   // label gets clipped against the bottom edge.
-  const isWideNav = width >= 900;
+  const isWideNav = width >= 900 && !isPhoneLandscape;
   // On wide screens the scaled emoji gets clipped at the bottom inside the tab
   // bar's icon slot. Wrapping it in a roomy, centered box (instead of forcing a
   // big lineHeight, which pushes the glyph down and clips it more) gives the
@@ -44,7 +44,7 @@ const TabNavigator = () => {
         <Text style={{ fontSize: s(22), lineHeight: s(26), textAlign: 'center' }}>{emoji}</Text>
       </View>
     ) : (
-      <Text style={{ fontSize: s(22) }}>{emoji}</Text>
+      <Text style={{ fontSize: s(isPhoneLandscape ? 18 : 22) }}>{emoji}</Text>
     );
 
   return (
@@ -52,21 +52,26 @@ const TabNavigator = () => {
       <AlarmBanner alarm={activeAlarm} onDismiss={dismissAlarm} />
       <Tab.Navigator
         screenOptions={{
-          headerStyle: { backgroundColor: colors.headerBackground },
+          headerStyle: {
+            backgroundColor: colors.headerBackground,
+            ...(isPhoneLandscape ? { height: 44 + insets.top } : {}),
+          },
+          sceneStyle: isPhoneLandscape ? {
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+          } : undefined,
           headerTintColor: colors.headerText,
           headerTitleStyle: { fontWeight: '700', fontSize: s(17) },
-          // Keep the icon-over-label layout on every screen size. On wide
-          // screens (iPad/Mac) React Navigation defaults to label-beside-icon,
-          // which looks squished — force below-icon like on the phone.
-          tabBarLabelPosition: 'below-icon',
+          // A horizontal icon and label save vertical space on a rotated phone.
+          tabBarLabelPosition: isPhoneLandscape ? 'beside-icon' : 'below-icon',
           tabBarStyle: {
             backgroundColor: colors.tabBarBackground,
             borderTopColor: colors.tabBarBorder,
             // Keep Android controls above the system navigation area when
             // Android 15+ enforces edge-to-edge rendering.
             paddingTop: isWideNav ? s(10) : 0,
-            paddingBottom: (isWideNav ? s(10) : 4) + bottomInset,
-            height: (isWideNav ? s(74) : s(56)) + bottomInset,
+            paddingBottom: (isWideNav ? s(10) : isPhoneLandscape ? 0 : 4) + bottomInset,
+            height: (isWideNav ? s(74) : isPhoneLandscape ? 44 : s(56)) + bottomInset,
           },
           tabBarActiveTintColor: colors.tabActive,
           tabBarInactiveTintColor: colors.tabInactive,

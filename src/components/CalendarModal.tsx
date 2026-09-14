@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import ModalOverlay from './ModalOverlay';
@@ -20,8 +20,8 @@ interface CalendarModalProps {
 const CalendarModal: React.FC<CalendarModalProps> = ({ visible, onClose }) => {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { fontScale } = useLayout();
-  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
+  const { fontScale, isPhoneLandscape } = useLayout();
+  const styles = useMemo(() => getStyles(colors, fontScale, isPhoneLandscape), [colors, fontScale, isPhoneLandscape]);
 
   const [view, setView] = useState(() => {
     const now = new Date();
@@ -84,8 +84,8 @@ const CalendarModal: React.FC<CalendarModalProps> = ({ visible, onClose }) => {
 
   return (
     <ModalOverlay visible={visible} onClose={onClose} animationType="fade">
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity style={styles.dialog} activeOpacity={1} onPress={() => {}}>
+      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose} accessible={false}>
+        <TouchableOpacity style={styles.dialog} activeOpacity={1} onPress={() => {}} accessible={false}>
           {/* Header: ‹  Mes Año  › */}
           <View style={styles.header}>
             <TouchableOpacity
@@ -117,7 +117,7 @@ const CalendarModal: React.FC<CalendarModalProps> = ({ visible, onClose }) => {
           </View>
 
           {/* Day grid */}
-          <View>
+          <ScrollView style={styles.calendarBody} showsVerticalScrollIndicator>
             {weeks.map((week, weekIndex) => (
               <View key={weekIndex} style={styles.grid}>
                 {week.map((d, i) => {
@@ -143,7 +143,7 @@ const CalendarModal: React.FC<CalendarModalProps> = ({ visible, onClose }) => {
                 })}
               </View>
             ))}
-          </View>
+          </ScrollView>
 
           {/* Footer */}
           <View style={styles.footer}>
@@ -155,7 +155,7 @@ const CalendarModal: React.FC<CalendarModalProps> = ({ visible, onClose }) => {
             ) : (
               <View />
             )}
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('close')}>
               <Text style={styles.closeText}>{t('close')}</Text>
             </TouchableOpacity>
           </View>
@@ -165,7 +165,7 @@ const CalendarModal: React.FC<CalendarModalProps> = ({ visible, onClose }) => {
   );
 };
 
-const getStyles = (colors: ThemeColors, scale: number = 1) => {
+const getStyles = (colors: ThemeColors, scale: number = 1, compact = false) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
     overlay: {
@@ -173,7 +173,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       backgroundColor: colors.overlay,
       justifyContent: 'center',
       alignItems: 'center',
-      padding: s(24),
+      paddingHorizontal: s(24),
+      paddingVertical: s(compact ? 8 : 24),
     },
     dialog: {
       backgroundColor: colors.card,
@@ -181,6 +182,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       padding: s(16),
       width: '100%',
       maxWidth: s(380),
+      maxHeight: '100%',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.15,
@@ -188,10 +190,11 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       elevation: 8,
     },
     header: {
+      flexShrink: 0,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: s(12),
+      marginBottom: s(compact ? 6 : 12),
     },
     navBtn: {
       width: s(36),
@@ -208,6 +211,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       textTransform: 'capitalize',
     },
     weekRow: {
+      flexShrink: 0,
       flexDirection: 'row',
       marginBottom: s(6),
     },
@@ -225,10 +229,15 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     grid: {
       flexDirection: 'row',
     },
+    calendarBody: {
+      flexGrow: 0,
+      flexShrink: 1,
+    },
     cell: {
       flex: 1,
       minWidth: 0,
-      aspectRatio: 1,
+      aspectRatio: compact ? undefined : 1,
+      height: compact ? s(34) : undefined,
       justifyContent: 'center',
       alignItems: 'center',
       paddingVertical: s(2),
@@ -256,10 +265,11 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       fontWeight: '800',
     },
     footer: {
+      flexShrink: 0,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginTop: s(14),
+      marginTop: s(compact ? 6 : 14),
     },
     todayBtn: {
       flexDirection: 'row',

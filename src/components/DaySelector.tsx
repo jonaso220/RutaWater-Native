@@ -14,6 +14,7 @@ interface DaySelectorProps {
   isWide: boolean;
   colors: ThemeColors;
   fontScale: number;
+  compact?: boolean;
   onSelectDay: (day: string) => void;
 }
 
@@ -27,12 +28,13 @@ const DaySelector = React.memo<DaySelectorProps>(({
   isWide,
   colors,
   fontScale,
+  compact = false,
   onSelectDay,
 }) => {
   // Suscribe el componente (memoizado) a los cambios de idioma para que las
   // etiquetas de getDayLabel se actualicen.
   useTranslation();
-  const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
+  const styles = useMemo(() => getStyles(colors, fontScale, isWide, compact), [colors, fontScale, isWide, compact]);
   const [todayName, setTodayName] = useState(getTodayDayName);
 
   useEffect(() => {
@@ -118,7 +120,7 @@ const DaySelector = React.memo<DaySelectorProps>(({
   );
 });
 
-const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = false) => {
+const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = false, compact = false) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
     daySelectorWrapper: {
@@ -135,7 +137,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     },
     daySelectorContent: {
       paddingHorizontal: s(12),
-      paddingVertical: s(10),
+      paddingVertical: s(compact ? 4 : 10),
       alignItems: 'center',
     },
     dayChip: {

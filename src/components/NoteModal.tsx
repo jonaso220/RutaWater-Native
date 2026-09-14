@@ -135,7 +135,7 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, note, onSave, onClose })
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.overlay}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <View style={styles.modal}>
             <View style={styles.header}>
               <Text style={styles.headerTitle}>
@@ -145,6 +145,8 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, note, onSave, onClose })
                 onPress={handleClose}
                 style={styles.closeBtn}
                 disabled={saving}
+                accessibilityRole="button"
+                accessibilityLabel={t('close')}
               >
                 <Text style={styles.closeBtnText}>✕</Text>
               </TouchableOpacity>

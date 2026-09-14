@@ -50,7 +50,15 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
   // iOS/macOS: use native Modal with flex wrapper for proper centering
   if (Platform.OS === 'ios') {
     return (
-      <Modal visible={visible} animationType={animationType} transparent>
+      <Modal
+        visible={visible}
+        animationType={animationType}
+        transparent
+        onRequestClose={onClose}
+        supportedOrientations={Platform.isPad
+          ? ['portrait', 'portrait-upside-down', 'landscape-left', 'landscape-right']
+          : ['portrait', 'landscape-left', 'landscape-right']}
+      >
         <View style={[styles.iosWrapper, { width, height }]}>
           {children}
         </View>

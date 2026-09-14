@@ -11,12 +11,13 @@ import { calculateProductTotals } from '../utils/productCounter';
 interface ProductCounterProps {
   clients: Client[];
   fontScale?: number;
+  compact?: boolean;
 }
 
-const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1 }) => {
+const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1, compact = false }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
-  const styles = React.useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
+  const styles = React.useMemo(() => getStyles(colors, fontScale, compact), [colors, fontScale, compact]);
   // Existing scheduled quantities must remain in the truck load even after a
   // product is hidden from pickers.
   const products = useAllProducts();
@@ -73,7 +74,7 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1 
   );
 };
 
-const getStyles = (colors: ThemeColors, scale: number = 1) => {
+const getStyles = (colors: ThemeColors, scale: number = 1, compact = false) => {
   const s = (v: number) => Math.round(v * scale);
   return StyleSheet.create({
   wrapper: {
@@ -90,7 +91,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   },
   content: {
     paddingHorizontal: s(14),
-    paddingVertical: s(10),
+    paddingVertical: s(compact ? 4 : 10),
     gap: s(10),
     alignItems: 'center',
   },
@@ -100,18 +101,18 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     gap: 5,
     backgroundColor: colors.card,
     paddingHorizontal: s(12),
-    paddingVertical: s(6),
+    paddingVertical: s(compact ? 3 : 6),
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.primaryLight,
   },
   qty: {
-    fontSize: s(20),
+    fontSize: s(compact ? 17 : 20),
     fontWeight: '800',
     color: colors.primary,
   },
   label: {
-    fontSize: s(16),
+    fontSize: s(compact ? 14 : 16),
     fontWeight: '600',
     color: colors.textMuted,
   },

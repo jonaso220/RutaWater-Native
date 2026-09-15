@@ -67,6 +67,7 @@ jobs:
         if: needs.detect.outputs.mode != 'submit'
         run: |
           npm ci
+          npm ci --prefix tests/firestore
           npx tsc --noEmit
           npm test -- --runInBand --no-watchman
       - name: Restore private build configuration

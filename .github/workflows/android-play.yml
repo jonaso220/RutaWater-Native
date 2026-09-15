@@ -92,7 +92,7 @@ jobs:
           RUTAWATER_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
           RUTAWATER_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
           RUTAWATER_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
-        run: ./gradlew :app:bundleRelease --no-daemon
+        run: ./gradlew :app:bundleRelease --no-daemon -Dorg.gradle.java.home="$JAVA_HOME"
       - name: Preserve signed bundle
         if: needs.detect.outputs.mode != 'submit'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

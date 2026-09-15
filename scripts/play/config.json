@@ -1,0 +1,8 @@
+{
+  "framework": "react-native",
+  "version_file": "android/app/build.gradle",
+  "package": "com.rutawater.native",
+  "track": "production",
+  "bundle": "android/app/build/outputs/bundle/release/app-release.aab",
+  "console_url": "https://play.google.com/console/u/0/developers/6498754936802314094/app/4972850541307179516/publishing"
+}

@@ -1,0 +1,119 @@
+name: Android - Google Play
+on:
+  push:
+    branches: [main]
+    paths: [android/app/build.gradle]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'verify: comprobar; upload: subir borrador; submit: enviar a revision'
+        type: choice
+        options: [verify, upload, submit]
+        default: verify
+        required: true
+      version_code:
+        description: 'Para submit: codigo de version exacto que aparece en main'
+        type: string
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: android-google-play
+  cancel-in-progress: false
+jobs:
+  detect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.release.outputs.run }}
+      mode: ${{ steps.release.outputs.mode }}
+      code: ${{ steps.release.outputs.code }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: release
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          RELEASE_ACTION: ${{ inputs.action || 'verify' }}
+          RELEASE_CODE: ${{ inputs.version_code }}
+        run: python3 scripts/play/release.py detect
+  release:
+    needs: detect
+    if: needs.detect.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate publishing safeguards
+        run: python3 -m unittest discover -s scripts/play -p 'test_*.py'
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        if: needs.detect.outputs.mode != 'submit'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: needs.detect.outputs.mode != 'submit'
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies and test
+        if: needs.detect.outputs.mode != 'submit'
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm test -- --runInBand --no-watchman
+      - name: Restore private build configuration
+        if: needs.detect.outputs.mode != 'submit'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          GOOGLE_SERVICES_JSON: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON }}
+        run: |
+          python3 - <<'PYCODE'
+          import base64, os
+          from pathlib import Path
+          path = Path(os.environ['RUNNER_TEMP']) / 'android-upload.jks'
+          path.write_bytes(base64.b64decode(os.environ['KEYSTORE_BASE64'], validate=True))
+          path.chmod(0o600)
+          Path('android/app/google-services.json').write_text(os.environ['GOOGLE_SERVICES_JSON'])
+          PYCODE
+      - name: Build signed Android bundle
+        if: needs.detect.outputs.mode != 'submit'
+        working-directory: android
+        env:
+          RUTAWATER_UPLOAD_STORE_FILE: ${{ runner.temp }}/android-upload.jks
+          RUTAWATER_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          RUTAWATER_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          RUTAWATER_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: ./gradlew :app:bundleRelease --no-daemon
+      - name: Preserve signed bundle
+        if: needs.detect.outputs.mode != 'submit'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-${{ needs.detect.outputs.code }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 14
+          if-no-files-found: error
+      - name: Authenticate to Google Play
+        id: auth
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WIF_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+      - name: Apply selected action
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          RELEASE_MODE: ${{ needs.detect.outputs.mode }}
+        run: python3 scripts/play/release.py "$RELEASE_MODE"
+      - name: Remove local signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/android-upload.jks" android/key.properties android/keystore.properties

@@ -12,7 +12,7 @@ Abrir [GitHub Actions](https://github.com/jonaso220/RutaWater-Native/actions/wor
 - `upload`: compila y sube la versión actual como borrador si aún no existe.
 - `submit`: envía el borrador a Google Play. Introducir su código exacto en `version_code`; debe coincidir con el código de `main`. No recompila.
 
-La aprobación y publicación dependen de Google y de los ajustes de publicación de Play Console. Enviar un borrador mientras hay cambios en revisión puede reiniciar esa revisión. La subida automática solicita explícitamente no enviar cambios a revisión; si Google no acepta esa modalidad, el workflow falla sin reintentar un envío.
+La aprobación y publicación dependen de Google y de los ajustes de publicación de Play Console. Enviar un borrador mientras hay cambios en revisión puede reiniciar esa revisión. La subida automática se detiene si ya hay una revisión en curso (volver a ejecutar `upload` cuando termine) y solicita explícitamente no enviar cambios a revisión; si Google no acepta esa modalidad, el workflow falla sin reintentar un envío.
 
 No se sobrescriben otros borradores ni se suben códigos duplicados. Resolver primero cualquier borrador anterior en Play Console. Una ejecución fallida muestra el error en Actions; `verify` es una comprobación segura para diagnosticar el acceso.
 

@@ -90,7 +90,7 @@ class Play:
             self.request('PUT', edit_url + '/tracks/' + config['track'], {'track': config['track'], 'releases': releases})
             self.request('POST', edit_url + ':validate')
             # Draft uploads must not submit pending changes or restart a review.
-            query = '?changesNotSentForReview=true' if mode == 'upload' else ''
+            query = '?changesNotSentForReview=true&changesInReviewBehavior=ERROR_IF_IN_REVIEW' if mode == 'upload' else ''
             self.request('POST', edit_url + ':commit' + query)
             committed = True
             summary(f'Version {code} ({name}): ' + ('uploaded as a draft. Use the manual review button when ready.' if mode == 'upload' else 'submitted to Google Play. Review/approval may still be pending.'), config)

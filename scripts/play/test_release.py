@@ -1,9 +1,9 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 import os
 from pathlib import Path
 import tempfile
-from release import release_update, main
+from release import release_update, main, Play
 
 class ReleaseSafetyTests(unittest.TestCase):
     def test_upload_preserves_serving_release(self):
@@ -24,6 +24,27 @@ class ReleaseSafetyTests(unittest.TestCase):
         for releases in ([], [{'versionCodes': ['29'], 'status': 'completed'}], [{'versionCodes': ['29','30'], 'status': 'draft'}]):
             with self.assertRaises(ValueError):
                 release_update(releases, 29, '1.18', 'submit', [])
+
+class ApiSafetyTests(unittest.TestCase):
+    config = {'package':'com.example.test','track':'alpha','bundle':'app.aab','console_url':'https://example.com'}
+    def client(self):
+        with patch.dict(os.environ, {'PLAY_ACCESS_TOKEN':'test-only'}):
+            return Play(self.config)
+    def test_verify_never_commits(self):
+        client = self.client()
+        client.request = Mock(side_effect=[{'id':'temporary'}, {'tracks':[{'track':'alpha'}]}, {}])
+        with patch('release.summary'), patch('builtins.print'):
+            client.run(self.config, 'verify', 3, '1.0')
+        self.assertEqual([c.args[0] for c in client.request.call_args_list], ['POST','GET','DELETE'])
+        self.assertTrue(client.request.call_args_list[-1].args[1].endswith('/edits/temporary'))
+    def test_upload_never_cancels_existing_review(self):
+        client = self.client()
+        client.request = Mock(side_effect=[{'id':'temporary'}, {'tracks':[{'track':'alpha'}]}, {'versionCode':3}, {}, {}, {}])
+        with patch('release.summary'), patch('release.Path.read_bytes', return_value=b'bundle'), patch('release.Path.read_text', return_value='[{"language":"es-419","text":"Changes"}]'):
+            client.run(self.config, 'upload', 3, '1.0')
+        commit = client.request.call_args_list[-1].args[1]
+        self.assertIn('changesNotSentForReview=true', commit)
+        self.assertIn('changesInReviewBehavior=ERROR_IF_IN_REVIEW', commit)
 
 class TriggerTests(unittest.TestCase):
     def detect(self, current, previous, env):

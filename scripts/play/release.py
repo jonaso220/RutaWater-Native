@@ -90,8 +90,18 @@ class Play:
             self.request('PUT', edit_url + '/tracks/' + config['track'], {'track': config['track'], 'releases': releases})
             self.request('POST', edit_url + ':validate')
             # Draft uploads must not submit pending changes or restart a review.
-            query = '?changesNotSentForReview=true&changesInReviewBehavior=ERROR_IF_IN_REVIEW' if mode == 'upload' else ''
-            self.request('POST', edit_url + ':commit' + query)
+            if mode == 'upload':
+                try:
+                    self.request('POST', edit_url + ':commit?changesNotSentForReview=true&changesInReviewBehavior=ERROR_IF_IN_REVIEW')
+                except RuntimeError as error:
+                    # Without managed publishing Play sends changes automatically and
+                    # rejects the flag. There is then no pending change to hold back,
+                    # and the draft release itself is never rolled out by a commit.
+                    if 'changesNotSentForReview must not be set' not in str(error):
+                        raise
+                    self.request('POST', edit_url + ':commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW')
+            else:
+                self.request('POST', edit_url + ':commit')
             committed = True
             summary(f'Version {code} ({name}): ' + ('uploaded as a draft. Use the manual review button when ready.' if mode == 'upload' else 'submitted to Google Play. Review/approval may still be pending.'), config)
         finally:

@@ -45,6 +45,22 @@ class ApiSafetyTests(unittest.TestCase):
         commit = client.request.call_args_list[-1].args[1]
         self.assertIn('changesNotSentForReview=true', commit)
         self.assertIn('changesInReviewBehavior=ERROR_IF_IN_REVIEW', commit)
+    def upload_with_commit(self, *commit_results):
+        client = self.client()
+        client.request = Mock(side_effect=[{'id':'temporary'}, {'tracks':[{'track':'alpha'}]}, {'versionCode':3}, {}, {}, *commit_results])
+        with patch('release.summary'), patch('release.Path.read_bytes', return_value=b'bundle'), patch('release.Path.read_text', return_value='[{"language":"es-419","text":"Changes"}]'):
+            client.run(self.config, 'upload', 3, '1.0')
+        return client
+    def test_upload_retries_without_flag_when_play_sends_changes_automatically(self):
+        rejected = RuntimeError('Google Play HTTP 400: Changes are sent for review automatically. The query parameter changesNotSentForReview must not be set.')
+        client = self.upload_with_commit(rejected, {})
+        retry = client.request.call_args_list[-1].args[1]
+        self.assertNotIn('changesNotSentForReview', retry)
+        self.assertIn('changesInReviewBehavior=ERROR_IF_IN_REVIEW', retry)
+        self.assertNotIn('DELETE', [c.args[0] for c in client.request.call_args_list])
+    def test_upload_does_not_retry_other_commit_errors(self):
+        with self.assertRaises(RuntimeError):
+            self.upload_with_commit(RuntimeError('Google Play HTTP 400: Changes are currently in review.'), {})
 
 class TriggerTests(unittest.TestCase):
     def detect(self, current, previous, env):

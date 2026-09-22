@@ -60,25 +60,41 @@ export const alarmTargetsDay = (client: AlarmClient, day: string): boolean =>
     || client.visitDay
   ) === day;
 
+// Snapshots keep the same object for unchanged clients, so each client's
+// entry is serialized once instead of on every store update.
+const alarmSignatureEntries = new WeakMap<AlarmClient, string>();
+
+const getAlarmSignatureEntry = (client: AlarmClient): string => {
+  let entry = alarmSignatureEntries.get(client);
+  if (entry === undefined) {
+    entry = JSON.stringify([
+      client.id || '',
+      client.alarm || '',
+      client.alarmDay || '',
+      client.alarmScheduledFor || 0,
+      client.freq,
+      !!client.isCompleted,
+      client.specificDate || '',
+      client.visitDay || '',
+      (client.visitDays || []).join(','),
+      client.doneFor || '',
+      String((client as { lastVisited?: unknown }).lastVisited ?? ''),
+    ]);
+    alarmSignatureEntries.set(client, entry);
+  }
+  return entry;
+};
+
 export const getAlarmReconciliationSignature = (
   clients: AlarmClient[],
   scopeKey: string,
-): string => JSON.stringify(clients
+): string => clients
   .filter((client) => (client.groupId || client.userId) === scopeKey)
-  .map((client) => [
-    client.id || '',
-    client.alarm || '',
-    client.alarmDay || '',
-    client.alarmScheduledFor || 0,
-    client.freq,
-    !!client.isCompleted,
-    client.specificDate || '',
-    client.visitDay || '',
-    (client.visitDays || []).join(','),
-    client.doneFor || '',
-    String((client as { lastVisited?: unknown }).lastVisited ?? ''),
-  ])
-  .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  .map((client) => ({ id: client.id || '', entry: getAlarmSignatureEntry(client) }))
+  // Only needs a stable order; a plain comparison avoids slow localeCompare.
+  .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  .map(({ entry }) => entry)
+  .join('\n');
 
 /**
  * Decides what local alarm reconciliation may do without conflating device

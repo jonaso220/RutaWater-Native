@@ -7,7 +7,7 @@ import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firest
 import { useQueryClient } from '@tanstack/react-query';
 import { db } from '../config/firebase';
 import { Client, ClientAddress, RELATIONSHIP_INVERSE } from '../types';
-import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, toLocalDateString, parseDate, alarmScheduleFields } from '../utils/helpers';
+import { normalizeText, fuzzyMatch, matchScore, getNextVisitDate, toLocalDateString, parseDate, alarmScheduleFields, resolveAlarmTargetDay } from '../utils/helpers';
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { alarmTargetsDay } from '../utils/alarmReconciliation';
 import { findExactClientMatch, planDuplicateClientCleanup } from '../utils/clientDuplicates';
@@ -728,10 +728,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
           const client = clientsRef.current.find((c) => c.id === clientId);
           // Prefer the day the user is currently viewing; fall back to the client's
           // configured visit day(s) so the alarm fires on the right delivery day.
-          const resolvedDay =
-            targetDay ||
-            (client?.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined) ||
-            client?.visitDay;
+          const resolvedDay = resolveAlarmTargetDay(client, targetDay);
           const previousAlarm = alarmSnapshotForClient(client, resolvedDay, userId);
           const fireAt = await scheduleClientAlarm(
             clientId,

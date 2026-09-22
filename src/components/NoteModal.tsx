@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -42,7 +42,10 @@ const NoteModal: React.FC<NoteModalProps> = ({ visible, note, onSave, onClose })
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
+  const styles = useMemo(
+    () => getStyles(colors, isTablet, modalWidth, fontScale),
+    [colors, isTablet, modalWidth, fontScale],
+  );
 
   const [notes, setNotes] = useState('');
   const [pickerDate, setPickerDate] = useState(new Date());
@@ -430,4 +433,4 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   });
 };
 
-export default NoteModal;
+export default React.memo(NoteModal);

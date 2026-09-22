@@ -132,3 +132,51 @@ export const occurrenceForSpecificDate = (
   if (target.getTime() <= Date.now()) return null;
   return target;
 };
+
+export interface AlarmScheduleOptions {
+  targetDay?: string;
+  specificDate?: string;
+  nextVisitDate?: string;
+  intervalWeeks?: number;
+  scheduledFor?: number;
+}
+
+/**
+ * When an alarm at `time` would fire for the given schedule, or null when it
+ * cannot be scheduled (invalid time, or a one-time/visit date with no future
+ * occurrence). Shared by the native scheduler and the picker's pre-check so
+ * both always agree.
+ */
+export const resolveAlarmFireDate = (
+  time: string,
+  options?: AlarmScheduleOptions,
+): Date | null => {
+  const parsed = parseTime(time);
+  if (!parsed) return null;
+
+  if (typeof options?.scheduledFor === 'number') {
+    return Number.isFinite(options.scheduledFor) && options.scheduledFor > Date.now()
+      ? new Date(options.scheduledFor)
+      : null;
+  }
+  if (options?.specificDate !== undefined) {
+    // A supplied one-time date is authoritative. If it is malformed, does not
+    // exist, or is already past, silently falling back to a weekly/daily alarm
+    // would schedule a different reminder than the user requested.
+    return occurrenceForSpecificDate(options.specificDate, parsed.hours, parsed.minutes);
+  }
+  if (options?.nextVisitDate) {
+    // Same contract as specificDate: a known visit day must not silently
+    // collapse to "next weekday" or the driver goes to a house that is not due.
+    return occurrenceForVisitDate(
+      options.nextVisitDate,
+      parsed.hours,
+      parsed.minutes,
+      options.intervalWeeks ?? 1,
+    );
+  }
+  if (options?.targetDay) {
+    return nextOccurrenceForDay(options.targetDay, parsed.hours, parsed.minutes);
+  }
+  return nextOccurrence(parsed.hours, parsed.minutes);
+};

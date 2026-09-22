@@ -52,6 +52,9 @@ const TabNavigator = () => {
       <AlarmBanner alarm={activeAlarm} onDismiss={dismissAlarm} />
       <Tab.Navigator
         screenOptions={{
+          // Tabs out of view don't re-render on every Firestore snapshot; they
+          // catch up with the latest state when focused again.
+          freezeOnBlur: true,
           headerStyle: {
             backgroundColor: colors.headerBackground,
             ...(isPhoneLandscape ? { height: 44 + insets.top } : {}),

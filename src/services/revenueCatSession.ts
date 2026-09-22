@@ -23,7 +23,9 @@ const ensureConfigured = (): Promise<void> => {
   if (!configurePromise) {
     configurePromise = (async () => {
       if (await Purchases.isConfigured()) return;
-      Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+      // Every native log line is forwarded to JS over the bridge; keep
+      // release builds quiet.
+      Purchases.setLogLevel(__DEV__ ? LOG_LEVEL.DEBUG : LOG_LEVEL.WARN);
       Purchases.configure({ apiKey: REVENUECAT_API_KEY });
     })().catch((error) => {
       // A transient native initialization failure must be retryable.
@@ -42,6 +44,12 @@ const isAlreadyAnonymousError = (error: unknown): boolean => (
 );
 
 const logOutNativeSession = async (): Promise<void> => {
+  // A restored identity may already be anonymous; calling logOut() then makes
+  // the SDK log a console error. If the check fails, fall through to logOut().
+  if (actualUserId === undefined && await Purchases.isAnonymous().catch(() => false)) {
+    actualUserId = null;
+    return;
+  }
   try {
     await Purchases.logOut();
     actualUserId = null;

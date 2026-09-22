@@ -2,6 +2,7 @@
 
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { Client } from '../types';
+import { resolveAlarmFireDate } from './scheduling';
 
 // --- SANITIZATION ---
 
@@ -416,6 +417,35 @@ export const alarmScheduleFields = (
     nextVisitDate: visit ? toLocalDateString(visit) : undefined,
     intervalWeeks: intervalWeeksForFreq(client.freq),
   };
+};
+
+// The day a new alarm is armed for: the day being viewed, else the client's
+// configured visit day(s).
+export const resolveAlarmTargetDay = (
+  client: Pick<Client, 'visitDay' | 'visitDays'> | undefined,
+  targetDay?: string,
+): string | undefined => targetDay
+  || (client?.visitDays && client.visitDays.length > 0 ? client.visitDays[0] : undefined)
+  || client?.visitDay;
+
+export type AlarmScheduleIssue = 'date-passed' | 'time-passed' | 'no-upcoming-visit';
+
+/**
+ * Why an alarm at `time` can't be scheduled for this client (its one-time
+ * order date or today's time already passed), or null when it can. Uses the
+ * same resolution as the native scheduler.
+ */
+export const getAlarmScheduleIssue = (
+  client: Client,
+  time: string,
+  targetDay?: string,
+): AlarmScheduleIssue | null => {
+  const fields = alarmScheduleFields(client, resolveAlarmTargetDay(client, targetDay));
+  if (resolveAlarmFireDate(time, fields)) return null;
+  if (fields.specificDate) {
+    return fields.specificDate === toLocalDateString(new Date()) ? 'time-passed' : 'date-passed';
+  }
+  return 'no-upcoming-visit';
 };
 
 // Excludes contact/products/alarm edits, which must not invalidate a delivery.

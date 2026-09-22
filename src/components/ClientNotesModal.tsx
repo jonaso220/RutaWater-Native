@@ -246,4 +246,4 @@ const getStyles = (colors: ThemeColors, modalWidth: number | undefined, scale: n
   });
 };
 
-export default ClientNotesModal;
+export default React.memo(ClientNotesModal);

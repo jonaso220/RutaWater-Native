@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { reportError } from '../lib/crashReporting';
 import {
   View,
@@ -43,7 +43,10 @@ const SettingsScreen = () => {
   const { fontScale, width: screenWidth } = useLayout();
   const isTablet = screenWidth >= 600;
   const groupModalWidth = getModalWidth(screenWidth);
-  const styles = getStyles(colors, fontScale, isTablet, groupModalWidth);
+  const styles = useMemo(
+    () => getStyles(colors, fontScale, isTablet, groupModalWidth),
+    [colors, fontScale, isTablet, groupModalWidth],
+  );
   const {
     user: firebaseUser,
     groupData,

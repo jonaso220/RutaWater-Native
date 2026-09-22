@@ -34,17 +34,22 @@ const escapeCsv = (val: string | number | boolean | undefined | null): string =>
 
 export const useDataExport = (user: ExportUser) => {
   const { t } = useTranslation();
-  const clients = useClientsStore((s) => s.clients);
-  const debts = useDebtsStore((s) => s.debts);
-  const transfers = useTransfersStore((s) => s.transfers);
+  // Los datos se leen al exportar (getState) en vez de suscribirse: así
+  // Ajustes no se re-renderiza con cada snapshot de clientes/deudas.
   // Mismo criterio que el badge de la UI: la deuda se deriva en vivo de la
   // colección (por customerId estable con fallback clientId legacy), no del flag
   // persistido c.hasDebt, que puede quedar desincronizado (p. ej. deuda
   // creada desde la webapp o instancia duplicada creada después de la deuda).
-  const getClientDebtTotal = useDebtsStore((s) => s.getClientDebtTotal);
+  const readExportData = () => ({
+    clients: useClientsStore.getState().clients,
+    debts: useDebtsStore.getState().debts,
+    transfers: useTransfersStore.getState().transfers,
+    getClientDebtTotal: useDebtsStore.getState().getClientDebtTotal,
+  });
 
   const handleExportCSV = async () => {
     try {
+      const { clients, getClientDebtTotal } = readExportData();
       // Las notas sueltas (isNote) no son clientes: salían como filas "NOTA".
       const allClients = clients.filter((c) => c.name && !c.isNote);
       if (allClients.length === 0) {
@@ -102,6 +107,7 @@ export const useDataExport = (user: ExportUser) => {
 
   const handleExportJSON = async () => {
     try {
+      const { clients, debts, transfers, getClientDebtTotal } = readExportData();
       const allClients = clients.filter((c) => c.name);
       if (allClients.length === 0 && debts.length === 0 && transfers.length === 0) {
         Alert.alert(t('settings.noDataCSV'), t('settings.noDataToExport'));

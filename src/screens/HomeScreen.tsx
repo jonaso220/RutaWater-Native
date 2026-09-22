@@ -296,7 +296,6 @@ const HomeScreen = () => {
   const collapsibleHeaderProgress = useRef(new Animated.Value(1)).current;
   const androidHeaderScrollY = useRef(new Animated.Value(0)).current;
   const collapsibleHeaderVisibleRef = useRef(true);
-  const [collapsibleHeaderVisible, setCollapsibleHeaderVisibleState] = useState(true);
   const lastListOffsetRef = useRef(0);
   const lastScrollDirectionRef = useRef<-1 | 0 | 1>(0);
   const scrollDirectionDistanceRef = useRef(0);
@@ -320,10 +319,7 @@ const HomeScreen = () => {
 
   const setCollapsibleHeaderVisible = useCallback((visible: boolean, animate = true) => {
     if (collapsibleHeaderVisibleRef.current === visible) {
-      if (!animate) {
-        collapsibleHeaderProgress.setValue(visible ? 1 : 0);
-        setCollapsibleHeaderVisibleState(visible);
-      }
+      if (!animate) collapsibleHeaderProgress.setValue(visible ? 1 : 0);
       return;
     }
 
@@ -333,7 +329,6 @@ const HomeScreen = () => {
     collapsibleHeaderProgress.stopAnimation();
 
     const duration = visible ? HEADER_SHOW_ANIMATION_MS : HEADER_HIDE_ANIMATION_MS;
-    setCollapsibleHeaderVisibleState(visible);
     if (!animate) {
       collapsibleHeaderProgress.setValue(visible ? 1 : 0);
       return;
@@ -343,7 +338,8 @@ const HomeScreen = () => {
       toValue: visible ? 1 : 0,
       duration,
       easing: Easing.bezier(0.2, 0, 0, 1),
-      useNativeDriver: false,
+      // Only drives a translateY, so the list never relayouts mid-scroll.
+      useNativeDriver: true,
       isInteraction: false,
     });
     headerAnimationRef.current = animation;
@@ -357,7 +353,7 @@ const HomeScreen = () => {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
-      // iOS can pause a JS-driven height animation while the app backgrounds.
+      // iOS can pause the header animation while the app backgrounds.
       // Restore its intended endpoint before the screen becomes interactive so
       // the header can never remain permanently half-open.
       setCollapsibleHeaderVisible(collapsibleHeaderVisibleRef.current, false);
@@ -422,12 +418,13 @@ const HomeScreen = () => {
   const handleCollapsibleHeaderLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = Math.round(event.nativeEvent.layout.height);
     if (nextHeight > 0) {
-      // Preserve full measurements during animation, but never reuse a taller
-      // header from a different orientation or window size.
-      setHeaderMeasurement((current) => ({
-        key: headerLayoutKey,
-        height: current.key === headerLayoutKey ? Math.max(current.height, nextHeight) : nextHeight,
-      }));
+      // The header is only translated, never clipped, so every layout is its
+      // real height and it can shrink when a row (e.g. day loads) disappears.
+      setHeaderMeasurement((current) => (
+        current.key === headerLayoutKey && current.height === nextHeight
+          ? current
+          : { key: headerLayoutKey, height: nextHeight }
+      ));
     }
   }, [headerLayoutKey]);
 
@@ -441,17 +438,31 @@ const HomeScreen = () => {
     () => Animated.diffClamp(androidHeaderScrollY, 0, androidHeaderTravel),
     [androidHeaderScrollY, androidHeaderTravel],
   );
-  const androidScrolledHeaderTranslateY = androidClampedHeaderScroll.interpolate({
-    inputRange: [0, androidHeaderTravel],
-    outputRange: [0, -androidHeaderTravel],
-    extrapolate: 'clamp',
-  });
-  // Android moves the header with native transforms instead of animating its
-  // height. Keep the compact filter panel visible on that path as well.
+  const androidScrolledHeaderTranslateY = useMemo(
+    () => androidClampedHeaderScroll.interpolate({
+      inputRange: [0, androidHeaderTravel],
+      outputRange: [0, -androidHeaderTravel],
+      extrapolate: 'clamp',
+    }),
+    [androidClampedHeaderScroll, androidHeaderTravel],
+  );
+  // Both platforms float the header over the list and move it with native
+  // transforms instead of animating its height: Android tracks the scroll
+  // position, iOS toggles by scroll direction. Keep the compact filter panel
+  // visible on both paths.
   const compactFiltersOpen = isPhoneLandscape && showFilters;
-  const androidHeaderTranslateY = compactFiltersOpen
+  const iosToggledHeaderTranslateY = useMemo(
+    () => collapsibleHeaderProgress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [-collapsibleHeaderHeight, 0],
+    }),
+    [collapsibleHeaderProgress, collapsibleHeaderHeight],
+  );
+  const headerTranslateY = compactFiltersOpen
     ? -collapsibleHeaderHeight
-    : androidScrolledHeaderTranslateY;
+    : Platform.OS === 'android'
+      ? androidScrolledHeaderTranslateY
+      : iosToggledHeaderTranslateY;
   const androidHeaderOnScroll = useMemo(
     () => Animated.event(
       [{ nativeEvent: { contentOffset: { y: androidHeaderScrollY } } }],
@@ -459,16 +470,15 @@ const HomeScreen = () => {
     ),
     [androidHeaderScrollY],
   );
+  const listChromeHeight = (compactFiltersOpen ? 0 : collapsibleHeaderHeight) + stickyControlsHeight;
   const clientListContentStyle = useMemo(
     () => [
       styles.listContent,
-      // Keep the list viewport fixed on Android. Its content starts below the
-      // floating header, while native transforms move the chrome out of view.
-      Platform.OS === 'android' && {
-        paddingTop: (compactFiltersOpen ? 0 : collapsibleHeaderHeight) + stickyControlsHeight + 12,
-      },
+      // Keep the list viewport fixed. Its content starts below the floating
+      // header, while native transforms move the chrome out of view.
+      { paddingTop: listChromeHeight + 12 },
     ],
-    [styles.listContent, collapsibleHeaderHeight, stickyControlsHeight, compactFiltersOpen],
+    [styles.listContent, listChromeHeight],
   );
 
   // Pull-to-refresh: force a server-side read of clients so the user can
@@ -964,6 +974,30 @@ const HomeScreen = () => {
   const handleDebtCb = useCallback((client: Client) => setDebtClient(client), []);
   const handleRelationshipsCb = useCallback((client: Client) => setRelationshipClient(client), []);
 
+  // Stable modal callbacks: with memoized modals, unrelated Home renders (search
+  // keystrokes, "Listo", header toggles) no longer re-render closed modals.
+  const closeProductsModal = useCallback(() => setProductsClient(null), []);
+  const closeNotesModal = useCallback(() => setNotesClient(null), []);
+  const closeEditModal = useCallback(() => setEditingClient(null), []);
+  const closeDebtModal = useCallback(() => setDebtClient(null), []);
+  const closeAddClientModal = useCallback(() => setShowAddClientModal(false), []);
+  const closeSmartModal = useCallback(() => setShowSmartModal(false), []);
+  const closeDebtsSheet = useCallback(() => setShowDebtsSheet(false), []);
+  const closeTransfersSheet = useCallback(() => setShowTransfersSheet(false), []);
+  const closeRelationshipsModal = useCallback(() => setRelationshipClient(null), []);
+  const closeAlarmPicker = useCallback(() => setAlarmPromptClient(null), []);
+  const closeProfileSwitcher = useCallback(() => setProfileSwitcherVisible(false), [setProfileSwitcherVisible]);
+  const closeCalendar = useCallback(() => setShowCalendar(false), []);
+  const handleDebtsTransferPayment = useCallback((clientId: string) => {
+    const client = clients.find((c) => c.id === clientId);
+    if (!client) return;
+    if (!hasPendingTransfer(clientId)) {
+      addTransfer(client);
+    }
+    setShowDebtsSheet(false);
+    setShowTransfersSheet(true);
+  }, [clients, hasPendingTransfer, addTransfer]);
+
   // Stable handler wrappers — read from a ref so renderListItem
   // doesn't have to depend on individual handler identities. Without this,
   // any change to addTransfer / saveAlarm / hasPendingTransfer (which the
@@ -1306,37 +1340,14 @@ const HomeScreen = () => {
         <Animated.View
           style={[
             styles.collapsibleTopHeader,
-            Platform.OS === 'android' && styles.collapsibleTopHeaderAndroid,
-            collapsibleHeaderHeight > 0 && (
-              Platform.OS === 'android'
-                ? {
-                  height: collapsibleHeaderHeight,
-                  transform: [{ translateY: androidHeaderTranslateY }],
-                }
-                : {
-                  height: collapsibleHeaderProgress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, collapsibleHeaderHeight],
-                  }),
-                }
-            ),
+            collapsibleHeaderHeight > 0 && {
+              transform: [{ translateY: headerTranslateY }],
+            },
           ]}
         >
           <View
             key={headerLayoutKey}
             onLayout={handleCollapsibleHeaderLayout}
-            style={collapsibleHeaderHeight > 0 ? {
-              // Keep the full header intact while its parent clips it, so every
-              // section travels together instead of receiving separate motion.
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: 0,
-              // Allow late layout changes (font metrics, data and device size) to
-              // grow the block; an exact height here could freeze it too short.
-              minHeight: collapsibleHeaderHeight,
-            } : undefined}
-            pointerEvents={Platform.OS === 'android' || collapsibleHeaderVisible ? 'auto' : 'none'}
           >
           {/* Each horizontal scroller owns a full-width row. */}
           <DaySelector
@@ -1477,13 +1488,13 @@ const HomeScreen = () => {
 
         <Animated.View
           onLayout={handleStickyControlsLayout}
-          style={Platform.OS === 'android' ? [
-            styles.stickyControlsAndroid,
+          style={[
+            styles.stickyControls,
             {
               top: collapsibleHeaderHeight,
-              transform: [{ translateY: androidHeaderTranslateY }],
+              transform: [{ translateY: headerTranslateY }],
             },
-          ] : undefined}
+          ]}
         >
       {/* Search bar + Filters */}
       <View style={styles.searchSection}>
@@ -1643,7 +1654,10 @@ const HomeScreen = () => {
         {/* Al cambiar de reparto, mantener la cabecera y la navegación activas.
             Solo el contenido dependiente del nuevo scope muestra carga. */}
         {loading ? (
-          <View style={styles.scopeLoadingContainer} accessibilityRole="progressbar">
+          <View
+            style={[styles.scopeLoadingContainer, { marginTop: listChromeHeight }]}
+            accessibilityRole="progressbar"
+          >
             <Text style={styles.loadingText}>{t('loading')}</Text>
             {[0, 1, 2, 3].map((i) => (
               <SkeletonCard key={i} />
@@ -1670,6 +1684,7 @@ const HomeScreen = () => {
                 onRefresh={onRefresh}
                 tintColor={colors.primary}
                 colors={[colors.primary]}
+                progressViewOffset={listChromeHeight}
               />
             }
             ListEmptyComponent={listEmptyComponent}
@@ -1697,6 +1712,7 @@ const HomeScreen = () => {
                 onRefresh={onRefresh}
                 tintColor={colors.primary}
                 colors={[colors.primary]}
+                progressViewOffset={listChromeHeight}
               />
             }
             ListEmptyComponent={listEmptyComponent}
@@ -1712,14 +1728,14 @@ const HomeScreen = () => {
         visible={!!productsClient}
         client={productsClient}
         onSave={updateClient}
-        onClose={() => setProductsClient(null)}
+        onClose={closeProductsModal}
       />
 
       <ClientNotesModal
         visible={!!notesClient}
         client={notesClient}
         onSave={updateClient}
-        onClose={() => setNotesClient(null)}
+        onClose={closeNotesModal}
       />
 
       {/* Edit Client Modal */}
@@ -1728,7 +1744,7 @@ const HomeScreen = () => {
         client={editingClient?.isNote ? null : editingClient}
         allClients={clients}
         onSave={updateClient}
-        onClose={() => setEditingClient(null)}
+        onClose={closeEditModal}
         onRemoveFromDay={handleDelete}
         scheduledDay={deferredDay}
         showClientInfo
@@ -1743,7 +1759,7 @@ const HomeScreen = () => {
         allClients={clients}
         debtTemplate={appSettings?.whatsappDeuda}
         reminderTemplate={appSettings?.whatsappRecordatorio}
-        onClose={() => setDebtClient(null)}
+        onClose={closeDebtModal}
         onAddDebt={addDebt}
         onMarkPaid={markDebtPaid}
         onMarkAllPaid={markAllDebtsPaid}
@@ -1763,13 +1779,13 @@ const HomeScreen = () => {
         visible={showAddClientModal}
         day={selectedDay}
         onSave={addClient}
-        onClose={() => setShowAddClientModal(false)}
+        onClose={closeAddClientModal}
       />
 
       {/* Smart Order Modal (IA) */}
       <SmartOrderModal
         visible={showSmartModal}
-        onClose={() => setShowSmartModal(false)}
+        onClose={closeSmartModal}
       />
 
       {/* Debts Sheet */}
@@ -1781,19 +1797,11 @@ const HomeScreen = () => {
         onMarkPaid={markDebtPaid}
         onMarkAllPaid={markAllDebtsPaid}
         onEditDebt={editDebt}
-        onClose={() => setShowDebtsSheet(false)}
+        onClose={closeDebtsSheet}
         onAddDebt={addDebt}
         reminderTemplate={appSettings?.whatsappRecordatorio}
         debtTemplate={appSettings?.whatsappDeuda}
-        onTransferPayment={(clientId) => {
-          const client = clients.find((c) => c.id === clientId);
-          if (!client) return;
-          if (!hasPendingTransfer(clientId)) {
-            addTransfer(client);
-          }
-          setShowDebtsSheet(false);
-          setShowTransfersSheet(true);
-        }}
+        onTransferPayment={handleDebtsTransferPayment}
       />
 
       {/* Transfers Sheet */}
@@ -1801,7 +1809,7 @@ const HomeScreen = () => {
         visible={showTransfersSheet}
         transfers={transfers}
         onReview={markTransferReviewed}
-        onClose={() => setShowTransfersSheet(false)}
+        onClose={closeTransfersSheet}
       />
 
       {/* Relationships Modal */}
@@ -1809,7 +1817,7 @@ const HomeScreen = () => {
         visible={!!relationshipClient}
         client={relationshipClient ? (clients.find((c) => c.id === relationshipClient.id) || relationshipClient) : null}
         allClients={clients}
-        onClose={() => setRelationshipClient(null)}
+        onClose={closeRelationshipsModal}
         onAddRelationship={addRelationship}
         onRemoveRelationship={removeRelationship}
       />
@@ -1817,20 +1825,20 @@ const HomeScreen = () => {
       <AlarmPicker
         client={alarmPromptClient}
         selectedDay={selectedDay}
-        onClose={() => setAlarmPromptClient(null)}
+        onClose={closeAlarmPicker}
       />
 
       {/* Profiles / Repartos switcher rápido (abierto desde el chip del header) */}
       <ProfilesModal
         mode="quick"
         visible={profileSwitcherVisible}
-        onClose={() => setProfileSwitcherVisible(false)}
+        onClose={closeProfileSwitcher}
       />
 
       {/* Calendario (solo vista del mes) */}
       <CalendarModal
         visible={showCalendar}
-        onClose={() => setShowCalendar(false)}
+        onClose={closeCalendar}
       />
     </View>
   );
@@ -1860,10 +1868,6 @@ const getStyles = (
     backgroundColor: colors.background,
   },
   collapsibleTopHeader: {
-    flexShrink: 0,
-    overflow: 'hidden',
-  },
-  collapsibleTopHeaderAndroid: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -1871,7 +1875,7 @@ const getStyles = (
     zIndex: 2,
     elevation: 2,
   },
-  stickyControlsAndroid: {
+  stickyControls: {
     position: 'absolute',
     left: 0,
     right: 0,

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -54,7 +54,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
+  const styles = useMemo(
+    () => getStyles(colors, isTablet, modalWidth, fontScale),
+    [colors, isTablet, modalWidth, fontScale],
+  );
 
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
@@ -880,4 +883,4 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   });
 };
 
-export default AddClientModal;
+export default React.memo(AddClientModal);

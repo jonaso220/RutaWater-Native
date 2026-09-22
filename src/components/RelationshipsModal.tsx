@@ -21,6 +21,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
+import { useValueWhileVisible } from '../hooks/useValueWhileVisible';
 import { getDaysSince, getEffectiveLastActivityDate, sharesHouseholdWith } from '../utils/recency';
 import { getClientPhoneSearchText } from '../utils/clientPhones';
 
@@ -38,10 +39,12 @@ interface RelationshipsModalProps {
   onRemoveRelationship: (clientId: string, targetId: string) => Promise<void>;
 }
 
+const NO_RELATIONSHIPS: Record<string, string> = {};
+
 const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   visible,
   client,
-  allClients,
+  allClients: liveAllClients,
   onClose,
   onAddRelationship,
   onRemoveRelationship,
@@ -52,7 +55,10 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
+  const styles = useMemo(
+    () => getStyles(colors, isTablet, modalWidth, fontScale),
+    [colors, isTablet, modalWidth, fontScale],
+  );
   const [mode, setMode] = useState<'list' | 'add'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTarget, setSelectedTarget] = useState<Client | null>(null);
@@ -62,8 +68,10 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
 
-  const relationships = client?.relationships || {};
-  const relatedIds = Object.keys(relationships);
+  // Don't rebuild the client map on every snapshot while closed.
+  const allClients = useValueWhileVisible(liveAllClients, visible);
+  const relationships = client?.relationships || NO_RELATIONSHIPS;
+  const relatedIds = useMemo(() => Object.keys(relationships), [relationships]);
   const clientsById = useMemo(
     () => new Map(allClients.map((candidate) => [candidate.id, candidate])),
     [allClients],
@@ -631,4 +639,4 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   });
 };
 
-export default RelationshipsModal;
+export default React.memo(RelationshipsModal);

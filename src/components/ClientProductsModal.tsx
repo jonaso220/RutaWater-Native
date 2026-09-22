@@ -278,4 +278,4 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth: number | 
   });
 };
 
-export default ClientProductsModal;
+export default React.memo(ClientProductsModal);

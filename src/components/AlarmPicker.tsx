@@ -15,6 +15,8 @@ import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { useClientsStore } from '../stores/clientsStore';
 import { hapticLight } from '../utils/haptics';
+import { getAlarmScheduleIssue } from '../utils/helpers';
+import { formatShortDate } from '../utils/format';
 import {
   getAlarmPermissionIssue,
   openExactAlarmPermissionSettings,
@@ -92,6 +94,20 @@ const AlarmPicker: React.FC<AlarmPickerProps> = ({ client, selectedDay, onClose 
     const target = client;
     try {
       onClose();
+      // A one-time order whose date already passed has nothing to remind
+      // about; say so instead of asking for permissions and then blaming them.
+      const scheduleIssue = getAlarmScheduleIssue(target, `${hours}:${minutes}`, selectedDay);
+      if (scheduleIssue) {
+        Alert.alert(
+          t('home.alarmCannotScheduleTitle'),
+          scheduleIssue === 'date-passed'
+            ? t('home.alarmDatePassedMsg', { date: formatShortDate(target.specificDate) })
+            : scheduleIssue === 'time-passed'
+              ? t('home.alarmTimePassedMsg')
+              : t('home.alarmNoUpcomingVisitMsg'),
+        );
+        return;
+      }
       const fireAt = await saveAlarm(target.id, `${hours}:${minutes}`, selectedDay);
       if (fireAt) {
         showAlarmConfirm(fireAt);
@@ -226,4 +242,4 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
   });
 };
 
-export default AlarmPicker;
+export default React.memo(AlarmPicker);

@@ -1,3 +1,5 @@
+(global as { __DEV__?: boolean }).__DEV__ = true;
+
 jest.mock('react-native-purchases', () => ({
   __esModule: true,
   default: {
@@ -6,9 +8,10 @@ jest.mock('react-native-purchases', () => ({
     configure: jest.fn(),
     logIn: jest.fn(),
     logOut: jest.fn(async () => ({})),
+    isAnonymous: jest.fn(async () => false),
     getCustomerInfo: jest.fn(),
   },
-  LOG_LEVEL: { DEBUG: 'DEBUG' },
+  LOG_LEVEL: { DEBUG: 'DEBUG', WARN: 'WARN' },
   PURCHASES_ERROR_CODE: {
     NETWORK_ERROR: '10',
     LOG_OUT_ANONYMOUS_USER_ERROR: '22',
@@ -32,6 +35,7 @@ const mockPurchases = jest.requireMock('react-native-purchases').default as {
   configure: jest.Mock;
   logIn: jest.Mock;
   logOut: jest.Mock;
+  isAnonymous: jest.Mock;
   getCustomerInfo: jest.Mock;
 };
 
@@ -43,6 +47,7 @@ describe('RevenueCat session serialization', () => {
     jest.clearAllMocks();
     mockPurchases.isConfigured.mockResolvedValue(false);
     mockPurchases.logOut.mockResolvedValue({} as any);
+    mockPurchases.isAnonymous.mockResolvedValue(false);
     mockPurchases.getCustomerInfo.mockResolvedValue(customerInfo('existing'));
   });
 
@@ -152,5 +157,25 @@ describe('RevenueCat session serialization', () => {
       customerInfo: { originalAppUserId: 'user-a' },
     });
     expect(mockPurchases.logIn).toHaveBeenCalledWith('user-a');
+  });
+
+  test('a restored anonymous identity is isolated without calling logOut', async () => {
+    mockPurchases.isAnonymous.mockResolvedValue(true);
+    mockPurchases.logIn.mockImplementation(async (id: string) => ({ customerInfo: customerInfo(id) }));
+
+    await logoutRevenueCatSession();
+    await identifyRevenueCatUser('user-a');
+
+    expect(mockPurchases.logOut).not.toHaveBeenCalled();
+    expect(mockPurchases.logIn).toHaveBeenCalledWith('user-a');
+  });
+
+  test('a failed anonymous check still falls back to logOut', async () => {
+    mockPurchases.isAnonymous.mockRejectedValue(new Error('native unavailable'));
+    mockPurchases.logIn.mockImplementation(async (id: string) => ({ customerInfo: customerInfo(id) }));
+
+    await identifyRevenueCatUser('user-a');
+
+    expect(mockPurchases.logOut).toHaveBeenCalledTimes(1);
   });
 });

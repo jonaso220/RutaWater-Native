@@ -267,6 +267,12 @@ export const useAlarmChecker = () => {
     // Al montar (arranque con datos ya cargados o apenas lleguen) y en cada
     // cambio remoto relevante mientras sigue en foreground.
     let lastSignature: string | null = null;
+    // The store also notifies for unrelated fields (loading, counts, catalog
+    // bridges); only recompute the signature when the client list or scope
+    // actually changed.
+    let signatureClients: ReturnType<typeof useClientsStore.getState>['clients'] | null = null;
+    let signatureScopeKey: string | null = null;
+    let cachedSignature = '';
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const readyForActiveScope = (state: ReturnType<typeof useClientsStore.getState>) => {
       const activeScopeKey = activeProfileScope || auth().currentUser?.uid;
@@ -280,7 +286,12 @@ export const useAlarmChecker = () => {
     ) => {
       const activeScopeKey = activeProfileScope || auth().currentUser?.uid;
       if (!activeScopeKey || !readyForActiveScope(state)) return;
-      const signature = getAlarmReconciliationSignature(state.clients, activeScopeKey);
+      if (state.clients !== signatureClients || activeScopeKey !== signatureScopeKey) {
+        signatureClients = state.clients;
+        signatureScopeKey = activeScopeKey;
+        cachedSignature = getAlarmReconciliationSignature(state.clients, activeScopeKey);
+      }
+      const signature = cachedSignature;
       if (!immediate && signature === lastSignature) return;
       lastSignature = signature;
       if (debounceTimer) clearTimeout(debounceTimer);

@@ -301,4 +301,4 @@ const getStyles = (colors: ThemeColors, scale: number = 1, compact = false) => {
   });
 };
 
-export default CalendarModal;
+export default React.memo(CalendarModal);

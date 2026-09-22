@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -40,7 +40,10 @@ const ProfilesModal: React.FC<ProfilesModalProps> = ({ visible, onClose, mode = 
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
+  const styles = useMemo(
+    () => getStyles(colors, isTablet, modalWidth, fontScale),
+    [colors, isTablet, modalWidth, fontScale],
+  );
 
   const profiles = useProfileStore((s) => s.profiles);
   const activeProfileId = useProfileStore((s) => s.activeProfileId);
@@ -634,4 +637,4 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   });
 };
 
-export default ProfilesModal;
+export default React.memo(ProfilesModal);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -39,7 +39,7 @@ const PromptModal: React.FC<PromptModalProps> = ({
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { fontScale } = useLayout();
-  const styles = getStyles(colors, fontScale);
+  const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
   const [value, setValue] = useState(defaultValue);
 
   useEffect(() => {

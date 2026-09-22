@@ -8,13 +8,7 @@ import notifee, {
 } from '@notifee/react-native';
 import { Platform } from 'react-native';
 import { reportError } from '../lib/crashReporting';
-import {
-  parseTime,
-  nextOccurrence,
-  nextOccurrenceForDay,
-  occurrenceForSpecificDate,
-  occurrenceForVisitDate,
-} from '../utils/scheduling';
+import { resolveAlarmFireDate } from '../utils/scheduling';
 
 const ANDROID_CHANNEL_ID = 'visit-alarms';
 
@@ -157,39 +151,10 @@ export const scheduleClientAlarm = async (
     permissionAlreadyChecked?: boolean;
   },
 ): Promise<Date | null> => {
-  const parsed = parseTime(time);
-  if (!parsed) return null;
+  const fireAt = resolveAlarmFireDate(time, options);
+  if (!fireAt) return null;
 
   const id = notificationIdFor(clientId);
-
-  let fireAt: Date | null = null;
-  if (typeof options?.scheduledFor === 'number') {
-    fireAt = Number.isFinite(options.scheduledFor) && options.scheduledFor > Date.now()
-      ? new Date(options.scheduledFor)
-      : null;
-    if (!fireAt) return null;
-  } else if (options?.specificDate !== undefined) {
-    fireAt = occurrenceForSpecificDate(options.specificDate, parsed.hours, parsed.minutes);
-    // A supplied one-time date is authoritative. If it is malformed, does not
-    // exist, or is already past, silently falling back to a weekly/daily alarm
-    // would schedule a different reminder than the user requested.
-    if (!fireAt) return null;
-  } else if (options?.nextVisitDate) {
-    fireAt = occurrenceForVisitDate(
-      options.nextVisitDate,
-      parsed.hours,
-      parsed.minutes,
-      options.intervalWeeks ?? 1,
-    );
-    // Same contract as specificDate: a known visit day must not silently
-    // collapse to "next weekday" or the driver goes to a house that is not due.
-    if (!fireAt) return null;
-  } else if (options?.targetDay) {
-    fireAt = nextOccurrenceForDay(options.targetDay, parsed.hours, parsed.minutes);
-  }
-  if (!fireAt) {
-    fireAt = nextOccurrence(parsed.hours, parsed.minutes);
-  }
 
   const trigger: TimestampTrigger = {
     type: TriggerType.TIMESTAMP,

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -41,7 +41,10 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
+  const styles = useMemo(
+    () => getStyles(colors, isTablet, modalWidth, fontScale),
+    [colors, isTablet, modalWidth, fontScale],
+  );
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const reviewingRef = useRef<string | null>(null);
 
@@ -268,4 +271,4 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   });
 };
 
-export default TransfersSheet;
+export default React.memo(TransfersSheet);

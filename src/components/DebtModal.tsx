@@ -26,6 +26,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
+import { useValueWhileVisible } from '../hooks/useValueWhileVisible';
 
 interface DebtModalProps {
   visible: boolean;
@@ -62,7 +63,10 @@ const DebtModal: React.FC<DebtModalProps> = ({
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
+  const styles = useMemo(
+    () => getStyles(colors, isTablet, modalWidth, fontScale),
+    [colors, isTablet, modalWidth, fontScale],
+  );
   const [newAmount, setNewAmount] = useState('');
   const [editingDebt, setEditingDebt] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
@@ -79,9 +83,11 @@ const DebtModal: React.FC<DebtModalProps> = ({
     savingRef.current = false;
   }, [client?.id]);
 
+  // Don't rebuild the identity index on every snapshot while closed.
+  const visibleAllClients = useValueWhileVisible(allClients, visible);
   const identityClients = useMemo(
-    () => allClients && allClients.length > 0 ? allClients : client ? [client] : [],
-    [allClients, client],
+    () => visibleAllClients && visibleAllClients.length > 0 ? visibleAllClients : client ? [client] : [],
+    [visibleAllClients, client],
   );
   const identityIndex = useMemo(
     () => buildClientIdentityIndex(identityClients),
@@ -586,4 +592,4 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   });
 };
 
-export default DebtModal;
+export default React.memo(DebtModal);

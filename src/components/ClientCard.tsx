@@ -99,6 +99,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
   const s = (v: number) => Math.round(v * fontScale);
   const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
   const [showPositionPrompt, setShowPositionPrompt] = useState(false);
+  // Mounted on first use (then kept for its close animation) so hundreds of
+  // cards don't each carry a hidden native modal.
+  const [positionPromptMounted, setPositionPromptMounted] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const allProducts = useAllProducts();
   const relationshipCount = Object.keys(client.relationships || {}).length;
@@ -120,6 +123,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
 
   const handleOrderTap = () => {
     if (!onChangePosition) return;
+    setPositionPromptMounted(true);
     setShowPositionPrompt(true);
   };
 
@@ -296,21 +300,23 @@ const ClientCard: React.FC<ClientCardProps> = ({
     );
     return (
       <View style={[styles.card, styles.noteCard, wideLayout && styles.cardWide]}>
-        <PromptModal
-          visible={showPositionPrompt}
-          title={t('clientCard.changePosition')}
-          message={t('clientCard.currentPosition', { pos: index + 1 })}
-          defaultValue={String(index + 1)}
-          keyboardType="number-pad"
-          onSubmit={(text) => {
-            setShowPositionPrompt(false);
-            const num = parseInt(text, 10);
-            if (num > 0 && onChangePosition) {
-              onChangePosition(num);
-            }
-          }}
-          onCancel={() => setShowPositionPrompt(false)}
-        />
+        {positionPromptMounted && (
+          <PromptModal
+            visible={showPositionPrompt}
+            title={t('clientCard.changePosition')}
+            message={t('clientCard.currentPosition', { pos: index + 1 })}
+            defaultValue={String(index + 1)}
+            keyboardType="number-pad"
+            onSubmit={(text) => {
+              setShowPositionPrompt(false);
+              const num = parseInt(text, 10);
+              if (num > 0 && onChangePosition) {
+                onChangePosition(num);
+              }
+            }}
+            onCancel={() => setShowPositionPrompt(false)}
+          />
+        )}
         <TouchableOpacity style={styles.orderBadge} onPress={handleOrderTap} activeOpacity={0.6}>
           <Text style={styles.orderText}>{index + 1}</Text>
         </TouchableOpacity>
@@ -358,21 +364,23 @@ const ClientCard: React.FC<ClientCardProps> = ({
         client.isStarred && styles.cardStarred,
       ]}
     >
-      <PromptModal
-        visible={showPositionPrompt}
-        title={t('clientCard.changePosition')}
-        message={t('clientCard.currentPosition', { pos: index + 1 })}
-        defaultValue={String(index + 1)}
-        keyboardType="number-pad"
-        onSubmit={(text) => {
-          setShowPositionPrompt(false);
-          const num = parseInt(text, 10);
-          if (num > 0 && onChangePosition) {
-            onChangePosition(num);
-          }
-        }}
-        onCancel={() => setShowPositionPrompt(false)}
-      />
+      {positionPromptMounted && (
+        <PromptModal
+          visible={showPositionPrompt}
+          title={t('clientCard.changePosition')}
+          message={t('clientCard.currentPosition', { pos: index + 1 })}
+          defaultValue={String(index + 1)}
+          keyboardType="number-pad"
+          onSubmit={(text) => {
+            setShowPositionPrompt(false);
+            const num = parseInt(text, 10);
+            if (num > 0 && onChangePosition) {
+              onChangePosition(num);
+            }
+          }}
+          onCancel={() => setShowPositionPrompt(false)}
+        />
+      )}
       {showActionsMenu && actionsMenu}
       <View style={[styles.cardBody, wideLayout && styles.cardBodyWide]}>
         {/* Client identity and high-priority controls */}

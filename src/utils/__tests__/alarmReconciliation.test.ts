@@ -177,6 +177,33 @@ describe('alarm reconciliation safety', () => {
     expect(remoteClear).not.toBe(remoteTime);
   });
 
+  test('signature tracks every scheduling field, ignores order and other scopes', () => {
+    const a = alarmClient({ id: 'a', userId: 'user-1', visitDay: 'Lunes' });
+    const b = alarmClient({ id: 'b', userId: 'user-1', visitDay: 'Martes', alarm: '' });
+    const other = alarmClient({ id: 'c', userId: 'user-2', visitDay: 'Lunes' });
+    const initial = getAlarmReconciliationSignature([a, b, other], 'user-1');
+
+    expect(getAlarmReconciliationSignature([b, a], 'user-1')).toBe(initial);
+    expect(getAlarmReconciliationSignature([a, b, { ...other, alarm: '11:00' }], 'user-1')).toBe(initial);
+    expect(getAlarmReconciliationSignature([a, b], 'user-1')).toBe(initial);
+
+    const changes: Record<string, unknown>[] = [
+      { alarmDay: 'Martes' },
+      { freq: 'biweekly' },
+      { isCompleted: true },
+      { specificDate: '2026-10-01' },
+      { visitDay: 'Miercoles' },
+      { visitDays: ['Lunes', 'Jueves'] },
+      { doneFor: '2026-09-21' },
+      { lastVisited: '2026-09-21' },
+    ];
+    changes.forEach((change) => {
+      expect(getAlarmReconciliationSignature([{ ...b, ...change }, a], 'user-1')).not.toBe(initial);
+    });
+    // A client without alarm still counts (its removal can orphan a trigger).
+    expect(getAlarmReconciliationSignature([a], 'user-1')).not.toBe(initial);
+  });
+
   test('an empty stale scope never authorizes orphan cleanup after a profile switch', () => {
     expect(isAlarmScopeReady(false, 'scope-a', 'scope-b')).toBe(false);
     expect(isAlarmScopeReady(false, 'scope-b', 'scope-b')).toBe(true);

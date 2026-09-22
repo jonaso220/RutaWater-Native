@@ -30,6 +30,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
+import { useValueWhileVisible } from '../hooks/useValueWhileVisible';
 import { getClientPhoneSearchText } from '../utils/clientPhones';
 
 interface DebtsSheetProps {
@@ -63,8 +64,8 @@ interface ClientDebtGroup {
 
 const DebtsSheet: React.FC<DebtsSheetProps> = ({
   visible,
-  debts,
-  clients,
+  debts: liveDebts,
+  clients: liveClients,
   isAdmin,
   onMarkPaid,
   onMarkAllPaid,
@@ -77,11 +78,17 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
+  // Everything below is derived from these; don't recompute it while closed.
+  const debts = useValueWhileVisible(liveDebts, visible);
+  const clients = useValueWhileVisible(liveClients, visible);
   const { width: windowWidth } = useWindowDimensions();
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
   const modalWidth = getModalWidth(windowWidth);
-  const styles = getStyles(colors, isTablet, modalWidth, fontScale);
+  const styles = useMemo(
+    () => getStyles(colors, isTablet, modalWidth, fontScale),
+    [colors, isTablet, modalWidth, fontScale],
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('date');
   const [showAddPanel, setShowAddPanel] = useState(false);
@@ -1265,4 +1272,4 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   });
 };
 
-export default DebtsSheet;
+export default React.memo(DebtsSheet);

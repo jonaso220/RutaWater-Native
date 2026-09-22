@@ -1373,4 +1373,4 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   });
 };
 
-export default SmartOrderModal;
+export default React.memo(SmartOrderModal);

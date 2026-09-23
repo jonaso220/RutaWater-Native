@@ -3,7 +3,7 @@ import { reportError } from '../../lib/crashReporting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Debt } from '../../types';
-import { parseDate } from '../../utils/helpers';
+import { sortByCreatedAtDesc } from '../../utils/sortByCreatedAt';
 import { belongsToProfileScope } from '../../utils/profileScope';
 import { dataScopeCacheKey, dataScopeQuery } from '../../utils/dataScope';
 import { isLiveSnapshotReady, liveSnapshotGeneration } from '../../utils/liveSnapshot';
@@ -60,17 +60,14 @@ export const useDebtsQuery = ({
     }
     const unsubscribe = scopedQuery.onSnapshot(
         (snapshot) => {
-          const loaded: Debt[] = snapshot.docs
-            .filter((doc) => belongsToProfileScope(doc.data(), userId, groupId))
-            .map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            })) as Debt[];
-          loaded.sort((a, b) => {
-            const dateA = parseDate(a.createdAt)?.getTime() || 0;
-            const dateB = parseDate(b.createdAt)?.getTime() || 0;
-            return dateB - dateA;
+          const inScope: Debt[] = [];
+          snapshot.docs.forEach((doc) => {
+            const data = doc.data();
+            if (belongsToProfileScope(data, userId, groupId)) {
+              inScope.push({ id: doc.id, ...data } as Debt);
+            }
           });
+          const loaded = sortByCreatedAtDesc(inScope);
           queryClient.setQueryData<Debt[]>(queryKey, loaded);
           setReadyGeneration(generation);
         },

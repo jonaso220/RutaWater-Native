@@ -3,7 +3,7 @@ import { reportError } from '../../lib/crashReporting';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../../config/firebase';
 import { Transfer } from '../../types';
-import { parseDate } from '../../utils/helpers';
+import { sortByCreatedAtDesc } from '../../utils/sortByCreatedAt';
 import { belongsToProfileScope } from '../../utils/profileScope';
 import { dataScopeCacheKey, dataScopeQuery } from '../../utils/dataScope';
 import { isLiveSnapshotReady, liveSnapshotGeneration } from '../../utils/liveSnapshot';
@@ -54,17 +54,14 @@ export const useTransfersQuery = ({
     }
     const unsubscribe = scopedQuery.onSnapshot(
         (snapshot) => {
-          const loaded: Transfer[] = snapshot.docs
-            .filter((doc) => belongsToProfileScope(doc.data(), userId, groupId))
-            .map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            })) as Transfer[];
-          loaded.sort((a, b) => {
-            const dateA = parseDate(a.createdAt)?.getTime() || 0;
-            const dateB = parseDate(b.createdAt)?.getTime() || 0;
-            return dateB - dateA;
+          const inScope: Transfer[] = [];
+          snapshot.docs.forEach((doc) => {
+            const data = doc.data();
+            if (belongsToProfileScope(data, userId, groupId)) {
+              inScope.push({ id: doc.id, ...data } as Transfer);
+            }
           });
+          const loaded = sortByCreatedAtDesc(inScope);
           queryClient.setQueryData<Transfer[]>(queryKey, loaded);
           setReadyGeneration(generation);
         },

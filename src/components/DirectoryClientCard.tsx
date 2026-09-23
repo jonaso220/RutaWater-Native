@@ -56,7 +56,7 @@ const DirectoryClientCard = ({
   const { t } = useTranslation();
   const { fontScale, width } = useLayout();
   const wideLayout = width >= 900;
-  const styles = React.useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
+  const styles = getSharedStyles(colors, fontScale);
 
   const sendWhatsApp = (client: Client) => {
     if (!client.phone) return;
@@ -332,6 +332,23 @@ const DirectoryClientCard = ({
       </View>
     </View>
   );
+};
+
+// Every card in the directory list uses the same styles. Building one
+// StyleSheet per card instance cost a full style object per row on mount.
+const sharedStylesCache = new WeakMap<ThemeColors, Map<number, ReturnType<typeof getStyles>>>();
+const getSharedStyles = (colors: ThemeColors, scale: number) => {
+  let byScale = sharedStylesCache.get(colors);
+  if (!byScale) {
+    byScale = new Map();
+    sharedStylesCache.set(colors, byScale);
+  }
+  let styles = byScale.get(scale);
+  if (!styles) {
+    styles = getStyles(colors, scale);
+    byScale.set(scale, styles);
+  }
+  return styles;
 };
 
 const getStyles = (colors: ThemeColors, scale: number = 1) => {

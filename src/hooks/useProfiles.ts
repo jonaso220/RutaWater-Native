@@ -33,7 +33,17 @@ export const useProfiles = (
   const [activeProfileId, setActiveProfileId] = useState<string>(PRIMARY_PROFILE_ID);
   // '' = sin nombre guardado; el fallback traducido se resuelve al mostrar.
   const [primaryName, setPrimaryName] = useState<string>('');
-  const [storedProfileIds, setStoredProfileIds] = useState<string[]>([]);
+  const [storedProfileIds, setStoredProfileIdsState] = useState<string[]>([]);
+  // Every users/{uid} snapshot (active profile, names, alarms…) carries a new
+  // profileIds array. Keeping the previous one when the ids are equal avoids
+  // tearing down and reattaching every profile listener on each snapshot.
+  const setStoredProfileIds = useCallback((next: string[]) => {
+    setStoredProfileIdsState((prev) => (
+      prev.length === next.length && prev.every((id, index) => id === next[index])
+        ? prev
+        : next
+    ));
+  }, []);
   const [profileIdsInitialized, setProfileIdsInitialized] = useState(false);
   const [profileIndexVersion, setProfileIndexVersion] = useState(0);
   const [loaded, setLoaded] = useState(false);

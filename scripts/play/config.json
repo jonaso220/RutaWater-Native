@@ -4,5 +4,6 @@
   "package": "com.rutawater.native",
   "track": "production",
   "bundle": "android/app/build/outputs/bundle/release/app-release.aab",
+  "mapping": "android/app/build/outputs/mapping/release/mapping.txt",
   "console_url": "https://play.google.com/console/u/0/developers/6498754936802314094/app/4972850541307179516/publishing"
 }

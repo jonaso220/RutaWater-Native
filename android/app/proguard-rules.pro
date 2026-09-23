@@ -8,3 +8,8 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+
+# react-native-device-info reads the Play install referrer on startup through
+# reflection (Class.forName + getMethod). R8 would otherwise rename that API
+# and the lookup would throw NoSuchMethodException on every launch.
+-keep class com.android.installreferrer.api.** { *; }

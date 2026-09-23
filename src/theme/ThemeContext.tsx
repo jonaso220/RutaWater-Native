@@ -1,4 +1,4 @@
-import React, {createContext, useContext, useSyncExternalStore} from 'react';
+import React, {createContext, useContext, useMemo, useSyncExternalStore} from 'react';
 import {Appearance} from 'react-native';
 import {lightColors, darkColors, ThemeColors} from './colors';
 
@@ -22,10 +22,15 @@ const getSnapshot = () => Appearance.getColorScheme() === 'dark';
 
 export const ThemeProvider: React.FC<{children: React.ReactNode}> = ({children}) => {
   const isDark = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const colors = isDark ? darkColors : lightColors;
+  // A new value object on every provider render would re-render every
+  // useTheme() consumer; it only needs to change with the color scheme.
+  const value = useMemo(
+    () => ({colors: isDark ? darkColors : lightColors, isDark}),
+    [isDark],
+  );
 
   return (
-    <ThemeContext.Provider value={{colors, isDark}}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

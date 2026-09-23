@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useDeferredValue } from 'react';
 import {
   View,
   Text,
@@ -114,6 +114,9 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   // legacy. Nunca intenta adivinar por nombre/teléfono.
   const clientGroups: ClientDebtGroup[] = useMemo(() => {
     const grouped = new Map<string, ClientDebtGroup>();
+    // Newest debt per group, computed once instead of re-parsing every date
+    // inside the sort comparator.
+    const latestByKey = new Map<string, number>();
 
     debts.forEach((debt) => {
       const stableClientId = getRelatedRecordStableClientId(debt, identityIndex);
@@ -142,17 +145,19 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
         if (!group.clientAddress) {
           group.clientAddress = client?.address || debt.clientAddress || '';
         }
-        if (client && !clients.some((c) => c.id === group.clientId)) {
+        if (client && !identityIndex.clientByDocumentId.has(group.clientId)) {
           group.clientId = client.id;
         }
       }
       const targetGroup = grouped.get(key)!;
       targetGroup.total += Number(debt.amount) || 0;
       targetGroup.debts.push(debt);
-      const age = getAgeDays(debt.createdAt);
+      const createdAtMs = parseDate(debt.createdAt)?.getTime() || 0;
+      const age = createdAtMs ? Math.floor((now - createdAtMs) / 86400000) : 0;
       if (age > targetGroup.maxAgeDays) {
         targetGroup.maxAgeDays = age;
       }
+      if (createdAtMs > (latestByKey.get(key) || 0)) latestByKey.set(key, createdAtMs);
     });
 
     const groups = Array.from(grouped.values());
@@ -161,23 +166,26 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
       groups.sort((a, b) => b.total - a.total);
     } else {
       // Sort by most recent debt
-      groups.sort((a, b) => {
-        const latestA = Math.max(...a.debts.map((d) => parseDate(d.createdAt)?.getTime() || 0));
-        const latestB = Math.max(...b.debts.map((d) => parseDate(d.createdAt)?.getTime() || 0));
-        return latestB - latestA;
-      });
+      groups.sort((a, b) => (
+        (latestByKey.get(b.stableClientId) || 0) - (latestByKey.get(a.stableClientId) || 0)
+      ));
     }
 
     return groups;
   }, [debts, clients, sortMode, identityIndex]);
 
+  // Deferred: keystrokes update the input first; the fuzzy filtering over
+  // every group/client runs as a lower-priority render right after.
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const deferredAddSearch = useDeferredValue(addSearch);
+
   const filteredGroups = useMemo(() => {
-    if (!searchTerm.trim()) return clientGroups;
-    const matcher = fuzzyMatch(searchTerm);
+    if (!deferredSearchTerm.trim()) return clientGroups;
+    const matcher = fuzzyMatch(deferredSearchTerm);
     return clientGroups.filter((g) =>
       matcher(g.clientName || '', g.clientAddress || '', g.clientPhone || ''),
     );
-  }, [clientGroups, searchTerm]);
+  }, [clientGroups, deferredSearchTerm]);
 
   const indebtedStableIds = useMemo(() => {
     const set = new Set<string>();
@@ -191,14 +199,14 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   // relevant matches (exact name, prefix) appear first instead of being
   // buried below generic fuzzy matches.
   const addPanelClients = useMemo(() => {
-    const matcher = fuzzyMatch(addSearch);
+    const matcher = fuzzyMatch(deferredAddSearch);
     const filtered = clients.filter((c) => matcher(c.name || '', c.address || '', getClientPhoneSearchText(c)));
-    if (!addSearch.trim()) return filtered;
+    if (!deferredAddSearch.trim()) return filtered;
     return filtered
-      .map((c) => ({ c, score: matchScore(addSearch, c.name || '', c.address || '', getClientPhoneSearchText(c)) }))
+      .map((c) => ({ c, score: matchScore(deferredAddSearch, c.name || '', c.address || '', getClientPhoneSearchText(c)) }))
       .sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || ''))
       .map((entry) => entry.c);
-  }, [clients, addSearch]);
+  }, [clients, deferredAddSearch]);
 
   const handleAddDebt = async () => {
     if (!selectedClient || !onAddDebt || savingRef.current) return;
@@ -601,7 +609,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                 </TouchableOpacity>
               )}
             </View>
-            {searchTerm.trim().length > 0 && (
+            {deferredSearchTerm.trim().length > 0 && (
               <Text style={styles.searchResultCount}>
                 {t('debtsSheet.resultCount', { count: filteredGroups.length })}
               </Text>

@@ -61,6 +61,21 @@ class Play:
             detail = json.loads(error.read()).get('error', {}).get('message', 'API request failed')
             raise RuntimeError(f'Google Play HTTP {error.code}: {detail}') from None
 
+    def upload_mapping(self, edit_url, config, code):
+        """Attach the R8 mapping so Play Console shows readable stack traces.
+
+        Best-effort: Crashlytics receives its own copy from the Gradle build,
+        so a failure here must not block an otherwise valid release.
+        """
+        mapping = config.get('mapping')
+        if not mapping or not Path(mapping).exists():
+            return
+        url = edit_url.replace('/androidpublisher/v3/', '/upload/androidpublisher/v3/') + f'/apks/{code}/deobfuscationFiles/proguard?uploadType=media'
+        try:
+            self.request('POST', url, Path(mapping).read_bytes(), binary=True)
+        except Exception as error:
+            print(f'Warning: R8 mapping upload failed; Play stack traces stay obfuscated: {error}', file=sys.stderr)
+
     def run(self, config, mode, code, name):
         edit = self.request('POST', self.root + '/edits', {})['id']
         edit_url = self.root + '/edits/' + edit
@@ -87,6 +102,7 @@ class Play:
                 result = self.request('POST', upload, data, binary=True)
                 if int(result['versionCode']) != int(code):
                     raise ValueError('Built bundle version does not match source version; edit discarded')
+                self.upload_mapping(edit_url, config, code)
             self.request('PUT', edit_url + '/tracks/' + config['track'], {'track': config['track'], 'releases': releases})
             self.request('POST', edit_url + ':validate')
             # Draft uploads must not submit pending changes or restart a review.

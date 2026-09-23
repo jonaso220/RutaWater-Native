@@ -62,6 +62,23 @@ class ApiSafetyTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.upload_with_commit(RuntimeError('Google Play HTTP 400: Changes are currently in review.'), {})
 
+    def test_upload_attaches_r8_mapping_after_bundle(self):
+        config = {**self.config, 'mapping': 'mapping.txt'}
+        client = self.client()
+        client.request = Mock(side_effect=[{'id':'temporary'}, {'tracks':[{'track':'alpha'}]}, {'versionCode':3}, {}, {}, {}, {}])
+        with patch('release.summary'), patch('release.Path.exists', return_value=True), patch('release.Path.read_bytes', return_value=b'data'), patch('release.Path.read_text', return_value='[{"language":"es-419","text":"Changes"}]'):
+            client.run(config, 'upload', 3, '1.0')
+        mapping_call = client.request.call_args_list[3]
+        self.assertTrue(mapping_call.args[1].endswith('/edits/temporary/apks/3/deobfuscationFiles/proguard?uploadType=media'))
+        self.assertIn('/upload/androidpublisher/v3/', mapping_call.args[1])
+    def test_mapping_upload_failure_does_not_block_release(self):
+        config = {**self.config, 'mapping': 'mapping.txt'}
+        client = self.client()
+        client.request = Mock(side_effect=[{'id':'temporary'}, {'tracks':[{'track':'alpha'}]}, {'versionCode':3}, RuntimeError('Google Play HTTP 500: boom'), {}, {}, {}])
+        with patch('release.summary'), patch('builtins.print'), patch('release.Path.exists', return_value=True), patch('release.Path.read_bytes', return_value=b'data'), patch('release.Path.read_text', return_value='[{"language":"es-419","text":"Changes"}]'):
+            client.run(config, 'upload', 3, '1.0')
+        self.assertIn('changesNotSentForReview=true', client.request.call_args_list[-1].args[1])
+
 class TriggerTests(unittest.TestCase):
     def detect(self, current, previous, env):
         with tempfile.TemporaryDirectory() as directory:

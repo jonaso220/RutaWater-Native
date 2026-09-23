@@ -105,6 +105,21 @@ interface AiParseOptions {
   previousResult?: ParseResult;
 }
 
+// Sin límite, una conexión colgada (señal débil en la calle) dejaba el
+// spinner de Pedido IA girando para siempre. El modelo suele responder en
+// pocos segundos; pasado este margen se muestra el error de red habitual.
+const PARSE_REQUEST_TIMEOUT_MS = 30_000;
+
+const fetchWithTimeout = async (url: string, init: RequestInit): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PARSE_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 export const useAiParse = (): UseAiParseReturn => {
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -200,16 +215,16 @@ export const useAiParse = (): UseAiParseReturn => {
           }),
         };
         try {
-          let response = await fetch(API_ENDPOINTS.parseOrder, requestInit);
+          let response = await fetchWithTimeout(API_ENDPOINTS.parseOrder, requestInit);
           // Un servidor local levantado pero mal configurado (sin API key, por
           // ejemplo) tampoco debe inutilizar Pedido IA en el simulador.
           if (response.status >= 500 && API_ENDPOINTS.parseOrderFallback) {
-            response = await fetch(API_ENDPOINTS.parseOrderFallback, requestInit);
+            response = await fetchWithTimeout(API_ENDPOINTS.parseOrderFallback, requestInit);
           }
           return response;
         } catch (localError) {
           if (!API_ENDPOINTS.parseOrderFallback) throw localError;
-          return fetch(API_ENDPOINTS.parseOrderFallback, requestInit);
+          return fetchWithTimeout(API_ENDPOINTS.parseOrderFallback, requestInit);
         }
       };
 

@@ -117,6 +117,7 @@ const reorderLayoutAnimation = {
 
 import DaySelector from '../components/DaySelector';
 import { ProductLabel } from '../components/ProductIcon';
+import DebouncedSearchInput, { DebouncedSearchInputHandle } from '../components/DebouncedSearchInput';
 
 // --- Memoized wrapper to prevent ClientCard re-renders on every day switch ---
 interface ClientItemProps {
@@ -291,7 +292,8 @@ const HomeScreen = () => {
   const [showSmartModal, setShowSmartModal] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef<DebouncedSearchInputHandle>(null);
+  const searchIconStyle = useMemo(() => [styles.searchIcon, { fontSize: 14 }], [styles.searchIcon]);
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   const [relationshipClient, setRelationshipClient] = useState<Client | null>(null);
@@ -549,7 +551,7 @@ const HomeScreen = () => {
   // Clear search when leaving this tab
   useFocusEffect(
     useCallback(() => {
-      return () => setSearchTerm('');
+      return () => searchInputRef.current?.clear();
     }, []),
   );
 
@@ -570,8 +572,10 @@ const HomeScreen = () => {
         previousKey === currentTodayKey ? previousKey : currentTodayKey
       ));
       if (currentToday !== lastKnownToday) {
-        // Day changed! Only auto-switch if user was viewing the old "today"
-        if (selectedDay === lastKnownToday) {
+        // Day changed! Only auto-switch if user was viewing the old "today".
+        // Read through the ref so switching tabs does not re-register the
+        // AppState listener and midnight timer.
+        if (selectedDayRef.current === lastKnownToday) {
           setSelectedDay(currentToday);
         }
         lastKnownToday = currentToday;
@@ -598,15 +602,7 @@ const HomeScreen = () => {
       if (rolloverTimer) clearTimeout(rolloverTimer);
       appStateSubscription.remove();
     };
-  }, [selectedDay]);
-
-  // Fix 4: Debounce search input
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, []);
 
   // Load WhatsApp templates (real-time listener)
   useEffect(() => {
@@ -1274,13 +1270,13 @@ const HomeScreen = () => {
   // Shared between the phone and wide-screen FlatList layouts.
   const listEmptyComponent = (
     <View style={styles.emptyContainer}>
-      <Text style={{ fontSize: 40, marginBottom: 8 }}>{searchTerm || activeFilters.size > 0 ? '🔍' : '📋'}</Text>
+      <Text style={{ fontSize: 40, marginBottom: 8 }}>{debouncedSearchTerm || activeFilters.size > 0 ? '🔍' : '📋'}</Text>
       <Text style={styles.emptyText}>
-        {searchTerm || activeFilters.size > 0
+        {debouncedSearchTerm || activeFilters.size > 0
           ? t('home.noSearchResults')
           : t('home.noClients', { day: selectedDay })}
       </Text>
-      {searchTerm || activeFilters.size > 0 ? (
+      {debouncedSearchTerm || activeFilters.size > 0 ? (
         <Text style={styles.emptySubtext}>{t('home.noSearchResultsSubtitle')}</Text>
       ) : (
         <Text style={styles.emptySubtext}>{t('home.noClientsSubtitle')}</Text>
@@ -1503,22 +1499,18 @@ const HomeScreen = () => {
       {/* Search bar + Filters */}
       <View style={styles.searchSection}>
         <View style={styles.searchRow}>
-          <View style={styles.searchInputWrapper}>
-            <Text style={[styles.searchIcon, { fontSize: 14 }]}>🔍</Text>
-            <TextInput
-              style={styles.searchInput}
-              value={searchTerm}
-              onChangeText={setSearchTerm}
-              placeholder={t('home.searchPlaceholder')}
-              placeholderTextColor={colors.textHint}
-              autoCorrect={false}
-            />
-            {searchTerm.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchTerm('')} style={styles.clearBtn}>
-                <Text style={styles.clearBtnText}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* Owns its keystrokes; only the debounced term re-renders Home. */}
+          <DebouncedSearchInput
+            ref={searchInputRef}
+            onDebouncedChange={setDebouncedSearchTerm}
+            placeholder={t('home.searchPlaceholder')}
+            placeholderTextColor={colors.textHint}
+            wrapperStyle={styles.searchInputWrapper}
+            iconStyle={searchIconStyle}
+            inputStyle={styles.searchInput}
+            clearButtonStyle={styles.clearBtn}
+            clearTextStyle={styles.clearBtnText}
+          />
           <TouchableOpacity
             style={[styles.filterToggleBtn, showFilters && styles.filterToggleBtnActive]}
             onPress={() => {
@@ -1682,7 +1674,7 @@ const HomeScreen = () => {
             keyboardShouldPersistTaps={androidListKeyboardTaps}
             initialNumToRender={12}
             maxToRenderPerBatch={12}
-            windowSize={11}
+            windowSize={7}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -1710,7 +1702,7 @@ const HomeScreen = () => {
             contentContainerStyle={clientListContentStyle}
             initialNumToRender={15}
             maxToRenderPerBatch={15}
-            windowSize={11}
+            windowSize={7}
             updateCellsBatchingPeriod={30}
             refreshControl={
               <RefreshControl

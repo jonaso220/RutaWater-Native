@@ -59,9 +59,12 @@ react {
 }
 
 /**
- * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ * Run R8 on release builds to shrink and optimize the Java/Kotlin bytecode.
+ * Libraries ship their own keep rules in their AARs; app-specific ones live
+ * in proguard-rules.pro. The Crashlytics plugin uploads the mapping file with
+ * each release build so crash stack traces stay readable.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -120,8 +123,8 @@ android {
         applicationId "com.rutawater.native"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 30
-        versionName "1.19"
+        versionCode 31
+        versionName "1.20"
     }
     packagingOptions {
         jniLibs {

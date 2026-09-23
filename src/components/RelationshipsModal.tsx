@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useDeferredValue } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -82,29 +82,32 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
     if (!client) return [];
     return relatedIds
       .map((id) => {
-        const c = allClients.find((cl) => cl.id === id);
+        const c = clientsById.get(id);
         if (!c) return null;
         return { client: c, type: relationships[id] };
       })
       .filter(Boolean) as { client: Client; type: string }[];
-  }, [client, allClients, relatedIds, relationships]);
+  }, [client, clientsById, relatedIds, relationships]);
 
   // Search results for adding new relationship.
   // Rank by matchScore (same as the directory) so exact prefix matches
   // appear first instead of being lost among generic fuzzy matches.
+  // Deferred so typing stays responsive while every client is ranked.
+  const deferredSearchTerm = useDeferredValue(searchTerm);
   const searchResults = useMemo(() => {
-    if (!client || !searchTerm.trim()) return [];
-    const matcher = fuzzyMatch(searchTerm);
+    if (!client || !deferredSearchTerm.trim()) return [];
+    const matcher = fuzzyMatch(deferredSearchTerm);
+    const relatedIdSet = new Set(relatedIds);
     return allClients
       .filter((c) => !c.isNote)
       .filter((c) => c.id !== client.id)
-      .filter((c) => !relatedIds.includes(c.id))
+      .filter((c) => !relatedIdSet.has(c.id))
       .filter((c) => matcher(c.name || '', c.address || '', getClientPhoneSearchText(c)))
-      .map((c) => ({ c, score: matchScore(searchTerm, c.name || '', c.address || '', getClientPhoneSearchText(c)) }))
+      .map((c) => ({ c, score: matchScore(deferredSearchTerm, c.name || '', c.address || '', getClientPhoneSearchText(c)) }))
       .sort((a, b) => b.score - a.score || (a.c.name || '').localeCompare(b.c.name || ''))
       .map((entry) => entry.c)
       .slice(0, 20);
-  }, [searchTerm, allClients, client, relatedIds]);
+  }, [deferredSearchTerm, allClients, client, relatedIds]);
 
   if (!client) return null;
 
@@ -309,7 +312,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
                         ) : null}
                       </TouchableOpacity>
                     ))}
-                    {searchTerm.trim().length > 0 && searchResults.length === 0 && (
+                    {deferredSearchTerm.trim().length > 0 && searchResults.length === 0 && (
                       <Text style={styles.noResults}>{t('home.noClients')}</Text>
                     )}
                   </>

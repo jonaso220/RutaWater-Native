@@ -238,7 +238,7 @@ const DebtModal: React.FC<DebtModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Existing debts */}
             {clientDebts.length > 0 ? (
               clientDebts.map((debt) => (

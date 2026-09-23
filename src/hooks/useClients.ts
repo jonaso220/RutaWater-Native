@@ -33,6 +33,7 @@ import { dataScopeFields, dataScopeQuery } from '../utils/dataScope';
 import { getRelatedClientReference } from '../utils/clientIdentity';
 import { createClientDocument, isClientLimitError } from '../services/clientCreation';
 import { getClientPhoneSearchText, getClientPhones } from '../utils/clientPhones';
+import { awaitWriteWithinGrace } from '../utils/pendingWrite';
 
 interface UseClientsProps {
   userId: string;
@@ -99,6 +100,16 @@ const compareDayOrder = (day: string) => (a: Client, b: Client) => {
   return orderA - orderB;
 };
 
+// How long an edit waits for the server before trusting Firestore's offline
+// queue. Online acknowledgements (and rejections) normally arrive well within.
+const CLIENT_WRITE_GRACE_MS = 1500;
+
+export interface UpdateClientOptions {
+  // Resolve only once the server acknowledged the write. Callers that confirm
+  // success to the user as a distinct step (AI orders) need this.
+  waitForServer?: boolean;
+}
+
 export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClientsProps) => {
   // Data source: TanStack Query holds the live array fed by a perpetual
   // Firestore listener (see useClientsQuery). isPending stays true until
@@ -123,10 +134,12 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
   // Optimistic-update helper: writes directly into the React Query cache so
   // consumers see the change immediately. The Firestore listener will
   // overwrite this with the authoritative server state on its next snapshot.
+  // Returns the array now in the cache so callers can publish the very same
+  // reference elsewhere.
   const setClientsCache = useCallback(
-    (updater: (prev: Client[]) => Client[]) => {
-      queryClient.setQueryData<Client[]>(cacheKey, (prev) => updater(prev ?? []));
-    },
+    (updater: (prev: Client[]) => Client[]): Client[] | undefined => (
+      queryClient.setQueryData<Client[]>(cacheKey, (prev) => updater(prev ?? []))
+    ),
     [queryClient, cacheKey],
   );
 
@@ -144,9 +157,18 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
       client.id === clientId ? { ...client, alarm, alarmDay, alarmScheduledFor } : client,
     );
     clientsRef.current = applyAlarm(clientsRef.current);
-    setClientsCache(applyAlarm);
-    useClientsStore.setState((state) => ({ clients: applyAlarm(state.clients) }));
-  }, [setClientsCache]);
+    const previousCache = queryClient.getQueryData<Client[]>(cacheKey);
+    const nextCache = setClientsCache(applyAlarm);
+    // Readers of the store (alarm checker, pickers) must see the alarm right
+    // away. Publishing the cache's own array when the store mirrors it means
+    // StoreSync's follow-up publish carries the same reference, so screens
+    // that select `clients` do not re-render a second time.
+    useClientsStore.setState((state) => ({
+      clients: nextCache && state.clients === previousCache
+        ? nextCache
+        : applyAlarm(state.clients),
+    }));
+  }, [cacheKey, queryClient, setClientsCache]);
   // Guard against double-tap on markAsDone
   const markingDoneRef = useRef<Set<string>>(new Set());
 
@@ -425,52 +447,71 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
     }
   }, [userId]);
 
-  // Generic update for client fields. Devuelve true si el write llegó a
-  // Firestore — los callers de la IA lo usan para no mostrar "Listo" en falso.
-  const updateClient = useCallback(async (clientId: string, data: Partial<Client>): Promise<boolean> => {
+  // Renombrar debe reflejarse en deudas/transferencias: clientName queda
+  // congelado al crearlas, y desactualizado partía la tarjeta del sheet en
+  // dos y desincronizaba el filtro "con deuda" del directorio. Best-effort:
+  // si esta parte falla, el rename principal ya quedó guardado.
+  const syncClientNameToRelatedRecords = useCallback(async (clientId: string, name: string) => {
+    try {
+      const { field, value, additionalFilter } = dataScopeQuery(
+        userId,
+        groupId,
+        scopeReadVersion,
+      );
+      await Promise.all((['debts', 'transfers'] as const).map(async (collection) => {
+        let scopedQuery = db.collection(collection)
+          .where(field, '==', value)
+          .where('clientId', '==', clientId);
+        if (additionalFilter) {
+          scopedQuery = scopedQuery.where(
+            additionalFilter.field,
+            '==',
+            additionalFilter.value,
+          );
+        }
+        const snap = await scopedQuery.get();
+        if (snap.empty) return;
+        const batch = db.batch();
+        snap.docs.forEach((docSnap) => batch.update(docSnap.ref, { clientName: name }));
+        await batch.commit();
+      }));
+    } catch (e) {
+      reportError(e, 'Error syncing clientName to debts/transfers');
+    }
+  }, [groupId, scopeReadVersion, userId]);
+
+  // Generic update for client fields. Devuelve false si el write falló, para
+  // que la UI avise en vez de asumir éxito. Por defecto no espera más que
+  // CLIENT_WRITE_GRACE_MS al servidor: el cambio ya se ve en la lista y queda
+  // en la cola offline de Firestore. `waitForServer` exige la confirmación
+  // del servidor (la IA la usa para no mostrar "Listo" en falso).
+  const updateClient = useCallback(async (
+    clientId: string,
+    data: Partial<Client>,
+    options?: UpdateClientOptions,
+  ): Promise<boolean> => {
+    let write: Promise<void>;
     try {
       const current = clientsRef.current.find((candidate) => candidate.id === clientId);
       const updates = current && scheduleChanged(current, data)
         ? { ...data, scheduleRevision: newVisitId() } : data;
-      await db.collection('clients').doc(clientId).update(updates);
+      write = db.collection('clients').doc(clientId).update(updates);
     } catch (e) {
       reportError(e, 'Error updating client');
       return false;
     }
-    // Renombrar debe reflejarse en deudas/transferencias: clientName queda
-    // congelado al crearlas, y desactualizado partía la tarjeta del sheet en
-    // dos y desincronizaba el filtro "con deuda" del directorio. Best-effort:
-    // si esta parte falla, el rename principal ya quedó guardado.
-    if (typeof data.name === 'string' && data.name.trim()) {
-      try {
-        const { field, value, additionalFilter } = dataScopeQuery(
-          userId,
-          groupId,
-          scopeReadVersion,
-        );
-        for (const collection of ['debts', 'transfers'] as const) {
-          let scopedQuery = db.collection(collection)
-            .where(field, '==', value)
-            .where('clientId', '==', clientId);
-          if (additionalFilter) {
-            scopedQuery = scopedQuery.where(
-              additionalFilter.field,
-              '==',
-              additionalFilter.value,
-            );
-          }
-          const snap = await scopedQuery.get();
-          if (snap.empty) continue;
-          const batch = db.batch();
-          snap.docs.forEach((docSnap) => batch.update(docSnap.ref, { clientName: data.name }));
-          await batch.commit();
-        }
-      } catch (e) {
-        reportError(e, 'Error syncing clientName to debts/transfers');
-      }
-    }
-    return true;
-  }, [groupId, scopeReadVersion, userId]);
+    const nextName = typeof data.name === 'string' ? data.name.trim() : '';
+    // Related records follow only a rename the server accepted, in the
+    // background: the editor does not wait for two more queries and batches.
+    void write.then(
+      () => (nextName ? syncClientNameToRelatedRecords(clientId, data.name as string) : undefined),
+      (e) => reportError(e, 'Error updating client'),
+    );
+    const outcome = options?.waitForServer
+      ? await write.then(() => 'acknowledged' as const, () => 'failed' as const)
+      : await awaitWriteWithinGrace(write, CLIENT_WRITE_GRACE_MS);
+    return outcome !== 'failed';
+  }, [syncClientNameToRelatedRecords]);
 
   // Schedule a client from the directory to a specific day/frequency.
   // mode='add' (default, used by directory ScheduleModal): when client already has a

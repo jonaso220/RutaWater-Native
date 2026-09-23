@@ -222,7 +222,7 @@ const RelationshipsModal: React.FC<RelationshipsModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {mode === 'list' ? (
               <>
                 {/* Linked clients list */}

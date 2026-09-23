@@ -94,7 +94,7 @@ const DailyLoadModal: React.FC<DailyLoadModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body}>
+          <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
             {/* Main loads */}
             <Text style={styles.sectionTitle}>{t('dailyLoad.mainLoad')}</Text>
             <View style={styles.grid}>

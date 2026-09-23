@@ -2,6 +2,7 @@ import type { Client } from '../../types';
 import { validateBackup } from '../backupRestore';
 import {
   buildClientIdentityIndex,
+  buildClientStableIdIndex,
   getRelatedClientReference,
   getRelatedRecordStableClientId,
   getStableClientId,
@@ -164,5 +165,56 @@ describe('stable client identity for debts and transfers', () => {
     expect(backup.debts.map((debt) => debt.clientId)).toEqual(originalClientIds);
     expect(resolvedIds).toEqual(originalClientIds);
     expect(new Set(resolvedIds).size).toBe(count);
+  });
+});
+
+describe('reusable stable id index', () => {
+  const clients = [
+    makeClient({ id: 'route-a', customerId: 'customer-a', freq: 'weekly' }),
+    makeClient({ id: 'customer-a', customerId: 'customer-a' }),
+    makeClient({ id: 'legacy-b' }),
+    makeClient({ id: 'note-1', isNote: true }),
+  ];
+
+  it('resolves exactly like the full identity index', () => {
+    const stableIndex = buildClientStableIdIndex(clients);
+    const fullIndex = buildClientIdentityIndex(clients);
+    expect(stableIndex.stableIdByDocumentId).toEqual(fullIndex.stableIdByDocumentId);
+    ['route-a', 'customer-a', 'legacy-b', 'note-1', 'unknown'].forEach((clientId) => {
+      expect(getRelatedRecordStableClientId({ clientId }, stableIndex))
+        .toBe(getRelatedRecordStableClientId({ clientId }, fullIndex));
+    });
+  });
+
+  it('keeps its identity when a snapshot changes no id', () => {
+    const previous = buildClientStableIdIndex(clients);
+    const nextSnapshot = clients.map((client) => ({
+      ...client,
+      isStarred: !client.isStarred,
+      isCompleted: true,
+      name: `${client.name} editado`,
+    }));
+    expect(buildClientStableIdIndex(nextSnapshot, previous)).toBe(previous);
+  });
+
+  it('rebuilds when a client is added, removed or linked to another customer', () => {
+    const previous = buildClientStableIdIndex(clients);
+    const added = buildClientStableIdIndex(
+      [...clients, makeClient({ id: 'new-c' })],
+      previous,
+    );
+    expect(added).not.toBe(previous);
+    expect(added.stableIdByDocumentId.get('new-c')).toBe('new-c');
+
+    expect(buildClientStableIdIndex(clients.slice(1), previous)).not.toBe(previous);
+
+    const relinked = buildClientStableIdIndex(
+      clients.map((client) => (
+        client.id === 'legacy-b' ? { ...client, customerId: 'customer-a' } : client
+      )),
+      previous,
+    );
+    expect(relinked).not.toBe(previous);
+    expect(relinked.stableIdByDocumentId.get('legacy-b')).toBe('customer-a');
   });
 });

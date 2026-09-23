@@ -6,6 +6,13 @@ export interface ClientIdentityIndex {
   clientsByStableId: Map<string, Client[]>;
 }
 
+/**
+ * The part of the identity index that resolves a related record to its stable
+ * customer id. It holds no client objects, so it can be reused across client
+ * snapshots that do not change any id (see buildClientStableIdIndex).
+ */
+export type ClientStableIdIndex = Pick<ClientIdentityIndex, 'stableIdByDocumentId'>;
+
 export interface RelatedClientReference {
   clientId: string;
   customerId?: string;
@@ -37,6 +44,18 @@ export const getRelatedClientReference = (
   customerId: getStableClientId(client),
 });
 
+const forEachIdentifiedClient = (
+  clients: Client[],
+  visit: (client: Client, documentId: string, stableId: string) => void,
+): void => {
+  clients.forEach((client) => {
+    if (!client || client.isNote) return;
+    const documentId = cleanId(client.id);
+    if (!documentId) return;
+    visit(client, documentId, getStableClientId(client) || documentId);
+  });
+};
+
 /**
  * Builds the indexes needed to resolve both generations of related records:
  *
@@ -51,11 +70,7 @@ export const buildClientIdentityIndex = (clients: Client[]): ClientIdentityIndex
   const stableIdByDocumentId = new Map<string, string>();
   const clientsByStableId = new Map<string, Client[]>();
 
-  clients.forEach((client) => {
-    if (!client || client.isNote) return;
-    const documentId = cleanId(client.id);
-    if (!documentId) return;
-    const stableId = getStableClientId(client) || documentId;
+  forEachIdentifiedClient(clients, (client, documentId, stableId) => {
     clientByDocumentId.set(documentId, client);
     stableIdByDocumentId.set(documentId, stableId);
     const matches = clientsByStableId.get(stableId) || [];
@@ -66,10 +81,37 @@ export const buildClientIdentityIndex = (clients: Client[]): ClientIdentityIndex
   return { clientByDocumentId, stableIdByDocumentId, clientsByStableId };
 };
 
+/**
+ * Same id resolution as buildClientIdentityIndex, but returns `previous` when
+ * no document id or stable id changed. Most client snapshots (visits, stars,
+ * notes, reorders) leave ids untouched, so debt/transfer lookups keyed by this
+ * index keep their identity and memoized lists do not re-render every row.
+ */
+export const buildClientStableIdIndex = (
+  clients: Client[],
+  previous?: ClientStableIdIndex | null,
+): ClientStableIdIndex => {
+  const stableIdByDocumentId = new Map<string, string>();
+  forEachIdentifiedClient(clients, (_client, documentId, stableId) => {
+    stableIdByDocumentId.set(documentId, stableId);
+  });
+  if (previous && previous.stableIdByDocumentId.size === stableIdByDocumentId.size) {
+    let unchanged = true;
+    for (const [documentId, stableId] of stableIdByDocumentId) {
+      if (previous.stableIdByDocumentId.get(documentId) !== stableId) {
+        unchanged = false;
+        break;
+      }
+    }
+    if (unchanged) return previous;
+  }
+  return { stableIdByDocumentId };
+};
+
 /** Resolve a related record's `clientId` without mutating or backfilling it. */
 export const getRelatedRecordStableClientId = (
   reference: string | RelatedClientReference,
-  index: ClientIdentityIndex,
+  index: ClientStableIdIndex,
 ): string => {
   const explicitStableId = typeof reference === 'string'
     ? ''
@@ -83,7 +125,7 @@ export const getRelatedRecordStableClientId = (
 export const relatedRecordBelongsToClient = (
   reference: string | RelatedClientReference,
   client: Pick<Client, 'id' | 'customerId'>,
-  index: ClientIdentityIndex,
+  index: ClientStableIdIndex,
 ): boolean => getRelatedRecordStableClientId(reference, index) === getStableClientId(client);
 
 /**

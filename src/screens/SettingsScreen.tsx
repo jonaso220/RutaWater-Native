@@ -226,7 +226,7 @@ const SettingsScreen = () => {
 
   return (
     <>
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
       {/* User info */}
       <View style={styles.section}>
         <View style={styles.userCard}>

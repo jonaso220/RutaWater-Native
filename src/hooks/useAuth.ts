@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AppState } from 'react-native';
 import { reportError } from '../lib/crashReporting';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { appleAuth } from '@invertase/react-native-apple-authentication';
 import { db } from '../config/firebase';
@@ -13,6 +14,14 @@ import { reportAppCompatibility } from '../services/appCompatibilityHeartbeat';
 import { planSessionRetry } from '../utils/sessionRetry';
 
 const MAX_GROUP_RECOVERY_ATTEMPTS = 5;
+
+type UserDocSnapshot = FirebaseFirestoreTypes.DocumentSnapshot;
+
+const isSameGroup = (a: Group | null, b: Group | null): boolean => (
+  a === b
+  || (a !== null && b !== null
+    && a.groupId === b.groupId && a.role === b.role && a.code === b.code)
+);
 
 // Configure Google Sign-In (webClientId from Firebase Console)
 GoogleSignin.configure({
@@ -43,6 +52,18 @@ export const useAuth = () => {
   const groupRecoveryRetryCountRef = useRef(0);
   const groupRecoveryRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const authSessionUidRef = useRef<string | null>(null);
+  // Re-evaluates the latest users/{uid} snapshot (group descriptor, role and
+  // legacy recovery) without tearing down the live listeners.
+  const foregroundRefreshRef = useRef<(() => void) | null>(null);
+  // A listener that errored is dead; only then does a foreground transition
+  // need to rebuild the whole auth session.
+  const sessionListenerFailedRef = useRef(false);
+
+  // Snapshots rebuild an identical descriptor; keeping the previous object
+  // avoids re-rendering every auth consumer when nothing changed.
+  const setGroupDataIfChanged = useCallback((next: Group | null) => {
+    setGroupData((prev) => (isSameGroup(prev, next) ? prev : next));
+  }, []);
 
   // Listen to auth state changes + live group membership.
   useEffect(() => {
@@ -55,6 +76,7 @@ export const useAuth = () => {
       // auth session before changing visible account state.
       seq += 1;
       legacyRecoveryAttemptedForUid = null;
+      foregroundRefreshRef.current = null;
       const nextUid = firebaseUser?.uid || null;
       if (authSessionUidRef.current !== nextUid) {
         authSessionUidRef.current = nextUid;
@@ -86,6 +108,7 @@ export const useAuth = () => {
       // own user document. Merge keeps all group/profile fields untouched and
       // repairs accounts created before this document became mandatory.
       const userRef = db.collection('users').doc(firebaseUser.uid);
+      sessionListenerFailedRef.current = false;
       // After the guarded global cutover, accounts created in the future must
       // start on canonical queries even though clients are forbidden from
       // writing their own scopeReadVersion marker. This public config contains
@@ -95,6 +118,7 @@ export const useAuth = () => {
           setGlobalScopeReadVersion(scopeConfig.data()?.readVersion === 1 ? 1 : 0);
         },
         (e) => {
+          sessionListenerFailedRef.current = true;
           if (auth().currentUser) reportError(e, 'Error watching data scope config');
           setGlobalScopeReadVersion(0);
         },
@@ -107,134 +131,140 @@ export const useAuth = () => {
       // dissolves the group, the scope switches immediately. This used to be a
       // one-shot read, leaving the session frozen on the old group (listeners
       // in permission-denied, writes failing silently) until an app restart.
-      unsubUser = userRef
-        .onSnapshot(
-          async (userDoc) => {
-            const mySeq = ++seq;
-            try {
-              const data = userDoc.exists ? userDoc.data() : null;
-              setUserScopeReadVersion(data?.scopeReadVersion === 1 ? 1 : 0);
-              if (data?.groupId) {
-                const groupDoc = await db.collection('groups').doc(data.groupId).get();
-                if (mySeq !== seq) return; // a newer snapshot superseded this one
+      const handleUserDoc = async (userDoc: UserDocSnapshot) => {
+        const mySeq = ++seq;
+        try {
+          const data = userDoc.exists ? userDoc.data() : null;
+          setUserScopeReadVersion(data?.scopeReadVersion === 1 ? 1 : 0);
+          if (data?.groupId) {
+            const groupDoc = await db.collection('groups').doc(data.groupId).get();
+            if (mySeq !== seq) return; // a newer snapshot superseded this one
 
-                // A stale users/{uid}.groupId used to install a phantom scope
-                // when its descriptor had already disappeared. Clear only the
-                // membership metadata; all business documents remain intact.
-                if (!groupDoc.exists) {
+            // A stale users/{uid}.groupId used to install a phantom scope
+            // when its descriptor had already disappeared. Clear only the
+            // membership metadata; all business documents remain intact.
+            if (!groupDoc.exists) {
+              setGroupData(null);
+              await userRef.update({ groupId: null, role: null });
+              return;
+            }
+
+            const canonicalRole = groupDoc.data()?.adminId === firebaseUser.uid
+              ? 'admin'
+              : 'member';
+            setGroupDataIfChanged({
+              groupId: data.groupId,
+              // groups/{id}.adminId is canonical. This repairs legacy
+              // admins whose users doc never received role="admin", and
+              // prevents a stale role field from granting admin UI.
+              role: canonicalRole,
+              code: groupDoc.data()?.code || '',
+            });
+            if (data.role !== canonicalRole) {
+              await userRef.update({ role: canonicalRole });
+            }
+          } else {
+            const accountState = data?.accountState || 'active';
+            const hasRecoverableJoinFence = Boolean(data?.pendingGroupId)
+              && data?.groupMigrationState === 'join_preflight';
+            const canAttemptLegacyRecovery = userDoc.exists
+              && accountState === 'active'
+              && data?.familyGroupRecoveryVersion !== 1
+              && (!data?.pendingGroupId || hasRecoverableJoinFence)
+              && groupRecoveryRetryCountRef.current < MAX_GROUP_RECOVERY_ATTEMPTS
+              && legacyRecoveryAttemptedForUid !== firebaseUser.uid;
+            if (canAttemptLegacyRecovery) {
+              legacyRecoveryAttemptedForUid = firebaseUser.uid;
+              try {
+                const token = await firebaseUser.getIdToken();
+                const response = await fetch(API_ENDPOINTS.recoverFamilyGroup, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
+                });
+                const payload = await response.json().catch(() => ({})) as {
+                  status?: string;
+                };
+                if (mySeq !== seq) return;
+                if (!response.ok) {
+                  // Safety conflicts and disabled/deleting accounts are
+                  // canonical outcomes. Only transient server failures are
+                  // retried; nothing is ever inferred on the phone.
+                  if (response.status >= 500) {
+                    throw new Error('FAMILY_RECOVERY_TEMPORARILY_UNAVAILABLE');
+                  }
+                  groupRecoveryRetryCountRef.current = 0;
                   setGroupData(null);
-                  await userRef.update({ groupId: null, role: null });
                   return;
                 }
-
-                const canonicalRole = groupDoc.data()?.adminId === firebaseUser.uid
-                  ? 'admin'
-                  : 'member';
-                setGroupData({
-                  groupId: data.groupId,
-                  // groups/{id}.adminId is canonical. This repairs legacy
-                  // admins whose users doc never received role="admin", and
-                  // prevents a stale role field from granting admin UI.
-                  role: canonicalRole,
-                  code: groupDoc.data()?.code || '',
-                });
-                if (data.role !== canonicalRole) {
-                  await userRef.update({ role: canonicalRole });
-                }
-              } else {
-                const accountState = data?.accountState || 'active';
-                const hasRecoverableJoinFence = Boolean(data?.pendingGroupId)
-                  && data?.groupMigrationState === 'join_preflight';
-                const canAttemptLegacyRecovery = userDoc.exists
-                  && accountState === 'active'
-                  && data?.familyGroupRecoveryVersion !== 1
-                  && (!data?.pendingGroupId || hasRecoverableJoinFence)
-                  && groupRecoveryRetryCountRef.current < MAX_GROUP_RECOVERY_ATTEMPTS
-                  && legacyRecoveryAttemptedForUid !== firebaseUser.uid;
-                if (canAttemptLegacyRecovery) {
-                  legacyRecoveryAttemptedForUid = firebaseUser.uid;
-                  try {
-                    const token = await firebaseUser.getIdToken();
-                    const response = await fetch(API_ENDPOINTS.recoverFamilyGroup, {
-                      method: 'POST',
-                      headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                      },
-                    });
-                    const payload = await response.json().catch(() => ({})) as {
-                      status?: string;
-                    };
+                if (
+                  payload.status === 'recovered' || payload.status === 'already'
+                ) {
+                  // The Admin transaction already repaired users/{uid}.
+                  // Read it once for a deterministic first render; the live
+                  // listener remains canonical for every later change.
+                  const repairedUser = await userRef.get();
+                  const repairedGroupId = repairedUser.data()?.groupId;
+                  if (mySeq !== seq) return;
+                  if (typeof repairedGroupId === 'string' && repairedGroupId) {
+                    const recoveredGroup = await db
+                      .collection('groups')
+                      .doc(repairedGroupId)
+                      .get();
                     if (mySeq !== seq) return;
-                    if (!response.ok) {
-                      // Safety conflicts and disabled/deleting accounts are
-                      // canonical outcomes. Only transient server failures are
-                      // retried; nothing is ever inferred on the phone.
-                      if (response.status >= 500) {
-                        throw new Error('FAMILY_RECOVERY_TEMPORARILY_UNAVAILABLE');
-                      }
+                    if (recoveredGroup.exists) {
+                      setGroupDataIfChanged({
+                        groupId: repairedGroupId,
+                        role: recoveredGroup.data()?.adminId === firebaseUser.uid
+                          ? 'admin'
+                          : 'member',
+                        code: recoveredGroup.data()?.code || '',
+                      });
                       groupRecoveryRetryCountRef.current = 0;
-                      setGroupData(null);
                       return;
                     }
-                    if (
-                      payload.status === 'recovered' || payload.status === 'already'
-                    ) {
-                      // The Admin transaction already repaired users/{uid}.
-                      // Read it once for a deterministic first render; the live
-                      // listener remains canonical for every later change.
-                      const repairedUser = await userRef.get();
-                      const repairedGroupId = repairedUser.data()?.groupId;
-                      if (mySeq !== seq) return;
-                      if (typeof repairedGroupId === 'string' && repairedGroupId) {
-                        const recoveredGroup = await db
-                          .collection('groups')
-                          .doc(repairedGroupId)
-                          .get();
-                        if (mySeq !== seq) return;
-                        if (recoveredGroup.exists) {
-                          setGroupData({
-                            groupId: repairedGroupId,
-                            role: recoveredGroup.data()?.adminId === firebaseUser.uid
-                              ? 'admin'
-                              : 'member',
-                            code: recoveredGroup.data()?.code || '',
-                          });
-                          groupRecoveryRetryCountRef.current = 0;
-                          return;
-                        }
-                      }
-                    }
-                    groupRecoveryRetryCountRef.current = 0;
-                  } catch (recoveryError) {
-                    // Recovery is a compatibility repair only. Offline or
-                    // backend failure must never alter/clear customer data or
-                    // prevent the normal personal scope from loading.
-                    if (mySeq !== seq) return;
-                    reportError(recoveryError, 'Legacy family recovery error');
-                    const retryPlan = planSessionRetry(
-                      groupRecoveryRetryCountRef.current,
-                      MAX_GROUP_RECOVERY_ATTEMPTS,
-                    );
-                    groupRecoveryRetryCountRef.current = retryPlan.attemptCount;
-                    if (!retryPlan.shouldSchedule) return;
-                    legacyRecoveryAttemptedForUid = null;
-                    groupRecoveryRetryTimerRef.current = setTimeout(() => {
-                      groupRecoveryRetryTimerRef.current = null;
-                      setGroupRecoveryRetryNonce((value) => value + 1);
-                    }, retryPlan.delayMs);
                   }
                 }
-                setGroupData(null);
+                groupRecoveryRetryCountRef.current = 0;
+              } catch (recoveryError) {
+                // Recovery is a compatibility repair only. Offline or
+                // backend failure must never alter/clear customer data or
+                // prevent the normal personal scope from loading.
+                if (mySeq !== seq) return;
+                reportError(recoveryError, 'Legacy family recovery error');
+                const retryPlan = planSessionRetry(
+                  groupRecoveryRetryCountRef.current,
+                  MAX_GROUP_RECOVERY_ATTEMPTS,
+                );
+                groupRecoveryRetryCountRef.current = retryPlan.attemptCount;
+                if (!retryPlan.shouldSchedule) return;
+                legacyRecoveryAttemptedForUid = null;
+                groupRecoveryRetryTimerRef.current = setTimeout(() => {
+                  groupRecoveryRetryTimerRef.current = null;
+                  setGroupRecoveryRetryNonce((value) => value + 1);
+                }, retryPlan.delayMs);
               }
-            } catch (e) {
-              reportError(e, 'Error loading group data');
-              if (mySeq === seq) setGroupData(null);
-            } finally {
-              if (mySeq === seq) setLoading(false);
             }
+            setGroupData(null);
+          }
+        } catch (e) {
+          reportError(e, 'Error loading group data');
+          if (mySeq === seq) setGroupData(null);
+        } finally {
+          if (mySeq === seq) setLoading(false);
+        }
+      };
+      let latestUserDoc: UserDocSnapshot | null = null;
+      unsubUser = userRef
+        .onSnapshot(
+          (userDoc) => {
+            latestUserDoc = userDoc;
+            void handleUserDoc(userDoc);
           },
           (e) => {
+            sessionListenerFailedRef.current = true;
             // After sign-out the listener can drop with permission-denied;
             // that's only a real error while someone is still signed in.
             if (auth().currentUser) {
@@ -243,11 +273,19 @@ export const useAuth = () => {
             setLoading(false);
           },
         );
+      foregroundRefreshRef.current = () => {
+        if (!latestUserDoc) return;
+        // Same recovery window the former full restart granted: re-read the
+        // group descriptor and allow one more legacy recovery attempt.
+        legacyRecoveryAttemptedForUid = null;
+        void handleUserDoc(latestUserDoc);
+      };
     });
     return () => {
       // Invalidate a token request or Admin recovery response that outlives
       // this listener generation (retry, foreground reset, or unmount).
       seq += 1;
+      foregroundRefreshRef.current = null;
       if (groupRecoveryRetryTimerRef.current) {
         clearTimeout(groupRecoveryRetryTimerRef.current);
         groupRecoveryRetryTimerRef.current = null;
@@ -256,11 +294,12 @@ export const useAuth = () => {
       if (unsubScopeConfig) unsubScopeConfig();
       unsubscribe();
     };
-  }, [groupRecoveryRetryNonce]);
+  }, [groupRecoveryRetryNonce, setGroupDataIfChanged]);
 
   // A foreground transition is an explicit new recovery window. This makes a
   // temporarily offline session recover on resume without leaving an
-  // unbounded background timer running indefinitely.
+  // unbounded background timer running indefinitely. Live Firestore listeners
+  // reconnect on their own, so they are only rebuilt when one of them died.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state !== 'active') return;
@@ -274,12 +313,30 @@ export const useAuth = () => {
         clearTimeout(groupRecoveryRetryTimerRef.current);
         groupRecoveryRetryTimerRef.current = null;
       }
+      const refreshSession = foregroundRefreshRef.current;
+      if (refreshSession && !sessionListenerFailedRef.current) {
+        // The former full restart also picked up profile edits (e.g. the
+        // Apple display name set after the first sign-in).
+        if (currentUser) {
+          // A different UID is left to onAuthStateChanged.
+          setUser((prev) => (
+            !prev
+            || prev.uid !== currentUser.uid
+            || (prev.displayName === currentUser.displayName
+              && prev.email === currentUser.email)
+              ? prev
+              : currentUser
+          ));
+        }
+        refreshSession();
+        return;
+      }
       setGroupRecoveryRetryNonce((value) => value + 1);
     });
     return () => subscription.remove();
   }, []);
 
-  const signInWithEmail = async (email: string, password: string) => {
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
     try {
       const credential = await auth().signInWithEmailAndPassword(email, password);
       await ensureUserDocument(credential.user);
@@ -291,9 +348,9 @@ export const useAuth = () => {
       reportError(error, 'Email Sign-In Error');
       throw error;
     }
-  };
+  }, []);
 
-  const signUpWithEmail = async (email: string, password: string) => {
+  const signUpWithEmail = useCallback(async (email: string, password: string) => {
     try {
       const credential = await auth().createUserWithEmailAndPassword(email, password);
       // Do not resolve registration before its authorization document exists.
@@ -304,9 +361,9 @@ export const useAuth = () => {
       reportError(error, 'Email Sign-Up Error');
       throw error;
     }
-  };
+  }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = useCallback(async () => {
     try {
       await GoogleSignin.hasPlayServices();
       const response = await GoogleSignin.signIn();
@@ -319,9 +376,9 @@ export const useAuth = () => {
       reportError(error, 'Google Sign-In Error');
       throw error;
     }
-  };
+  }, []);
 
-  const signInWithApple = async () => {
+  const signInWithApple = useCallback(async () => {
     try {
       const appleAuthRequestResponse = await appleAuth.performRequest({
         requestedOperation: appleAuth.Operation.LOGIN,
@@ -353,9 +410,9 @@ export const useAuth = () => {
       reportError(error, 'Apple Sign-In Error');
       throw error;
     }
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       const signingOutUserId = auth().currentUser?.uid;
       // RevenueCat is process-wide. Detach the current Firebase UID before the
@@ -380,9 +437,9 @@ export const useAuth = () => {
     } catch (error) {
       reportError(error, 'Sign-Out Error');
     }
-  };
+  }, []);
 
-  const deleteAccount = async () => {
+  const deleteAccount = useCallback(async () => {
     const currentUser = auth().currentUser;
     if (!currentUser) throw new Error('No user logged in');
 
@@ -471,18 +528,22 @@ export const useAuth = () => {
       }
       throw error;
     }
-  };
+  }, []);
 
   const isAdmin = !groupData || groupData.role === 'admin';
 
-  const getDataScope = () => {
-    if (groupData?.groupId) {
-      return { groupId: groupData.groupId };
+  const groupId = groupData?.groupId;
+  const userId = user?.uid || '';
+  const getDataScope = useCallback(() => {
+    if (groupId) {
+      return { groupId };
     }
-    return { userId: user?.uid || '' };
-  };
+    return { userId };
+  }, [groupId, userId]);
 
-  return {
+  // Stable identity: AuthProvider passes this object as the context value, so
+  // a new object on every render would re-render every auth consumer.
+  return useMemo(() => ({
     user,
     loading,
     groupData,
@@ -496,5 +557,18 @@ export const useAuth = () => {
     deleteAccount,
     getDataScope,
     setGroupData,
-  };
+  }), [
+    user,
+    loading,
+    groupData,
+    scopeReadVersion,
+    isAdmin,
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithGoogle,
+    signInWithApple,
+    signOut,
+    deleteAccount,
+    getDataScope,
+  ]);
 };

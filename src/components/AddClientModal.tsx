@@ -357,7 +357,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Destination toggle */}
             <Text style={styles.sectionTitle}>{t('addModal.destination')}</Text>
             {isDirectoryMode ? (

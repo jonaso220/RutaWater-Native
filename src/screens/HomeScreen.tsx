@@ -106,6 +106,10 @@ const HEADER_SHOW_ANIMATION_MS = 280;
 const HEADER_HIDE_SCROLL_DISTANCE = 48;
 const HEADER_SHOW_SCROLL_DISTANCE = 28;
 const REFRESH_TIMEOUT_MS = 10_000;
+// On Android the cards' dialogs (position prompt) render inside the list as
+// overlays, not in a native Modal window, so a list that swallows the first
+// tap to dismiss the keyboard made their buttons need two taps.
+const androidListKeyboardTaps = Platform.OS === 'android' ? 'handled' as const : undefined;
 const reorderLayoutAnimation = {
   duration: REORDER_ANIMATION_MS,
   update: { type: LayoutAnimation.Types.easeInEaseOut },
@@ -1675,6 +1679,7 @@ const HomeScreen = () => {
             onScroll={Platform.OS === 'android' ? androidHeaderOnScroll : handleClientListScroll}
             scrollEventThrottle={16}
             onScrollBeginDrag={handleClientListBeginDrag}
+            keyboardShouldPersistTaps={androidListKeyboardTaps}
             initialNumToRender={12}
             maxToRenderPerBatch={12}
             windowSize={11}
@@ -1700,6 +1705,7 @@ const HomeScreen = () => {
             onScroll={Platform.OS === 'android' ? androidHeaderOnScroll : handleClientListScroll}
             scrollEventThrottle={16}
             onScrollBeginDrag={handleClientListBeginDrag}
+            keyboardShouldPersistTaps={androidListKeyboardTaps}
             style={{ flex: 1 }}
             contentContainerStyle={clientListContentStyle}
             initialNumToRender={15}

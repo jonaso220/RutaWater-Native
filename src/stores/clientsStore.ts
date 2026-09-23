@@ -19,9 +19,16 @@ interface ClientsStore {
   undoComplete: (client: Client) => Promise<void>;
   deleteAllCompleted: (day: string) => Promise<void>;
   deleteFromDay: (clientId: string, day: string) => Promise<void>;
-  // Devuelven true si el write llegó a Firestore (la IA los usa para no
+  // Devuelve false si el write falló. Por defecto no espera más que un
+  // instante al servidor (el cambio queda en la cola offline); la IA pasa
+  // waitForServer para no confirmar "Listo" cuando en realidad falló.
+  updateClient: (
+    clientId: string,
+    data: Partial<Client>,
+    options?: { waitForServer?: boolean },
+  ) => Promise<boolean>;
+  // Devuelve true si el write llegó a Firestore (la IA lo usa para no
   // confirmar "Listo" cuando en realidad falló).
-  updateClient: (clientId: string, data: Partial<Client>) => Promise<boolean>;
   scheduleFromDirectory: (
     client: Client,
     days: string[],

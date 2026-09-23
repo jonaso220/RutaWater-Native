@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useAuthContext } from '../context/AuthContext';
 import { useClients } from '../hooks/useClients';
 import { useDebts } from '../hooks/useDebts';
@@ -20,6 +20,7 @@ import { useSubscriptionStore } from './subscriptionStore';
 import { useProductCatalogStore } from './productCatalogStore';
 import { useProfileStore } from './profileStore';
 import { queryClient } from '../lib/queryClient';
+import { buildClientStableIdIndex, ClientStableIdIndex } from '../utils/clientIdentity';
 
 /**
  * StoreSync bridges the existing React hooks (which manage Firebase listeners)
@@ -110,7 +111,11 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   // pass until the real active profile arrived from users/{uid}.
   useClientsAutoCleanup(clientsHook.clients, effectiveGroupId || userId, profilesHook.loaded);
 
-  useEffect(() => {
+  // Layout effects for the clients/debts/transfers bridges: a passive effect
+  // runs after the frame is painted, so an optimistic change (reorder, alarm,
+  // visit) used to show one frame late and cost an extra commit. Publishing
+  // before paint lets the screens re-render within the same frame.
+  useLayoutEffect(() => {
     useClientsStore.setState({
       ...clientsHook,
       scopeKey: effectiveGroupId || userId,
@@ -121,15 +126,25 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   }, [clientsHook.clients, clientsHook.loading, effectiveGroupId, userId, dayCounts, canAddClient, clientCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Debts ---
-  // Pasamos clients para resolver customerId estable y clientId legacy.
+  // Índice de clients para resolver customerId estable y clientId legacy,
+  // compartido por deudas y transferencias. Conserva su identidad mientras no
+  // cambie ningún id, así los lookups de deudas/transferencias (y las filas
+  // que dependen de ellos) no se recalculan con cada snapshot de clientes.
+  const clientStableIdIndexRef = useRef<ClientStableIdIndex | null>(null);
+  const clientStableIdIndex = useMemo(() => {
+    const next = buildClientStableIdIndex(clientsHook.clients, clientStableIdIndexRef.current);
+    clientStableIdIndexRef.current = next;
+    return next;
+  }, [clientsHook.clients]);
+
   const debtsHook = useDebts({
     userId,
     groupId: effectiveGroupId,
-    clients: clientsHook.clients,
+    identityIndex: clientStableIdIndex,
     scopeReadVersion,
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     useDebtsStore.setState({
       debts: debtsHook.debts,
       getClientDebts: debtsHook.getClientDebts,
@@ -142,15 +157,14 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
   }, [debtsHook.debts, debtsHook.getClientDebts, debtsHook.getClientDebtTotal, debtsHook.addDebt, debtsHook.markDebtPaid, debtsHook.editDebt, debtsHook.markAllDebtsPaid]);
 
   // --- Transfers ---
-  // Pasamos clients para resolver customerId estable y clientId legacy.
   const transfersHook = useTransfers({
     userId,
     groupId: effectiveGroupId,
-    clients: clientsHook.clients,
+    identityIndex: clientStableIdIndex,
     scopeReadVersion,
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     useTransfersStore.setState({
       transfers: transfersHook.transfers,
       getClientTransfers: transfersHook.getClientTransfers,

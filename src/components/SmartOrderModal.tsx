@@ -362,7 +362,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           return;
         }
         updates.updatedAt = new Date();
-        const mergedOk = await updateClient(client.id, updates);
+        const mergedOk = await updateClient(client.id, updates, { waitForServer: true });
         if (!mergedOk) {
           Alert.alert(t('error'), t('smartOrder.mergeFailed'));
           setSaving(false);
@@ -405,7 +405,7 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
           setSaving(false);
           return;
         }
-        const updatedOk = await updateClient(client.id, updates as any);
+        const updatedOk = await updateClient(client.id, updates as any, { waitForServer: true });
         if (!updatedOk) {
           Alert.alert(t('error'), t('smartOrder.updateFailed'));
           setSaving(false);

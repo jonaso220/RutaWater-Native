@@ -356,6 +356,7 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
           <ScrollView
             style={[styles.body, primarySavedPendingFamily && { opacity: 0.65 }]}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             pointerEvents={primarySavedPendingFamily ? 'none' : 'auto'}
           >
             {clientAddresses.length > 1 && (

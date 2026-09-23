@@ -5,7 +5,7 @@ import { Transfer, Client } from '../types';
 import { useTransfersQuery } from './queries/useTransfersQuery';
 import { dataScopeFields } from '../utils/dataScope';
 import {
-  buildClientIdentityIndex,
+  ClientStableIdIndex,
   getRelatedClientReference,
   getRelatedRecordStableClientId,
   getStableClientId,
@@ -14,14 +14,15 @@ import {
 interface UseTransfersProps {
   userId: string;
   groupId?: string;
-  clients?: Client[];
+  // Shared with useDebts; built once per client snapshot in StoreSync.
+  identityIndex: ClientStableIdIndex;
   scopeReadVersion?: number;
 }
 
 export const useTransfers = ({
   userId,
   groupId,
-  clients = [],
+  identityIndex,
   scopeReadVersion = 0,
 }: UseTransfersProps) => {
   // Data source: TanStack Query holds the live transfers array via
@@ -35,28 +36,34 @@ export const useTransfers = ({
   transfersRef.current = transfers;
   const busyRef = useRef<Set<string>>(new Set());
 
-  const identityIndex = useMemo(() => buildClientIdentityIndex(clients), [clients]);
-
   // Resolve current stable ids and exact legacy document ids without using
-  // editable contact fields.
+  // editable contact fields. Grouped once per transfers/ids change so each
+  // lookup is O(1); the lookups depend on this map (not on a ref) so memoized
+  // consumers such as HomeScreen's transferMap refresh when transfers change.
+  const transfersByStableId = useMemo(() => {
+    const byStableId = new Map<string, Transfer[]>();
+    transfers.forEach((transfer) => {
+      const stableId = getRelatedRecordStableClientId(transfer, identityIndex);
+      const matches = byStableId.get(stableId);
+      if (matches) matches.push(transfer);
+      else byStableId.set(stableId, [transfer]);
+    });
+    return byStableId;
+  }, [transfers, identityIndex]);
+
   const getClientTransfers = useCallback(
     (clientId: string): Transfer[] => {
       const stableId = getRelatedRecordStableClientId(clientId, identityIndex);
-      return transfersRef.current.filter(
-        (transfer) => getRelatedRecordStableClientId(transfer, identityIndex) === stableId,
-      );
+      return [...(transfersByStableId.get(stableId) || [])];
     },
-    [identityIndex],
+    [transfersByStableId, identityIndex],
   );
 
   const hasPendingTransfer = useCallback(
-    (clientId: string): boolean => {
-      const stableId = getRelatedRecordStableClientId(clientId, identityIndex);
-      return transfersRef.current.some(
-        (transfer) => getRelatedRecordStableClientId(transfer, identityIndex) === stableId,
-      );
-    },
-    [identityIndex],
+    (clientId: string): boolean => (
+      transfersByStableId.has(getRelatedRecordStableClientId(clientId, identityIndex))
+    ),
+    [transfersByStableId, identityIndex],
   );
 
   const addTransfer = useCallback(

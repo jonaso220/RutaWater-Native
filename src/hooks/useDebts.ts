@@ -6,7 +6,7 @@ import { shareInFlightOperation } from '../utils/inFlightOperation';
 import { useDebtsQuery } from './queries/useDebtsQuery';
 import { dataScopeFields } from '../utils/dataScope';
 import {
-  buildClientIdentityIndex,
+  ClientStableIdIndex,
   getRelatedClientReference,
   getRelatedRecordStableClientId,
   getStableClientId,
@@ -15,14 +15,15 @@ import {
 interface UseDebtsProps {
   userId: string;
   groupId?: string;
-  clients?: Client[];
+  // Shared with useTransfers; built once per client snapshot in StoreSync.
+  identityIndex: ClientStableIdIndex;
   scopeReadVersion?: number;
 }
 
 export const useDebts = ({
   userId,
   groupId,
-  clients = [],
+  identityIndex,
   scopeReadVersion = 0,
 }: UseDebtsProps) => {
   // Data source: TanStack Query holds the live debts array, fed by a
@@ -32,42 +33,39 @@ export const useDebts = ({
     () => debtsQuery.snapshotReady ? (debtsQuery.data ?? []) : [],
     [debtsQuery.data, debtsQuery.snapshotReady],
   );
-  // Ref sincrónico para evitar closures stale en operaciones rápidas
-  const debtsRef = useRef<Debt[]>(debts);
-  debtsRef.current = debts;
   // Promesas compartidas contra doble-tap: todos los callers esperan el mismo
   // write real, en vez de que el segundo reciba `undefined` como falso éxito.
   const inFlightRef = useRef<Map<string, Promise<void>>>(new Map());
 
-  const identityIndex = useMemo(() => buildClientIdentityIndex(clients), [clients]);
-
-  // Legacy debts keep only an exact client document id; current debts add the
-  // stable customerId while retaining that exact id for old app versions.
-  const getClientDebts = useCallback(
-    (clientId: string): Debt[] => {
-      const stableId = getRelatedRecordStableClientId(clientId, identityIndex);
-      return debtsRef.current.filter(
-        (debt) => getRelatedRecordStableClientId(debt, identityIndex) === stableId,
-      );
-    },
-    [identityIndex],
-  );
-
-  // Pre-cómputo de totales por identidad estable explícita.
+  // Pre-cómputo por identidad estable explícita. Legacy debts keep only an
+  // exact client document id; current debts add the stable customerId while
+  // retaining that exact id for old app versions.
   // Antes getClientDebtTotal era O(C+D) por llamada (find sobre clients +
   // filter+reduce sobre todas las deudas) y se invoca una vez por cliente en
   // los bucles de HomeScreen (filtro con_deuda + debtMap) → O(N²) con 600+
-  // clientes. Ahora se arma este índice una sola vez por cambio de
-  // clients/debts (O(C+D)) y cada total es un lookup O(1).
-  const debtTotals = useMemo(() => {
+  // clientes. Ahora se arma este índice una sola vez por cambio de deudas o de
+  // ids de clientes (O(D)) y cada consulta es un lookup O(1).
+  const { debtsByStableId, debtTotals } = useMemo(() => {
+    const byStableId = new Map<string, Debt[]>();
     const totalByStableId = new Map<string, number>();
     debts.forEach((debt) => {
       const stableId = getRelatedRecordStableClientId(debt, identityIndex);
+      const matches = byStableId.get(stableId);
+      if (matches) matches.push(debt);
+      else byStableId.set(stableId, [debt]);
       const amount = Number(debt.amount) || 0;
       totalByStableId.set(stableId, (totalByStableId.get(stableId) || 0) + amount);
     });
-    return totalByStableId;
+    return { debtsByStableId: byStableId, debtTotals: totalByStableId };
   }, [debts, identityIndex]);
+
+  const getClientDebts = useCallback(
+    (clientId: string): Debt[] => {
+      const stableId = getRelatedRecordStableClientId(clientId, identityIndex);
+      return [...(debtsByStableId.get(stableId) || [])];
+    },
+    [debtsByStableId, identityIndex],
+  );
 
   // O(1) lookup; no depende del nombre ni del teléfono editables.
   const getClientDebtTotal = useCallback(

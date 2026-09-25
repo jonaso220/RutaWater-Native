@@ -35,6 +35,11 @@ export interface Client {
   // alarmas, exportaciones y documentos anteriores a esta lista.
   addresses?: ClientAddress[];
   notes: string;
+  // Datos de facturación opcionales (Uruguay: RUT + razón social). Ausentes
+  // en documentos anteriores a esta ficha.
+  rut?: string;
+  businessName?: string;
+  email?: string;
   lat: string;
   lng: string;
   mapsLink: string;

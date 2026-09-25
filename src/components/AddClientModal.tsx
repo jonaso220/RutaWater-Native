@@ -24,6 +24,12 @@ import { getModalWidth } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import { FREE_CLIENT_LIMIT } from '../constants/subscription';
 import { isClientLimitError } from '../services/clientCreation';
+import ClientBillingInfoEditor from './ClientBillingInfoEditor';
+import {
+  ClientBillingInfo,
+  isValidClientEmail,
+  sanitizeClientBillingInfo,
+} from '../utils/clientBillingInfo';
 
 interface AddClientModalProps {
   visible: boolean;
@@ -36,6 +42,7 @@ interface AddClientModalProps {
     products: Record<string, number>,
     notes: string,
     mapsLink: string,
+    billing: ClientBillingInfo,
   ) => Promise<void>;
   onClose: () => void;
 }
@@ -64,6 +71,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   const [phone, setPhone] = useState('');
   const [mapsLink, setMapsLink] = useState('');
   const [notes, setNotes] = useState('');
+  const [billing, setBilling] = useState<ClientBillingInfo>(sanitizeClientBillingInfo(null));
   const [products, setProducts] = useState<Record<string, number>>({});
   const [destination, setDestination] = useState<Destination>(day ? 'day' : 'directory');
   const [selectedDay, setSelectedDay] = useState('');
@@ -280,6 +288,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
     setPhone('');
     setMapsLink('');
     setNotes('');
+    setBilling(sanitizeClientBillingInfo(null));
     setProducts({});
     setDestination(isDirectoryMode ? 'directory' : 'day');
     setSelectedDay('');
@@ -308,6 +317,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
       Alert.alert(t('error'), t('addModal.nameRequired'));
       return;
     }
+    if (!isValidClientEmail(billing.email)) {
+      Alert.alert(t('error'), t('clientBilling.invalidEmail'));
+      return;
+    }
     if (isDirectoryMode && destination === 'day' && !selectedDay) {
       Alert.alert(t('error'), t('addModal.dayRequired'));
       return;
@@ -321,7 +334,16 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
       } else {
         targetDay = destination === 'directory' ? '' : day;
       }
-      await onSave(name.trim(), address.trim(), phone.trim(), targetDay, products, notes.trim(), mapsLink.trim());
+      await onSave(
+        name.trim(),
+        address.trim(),
+        phone.trim(),
+        targetDay,
+        products,
+        notes.trim(),
+        mapsLink.trim(),
+        sanitizeClientBillingInfo(billing),
+      );
       resetForm();
       onClose();
     } catch (e) {
@@ -490,8 +512,12 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               )}
             </View>
 
+            {/* Billing (optional) */}
+            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('clientBilling.title')}</Text>
+            <ClientBillingInfoEditor value={billing} onChange={setBilling} />
+
             {/* Products */}
-            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('addModal.products')}</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 10 }]}>{t('addModal.products')}</Text>
             {catalogProducts.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <ProductLabel

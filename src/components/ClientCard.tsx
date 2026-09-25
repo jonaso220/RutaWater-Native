@@ -11,6 +11,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import PromptModal from './PromptModal';
 import ModalOverlay from './ModalOverlay';
+import ClientDetailsModal from './ClientDetailsModal';
 import { ProductIcon } from './ProductIcon';
 import { getFreqLabel } from '../constants/products';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
@@ -103,6 +104,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
   // cards don't each carry a hidden native modal.
   const [positionPromptMounted, setPositionPromptMounted] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
+  // Igual que el prompt de posición: se monta al primer uso.
+  const [showDetails, setShowDetails] = useState(false);
+  const [detailsMounted, setDetailsMounted] = useState(false);
   const allProducts = useAllProducts();
   const relationshipCount = Object.keys(client.relationships || {}).length;
 
@@ -272,6 +276,21 @@ const ClientCard: React.FC<ClientCardProps> = ({
             )}
             <TouchableOpacity
               style={styles.menuItem}
+              onPress={() => runMenuAction(() => {
+                setDetailsMounted(true);
+                setShowDetails(true);
+              })}
+              accessibilityRole="button"
+              accessibilityLabel={t('clientCard.viewDetails')}
+            >
+              <View style={[styles.menuItemIcon, !!client.rut && styles.menuItemIconPrimary]}>
+                <Ionicons name="id-card-outline" size={s(20)} color={client.rut ? colors.primary : colors.textSecondary} />
+              </View>
+              <Text style={styles.menuItemText}>{t('clientCard.viewDetails')}</Text>
+              <Ionicons name="chevron-forward" size={s(18)} color={colors.textHint} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.menuItem}
               onPress={() => runMenuAction(onEdit)}
               accessibilityRole="button"
               accessibilityLabel={t('clientCard.editClient')}
@@ -382,6 +401,15 @@ const ClientCard: React.FC<ClientCardProps> = ({
         />
       )}
       {showActionsMenu && actionsMenu}
+      {detailsMounted && (
+        <ClientDetailsModal
+          visible={showDetails}
+          client={client}
+          onClose={() => setShowDetails(false)}
+          onEdit={onEdit}
+          fontScale={fontScale}
+        />
+      )}
       <View style={[styles.cardBody, wideLayout && styles.cardBodyWide]}>
         {/* Client identity and high-priority controls */}
         <View style={styles.clientHeader}>

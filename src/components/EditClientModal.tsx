@@ -17,6 +17,7 @@ import ClientInfoEditModal from './ClientInfoEditModal';
 import FrequencyEditModal from './FrequencyEditModal';
 import ClientAddressesEditor from './ClientAddressesEditor';
 import ClientPhonesEditor from './ClientPhonesEditor';
+import ClientBillingInfoEditor from './ClientBillingInfoEditor';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import auth from '@react-native-firebase/auth';
 import { Client, ClientAddress, ClientPhone } from '../types';
@@ -48,6 +49,12 @@ import {
   getPrimaryClientPhone,
   sanitizeClientPhones,
 } from '../utils/clientPhones';
+import {
+  billingInfoUpdates,
+  ClientBillingInfo,
+  isValidClientEmail,
+  sanitizeClientBillingInfo,
+} from '../utils/clientBillingInfo';
 
 interface EditClientModalProps {
   visible: boolean;
@@ -97,6 +104,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const [phones, setPhones] = useState<ClientPhone[]>([]);
   const [mapsLink, setMapsLink] = useState('');
   const [addresses, setAddresses] = useState<ClientAddress[]>([]);
+  const [billing, setBilling] = useState<ClientBillingInfo>(sanitizeClientBillingInfo(null));
   const [products, setProducts] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const [freq, setFreq] = useState<Frequency>('weekly');
@@ -119,6 +127,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       setPhones(getEditableClientPhones(client));
       setMapsLink(client.mapsLink || '');
       setAddresses(getEditableClientAddresses(client));
+      setBilling(sanitizeClientBillingInfo(client));
       // Initialize products from client data. Start from whatever the client
       // already has (so quantities for hidden/removed products survive an edit)
       // then make sure every product in the current catalog has an entry.
@@ -198,6 +207,10 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     const hasNewDate = needsDate && startDate;
     if (freq !== 'once' && freq !== 'on_demand' && !hasDay && !hasNewDate) {
       Alert.alert(t('error'), t('editModal.errorNoDays'));
+      return;
+    }
+    if (!isValidClientEmail(billing.email)) {
+      Alert.alert(t('error'), t('clientBilling.invalidEmail'));
       return;
     }
     savingRef.current = true;
@@ -362,6 +375,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     const primaryPhone = getPrimaryClientPhone(cleanPhones)?.number || '';
     if (JSON.stringify(cleanPhones) !== JSON.stringify(currentPhones)) data.phones = cleanPhones;
     if (primaryPhone !== (client.phone || '').trim()) data.phone = primaryPhone;
+    Object.assign(data, billingInfoUpdates(client, billing));
     const savedDay = (data as any).visitDay as string | undefined;
     const savedDate = (data as any).specificDate as string | undefined;
     const dayMoved = savedDay !== undefined && savedDay !== client.visitDay;
@@ -568,6 +582,10 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                   {t('clientAddresses.title')}
                 </Text>
                 <ClientAddressesEditor addresses={addresses} onChange={setAddresses} />
+                <Text style={[styles.sectionTitle, { marginTop: 20 }]}>
+                  {t('clientBilling.title')}
+                </Text>
+                <ClientBillingInfoEditor value={billing} onChange={setBilling} />
               </>
             )}
 
@@ -772,6 +790,8 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
         setAddress={setAddress}
         setPhones={setPhones}
         setMapsLink={setMapsLink}
+        billing={billing}
+        setBilling={setBilling}
       />
 
       <FrequencyEditModal

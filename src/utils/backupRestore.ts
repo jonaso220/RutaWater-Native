@@ -11,6 +11,9 @@ export interface BackupClientRecord {
   address: string;
   addresses: ClientAddress[];
   notes: string;
+  rut: string;
+  businessName: string;
+  email: string;
   lat: string;
   lng: string;
   mapsLink: string;
@@ -185,6 +188,9 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
     address: sanitizeString(value.address, 200),
     addresses: sanitizeAddresses(value.addresses),
     notes: sanitizeString(value.notes, 500),
+    rut: sanitizeString(value.rut, 40),
+    businessName: sanitizeString(value.businessName, 150),
+    email: sanitizeString(value.email, 150),
     lat: sanitizeString(value.lat, 20),
     lng: sanitizeString(value.lng, 20),
     mapsLink: safeMapsLink(value.mapsLink),

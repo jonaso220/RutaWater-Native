@@ -33,6 +33,7 @@ import { dataScopeFields, dataScopeQuery } from '../utils/dataScope';
 import { getRelatedClientReference } from '../utils/clientIdentity';
 import { createClientDocument, isClientLimitError } from '../services/clientCreation';
 import { getClientPhoneSearchText, getClientPhones } from '../utils/clientPhones';
+import { ClientBillingInfo, sanitizeClientBillingInfo } from '../utils/clientBillingInfo';
 import { awaitWriteWithinGrace } from '../utils/pendingWrite';
 
 interface UseClientsProps {
@@ -977,9 +978,15 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
     products: Record<string, number>,
     notes: string,
     mapsLink?: string,
+    billing?: ClientBillingInfo,
   ) => {
     try {
       const scope = dataScopeFields(userId, groupId);
+      // Solo los datos de facturación cargados: al re-guardar un contacto de
+      // directorio existente no se deben borrar un RUT/email ya guardados.
+      const billingInfo = Object.fromEntries(
+        Object.entries(sanitizeClientBillingInfo(billing)).filter(([, value]) => !!value),
+      ) as Partial<ClientBillingInfo>;
 
       const cleanProducts: Record<string, number> = {};
       Object.entries(products).forEach(([key, val]) => {
@@ -1023,6 +1030,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         lng: '',
         mapsLink: mapsLink || '',
         notes,
+        ...billingInfo,
         freq: isDirectoryOnly ? 'on_demand' : 'weekly',
         visitDay: isDirectoryOnly ? 'Sin Asignar' : day,
         visitDays: isDirectoryOnly ? [] : [day],
@@ -1058,6 +1066,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         if (phone.trim()) contactUpdates.phone = phone;
         if (notes.trim()) contactUpdates.notes = notes;
         if (mapsLink?.trim()) contactUpdates.mapsLink = mapsLink;
+        Object.assign(contactUpdates, billingInfo);
         await db.collection('clients').doc(exactMatch.id).update(contactUpdates);
         return;
       }
@@ -1434,7 +1443,9 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
             keeperUpdates[`sameHousehold.${targetId}`] = stale.sameHousehold?.[targetId] !== false;
           }
         });
-        const copyIfMissing = (field: 'phone' | 'address' | 'notes' | 'lat' | 'lng' | 'mapsLink') => {
+        const copyIfMissing = (
+          field: 'phone' | 'address' | 'notes' | 'lat' | 'lng' | 'mapsLink' | 'rut' | 'businessName' | 'email',
+        ) => {
           const alreadyQueued = migrationOps.get(db.collection('clients').doc(activeId).path)?.data[field];
           if (!keeper[field]?.trim() && !alreadyQueued && stale[field]?.trim()) {
             keeperUpdates[field] = stale[field];
@@ -1446,6 +1457,9 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         copyIfMissing('lat');
         copyIfMissing('lng');
         copyIfMissing('mapsLink');
+        copyIfMissing('rut');
+        copyIfMissing('businessName');
+        copyIfMissing('email');
         if (Object.keys(keeperUpdates).length > 0) {
           addMigration(db.collection('clients').doc(activeId), keeperUpdates);
         }
@@ -1583,6 +1597,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         lng: client.lng || '',
         mapsLink: client.mapsLink || '',
         notes: client.notes || '',
+        ...sanitizeClientBillingInfo(client),
         freq: 'on_demand',
         visitDay: 'Sin Asignar',
         visitDays: [],

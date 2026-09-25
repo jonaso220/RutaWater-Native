@@ -127,6 +127,7 @@ export const useDataExport = (user: ExportUser) => {
           lat: c.lat || '', lng: c.lng || '', freq: c.freq || '',
           visitDay: c.visitDay || '', visitDays: c.visitDays || [],
           specificDate: c.specificDate || '', notes: c.notes || '',
+          rut: c.rut || '', businessName: c.businessName || '', email: c.email || '',
           products: c.products || {}, isStarred: c.isStarred || false,
           isPinned: c.isPinned || false,
           alarm: c.alarm || '', alarmDay: c.alarmDay || '',

@@ -17,7 +17,9 @@ import { useTranslation } from 'react-i18next';
 import { getModalWidth } from '../utils/helpers';
 import { useLayout } from '../hooks/useLayout';
 import ClientPhonesEditor from './ClientPhonesEditor';
+import ClientBillingInfoEditor from './ClientBillingInfoEditor';
 import { ClientPhone } from '../types';
+import { ClientBillingInfo } from '../utils/clientBillingInfo';
 
 interface ClientInfoEditModalProps {
   visible: boolean;
@@ -30,6 +32,8 @@ interface ClientInfoEditModalProps {
   setAddress: (s: string) => void;
   setPhones: (phones: ClientPhone[]) => void;
   setMapsLink: (s: string) => void;
+  billing: ClientBillingInfo;
+  setBilling: (value: ClientBillingInfo) => void;
 }
 
 const ClientInfoEditModal: React.FC<ClientInfoEditModalProps> = ({
@@ -43,6 +47,8 @@ const ClientInfoEditModal: React.FC<ClientInfoEditModalProps> = ({
   setAddress,
   setPhones,
   setMapsLink,
+  billing,
+  setBilling,
 }) => {
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -114,6 +120,8 @@ const ClientInfoEditModal: React.FC<ClientInfoEditModalProps> = ({
                 </TouchableOpacity>
               )}
             </View>
+            <Text style={styles.sectionTitle}>{t('clientBilling.title')}</Text>
+            <ClientBillingInfoEditor value={billing} onChange={setBilling} />
           </ScrollView>
 
           <View style={styles.footer}>

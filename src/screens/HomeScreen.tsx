@@ -59,6 +59,8 @@ import SmartOrderModal from '../components/SmartOrderModal';
 import RelationshipsModal from '../components/RelationshipsModal';
 import ProfilesModal from '../components/ProfilesModal';
 import CalendarModal from '../components/CalendarModal';
+import WelcomeModal from '../components/WelcomeModal';
+import { hasSeenOnboarding, markOnboardingSeen } from '../utils/onboardingState';
 import { useProfileStore } from '../stores/profileStore';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -105,6 +107,7 @@ const HEADER_HIDE_ANIMATION_MS = 240;
 const HEADER_SHOW_ANIMATION_MS = 280;
 const HEADER_HIDE_SCROLL_DISTANCE = 48;
 const HEADER_SHOW_SCROLL_DISTANCE = 28;
+const WELCOME_DISMISS_DELAY_MS = 450;
 const REFRESH_TIMEOUT_MS = 10_000;
 // On Android the cards' dialogs (position prompt) render inside the list as
 // overlays, not in a native Modal window, so a list that swallows the first
@@ -740,8 +743,16 @@ const HomeScreen = () => {
           label = `${dayNames[d.getDay()]} ${d.getDate()} ${monthNames[d.getMonth()]}`;
         }
 
+        // Etiqueta corta para la barra "Por entregar": hoy / mañana / mié 30.
+        const shortLabel = diffDays <= 0
+          ? t('productCounter.today')
+          : diffDays === 1
+            ? t('productCounter.tomorrow')
+            : `${dayNames[d.getDay()].slice(0, 3).toLowerCase()} ${d.getDate()}`;
+
         return {
           title: label,
+          shortLabel,
           dateKey,
           isToday: diffDays <= 0,
           data: groups[dateKey],
@@ -903,6 +914,32 @@ const HomeScreen = () => {
 
   const pendingTransferCount = transfers.length;
 
+  // Cuenta sin ninguna ficha real (las notas sueltas no cuentan): se muestra
+  // la guía de primeros pasos y se esconden los atajos que todavía no sirven.
+  const hasAnyClient = useMemo(() => clients.some((c) => !c.isNote), [clients]);
+  const isNewAccount = !isInitialClientsLoading && !hasAnyClient;
+  const showSecondaryActions = !isNewAccount || debts.length > 0 || pendingTransferCount > 0;
+
+  const [showWelcome, setShowWelcome] = useState(false);
+  const uid = user?.uid;
+  useEffect(() => {
+    if (!uid || isInitialClientsLoading) return;
+    let cancelled = false;
+    hasSeenOnboarding(uid).then((seen) => {
+      if (seen || cancelled) return;
+      // Quien ya tiene clientes no necesita la bienvenida, ni ahora ni si
+      // algún día vacía su reparto.
+      if (hasAnyClient) markOnboardingSeen(uid);
+      else setShowWelcome(true);
+    });
+    return () => { cancelled = true; };
+  }, [uid, isInitialClientsLoading, hasAnyClient]);
+
+  const closeWelcome = useCallback(() => {
+    setShowWelcome(false);
+    if (uid) markOnboardingSeen(uid);
+  }, [uid]);
+
   const openAddClientFlow = useCallback(() => {
     if (!canAddClient) {
       Alert.alert(
@@ -917,6 +954,21 @@ const HomeScreen = () => {
     }
     setShowAddClientModal(true);
   }, [canAddClient, navigation, t]);
+
+  const handleWelcomeAddClient = useCallback(() => {
+    closeWelcome();
+    // iOS no presenta un Modal mientras el anterior todavía se está cerrando.
+    setTimeout(openAddClientFlow, WELCOME_DISMISS_DELAY_MS);
+  }, [closeWelcome, openAddClientFlow]);
+
+  const openSmartOrder = useCallback(() => {
+    hapticSelection();
+    setShowSmartModal(true);
+  }, []);
+
+  const openProductsSettings = useCallback(() => {
+    navigation.navigate('Ajustes');
+  }, [navigation]);
 
   // Map client ID to its global position among ALL clients for the day.
   const globalPositionMap = useMemo(() => {
@@ -1268,19 +1320,53 @@ const HomeScreen = () => {
   }
 
   // Shared between the phone and wide-screen FlatList layouts.
-  const listEmptyComponent = (
+  const isSearching = !!debouncedSearchTerm || activeFilters.size > 0;
+  const listEmptyComponent = isSearching ? (
     <View style={styles.emptyContainer}>
-      <Text style={{ fontSize: 40, marginBottom: 8 }}>{debouncedSearchTerm || activeFilters.size > 0 ? '🔍' : '📋'}</Text>
-      <Text style={styles.emptyText}>
-        {debouncedSearchTerm || activeFilters.size > 0
-          ? t('home.noSearchResults')
-          : t('home.noClients', { day: selectedDay })}
-      </Text>
-      {debouncedSearchTerm || activeFilters.size > 0 ? (
-        <Text style={styles.emptySubtext}>{t('home.noSearchResultsSubtitle')}</Text>
-      ) : (
-        <Text style={styles.emptySubtext}>{t('home.noClientsSubtitle')}</Text>
-      )}
+      <Text style={{ fontSize: 40, marginBottom: 8 }}>🔍</Text>
+      <Text style={styles.emptyText}>{t('home.noSearchResults')}</Text>
+      <Text style={styles.emptySubtext}>{t('home.noSearchResultsSubtitle')}</Text>
+    </View>
+  ) : isNewAccount ? (
+    <View style={styles.gettingStarted}>
+      <Text style={styles.gettingStartedTitle}>{t('home.gettingStartedTitle')}</Text>
+      <Text style={styles.gettingStartedBody}>{t('home.gettingStartedBody')}</Text>
+      <TouchableOpacity
+        style={styles.emptyPrimaryBtn}
+        onPress={() => {
+          hapticSelection();
+          openAddClientFlow();
+        }}
+        accessibilityRole="button"
+      >
+        <Ionicons name="person-add-outline" size={chromeSize(18)} color={colors.textWhite} />
+        <Text style={styles.emptyPrimaryBtnText}>{t('home.gettingStartedAddClient')}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.emptySecondaryBtn} onPress={openSmartOrder} accessibilityRole="button">
+        <Ionicons name="sparkles-outline" size={chromeSize(17)} color={colors.primary} />
+        <Text style={styles.emptySecondaryBtnText}>{t('home.gettingStartedAiOrder')}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.emptySecondaryBtn} onPress={openProductsSettings} accessibilityRole="button">
+        <Ionicons name="water-outline" size={chromeSize(17)} color={colors.primary} />
+        <Text style={styles.emptySecondaryBtnText}>{t('home.gettingStartedProducts')}</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <View style={styles.emptyContainer}>
+      <Text style={{ fontSize: 40, marginBottom: 8 }}>📋</Text>
+      <Text style={styles.emptyText}>{t('home.noClients', { day: selectedDay })}</Text>
+      <Text style={styles.emptySubtext}>{t('home.noClientsSubtitle')}</Text>
+      <TouchableOpacity
+        style={styles.emptySecondaryBtn}
+        onPress={() => {
+          hapticSelection();
+          openAddClientFlow();
+        }}
+        accessibilityRole="button"
+      >
+        <Ionicons name="add" size={chromeSize(18)} color={colors.primary} />
+        <Text style={styles.emptySecondaryBtnText}>{t('home.addClientToDay', { day: selectedDay })}</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -1361,7 +1447,12 @@ const HomeScreen = () => {
           />
 
           {/* Product counter — only nearest date */}
-          <ProductCounter clients={nearestDateClients} fontScale={fontScale} compact={isPhoneLandscape} />
+          <ProductCounter
+            clients={nearestDateClients}
+            whenLabel={clientSections[0]?.shortLabel ?? ''}
+            fontScale={fontScale}
+            compact={isPhoneLandscape}
+          />
 
           {/* Quick actions — collapse with the calendar and load summary. */}
           <View style={styles.actionPanel}>
@@ -1400,8 +1491,12 @@ const HomeScreen = () => {
                   </Text>
                 </TouchableOpacity>
 
+                {showSecondaryActions && (
                 <TouchableOpacity
-                  style={[styles.actionCompactButton, styles.actionCompactDebt]}
+                  style={[
+                    styles.actionCompactButton,
+                    debts.length > 0 ? styles.actionCompactDebt : styles.actionCompactNeutral,
+                  ]}
                   onPress={() => {
                     hapticSelection();
                     setShowDebtsSheet(true);
@@ -1410,8 +1505,16 @@ const HomeScreen = () => {
                   accessibilityRole="button"
                   accessibilityLabel={`${t('home.debts')}: ${debts.length}`}
                 >
-                  <Ionicons name="cash-outline" size={chromeSize(17)} color={colors.danger} />
-                  <Text style={styles.actionCompactDebtText} numberOfLines={1}>
+                  {/* Rojo sólo cuando hay algo que cobrar; sin deudas no es una alerta. */}
+                  <Ionicons
+                    name="cash-outline"
+                    size={chromeSize(17)}
+                    color={debts.length > 0 ? colors.danger : colors.textMuted}
+                  />
+                  <Text
+                    style={debts.length > 0 ? styles.actionCompactDebtText : styles.actionCompactNeutralText}
+                    numberOfLines={1}
+                  >
                     {t('home.debts')}
                   </Text>
                   {debts.length > 0 && (
@@ -1422,8 +1525,10 @@ const HomeScreen = () => {
                     </View>
                   )}
                 </TouchableOpacity>
+                )}
               </View>
 
+              {showSecondaryActions && (
               <View style={styles.actionCompactShortcutRow}>
                 <TouchableOpacity
                   style={styles.actionCompactShortcut}
@@ -1480,6 +1585,7 @@ const HomeScreen = () => {
                   )}
                 </TouchableOpacity>
               </View>
+              )}
             </View>
             </View>
           </View>
@@ -1778,6 +1884,12 @@ const HomeScreen = () => {
         day={selectedDay}
         onSave={addClient}
         onClose={closeAddClientModal}
+      />
+
+      <WelcomeModal
+        visible={showWelcome}
+        onClose={closeWelcome}
+        onAddFirstClient={handleWelcomeAddClient}
       />
 
       {/* Smart Order Modal (IA) */}
@@ -2265,6 +2377,75 @@ const getStyles = (
     color: colors.textHint,
     marginTop: 6,
     opacity: 0.7,
+  },
+  gettingStarted: {
+    marginTop: s(28),
+    marginHorizontal: s(16),
+    padding: s(20),
+    borderRadius: s(16),
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.card,
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 520,
+  },
+  gettingStartedTitle: {
+    fontSize: s(20),
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginBottom: s(8),
+  },
+  gettingStartedBody: {
+    fontSize: s(15),
+    lineHeight: s(21),
+    color: colors.textSecondary,
+    marginBottom: s(18),
+  },
+  emptyPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: s(8),
+    backgroundColor: colors.primary,
+    borderRadius: s(12),
+    paddingVertical: s(14),
+    paddingHorizontal: s(16),
+  },
+  emptyPrimaryBtnText: {
+    fontSize: s(16),
+    fontWeight: '700',
+    color: colors.textWhite,
+  },
+  emptySecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: s(8),
+    marginTop: s(10),
+    borderRadius: s(12),
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+    backgroundColor: colors.primaryLighter,
+    paddingVertical: s(12),
+    paddingHorizontal: s(16),
+  },
+  emptySecondaryBtnText: {
+    fontSize: s(15),
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  actionCompactNeutral: {
+    backgroundColor: colors.sectionBackground,
+    borderColor: colors.cardBorder,
+  },
+  actionCompactNeutralText: {
+    width: '100%',
+    textAlign: 'center',
+    fontSize: s(12),
+    lineHeight: s(15),
+    fontWeight: '800',
+    color: colors.textSecondary,
   },
   completedSection: {
     borderTopWidth: 2,

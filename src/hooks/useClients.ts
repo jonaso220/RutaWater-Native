@@ -12,7 +12,7 @@ import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { alarmTargetsDay } from '../utils/alarmReconciliation';
 import { findExactClientMatch, planDuplicateClientCleanup } from '../utils/clientDuplicates';
 import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../utils/recency';
-import { ALL_DAYS, Frequency } from '../constants/products';
+import { ALL_DAYS, Frequency, RecurringFrequency } from '../constants/products';
 import {
   scheduleClientAlarm,
   cancelClientAlarm,
@@ -979,6 +979,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
     notes: string,
     mapsLink?: string,
     billing?: ClientBillingInfo,
+    freq: RecurringFrequency = 'weekly',
   ) => {
     try {
       const scope = dataScopeFields(userId, groupId);
@@ -1031,7 +1032,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         mapsLink: mapsLink || '',
         notes,
         ...billingInfo,
-        freq: isDirectoryOnly ? 'on_demand' : 'weekly',
+        freq: isDirectoryOnly ? 'on_demand' : freq,
         visitDay: isDirectoryOnly ? 'Sin Asignar' : day,
         visitDays: isDirectoryOnly ? [] : [day],
         specificDate: '',

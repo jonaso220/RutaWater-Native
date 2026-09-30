@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { ProductLabel } from './ProductIcon';
-import { ALL_DAYS, getDayLabel } from '../constants/products';
+import { ALL_DAYS, RecurringFrequency, getDayLabel } from '../constants/products';
 import { useProducts } from '../stores/productCatalogStore';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
@@ -43,11 +43,17 @@ interface AddClientModalProps {
     notes: string,
     mapsLink: string,
     billing: ClientBillingInfo,
+    freq: RecurringFrequency,
   ) => Promise<void>;
   onClose: () => void;
 }
 
 type Destination = 'day' | 'directory';
+
+// Un pedido de una sola vez necesita fecha y va primero en la lista; ese
+// flujo ya existe en "+ Visita" del Directorio, así que acá sólo se ofrecen
+// las frecuencias recurrentes.
+const RECURRING_FREQUENCIES: RecurringFrequency[] = ['weekly', 'biweekly', 'triweekly', 'monthly'];
 
 const AddClientModal: React.FC<AddClientModalProps> = ({
   visible,
@@ -75,9 +81,13 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
   const [products, setProducts] = useState<Record<string, number>>({});
   const [destination, setDestination] = useState<Destination>(day ? 'day' : 'directory');
   const [selectedDay, setSelectedDay] = useState('');
+  const [frequency, setFrequency] = useState<RecurringFrequency>('weekly');
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [showPasteModal, setShowPasteModal] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollToMoreRef = useRef(false);
   const [pasteText, setPasteText] = useState('');
   const catalogProducts = useProducts();
 
@@ -129,7 +139,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
 
     if (parsedName) setName(parsedName);
     if (parsedAddress) setAddress(parsedAddress);
-    if (parsedMapsLink) setMapsLink(parsedMapsLink);
+    if (parsedMapsLink) {
+      setMapsLink(parsedMapsLink);
+      setShowMoreDetails(true);
+    }
   };
 
   const parseOrderText = (text: string) => {
@@ -266,7 +279,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
     if (parsedName) setName(parsedName);
     if (parsedAddress) setAddress(parsedAddress);
     if (parsedPhone) setPhone(parsedPhone);
-    if (parsedMapsLink) setMapsLink(parsedMapsLink);
+    if (parsedMapsLink) {
+      setMapsLink(parsedMapsLink);
+      setShowMoreDetails(true);
+    }
     if (Object.keys(parsedProducts).length > 0) setProducts(parsedProducts);
     if (noteParts.length > 0) setNotes(noteParts.join('\n'));
   };
@@ -289,9 +305,11 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
     setMapsLink('');
     setNotes('');
     setBilling(sanitizeClientBillingInfo(null));
+    setShowMoreDetails(false);
     setProducts({});
     setDestination(isDirectoryMode ? 'directory' : 'day');
     setSelectedDay('');
+    setFrequency('weekly');
     savingRef.current = false;
     setSaving(false);
   };
@@ -318,6 +336,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
       return;
     }
     if (!isValidClientEmail(billing.email)) {
+      setShowMoreDetails(true);
       Alert.alert(t('error'), t('clientBilling.invalidEmail'));
       return;
     }
@@ -343,6 +362,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
         notes.trim(),
         mapsLink.trim(),
         sanitizeClientBillingInfo(billing),
+        frequency,
       );
       resetForm();
       onClose();
@@ -379,7 +399,19 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            ref={scrollRef}
+            style={styles.body}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => {
+              // Al desplegar "Más datos", mostrar los campos que aparecieron abajo.
+              if (scrollToMoreRef.current) {
+                scrollToMoreRef.current = false;
+                scrollRef.current?.scrollToEnd({ animated: true });
+              }
+            }}
+          >
             {/* Destination toggle */}
             <Text style={styles.sectionTitle}>{t('addModal.destination')}</Text>
             {isDirectoryMode ? (
@@ -439,6 +471,31 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               </View>
             )}
 
+            {/* Frequency: agendar a un día es siempre recurrente, que se vea. */}
+            {destination === 'day' ? (
+              <>
+                <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('addModal.frequency')}</Text>
+                <View style={styles.dayChipsRow}>
+                  {RECURRING_FREQUENCIES.map((f) => (
+                    <TouchableOpacity
+                      key={f}
+                      style={[styles.dayChip, frequency === f && styles.dayChipSelected]}
+                      onPress={() => setFrequency(f)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: frequency === f }}
+                    >
+                      <Text style={[styles.dayChipText, frequency === f && styles.dayChipTextSelected]}>
+                        {t(`freq.${f}`)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.hintText}>{t('addModal.frequencyHint')}</Text>
+              </>
+            ) : (
+              <Text style={styles.hintText}>{t('addModal.directoryHint')}</Text>
+            )}
+
             {/* Name */}
             <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('addModal.name')}</Text>
             <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
@@ -492,32 +549,8 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
               )}
             </View>
 
-            {/* Maps Link */}
-            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('addModal.mapsUrl')}</Text>
-            <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
-              <TextInput
-                style={{ flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 }}
-                value={mapsLink}
-                onChangeText={setMapsLink}
-                placeholder="https://maps.app.goo.gl/..."
-                placeholderTextColor={colors.textHint}
-                keyboardType="url"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {mapsLink.length > 0 && (
-                <TouchableOpacity onPress={() => setMapsLink('')} style={{ padding: 10 }}>
-                  <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Billing (optional) */}
-            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('clientBilling.title')}</Text>
-            <ClientBillingInfoEditor value={billing} onChange={setBilling} />
-
             {/* Products */}
-            <Text style={[styles.sectionTitle, { marginTop: 10 }]}>{t('addModal.products')}</Text>
+            <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('addModal.products')}</Text>
             {catalogProducts.map((p) => (
               <View key={p.id} style={styles.productRow}>
                 <ProductLabel
@@ -565,6 +598,57 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                 </TouchableOpacity>
               )}
             </View>
+
+            {/* Datos que se usan poco: plegados para que Productos quede a mano. */}
+            <TouchableOpacity
+              style={styles.moreToggle}
+              onPress={() => {
+                scrollToMoreRef.current = !showMoreDetails;
+                setShowMoreDetails((v) => !v);
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showMoreDetails }}
+            >
+              <Ionicons
+                name={showMoreDetails ? 'chevron-down' : 'chevron-forward'}
+                size={Math.round(16 * fontScale)}
+                color={colors.textSecondary}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.moreToggleTitle}>{t('addModal.moreDetails')}</Text>
+                {!showMoreDetails && (
+                  <Text style={styles.moreToggleHint}>{t('addModal.moreDetailsHint')}</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+            {showMoreDetails && (
+              <View style={styles.moreBody}>
+                {/* Maps Link */}
+                <Text style={[styles.sectionTitle, { marginTop: 12 }]}>{t('addModal.mapsUrl')}</Text>
+                <View style={[styles.textInput, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <TextInput
+                    style={{ flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 }}
+                    value={mapsLink}
+                    onChangeText={setMapsLink}
+                    placeholder="https://maps.app.goo.gl/..."
+                    placeholderTextColor={colors.textHint}
+                    keyboardType="url"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {mapsLink.length > 0 && (
+                    <TouchableOpacity onPress={() => setMapsLink('')} style={{ padding: 10 }}>
+                      <Text style={{ fontSize: 16, color: colors.textHint }}>✕</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <Text style={styles.hintText}>{t('addModal.mapsHelp')}</Text>
+
+                {/* Billing (optional) */}
+                <Text style={[styles.sectionTitle, { marginTop: 16 }]}>{t('clientBilling.title')}</Text>
+                <ClientBillingInfoEditor value={billing} onChange={setBilling} />
+              </View>
+            )}
           </ScrollView>
 
           {/* Save button */}
@@ -580,8 +664,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({
                   : destination === 'directory'
                     ? t('addModal.saveToDirectory')
                     : isDirectoryMode
-                      ? (selectedDay ? t('addModal.scheduleIn', { day: selectedDay }) : t('addModal.selectDay'))
-                      : t('addModal.addTo', { day })}
+                      ? (selectedDay
+                        ? t('addModal.scheduleIn', { day: selectedDay, every: t(`addModal.every.${frequency}`) })
+                        : t('addModal.selectDay'))
+                      : t('addModal.addTo', { day, every: t(`addModal.every.${frequency}`) })}
               </Text>
             </TouchableOpacity>
           </View>
@@ -743,6 +829,37 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   },
   dayChipTextSelected: {
     color: colors.textWhite,
+  },
+  moreToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(8),
+    marginTop: s(16),
+    paddingVertical: s(10),
+    paddingHorizontal: s(12),
+    borderRadius: s(10),
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.cardBorder,
+  },
+  moreToggleTitle: {
+    fontSize: s(15),
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  moreToggleHint: {
+    fontSize: s(12),
+    color: colors.textMuted,
+    marginTop: s(2),
+  },
+  moreBody: {
+    marginBottom: s(16),
+  },
+  hintText: {
+    fontSize: s(13),
+    lineHeight: s(18),
+    color: colors.textMuted,
+    marginTop: s(8),
   },
   textInput: {
     backgroundColor: colors.inputBackground,

@@ -57,6 +57,7 @@ const DirectoryClientCard = ({
   const { fontScale, width } = useLayout();
   const wideLayout = width >= 900;
   const styles = getSharedStyles(colors, fontScale);
+  const s = (v: number) => Math.round(v * fontScale);
 
   const sendWhatsApp = (client: Client) => {
     if (!client.phone) return;
@@ -169,7 +170,7 @@ const DirectoryClientCard = ({
           <View style={styles.headerInfo}>
             <View style={styles.nameRow}>
               <Text style={styles.clientName} numberOfLines={1}>
-                {(item.name || '').toUpperCase()}
+                {item.name || ''}
               </Text>
               {item.phone ? (
                 <View style={styles.clientPhoneRow}>
@@ -265,6 +266,8 @@ const DirectoryClientCard = ({
         {/* ACTION BUTTONS */}
         <View style={[styles.actionsRow, wideLayout && styles.actionsRowWide]}>
           <View style={[styles.actionButtonsGroup, wideLayout && styles.actionButtonsGroupWide]}>
+            {/* Íconos de línea como en Inicio, con etiqueta: los emojis solos no
+                decían qué hacía cada botón. */}
             {item.phone ? (
               <TouchableOpacity
                 onPress={() => callClient(item)}
@@ -273,7 +276,10 @@ const DirectoryClientCard = ({
                 accessibilityRole="button"
                 accessibilityLabel={`${t('clientCard.call')}: ${item.name}`}
               >
-                <Text style={styles.actionBtnEmoji}>📞</Text>
+                <Ionicons name="call-outline" size={s(19)} color={colors.textSecondary} />
+                <Text style={styles.actionBtnLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {t('directory.actions.call')}
+                </Text>
               </TouchableOpacity>
             ) : null}
             {item.phone ? (
@@ -284,7 +290,10 @@ const DirectoryClientCard = ({
                 accessibilityRole="button"
                 accessibilityLabel={`${t('clientCard.whatsapp')}: ${item.name}`}
               >
-                <Text style={styles.actionBtnEmoji}>💬</Text>
+                <Ionicons name="logo-whatsapp" size={s(19)} color={colors.successMedium} />
+                <Text style={styles.actionBtnLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {t('directory.actions.whatsapp')}
+                </Text>
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
@@ -292,9 +301,19 @@ const DirectoryClientCard = ({
               style={styles.actionBtn}
               hitSlop={ACTION_HIT_SLOP}
               accessibilityRole="button"
-              accessibilityLabel={`${t(debtTotal > 0 ? 'clientCard.manageDebt' : 'clientCard.addDebt')}: ${item.name}`}
+              accessibilityLabel={debtTotal > 0
+                ? `${t('clientCard.manageDebt')}: ${item.name}. ${formatMoney(debtTotal)}`
+                : `${t('clientCard.addDebt')}: ${item.name}`}
             >
-              <Text style={styles.actionBtnEmoji}>{debtTotal > 0 ? '💰' : '💵'}</Text>
+              <Ionicons name="cash-outline" size={s(19)} color={debtTotal > 0 ? colors.danger : colors.textSecondary} />
+              <Text
+                style={[styles.actionBtnLabel, debtTotal > 0 && styles.actionBtnLabelDebt]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {debtTotal > 0 ? formatMoney(debtTotal) : t('directory.actions.debt')}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => onRelationship(item)}
@@ -303,7 +322,14 @@ const DirectoryClientCard = ({
               accessibilityRole="button"
               accessibilityLabel={`${t('clientCard.manageFamily')}: ${item.name}`}
             >
-              <Text style={styles.actionBtnEmoji}>{hasRelationships ? '👨‍👩‍👧' : '👥'}</Text>
+              <Ionicons
+                name={hasRelationships ? 'people' : 'people-outline'}
+                size={s(19)}
+                color={hasRelationships ? colors.primary : colors.textSecondary}
+              />
+              <Text style={styles.actionBtnLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                {t('directory.actions.family')}
+              </Text>
             </TouchableOpacity>
             {isAdmin && (
               <TouchableOpacity
@@ -313,7 +339,10 @@ const DirectoryClientCard = ({
                 accessibilityRole="button"
                 accessibilityLabel={`${t('clientCard.editClient')}: ${item.name}`}
               >
-                <Text style={styles.actionBtnEmoji}>✏️</Text>
+                <Ionicons name="pencil-outline" size={s(18)} color={colors.textSecondary} />
+                <Text style={styles.actionBtnLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                  {t('directory.actions.edit')}
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -426,7 +455,6 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     fontWeight: '700',
     color: colors.textPrimary,
     flex: 1,
-    letterSpacing: 0.2,
   },
   clientPhone: {
     fontSize: s(11),
@@ -566,27 +594,39 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
     borderLeftColor: colors.sectionBackground,
   },
   actionButtonsGroup: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: s(6),
+    gap: s(2),
     backgroundColor: colors.sectionBackground,
     borderRadius: s(10),
     paddingHorizontal: s(6),
     paddingVertical: s(3),
   },
   actionButtonsGroupWide: {
+    flex: 0,
     width: '100%',
     justifyContent: 'space-between',
   },
   actionBtn: {
-    width: s(38),
-    height: s(38),
+    flex: 1,
+    minWidth: 0,
+    maxWidth: s(60),
+    minHeight: s(44),
     alignItems: 'center',
     justifyContent: 'center',
+    gap: s(2),
     borderRadius: s(8),
   },
-  actionBtnEmoji: {
-    fontSize: s(18),
+  actionBtnLabel: {
+    fontSize: s(11),
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  actionBtnLabelDebt: {
+    color: colors.danger,
+    fontWeight: '700',
   },
   scheduleButton: {
     backgroundColor: colors.primaryLight,

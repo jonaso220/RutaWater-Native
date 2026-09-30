@@ -533,9 +533,11 @@ const ClientCard: React.FC<ClientCardProps> = ({
                   <Text style={styles.productShort}>{p.short}</Text>
                 </View>
               ))}
-            </View>
-            <View style={styles.quickEditIcon}>
-              <Ionicons name="pencil" size={s(14)} color={colors.textMuted} />
+              {/* Pegado al último producto: se lee como "editar productos", no el cliente. */}
+              <View style={styles.inlineEditChip}>
+                <Ionicons name="pencil" size={s(13)} color={colors.primary} />
+                <Text style={styles.inlineEditText}>{t('clientCard.editShort')}</Text>
+              </View>
             </View>
           </TouchableOpacity>
         ) : null}
@@ -555,8 +557,9 @@ const ClientCard: React.FC<ClientCardProps> = ({
                 Alert.alert(t('error'), t('directory.errorLink'));
               })}
             </Text>
-            <View style={styles.quickEditIconCompact}>
-              <Ionicons name="pencil" size={s(13)} color={colors.textMuted} />
+            <View style={[styles.inlineEditChip, styles.inlineEditChipNote]}>
+              <Ionicons name="pencil" size={s(13)} color={colors.primary} />
+              <Text style={styles.inlineEditText}>{t('clientCard.editShort')}</Text>
             </View>
           </TouchableOpacity>
         ) : null}
@@ -976,24 +979,29 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       fontWeight: '500',
       lineHeight: s(18),
     },
-    quickEditIcon: {
-      width: s(28),
-      height: s(28),
-      borderRadius: s(9),
-      backgroundColor: colors.sectionBackground,
+    // Mismo lenguaje visual que "Añadir nota" (borde punteado) para que se
+    // entienda que es una acción sobre esa fila.
+    inlineEditChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: s(4),
+      paddingVertical: s(4),
+      paddingHorizontal: s(9),
+      borderRadius: 999,
       borderWidth: 1,
-      borderColor: colors.cardBorder,
-      justifyContent: 'center',
-      alignItems: 'center',
+      borderStyle: 'dashed',
+      borderColor: colors.primaryBorder,
     },
-    quickEditIconCompact: {
-      width: s(24),
-      height: s(24),
-      borderRadius: s(8),
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginTop: s(-3),
-      marginRight: s(-3),
+    inlineEditChipNote: {
+      alignSelf: 'flex-start',
+      marginTop: s(-2),
+      marginRight: s(-2),
+      backgroundColor: colors.card,
+    },
+    inlineEditText: {
+      fontSize: s(12),
+      fontWeight: '700',
+      color: colors.primary,
     },
     quickAddRow: {
       flexDirection: 'row',

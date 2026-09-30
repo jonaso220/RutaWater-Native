@@ -468,8 +468,8 @@ const DirectoryScreen = () => {
       {/* New Client Modal */}
       <AddClientModal
         visible={showNewClient}
-        onSave={async (name, address, phone, targetDay, products, notes, mapsLink, billing) => {
-          await addClient(name, address, phone, targetDay, products, notes, mapsLink, billing);
+        onSave={async (name, address, phone, targetDay, products, notes, mapsLink, billing, freq) => {
+          await addClient(name, address, phone, targetDay, products, notes, mapsLink, billing, freq);
         }}
         onClose={() => setShowNewClient(false)}
       />

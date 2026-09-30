@@ -658,7 +658,10 @@ const SmartOrderModal: React.FC<SmartOrderModalProps> = ({ visible, onClose }) =
               <View style={styles.errorBox} accessibilityRole="alert">
                 <Text style={styles.errorTitle}>{t('smartOrder.parseErrorTitle')}</Text>
                 <Text style={styles.errorMsg}>{error}</Text>
-                <Text style={styles.errorHint}>{t('smartOrder.parseErrorHint')}</Text>
+                <Text style={styles.errorHint}>
+                  {/* El servidor local sólo existe en desarrollo (ver config/api.ts). */}
+                  {__DEV__ ? t('smartOrder.parseErrorHint') : t('smartOrder.parseErrorUserHint')}
+                </Text>
               </View>
             )}
 

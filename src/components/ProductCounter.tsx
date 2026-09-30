@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTranslation } from 'react-i18next';
 import { Client } from '../types';
 import { useAllProducts } from '../stores/productCatalogStore';
@@ -10,14 +11,17 @@ import { calculateProductTotals } from '../utils/productCounter';
 
 interface ProductCounterProps {
   clients: Client[];
+  /** Fecha de esos clientes ("hoy", "mañana", "mié 30"): la barra suma la primera fecha de la lista. */
+  whenLabel: string;
   fontScale?: number;
   compact?: boolean;
 }
 
-const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1, compact = false }) => {
+const ProductCounter: React.FC<ProductCounterProps> = ({ clients, whenLabel, fontScale = 1, compact = false }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const styles = React.useMemo(() => getStyles(colors, fontScale, compact), [colors, fontScale, compact]);
+  const s = (v: number) => Math.round(v * fontScale);
   // Existing scheduled quantities must remain in the truck load even after a
   // product is hidden from pickers.
   const products = useAllProducts();
@@ -43,6 +47,21 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1,
 
   return (
     <View style={styles.wrapper}>
+      <View style={styles.row}>
+      {/* Título en dos líneas chicas a la izquierda: no suma altura a la barra
+          y queda fijo mientras los productos se deslizan. */}
+      <View
+        style={styles.title}
+        accessible
+        accessibilityRole="header"
+        accessibilityLabel={`${t('productCounter.title')} ${whenLabel}`}
+      >
+        <MaterialCommunityIcons name="truck-delivery-outline" size={s(compact ? 15 : 17)} color={colors.primary} />
+        <View>
+          <Text style={styles.titleText} numberOfLines={1}>{t('productCounter.title')}</Text>
+          <Text style={styles.whenText} numberOfLines={1}>{whenLabel}</Text>
+        </View>
+      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -57,7 +76,7 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1,
           // number actually loaded onto the truck — show it big, sifones in parens.
           const bigValue = isSoda ? Math.ceil(totals[productId] / 6) : totals[productId];
           const bigLabel = isSoda
-            ? t('productCounter.crate')
+            ? t('productCounter.crate', { count: bigValue })
             : product?.short || `${t('productCounter.notInCatalog')} · ${productId.slice(-4)}`;
           return (
             <View key={productId} style={styles.item}>
@@ -70,6 +89,7 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, fontScale = 1,
           );
         })}
       </ScrollView>
+      </View>
     </View>
   );
 };
@@ -82,17 +102,42 @@ const getStyles = (colors: ThemeColors, scale: number = 1, compact = false) => {
     borderBottomWidth: 1,
     borderBottomColor: colors.primaryLight,
   },
-  container: {
+  row: {
     width: '100%',
     maxWidth: WIDE_CONTENT_MAX_WIDTH,
     alignSelf: 'center',
-    flexGrow: 0,
-    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  title: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(5),
+    marginLeft: s(12),
+    paddingRight: s(8),
+    borderRightWidth: 1,
+    borderRightColor: colors.primaryLight,
+  },
+  titleText: {
+    fontSize: s(11),
+    lineHeight: s(13),
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  whenText: {
+    fontSize: s(11),
+    lineHeight: s(13),
+    fontWeight: '500',
+    color: colors.textMuted,
+  },
+  container: {
+    flex: 1,
   },
   content: {
-    paddingHorizontal: s(14),
+    paddingLeft: s(8),
+    paddingRight: s(12),
     paddingVertical: s(compact ? 4 : 10),
-    gap: s(10),
+    gap: s(8),
     alignItems: 'center',
   },
   item: {
@@ -100,7 +145,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1, compact = false) => {
     alignItems: 'center',
     gap: 5,
     backgroundColor: colors.card,
-    paddingHorizontal: s(12),
+    paddingHorizontal: s(10),
     paddingVertical: s(compact ? 3 : 6),
     borderRadius: 14,
     borderWidth: 1,

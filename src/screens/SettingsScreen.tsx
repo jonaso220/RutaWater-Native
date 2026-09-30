@@ -463,7 +463,8 @@ const SettingsScreen = () => {
             </View>
           )}
 
-          {canManageActiveProfile && (
+          {/* Con menos de 2 clientes no puede haber duplicados. */}
+          {canManageActiveProfile && clientCount >= 2 && (
             <>
               <View style={styles.templateDivider} />
 

@@ -45,6 +45,7 @@ export const getDayLabel = (day: string): string => {
 };
 
 export type Frequency = 'weekly' | 'biweekly' | 'triweekly' | 'monthly' | 'once' | 'on_demand';
+export type RecurringFrequency = Extract<Frequency, 'weekly' | 'biweekly' | 'triweekly' | 'monthly'>;
 
 // Orden de los chips en los selectores de frecuencia.
 export const FREQUENCIES: Frequency[] = ['weekly', 'biweekly', 'triweekly', 'monthly', 'once', 'on_demand'];

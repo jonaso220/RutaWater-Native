@@ -6,7 +6,7 @@ import crashlytics from '@react-native-firebase/crashlytics';
 // o el ThemeProvider. El boundary tiene que renderizar siempre, sin dependencias.
 const STRINGS = {
   title: 'Algo salió mal',
-  subtitle: 'La app encontró un error inesperado. Probá reintentar — si sigue, cerrá y abrí de nuevo.',
+  subtitle: 'La app encontró un error inesperado. Prueba reintentar; si sigue, ciérrala y ábrela de nuevo.',
   retry: 'Reintentar',
 };
 

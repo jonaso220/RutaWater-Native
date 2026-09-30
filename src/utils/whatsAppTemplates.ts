@@ -1,4 +1,4 @@
-export const DEFAULT_EN_CAMINO = 'Buenas 🚚. Ya estamos en camino, sos el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!\n\nAquapura';
+export const DEFAULT_EN_CAMINO = 'Buenas 🚚. Ya estamos en camino, eres el/la siguiente en la lista de entrega. ¡Nos vemos en unos minutos!';
 export const DEFAULT_TOMORROW_VISIT = 'Buenas 👋 Te escribo para recordarte que mañana andaremos por tu casa 🚛💧\n\nEn caso de que ya sepas lo que vas a necesitar, te agradezco que me lo digas así lo pongo en la agenda 📝✅\n\n¡Saludos! 😃';
 
 export const resolveClientCardWhatsAppMessage = (

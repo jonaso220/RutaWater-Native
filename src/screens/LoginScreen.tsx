@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   StatusBar,
+  Linking,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -17,9 +18,14 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
+// Mismas páginas que enlaza la pantalla Premium.
+const PRIVACY_URL = 'https://rutawater-privacy.netlify.app/';
+const TERMS_URL = 'https://rutawater-privacy.netlify.app/terms.html';
+
 interface LoginScreenProps {
   onSignInWithEmail: (email: string, password: string) => Promise<void>;
   onSignUpWithEmail: (email: string, password: string) => Promise<void>;
+  onSendPasswordReset: (email: string) => Promise<void>;
   onSignInWithGoogle: () => Promise<void>;
   onSignInWithApple: () => Promise<void>;
 }
@@ -27,14 +33,16 @@ interface LoginScreenProps {
 const LoginScreen: React.FC<LoginScreenProps> = ({
   onSignInWithEmail,
   onSignUpWithEmail,
+  onSendPasswordReset,
   onSignInWithGoogle,
   onSignInWithApple,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const styles = getStyles(colors);
-  const [loading, setLoading] = useState<'google' | 'apple' | 'email' | null>(null);
+  const [loading, setLoading] = useState<'google' | 'apple' | 'email' | 'reset' | null>(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -57,6 +65,31 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   };
 
+  const handleForgotPassword = async () => {
+    setNotice('');
+    if (!email.trim()) {
+      setError(t('login.resetNeedsEmail'));
+      return;
+    }
+    setLoading('reset');
+    setError('');
+    try {
+      await onSendPasswordReset(email.trim());
+      setNotice(t('login.resetSent', { email: email.trim() }));
+    } catch (e: any) {
+      if (e.code === 'auth/invalid-email') {
+        setError(t('login.invalidEmail'));
+      } else if (e.code === 'auth/user-not-found') {
+        // Mismo aviso que un envío exitoso: no revelar qué correos tienen cuenta.
+        setNotice(t('login.resetSent', { email: email.trim() }));
+      } else {
+        setError(t('login.resetError'));
+      }
+    } finally {
+      setLoading(null);
+    }
+  };
+
   const handleEmailAuth = async () => {
     if (!email.trim() || !password.trim()) {
       setError(t('login.fillFields'));
@@ -68,6 +101,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     }
     setLoading('email');
     setError('');
+    setNotice('');
     try {
       if (isSignUp) {
         await onSignUpWithEmail(email.trim(), password);
@@ -109,6 +143,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           <Text style={styles.subtitle}>{t('login.subtitle')}</Text>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
+          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
           {showEmailForm ? (
             <>
@@ -148,6 +183,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                 </TouchableOpacity>
               </View>
 
+              {!isSignUp && (
+                <TouchableOpacity
+                  onPress={handleForgotPassword}
+                  disabled={!!loading}
+                  style={styles.forgotButton}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.forgotText}>
+                    {loading === 'reset' ? t('login.connecting') : t('login.forgotPassword')}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity
                 style={[styles.emailButton, !!loading && styles.buttonDisabled]}
                 onPress={handleEmailAuth}
@@ -163,7 +211,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
                 )}
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => { setIsSignUp(!isSignUp); setError(''); }}>
+              <TouchableOpacity onPress={() => { setIsSignUp(!isSignUp); setError(''); setNotice(''); }}>
                 <Text style={styles.toggleText}>
                   {isSignUp ? t('login.alreadyHaveAccount') : t('login.noAccount')}
                 </Text>
@@ -211,6 +259,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
               <Text style={styles.emailToggleText}>{t('login.signInWithEmail')}</Text>
             </TouchableOpacity>
           )}
+
+          <Text style={styles.legalText}>
+            {t('login.legalPrefix')}
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(TERMS_URL)}>
+              {t('login.terms')}
+            </Text>
+            {t('login.legalAnd')}
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(PRIVACY_URL)}>
+              {t('login.privacy')}
+            </Text>
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -249,8 +308,38 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: colors.textHint,
+    lineHeight: 22,
+    color: colors.textSecondary,
+    textAlign: 'center',
     marginBottom: 32,
+  },
+  notice: {
+    color: colors.successText,
+    fontSize: 15,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginTop: -4,
+    marginBottom: 12,
+    paddingVertical: 4,
+  },
+  forgotText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  legalText: {
+    marginTop: 24,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textHint,
+    textAlign: 'center',
+  },
+  legalLink: {
+    color: colors.primary,
+    fontWeight: '600',
   },
   error: {
     color: colors.dangerBright,

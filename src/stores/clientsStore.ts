@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Client, ClientAddress } from '../types';
 import type { VisitCommand } from '../utils/visitCompletion';
-import { Frequency } from '../constants/products';
+import { Frequency, RecurringFrequency } from '../constants/products';
 import type { ClientBillingInfo } from '../utils/clientBillingInfo';
 
 interface ClientsStore {
@@ -58,6 +58,7 @@ interface ClientsStore {
     notes: string,
     mapsLink?: string,
     billing?: ClientBillingInfo,
+    freq?: RecurringFrequency,
   ) => Promise<void>;
   aiCreateClient: (data: {
     name: string;

@@ -350,6 +350,10 @@ export const useAuth = () => {
     }
   }, []);
 
+  const sendPasswordReset = useCallback(async (email: string) => {
+    await auth().sendPasswordResetEmail(email);
+  }, []);
+
   const signUpWithEmail = useCallback(async (email: string, password: string) => {
     try {
       const credential = await auth().createUserWithEmailAndPassword(email, password);
@@ -551,6 +555,7 @@ export const useAuth = () => {
     isAdmin,
     signInWithEmail,
     signUpWithEmail,
+    sendPasswordReset,
     signInWithGoogle,
     signInWithApple,
     signOut,
@@ -565,6 +570,7 @@ export const useAuth = () => {
     isAdmin,
     signInWithEmail,
     signUpWithEmail,
+    sendPasswordReset,
     signInWithGoogle,
     signInWithApple,
     signOut,

@@ -239,6 +239,26 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
       onClientLimitReached?.();
       return;
     }
+    // Una visita sin productos es válida (cobrar, retirar envases), pero casi
+    // siempre es un olvido: se confirma antes de guardar. Reintentar solo los
+    // familiares no vuelve a preguntar.
+    const hasProducts = Object.values(localProducts).some((qty) => qty > 0);
+    if (!hasProducts && !primarySavedPendingFamily) {
+      Alert.alert(
+        t('scheduleModal.noProductsTitle'),
+        t('scheduleModal.noProductsMsg'),
+        [
+          { text: t('scheduleModal.noProductsAdd'), style: 'cancel' },
+          { text: t('scheduleModal.noProductsConfirm'), onPress: () => { saveSchedule(); } },
+        ],
+      );
+      return;
+    }
+    await saveSchedule();
+  };
+
+  const saveSchedule = async () => {
+    if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     const cleanProducts: Record<string, number> = {};
@@ -406,8 +426,10 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
                   onPress={() => setLocalFreq(key)}
                   style={[
                     styles.freqChip,
-                    localFreq === key && (key === 'once' ? styles.freqChipOnce : styles.freqChipSelected),
+                    localFreq === key && styles.freqChipSelected,
                   ]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: localFreq === key }}
                 >
                   <Text
                     style={[
@@ -830,10 +852,6 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   freqChipSelected: {
     backgroundColor: colors.primaryLight,
     borderColor: colors.primary,
-  },
-  freqChipOnce: {
-    backgroundColor: colors.warningLightBg,
-    borderColor: colors.warning,
   },
   freqChipText: {
     fontSize: s(15),

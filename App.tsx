@@ -16,7 +16,7 @@ import { queryClient } from './src/lib/queryClient';
 import ErrorBoundary from './src/components/ErrorBoundary';
 
 const AppContent = () => {
-  const { user, loading: authLoading, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple } = useAuthContext();
+  const { user, loading: authLoading, signInWithEmail, signUpWithEmail, sendPasswordReset, signInWithGoogle, signInWithApple } = useAuthContext();
   const { colors } = useTheme();
 
   if (authLoading) {
@@ -28,7 +28,7 @@ const AppContent = () => {
   }
 
   if (!user) {
-    return <LoginScreen onSignInWithEmail={signInWithEmail} onSignUpWithEmail={signUpWithEmail} onSignInWithGoogle={signInWithGoogle} onSignInWithApple={signInWithApple} />;
+    return <LoginScreen onSignInWithEmail={signInWithEmail} onSignUpWithEmail={signUpWithEmail} onSendPasswordReset={sendPasswordReset} onSignInWithGoogle={signInWithGoogle} onSignInWithApple={signInWithApple} />;
   }
 
   return (

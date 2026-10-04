@@ -7,12 +7,15 @@ import {
   Modal,
   useWindowDimensions,
 } from 'react-native';
+import { AndroidScreenOverlay } from './AndroidOverlayHost';
 
 interface ModalOverlayProps {
   visible: boolean;
   onClose: () => void;
   children: React.ReactNode;
   animationType?: 'none' | 'slide' | 'fade';
+  /** Mount card-owned Android overlays at the app root to escape list clipping. */
+  escapeParent?: boolean;
 }
 
 /**
@@ -30,6 +33,7 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
   onClose,
   children,
   animationType = 'slide',
+  escapeParent = false,
 }) => {
   // Force wrapper to follow window size. On iPadOS apps running on Mac, the
   // native Modal's hosting view does not always resize with the app window,
@@ -68,6 +72,8 @@ const ModalOverlay: React.FC<ModalOverlayProps> = ({
 
   // Android: render as absolute overlay within parent bounds
   if (!visible) return null;
+
+  if (escapeParent) return <AndroidScreenOverlay>{children}</AndroidScreenOverlay>;
 
   return (
     <View style={styles.androidOverlay}>

@@ -66,7 +66,7 @@ const ClientDetailsModal: React.FC<ClientDetailsModalProps> = ({
   };
 
   return (
-    <ModalOverlay visible={visible} onClose={onClose} animationType="fade">
+    <ModalOverlay visible={visible} onClose={onClose} animationType="fade" escapeParent>
       <View style={styles.overlay}>
         <Pressable
           style={StyleSheet.absoluteFill}

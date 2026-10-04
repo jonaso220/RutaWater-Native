@@ -14,6 +14,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import { queryClient } from './src/lib/queryClient';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import { AndroidOverlayProvider } from './src/components/AndroidOverlayHost';
 
 const AppContent = () => {
   const { user, loading: authLoading, signInWithEmail, signUpWithEmail, sendPasswordReset, signInWithGoogle, signInWithApple } = useAuthContext();
@@ -44,7 +45,9 @@ const App = () => (
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <AuthProvider>
-            <AppContent />
+            <AndroidOverlayProvider>
+              <AppContent />
+            </AndroidOverlayProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryClientProvider>

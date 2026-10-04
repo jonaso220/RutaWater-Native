@@ -190,6 +190,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
       visible={showActionsMenu}
       onClose={() => setShowActionsMenu(false)}
       animationType="fade"
+      escapeParent
     >
       <View style={styles.menuOverlay}>
         <Pressable

@@ -1,0 +1,19 @@
+{
+  "name": "rutawater-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Servidor MCP local para que un asistente (Claude, Codex) lea y edite RutaWater directo en Firestore, sin controlar la interfaz. Reutiliza la lógica de agenda y Listo de la app.",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node dist/server.cjs",
+    "test": "npm run build && cd .. && TZ=America/Montevideo firebase emulators:exec --only firestore --project demo-rutawater \"npx jest --config mcp-server/jest.config.js --runInBand --no-watchman && node mcp-server/test/smoke.mjs\""
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "esbuild": "0.28.2",
+    "zod": "3.25.76"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

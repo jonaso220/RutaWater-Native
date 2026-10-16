@@ -2,11 +2,12 @@ import type { DocumentReference, Firestore, Transaction } from 'firebase-admin/f
 import type { Client } from '../../src/types';
 import { withDefaults } from '../../src/utils/clientDefaults';
 import {
-  applyVisitCommand, createVisitCommand, undoForCompletedClient, VisitCommand, VisitResult,
+  applyVisitCommand, createVisitCommand, newVisitId, undoForCompletedClient, VisitCommand, VisitResult,
 } from '../../src/utils/visitCompletion';
+import { getLastVisitDate } from '../../src/utils/recency';
 import { Account, Route, routeForRecord } from './routes';
 import {
-  CatalogProduct, clientDays, isValidIsoDate, nextVisit, quantity, todayKey,
+  CatalogProduct, clientDays, FREQ_LABELS, isValidIsoDate, nextVisit, quantity, todayKey, weekdayOf,
 } from './views';
 
 export class WriteError extends Error {}
@@ -200,4 +201,104 @@ export const undoDone = (
     cliente_id: loaded.client.id, nombre: loaded.client.name, reparto: loaded.route.name, cambiado: true,
     antes: { proxima_visita: before }, despues: { proxima_visita: client ? nextVisit(client) : null },
   };
+});
+
+/**
+ * Adelanta la próxima visita de un cliente con frecuencia a una fecha más
+ * cercana del MISMO día de semana. Hace lo mismo que cambiar la «fecha de
+ * inicio» en Editar cliente (EditClientModal): fija specificDate, reinicia
+ * lastVisited/doneFor para que el ciclo arranque en esa fecha y conserva la
+ * última entrega real en lastDeliveredAt. No cambia días, frecuencia ni orden.
+ */
+export const advanceVisit = (
+  db: Firestore, account: Account, clientId: string, date: string,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (!isValidIsoDate(date)) throw new WriteError(`Fecha inválida: ${date}. Usá aaaa-mm-dd.`);
+  const loaded = await loadForWrite(db, transaction, account, clientId);
+  const current = projectPending(loaded.client);
+  if (!current) throw new WriteError('La ficha ya no existe.');
+  if (current.freq === 'once' || current.freq === 'on_demand') {
+    throw new WriteError('Solo se adelantan clientes con frecuencia; un pedido de una vez o de directorio se agenda aparte.');
+  }
+  if (current.isNote) throw new WriteError('Las notas no se reagendan.');
+  if (!clientDays(current).includes(weekdayOf(date))) {
+    throw new WriteError(`${date} es ${weekdayOf(date)} y el cliente va ${clientDays(current).join(', ')}: solo se adelanta manteniendo el día.`);
+  }
+  if (date < todayKey()) throw new WriteError('La fecha ya pasó.');
+  const before = nextVisit(current);
+  if (!before) throw new WriteError('El cliente no tiene una próxima visita calculada.');
+  if (date >= before) throw new WriteError(`La próxima visita ya es ${before}; ${date} no la adelanta.`);
+  if (Array.isArray(loaded.client.visitCommands) && loaded.client.visitCommands.length) {
+    throw new WriteError('La ficha tiene un Listo pendiente de aplicar desde la app; reintentar en unos segundos.');
+  }
+  const lastDelivery = getLastVisitDate(current);
+  const updates: Record<string, unknown> = {
+    specificDate: date,
+    lastVisited: null,
+    doneFor: '',
+    scheduleRevision: newVisitId(),
+    isCompleted: false,
+    completedAt: null,
+  };
+  if (lastDelivery) updates.lastDeliveredAt = lastDelivery;
+  const after = nextVisit({ ...current, ...updates } as Client);
+  if (after !== date) throw new WriteError(`La app calcularía ${after} en lugar de ${date}; no se cambió nada.`);
+  transaction.update(loaded.ref, updates);
+  return {
+    cliente_id: current.id, nombre: current.name, reparto: loaded.route.name, cambiado: true,
+    antes: { proxima_visita: before }, despues: { proxima_visita: after },
+  };
+});
+
+export const FREQUENCIES: Record<string, Client['freq']> = {
+  semanal: 'weekly', weekly: 'weekly',
+  quincenal: 'biweekly', biweekly: 'biweekly', 'cada 15 dias': 'biweekly', 'cada 15 días': 'biweekly',
+  'cada 3 semanas': 'triweekly', triweekly: 'triweekly', 'cada 20 dias': 'triweekly', 'cada 20 días': 'triweekly',
+  mensual: 'monthly', monthly: 'monthly',
+};
+
+/**
+ * Cambia la frecuencia de un cliente con agenda periódica, igual que Editar
+ * cliente (EditClientModal): al cambiar la frecuencia se reinicia
+ * lastVisited/doneFor para que la próxima visita se recalcule, se conserva la
+ * última entrega real y se renueva scheduleRevision. Con `startDate` (mismo día
+ * de semana) fija además desde cuándo corre el ciclo. No cambia días ni orden.
+ */
+export const changeFrequency = (
+  db: Firestore, account: Account, clientId: string, frequency: string, startDate?: string,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const freq = FREQUENCIES[frequency.trim().toLowerCase()];
+  if (!freq) throw new WriteError(`Frecuencia desconocida: ${frequency}. Usá semanal, quincenal, cada 3 semanas o mensual.`);
+  if (startDate !== undefined && !isValidIsoDate(startDate)) throw new WriteError(`Fecha inválida: ${startDate}. Usá aaaa-mm-dd.`);
+  const loaded = await loadForWrite(db, transaction, account, clientId);
+  const current = projectPending(loaded.client);
+  if (!current) throw new WriteError('La ficha ya no existe.');
+  if (current.isNote) throw new WriteError('Las notas no tienen frecuencia.');
+  if (current.freq === 'once' || current.freq === 'on_demand') {
+    throw new WriteError('Solo se cambia la frecuencia de clientes que ya tienen agenda periódica; un pedido de una vez o de directorio se agenda desde la app.');
+  }
+  if (Array.isArray(loaded.client.visitCommands) && loaded.client.visitCommands.length) {
+    throw new WriteError('La ficha tiene un Listo pendiente de aplicar desde la app; reintentar en unos segundos.');
+  }
+  if (startDate !== undefined) {
+    if (!clientDays(current).includes(weekdayOf(startDate))) {
+      throw new WriteError(`${startDate} es ${weekdayOf(startDate)} y el cliente va ${clientDays(current).join(', ')}: la fecha de inicio tiene que mantener el día.`);
+    }
+    if (startDate < todayKey()) throw new WriteError('La fecha de inicio ya pasó.');
+  }
+  const before = { frecuencia: FREQ_LABELS[current.freq] || current.freq, proxima_visita: nextVisit(current) };
+  const freqChanged = freq !== current.freq;
+  const dateChanged = startDate !== undefined && startDate !== (current.specificDate || '');
+  if (!freqChanged && !dateChanged) {
+    return { cliente_id: current.id, nombre: current.name, reparto: loaded.route.name, cambiado: false, antes: before, despues: before };
+  }
+  const updates: Record<string, unknown> = {
+    freq, lastVisited: null, doneFor: '', scheduleRevision: newVisitId(), isCompleted: false, completedAt: null,
+  };
+  if (dateChanged) updates.specificDate = startDate;
+  const lastDelivery = getLastVisitDate(current);
+  if (lastDelivery) updates.lastDeliveredAt = lastDelivery;
+  const after = { frecuencia: FREQ_LABELS[freq] || freq, proxima_visita: nextVisit({ ...current, ...updates } as Client) };
+  transaction.update(loaded.ref, updates);
+  return { cliente_id: current.id, nombre: current.name, reparto: loaded.route.name, cambiado: true, antes: before, despues: after };
 });

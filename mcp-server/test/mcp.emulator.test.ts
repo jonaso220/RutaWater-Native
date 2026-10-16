@@ -8,7 +8,7 @@ import { Store } from '../src/store';
 import {
   addDays, agendaFor, debtReport, nextVisit, productCatalog, searchClients, todayKey, weekdayOf,
 } from '../src/views';
-import { markDone, setNote, setProducts, setStar, undoDone } from '../src/writes';
+import { advanceVisit, changeFrequency, markDone, setNote, setProducts, setStar, undoDone } from '../src/writes';
 
 const emulator = process.env.FIRESTORE_EMULATOR_HOST;
 const describeWithEmulator = emulator ? describe : describe.skip;
@@ -154,6 +154,62 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     const done = await markDone(db, account, 'atrasado', todayKey());
     expect(done.antes).toEqual({ visita: yesterday });
     expect((await db.doc('clients/atrasado').get()).data()?.doneFor).toBe(yesterday);
+  });
+
+  test('adelantar una visita quincenal a la semana más cercana, mismo día', async () => {
+    await db.doc('clients/quincenal').set(client({
+      name: 'Quincenal', freq: 'biweekly', lastVisited: new Date(`${addDays(tomorrow, -7)}T10:00:00`),
+      lastDeliveredAt: new Date(`${addDays(tomorrow, -7)}T10:00:00`), products: { b20: 1 },
+    }));
+    const account = await store.refreshAccount();
+    const before = (await db.doc('clients/quincenal').get()).data()!;
+    expect(nextVisit({ ...before, id: 'quincenal' } as any)).toBe(addDays(tomorrow, 7));
+
+    await expect(advanceVisit(db, account, 'quincenal', addDays(tomorrow, 1))).rejects.toThrow('manteniendo el día');
+    await expect(advanceVisit(db, account, 'quincenal', addDays(tomorrow, 7))).rejects.toThrow('no la adelanta');
+    await expect(advanceVisit(db, account, 'unavez', tomorrow)).rejects.toThrow('Solo se adelantan');
+
+    const moved = await advanceVisit(db, account, 'quincenal', tomorrow);
+    expect(moved.despues).toEqual({ proxima_visita: tomorrow });
+    const after = (await db.doc('clients/quincenal').get()).data()!;
+    expect(after.specificDate).toBe(tomorrow);
+    expect(after.lastVisited).toBeNull();
+    expect(after.lastDeliveredAt.toDate().toISOString()).toBe(before.lastDeliveredAt.toDate().toISOString());
+    expect(after.visitDay).toBe(tomorrowDay);
+
+    // El ciclo sigue cada 15 días desde la fecha adelantada.
+    const done = await markDone(db, account, 'quincenal', tomorrow);
+    expect(done.despues).toEqual({ proxima_visita: addDays(tomorrow, 14), ficha_eliminada: false });
+  });
+
+  test('cambiar frecuencia: semanal a quincenal y mensual a semanal, manteniendo el día', async () => {
+    const delivered = new Date(`${addDays(tomorrow, -7)}T10:00:00`);
+    await db.doc('clients/mensual').set(client({
+      name: 'Mensual', freq: 'monthly', lastVisited: delivered, lastDeliveredAt: delivered,
+    }));
+    const account = await store.refreshAccount();
+
+    const toBiweekly = await changeFrequency(db, account, 'rosa', 'quincenal');
+    expect(toBiweekly.antes).toEqual({ frecuencia: 'semanal', proxima_visita: tomorrow });
+    expect(toBiweekly.despues).toEqual({ frecuencia: 'quincenal', proxima_visita: tomorrow });
+    expect((await db.doc('clients/rosa').get()).data()?.freq).toBe('biweekly');
+    expect((await changeFrequency(db, account, 'rosa', 'quincenal')).cambiado).toBe(false);
+
+    const monthlyBefore = (await db.doc('clients/mensual').get()).data()!;
+    expect(nextVisit({ ...monthlyBefore, id: 'mensual' } as any)).toBe(addDays(tomorrow, 21));
+    const toWeekly = await changeFrequency(db, account, 'mensual', 'semanal');
+    expect(toWeekly.despues).toEqual({ frecuencia: 'semanal', proxima_visita: tomorrow });
+    const after = (await db.doc('clients/mensual').get()).data()!;
+    expect(after.lastVisited).toBeNull();
+    expect(after.lastDeliveredAt.toDate().toISOString()).toBe(delivered.toISOString());
+    expect(after.visitDay).toBe(tomorrowDay);
+
+    const started = await changeFrequency(db, account, 'mario', 'quincenal', addDays(tomorrow, 7));
+    expect(started.despues).toEqual({ frecuencia: 'quincenal', proxima_visita: addDays(tomorrow, 7) });
+
+    await expect(changeFrequency(db, account, 'mario', 'cada 2 meses')).rejects.toThrow('desconocida');
+    await expect(changeFrequency(db, account, 'mario', 'semanal', addDays(tomorrow, 1))).rejects.toThrow('mantener el día');
+    await expect(changeFrequency(db, account, 'unavez', 'semanal')).rejects.toThrow('agenda periódica');
   });
 
   test('Listo de un pedido de una vez lo completa', async () => {

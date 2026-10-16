@@ -64,7 +64,7 @@ const call = async (name, args = {}) => {
 
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
-  'actualizar_nota', 'agenda_del_dia', 'buscar_clientes', 'deshacer_listo', 'fijar_productos',
+  'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'buscar_clientes', 'cambiar_frecuencia', 'deshacer_listo', 'fijar_productos',
   'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'ver_cliente', 'ver_productos',
 ]);
 
@@ -96,5 +96,5 @@ const audit = fs.readFileSync(auditPath, 'utf8').trim().split('\n').map((line) =
 assert.deepEqual(audit, ['fijar_productos', 'marcar_favorito', 'actualizar_nota', 'marcar_listo']);
 
 await client.close();
-console.log('smoke: OK (11 herramientas, lectura, escrituras y registro de auditoría)');
+console.log('smoke: OK (13 herramientas, lectura, escrituras y registro de auditoría)');
 process.exit(0);

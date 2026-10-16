@@ -16,7 +16,7 @@ import type { Settings } from './store';
 export const ALL_DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const DAY_BY_INDEX = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-const FREQ_LABELS: Record<string, string> = {
+export const FREQ_LABELS: Record<string, string> = {
   weekly: 'semanal', biweekly: 'quincenal', triweekly: 'cada 3 semanas',
   monthly: 'mensual', once: 'una vez', on_demand: 'sin agenda (directorio)',
 };

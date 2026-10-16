@@ -9,14 +9,18 @@ import {
   addDays, agendaFor, clientDetail, clientSummary, debtReport, debtsForClient, isValidIsoDate,
   productCatalog, searchClients, todayKey, weekdayOf, whatsappTemplates,
 } from './views';
-import { ChangeResult, markDone, setNote, setProducts, setStar, undoDone, WriteError } from './writes';
+import {
+  advanceVisit, ChangeResult, changeFrequency, markDone, setNote, setProducts, setStar, undoDone, WriteError,
+} from './writes';
 
 const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta configurada.
 - Las fechas son aaaa-mm-dd en hora de Uruguay; agenda_del_dia también acepta «hoy» y «mañana».
 - Buscá al cliente con buscar_clientes y usá su id en las demás herramientas.
 - Las escrituras devuelven antes/después confirmado por el servidor; si «cambiado» es false ya estaba así.
 - marcar_favorito fija la estrella (no la alterna). marcar_listo usa la misma lógica que el botón Listo y se puede deshacer desde la app.
-- No hay herramientas para borrar clientes, cambiar deudas, precios ni frecuencias.`;
+- adelantar_visita trae la próxima visita de un cliente con frecuencia a una fecha más cercana del mismo día (como cambiar la fecha de inicio en Editar cliente).
+- cambiar_frecuencia cambia semanal/quincenal/cada 3 semanas/mensual manteniendo los días (como Editar cliente).
+- No hay herramientas para borrar clientes, cambiar deudas, precios ni días de visita.`;
 
 const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 1) }] });
 const failure = (error: unknown) => ({
@@ -216,6 +220,26 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
   }, write('deshacer_listo', async ({ cliente_id }) => undoDone(
     store.db, await store.refreshAccount(), cliente_id,
+  )));
+  server.registerTool('adelantar_visita', {
+    title: 'Adelantar visita',
+    description: 'Adelanta la próxima visita de un cliente con frecuencia (p. ej. quincenal) a una fecha más cercana del MISMO día de semana; el ciclo sigue desde esa fecha. Igual que cambiar la fecha de inicio en Editar cliente. No cambia días ni frecuencia.',
+    inputSchema: { cliente_id: z.string().min(1), fecha: z.string().describe('aaaa-mm-dd, «hoy» o «mañana»') },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  }, write('adelantar_visita', async ({ cliente_id, fecha }) => advanceVisit(
+    store.db, await store.refreshAccount(), cliente_id, resolveDate(fecha),
+  )));
+  server.registerTool('cambiar_frecuencia', {
+    title: 'Cambiar frecuencia',
+    description: 'Cambia la frecuencia de un cliente con agenda periódica (semanal, quincenal, cada 3 semanas, mensual) manteniendo sus días, igual que Editar cliente. Opcional: fecha_inicio (mismo día de semana) para fijar desde cuándo corre el ciclo. Devuelve frecuencia y próxima visita antes y después.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      frecuencia: z.string().describe('semanal, quincenal, cada 3 semanas o mensual'),
+      fecha_inicio: z.string().optional().describe('aaaa-mm-dd, «hoy» o «mañana»; mismo día de semana del cliente'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('cambiar_frecuencia', async ({ cliente_id, frecuencia, fecha_inicio }) => changeFrequency(
+    store.db, await store.refreshAccount(), cliente_id, frecuencia, fecha_inicio ? resolveDate(fecha_inicio) : undefined,
   )));
 };
 

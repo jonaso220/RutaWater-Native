@@ -123,7 +123,7 @@ android {
         applicationId "com.rutawater.native"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 39
+        versionCode 40
         versionName "1.26"
     }
     packagingOptions {

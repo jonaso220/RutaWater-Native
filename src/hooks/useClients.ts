@@ -25,13 +25,14 @@ import {
 } from '../services/notifications';
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
 import { reportError } from '../lib/crashReporting';
-import { moveItemToPosition } from '../utils/clientOrder';
+import { planPositionChange } from '../utils/clientOrder';
 import { getClientAddresses, getClientAddressSearchText, locationFields } from '../utils/clientAddresses';
 import { useClientsStore } from '../stores/clientsStore';
 import { toExistingClientUpdate } from '../utils/clientWriteData';
 import { dataScopeFields, dataScopeQuery } from '../utils/dataScope';
 import { getRelatedClientReference } from '../utils/clientIdentity';
 import { createClientDocument, isClientLimitError } from '../services/clientCreation';
+import { fillClientCoordinates, touchesLocation } from '../services/clientCoordinates';
 import { getClientPhoneSearchText, getClientPhones } from '../utils/clientPhones';
 import { ClientBillingInfo, sanitizeClientBillingInfo } from '../utils/clientBillingInfo';
 import { awaitWriteWithinGrace } from '../utils/pendingWrite';
@@ -505,7 +506,11 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
     // Related records follow only a rename the server accepted, in the
     // background: the editor does not wait for two more queries and batches.
     void write.then(
-      () => (nextName ? syncClientNameToRelatedRecords(clientId, data.name as string) : undefined),
+      () => {
+        // A saved location gets its coordinates from the Maps link, in the background.
+        if (touchesLocation(data as Record<string, unknown>)) void fillClientCoordinates(clientId, data);
+        return nextName ? syncClientNameToRelatedRecords(clientId, data.name as string) : undefined;
+      },
       (e) => reportError(e, 'Error updating client'),
     );
     const outcome = options?.waitForServer
@@ -680,6 +685,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
           [clientData.id],
         );
         syncScheduledClientRef(clientData.id, clientData, updateData);
+        void fillClientCoordinates(clientData.id, updateData);
       } else if (mode === 'replace' || isRecurringScheduleEdit) {
         // Move/replace: update the existing pending-order doc in place
         // (e.g. user said "movélo del 29-4 al 6 de mayo"), or the user is
@@ -693,6 +699,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
           [clientData.id],
         );
         syncScheduledClientRef(clientData.id, clientData, updateData);
+        void fillClientCoordinates(clientData.id, updateData);
       } else {
         // Add: keep the existing order and add a new one (only reached for
         // freq='once' with a date — a one-time extra pedido).
@@ -724,6 +731,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
             [existingOnDemand.id],
           );
           syncScheduledClientRef(existingOnDemand.id, existingOnDemand, updateData);
+          void fillClientCoordinates(existingOnDemand.id, updateData);
         } else {
           // El pedido extra es otro documento del mismo cliente humano. La
           // identidad estable permite sumar su entrega al hogar sin copiar
@@ -1057,6 +1065,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         // Its creator/scope remain unchanged when a teammate performs this.
         const updates = toExistingClientUpdate(newClientData);
         await db.collection('clients').doc(exactMatch.id).update(updates);
+        void fillClientCoordinates(exactMatch.id, updates);
         return;
       }
       if (exactMatch && isDirectoryOnly) {
@@ -1069,6 +1078,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         if (mapsLink?.trim()) contactUpdates.mapsLink = mapsLink;
         Object.assign(contactUpdates, billingInfo);
         await db.collection('clients').doc(exactMatch.id).update(contactUpdates);
+        void fillClientCoordinates(exactMatch.id, contactUpdates);
         return;
       }
 
@@ -1190,6 +1200,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         // AI intake follows the same immutable-attribution contract as the UI.
         const updates = toExistingClientUpdate(newClientData);
         await db.collection('clients').doc(exactMatch.id).update(updates);
+        void fillClientCoordinates(exactMatch.id, updates);
         return true;
       }
       if (exactMatch && isOnDemand) {
@@ -1202,6 +1213,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         const mapsLink = normalizeGoogleMapsLink(data.mapsLink);
         if (mapsLink) contactUpdates.mapsLink = mapsLink;
         await db.collection('clients').doc(exactMatch.id).update(contactUpdates);
+        void fillClientCoordinates(exactMatch.id, contactUpdates);
         return true;
       }
 
@@ -1241,81 +1253,12 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
       });
   }, []);
 
-  // Reorder client: sequential integer positions with displacement (matches webapp)
-  // Supports manual position (targetPosition) for UI input
-  // Read the stored order for a client on a given day, falling back to the
-  // legacy single `listOrder` field. Returns Infinity for clients with no
-  // stored order so they sort to the bottom.
-  const readOrder = (c: Client, day: string): number => {
-    const o = c.listOrders && typeof c.listOrders[day] === 'number'
-      ? c.listOrders[day]
-      : (typeof c.listOrder === 'number' ? c.listOrder : undefined);
-    return typeof o === 'number' ? o : Infinity;
-  };
-
-  // Minimum gap between two adjacent fractional orders before we trigger a
-  // full rebalance for the day. With doubles this gap is reachable after
-  // ~50 consecutive midpoint inserts in the same spot, but in practice
-  // users don't insert in the same spot that often, so rebalances are rare.
-  const FRACTIONAL_MIN_GAP = 1e-9;
-
+  // Reorder client: the moved client takes the midpoint between its new
+  // neighbors (planPositionChange, shared with the RutaWater MCP server).
   const changePosition = useCallback(async (clientId: string, newPos: number, day: string) => {
     // Read from the synchronous ref so we always see the latest positions.
     const sourceClients = getDayClientsFromSource(day, clientsRef.current);
-    const move = moveItemToPosition(sourceClients, clientId, newPos);
-    const { currentIndex, newIndex } = move;
-    if (currentIndex === -1) return;
-    if (!move.changed) return;
-    const allClients = move.items;
-
-    const prevNeighbor = newIndex > 0 ? allClients[newIndex - 1] : null;
-    const nextNeighbor = newIndex < allClients.length - 1 ? allClients[newIndex + 1] : null;
-
-    // Treat non-finite stored orders (Infinity sentinel for "no order") as
-    // missing neighbors so we don't end up assigning Infinity ourselves.
-    const rawPrev = prevNeighbor ? readOrder(prevNeighbor, day) : null;
-    const rawNext = nextNeighbor ? readOrder(nextNeighbor, day) : null;
-    const prevOrder = rawPrev !== null && isFinite(rawPrev) ? rawPrev : null;
-    const nextOrder = rawNext !== null && isFinite(rawNext) ? rawNext : null;
-
-    // Decide the new fractional order for the moved client. Falls through to
-    // a full rebalance only if the gap between neighbors is exhausted.
-    let newOrder: number;
-    let needsRebalance = false;
-
-    if (prevOrder === null && nextOrder === null) {
-      newOrder = 1;
-    } else if (prevOrder === null) {
-      // Moving to the top: place before the current first.
-      newOrder = (nextOrder as number) - 1;
-    } else if (nextOrder === null) {
-      // Moving to the bottom: place after the current last.
-      newOrder = prevOrder + 1;
-    } else if (nextOrder - prevOrder <= FRACTIONAL_MIN_GAP) {
-      // Gap between neighbors is too small for another midpoint — rebalance.
-      needsRebalance = true;
-      newOrder = 0; // will be overwritten by the rebalance pass below
-    } else {
-      newOrder = (prevOrder + nextOrder) / 2;
-    }
-
-    // Build the updates list. In the common path, only one write.
-    const updates: { id: string; position: number }[] = [];
-    if (needsRebalance) {
-      // Reassign integer positions to the entire day list. This costs N
-      // writes, but only happens after roughly 50+ midpoint inserts at the
-      // same position — extremely rare in practice.
-      allClients.forEach((c, idx) => {
-        const stored = readOrder(c, day);
-        const target = idx + 1;
-        if (stored !== target) {
-          updates.push({ id: c.id, position: target });
-        }
-      });
-    } else {
-      updates.push({ id: clientId, position: newOrder });
-    }
-
+    const { updates } = planPositionChange(sourceClients, clientId, newPos, day);
     if (updates.length === 0) return;
 
     // Optimistic local update so the UI reflects the new order immediately.

@@ -7,10 +7,10 @@ import { findRoute, Route } from './routes';
 import type { Store } from './store';
 import {
   addDays, agendaFor, clientDetail, clientSummary, debtReport, debtsForClient, debtTotalMessage, hasPendingTransfer,
-  isValidIsoDate, productCatalog, searchClients, todayKey, weekdayOf, whatsappTemplates,
+  isValidIsoDate, productCatalog, searchClients, suggestPosition, todayKey, weekdayOf, whatsappTemplates,
 } from './views';
 import {
-  advanceVisit, ChangeResult, changeFrequency, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote,
+  advanceVisit, ChangeResult, changeFrequency, changePosition, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote,
   setProducts, setStar, undoDone, WriteError,
 } from './writes';
 
@@ -20,7 +20,9 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - Las escrituras devuelven antes/después confirmado por el servidor; si «cambiado» es false ya estaba así.
 - marcar_favorito fija la estrella (no la alterna). marcar_listo usa la misma lógica que el botón Listo y se puede deshacer desde la app.
 - adelantar_visita trae la próxima visita de un cliente con frecuencia a una fecha más cercana del mismo día (como cambiar la fecha de inicio en Editar cliente).
-- agendar_una_vez agenda una visita de una vez con sus productos (como Directorio → Agendar → Una vez): una ficha de directorio pasa a ser esa visita; a un cliente que ya está en agenda se le agrega otra ficha sin tocar la suya. La ficha de la visita queda sin nota ni estrella, como en la app. Si ya tiene visita ese día no agrega otra.
+- agendar_una_vez agenda una visita de una vez con sus productos (como Directorio → Agendar → Una vez): una ficha de directorio pasa a ser esa visita; a un cliente que ya está en agenda se le agrega otra ficha sin tocar la suya. La ficha de la visita queda sin nota ni estrella, como en la app. Si ya tiene visita ese día no agrega otra. Queda primera del día, salvo con ubicar=true: entonces va donde indica sugerir_posicion.
+- sugerir_posicion calcula dónde conviene una ficha en el recorrido de una fecha: entre las dos paradas consecutivas donde menos desvío agrega en línea recta. Si al cliente o a alguna parada le faltan coordenadas no sugiere nada y dice cuáles faltan.
+- cambiar_posicion mueve una ficha al número indicado de la lista de ese día (como «Cambiar posición» en la tarjeta).
 - cambiar_frecuencia cambia semanal/quincenal/cada 3 semanas/mensual manteniendo los días (como Editar cliente).
 - registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: anotalo en la nota.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
@@ -170,6 +172,24 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     return { total_general: report.reduce((sum, entry) => sum + entry.total, 0), clientes: report };
   }));
 
+  server.registerTool('sugerir_posicion', {
+    title: 'Sugerir posición',
+    description: 'Dónde conviene ubicar al cliente en el recorrido de esa fecha: entre las dos paradas consecutivas (en el orden del día) donde menos desvío agrega en línea recta (haversine), d(A,P) + d(P,B) − d(A,B), o antes de la primera / después de la última. Devuelve posicion (el número que queda en la tarjeta; se pasa tal cual a cambiar_posicion), anterior y siguiente con su número actual y desvio_metros. Si al cliente o a alguna parada le faltan coordenadas, posicion es null y sin_coordenadas dice cuáles; con ignorar_sin_coordenadas=true calcula igual con las que tienen (completa=false). Solo lectura.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      fecha: z.string().describe('aaaa-mm-dd, «hoy» o «mañana»'),
+      ignorar_sin_coordenadas: z.boolean().optional().describe('Calcular aunque falten coordenadas de algunas paradas'),
+    },
+    annotations: { readOnlyHint: true },
+  }, handle(async ({ cliente_id, fecha, ignorar_sin_coordenadas }: { cliente_id: string; fecha: string; ignorar_sin_coordenadas?: boolean }) => {
+    const date = resolveDate(fecha);
+    const { client, route, all } = await findClient(cliente_id);
+    return {
+      cliente_id: client.id, nombre: client.name, reparto: route.name, fecha: date, dia: weekdayOf(date),
+      ...suggestPosition(all, client, date, !!ignorar_sin_coordenadas),
+    };
+  }));
+
   if (config.readOnly) return;
 
   const write = (tool: string, run: (args: any) => Promise<ChangeResult>) => handle(async (args: any) => {
@@ -255,16 +275,31 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('agendar_una_vez', {
     title: 'Agendar una vez',
-    description: 'Agenda una visita de una vez para esa fecha con esos productos, igual que Directorio → Agendar / + Visita → Una vez: si la ficha es solo de directorio, esa misma ficha pasa a ser la visita; si el cliente ya está en agenda, se agrega otra ficha con el mismo cliente y la suya no cambia. Queda primera en la lista del día. Como en la app, la ficha de la visita queda con nota vacía y sin estrella (en una ficha de directorio, antes muestra la nota y la estrella que tenía, para restaurarlas con actualizar_nota y marcar_favorito). Si el cliente ya tiene una visita esa fecha no agrega otra (cambiado=false, devuelve su ficha_id para fijar_productos). Rechaza fechas pasadas.',
+    description: 'Agenda una visita de una vez para esa fecha con esos productos, igual que Directorio → Agendar / + Visita → Una vez: si la ficha es solo de directorio, esa misma ficha pasa a ser la visita; si el cliente ya está en agenda, se agrega otra ficha con el mismo cliente y la suya no cambia. Queda primera en la lista del día (con ubicar=true, entre las dos paradas donde menos desvío agrega; despues.posicion y ubicacion lo detallan). Como en la app, la ficha de la visita queda con nota vacía y sin estrella (en una ficha de directorio, antes muestra la nota y la estrella que tenía, para restaurarlas con actualizar_nota y marcar_favorito). Si el cliente ya tiene una visita esa fecha no agrega otra (cambiado=false, devuelve su ficha_id para fijar_productos). Rechaza fechas pasadas.',
     inputSchema: {
       cliente_id: z.string().min(1),
       fecha: z.string().describe('aaaa-mm-dd, «hoy» o «mañana»'),
       productos: z.record(z.string(), z.number().int().min(0).max(9999)).describe('{ id_producto: cantidad }, ids de ver_productos'),
+      ubicar: z.boolean().optional().describe('true: en vez de primera, la ubica donde indica sugerir_posicion (si faltan coordenadas queda primera y ubicacion.motivo dice por qué)'),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, write('agendar_una_vez', async ({ cliente_id, fecha, productos }) => scheduleOnce(
-    store.db, await store.refreshAccount(), await catalog(), cliente_id, resolveDate(fecha), productos,
+  }, write('agendar_una_vez', async ({ cliente_id, fecha, productos, ubicar }) => scheduleOnce(
+    store.db, await store.refreshAccount(), await catalog(), cliente_id, resolveDate(fecha), productos, !!ubicar,
   )));
+
+  server.registerTool('cambiar_posicion', {
+    title: 'Cambiar posición',
+    description: 'Mueve la ficha al número indicado de la lista de ese día de semana, igual que «Cambiar posición» en la tarjeta de Inicio (el número es el de la tarjeta y cuenta todas las fichas de ese día de semana; uno mayor que la lista la deja última). Normalmente escribe solo esa ficha. Falla si la ficha no está en la lista de ese día o si alguien cambió el orden mientras tanto.',
+    inputSchema: {
+      cliente_id: z.string().min(1).describe('Id de la ficha que figura en la agenda (la de la visita)'),
+      fecha: z.string().describe('aaaa-mm-dd, «hoy» o «mañana»; se usa su día de semana'),
+      posicion: z.number().int().min(1).max(10000),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('cambiar_posicion', async ({ cliente_id, fecha, posicion }) => {
+    const { all } = await findClient(cliente_id);
+    return changePosition(store.db, await store.refreshAccount(), all, cliente_id, resolveDate(fecha), posicion);
+  }));
 
   server.registerTool('registrar_pago', {
     title: 'Registrar pago',

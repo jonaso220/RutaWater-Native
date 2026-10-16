@@ -19,8 +19,10 @@ import { toExistingClientUpdate } from '../../src/utils/clientWriteData';
 import { sanitizeClientData } from '../../netlify/functions/_shared/clientCreationService';
 import { Account, Route, routeForRecord } from './routes';
 import {
-  agendaFor, CatalogProduct, clientDays, FREQ_LABELS, isValidIsoDate, nextVisit, quantity, todayKey, weekdayOf,
+  agendaFor, CatalogProduct, clientDays, dayList, FREQ_LABELS, isValidIsoDate, nextVisit, PositionSuggestion, quantity,
+  suggestPosition, todayKey, weekdayOf,
 } from './views';
+import { moveItemToPosition, planPositionChange, readDayOrder } from '../../src/utils/clientOrder';
 
 export class WriteError extends Error {}
 
@@ -361,7 +363,7 @@ const cycleFallsOn = (client: Client, date: string): boolean => {
  */
 export const scheduleOnce = (
   db: Firestore, account: Account, catalog: CatalogProduct[],
-  clientId: string, date: string, products: Record<string, number>,
+  clientId: string, date: string, products: Record<string, number>, place = false,
 ): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
   if (!isValidIsoDate(date)) throw new WriteError(`Fecha inválida: ${date}. Usá aaaa-mm-dd.`);
   if (date < todayKey()) throw new WriteError('La fecha ya pasó.');
@@ -445,40 +447,121 @@ export const scheduleOnce = (
     frecuencia: FREQ_LABELS[clientData.freq] || clientData.freq, proxima_visita: nextVisit(clientData),
     nota: clientData.notes || '', favorito: !!clientData.isStarred,
   };
-  const after = (fichaId: string, ficha: 'misma' | 'reutilizada' | 'nueva') => ({
-    ficha_id: fichaId, ficha, fecha: date, dia: dayName, productos: cleanProducts, nota: '', favorito: false,
-  });
-
   const wasInDirectory = clientData.freq === 'on_demand' || clientData.visitDay === 'Sin Asignar';
-  if (wasInDirectory) {
-    transaction.update(loaded.ref, toExistingClientUpdate(newData));
-    return { ...base, cambiado: true, antes: before, despues: after(clientData.id, 'misma') };
-  }
-
-  const reusable = findExactClientMatch(
+  const reusable = wasInDirectory ? undefined : findExactClientMatch(
     all.map((entry) => entry.client).filter((candidate) => candidate.id !== clientData.id && candidate.freq === 'on_demand'),
     clientData.name,
     clientData.phone,
   );
+  const fichaKind: 'misma' | 'reutilizada' | 'nueva' = wasInDirectory ? 'misma' : (reusable ? 'reutilizada' : 'nueva');
+  let ref = loaded.ref;
+  if (reusable) ref = db.collection('clients').doc(reusable.id);
+  else if (!wasInDirectory) ref = db.collection('clients').doc();
   if (reusable) {
     const existingDelivery = getLastVisitDate(reusable);
     if (existingDelivery && (!newData.lastDeliveredAt || existingDelivery.getTime() > newData.lastDeliveredAt.getTime())) {
       newData.lastDeliveredAt = existingDelivery;
     }
-    transaction.update(db.collection('clients').doc(reusable.id), toExistingClientUpdate(newData));
-    return { ...base, cambiado: true, antes: before, despues: after(reusable.id, 'reutilizada') };
   }
 
-  newData.lastDeliveredAt = getLastVisitDate(clientData);
-  newData.createdAt = new Date();
-  // La app manda newData por HTTP (JSON) a create-client, que lo sanea y lo crea.
-  const ref = db.collection('clients').doc();
-  const { data } = sanitizeClientData({ id: ref.id, data: JSON.parse(JSON.stringify(newData)) }, account.uid);
-  // create-client controla además el límite del plan gratis, que sale de
-  // RevenueCat; este servidor corre como el dueño de la cuenta y no lo consulta.
-  transaction.create(ref, data);
-  transaction.set(db.collection('users').doc(account.uid), { clientCreateVersion: 1 }, { merge: true });
-  return { ...base, cambiado: true, antes: before, despues: after(ref.id, 'nueva') };
+  // ubicar: en vez de primera, entre las dos paradas donde menos desvío agrega.
+  let placement: (PositionSuggestion & { aplicada: boolean }) | undefined;
+  let reorder: Array<{ id: string; position: number }> = [];
+  if (place) {
+    const routeAll = all.map((entry) => projectPending(entry.client)).filter((client): client is Client => !!client);
+    const visit = { ...withDefaults(ref.id, newData), id: ref.id } as Client;
+    const suggestion = suggestPosition(routeAll, visit, date);
+    placement = { ...suggestion, aplicada: false };
+    if (suggestion.posicion !== null) {
+      const list = dayList([...routeAll.filter((client) => client.id !== ref.id), visit], dayName);
+      const plan = planPositionChange(list, ref.id, suggestion.posicion, dayName);
+      const own = plan.updates.find((update) => update.id === ref.id);
+      if (own) {
+        newData.listOrder = own.position;
+        newData.listOrders = { [dayName]: own.position };
+      }
+      reorder = plan.updates.filter((update) => update.id !== ref.id);
+      placement.aplicada = true;
+    }
+  }
+  const after = {
+    ficha_id: ref.id, ficha: fichaKind, fecha: date, dia: dayName, productos: cleanProducts, nota: '', favorito: false,
+    ...(placement ? { posicion: placement.aplicada ? placement.posicion : 1 } : {}),
+  };
+  const result = {
+    ...base, cambiado: true, antes: before, despues: after, ...(placement ? { ubicacion: placement } : {}),
+  };
+
+  if (fichaKind === 'nueva') {
+    newData.lastDeliveredAt = getLastVisitDate(clientData);
+    newData.createdAt = new Date();
+    // La app manda newData por HTTP (JSON) a create-client, que lo sanea y lo crea.
+    const { data } = sanitizeClientData({ id: ref.id, data: JSON.parse(JSON.stringify(newData)) }, account.uid);
+    // create-client controla además el límite del plan gratis, que sale de
+    // RevenueCat; este servidor corre como el dueño de la cuenta y no lo consulta.
+    transaction.create(ref, data);
+    transaction.set(db.collection('users').doc(account.uid), { clientCreateVersion: 1 }, { merge: true });
+  } else {
+    transaction.update(ref, toExistingClientUpdate(newData));
+  }
+  // Solo si el día hubo que renumerarse (igual que Cambiar posición en la app).
+  reorder.forEach(({ id, position }) => {
+    transaction.update(db.collection('clients').doc(id), { [`listOrders.${dayName}`]: position });
+  });
+  return result;
+});
+
+/**
+ * «Cambiar posición» de Inicio (useClients.changePosition): mueve la ficha al
+ * número `position` de la lista de ese día de semana con planPositionChange,
+ * así que en general es una sola escritura (el punto medio entre sus nuevos
+ * vecinos). `clients` es la copia en vivo del reparto: no se relee la
+ * colección; dentro de la transacción solo se leen la ficha y los vecinos de
+ * los que depende el orden nuevo, y si cambiaron no se escribe nada.
+ */
+export const changePosition = (
+  db: Firestore, account: Account, clients: Client[], clientId: string, date: string, position: number,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (!isValidIsoDate(date)) throw new WriteError(`Fecha inválida: ${date}. Usá aaaa-mm-dd.`);
+  if (!Number.isInteger(position) || position < 1) throw new WriteError(`Posición inválida: ${position}.`);
+  const loaded = await loadForWrite(db, transaction, account, clientId);
+  const day = weekdayOf(date);
+  const fresh = projectPending(loaded.client);
+  if (!fresh) throw new WriteError('La ficha ya no existe.');
+  const list = dayList([...clients.filter((client) => client.id !== clientId), fresh], day);
+  const currentIndex = list.findIndex((client) => client.id === clientId);
+  if (currentIndex === -1) {
+    throw new WriteError(`${fresh.name} no está en la lista del ${day} (solo se ordenan fichas activas de ese día).`);
+  }
+  // Como Inicio, una posición mayor que la lista la deja última.
+  const bounded = Math.min(position, list.length);
+  const base = { cliente_id: fresh.id, nombre: fresh.name, reparto: loaded.route.name };
+  const plan = planPositionChange(list, clientId, bounded, day);
+  const before = { dia: day, posicion: currentIndex + 1 };
+  if (!plan.updates.length) return { ...base, cambiado: false, antes: before, despues: before };
+
+  const moved = moveItemToPosition(list, clientId, bounded).items;
+  const dependsOn = plan.updates.length > 1
+    ? moved.filter((client) => client.id !== clientId)
+    : [moved[plan.newIndex - 1], moved[plan.newIndex + 1]].filter((client): client is Client => !!client);
+  const snaps = dependsOn.length ? await transaction.getAll(...dependsOn.map((client) => db.collection('clients').doc(client.id))) : [];
+  snaps.forEach((snap, index) => {
+    const live = dependsOn[index];
+    if (!snap.exists || readDayOrder(withDefaults(snap.id, snap.data()), day) !== readDayOrder(live, day)) {
+      throw new WriteError('El orden de ese día cambió mientras tanto (alguien lo movió desde la app); volvé a intentar.');
+    }
+  });
+  plan.updates.forEach(({ id, position: order }) => {
+    transaction.update(db.collection('clients').doc(id), { [`listOrders.${day}`]: order });
+  });
+  const neighbor = (client: Client | undefined) => (client ? client.name : null);
+  return {
+    ...base, cambiado: true, antes: before,
+    despues: {
+      dia: day, posicion: plan.newIndex + 1,
+      anterior: neighbor(moved[plan.newIndex - 1]), siguiente: neighbor(moved[plan.newIndex + 1]),
+    },
+  };
 });
 
 

@@ -6,5 +6,5 @@
     "types": ["node", "jest"],
     "baseUrl": "."
   },
-  "include": ["src/**/*", "test/**/*.ts"]
+  "include": ["src/**/*", "scripts/**/*.ts", "test/**/*.ts"]
 }

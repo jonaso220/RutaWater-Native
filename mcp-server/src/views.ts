@@ -9,6 +9,7 @@ import {
   buildClientIdentityIndex, getRelatedRecordStableClientId, getStableClientId, resolveClientForStableId,
 } from '../../src/utils/clientIdentity';
 import { DEFAULT_EN_CAMINO, DEFAULT_TOMORROW_VISIT } from '../../src/utils/whatsAppTemplates';
+import { cheapestInsertion, clientCoordinates, Coordinates } from '../../src/utils/geo';
 import type { Route } from './routes';
 import type { Settings } from './store';
 
@@ -187,6 +188,15 @@ const dayOrder = (client: Client, day: string): number => {
   return legacy > 1000000 ? 999999 + legacy / 1e15 : (legacy || 999999);
 };
 
+/**
+ * Lista completa de un día de semana como la muestra Inicio (getAllDayClients):
+ * fichas activas de ese día, en su orden, aunque esa fecha no les toque. El
+ * número de la tarjeta y «Cambiar posición» se refieren a esta lista.
+ */
+export const dayList = (clients: Client[], day: string): Client[] => clients
+  .filter((client) => client.freq !== 'on_demand' && !client.isCompleted && clientDays(client).includes(day))
+  .sort((a, b) => dayOrder(a, day) - dayOrder(b, day));
+
 export interface AgendaEntry {
   client: Client;
   // Fecha real de la visita; en una atrasada es anterior a la fecha pedida.
@@ -284,3 +294,74 @@ export const formatMoney = (n: number | undefined | null): string =>
 /** Texto que manda «Enviar total ($X)» en Deudas (buildDebtTotalWhatsAppUrl). */
 export const debtTotalMessage = (template: string, total: number): string =>
   (template || 'La deuda es de ${total}. Saludos').replace('${total}', formatMoney(total));
+
+const routeLabel = (client: Client, list: Client[]) => ({
+  id: client.id, nombre: client.name, posicion: list.findIndex((candidate) => candidate.id === client.id) + 1,
+});
+
+export interface PositionSuggestion {
+  posicion: number | null;
+  anterior: { id: string; nombre: string; posicion: number } | null;
+  siguiente: { id: string; nombre: string; posicion: number } | null;
+  desvio_metros: number | null;
+  paradas: number;
+  completa: boolean;
+  sin_coordenadas: Array<{ id: string; nombre: string; posicion: number }>;
+  motivo?: string;
+}
+
+/**
+ * Dónde entra `target` en el recorrido de `isoDate`: entre las dos paradas
+ * consecutivas (en el orden del día) donde menos desvío agrega en línea
+ * recta, d(A,P) + d(P,B) − d(A,B), o en un extremo. Las paradas son las
+ * fichas que Inicio muestra para esa fecha y pertenecen a la lista de ese día
+ * de semana (sin `target` ni otras fichas con su mismo id).
+ * Si al cliente o a alguna parada le faltan coordenadas no adivina: devuelve
+ * posicion null y la lista de fichas sin coordenadas, salvo que se pida
+ * explícitamente ignorarlas (`allowMissing`), y entonces lo marca incompleto.
+ * `posicion` es el número que queda en la tarjeta al mover `target` ahí (el
+ * mismo que espera cambiar_posicion); las de anterior/siguiente son las de hoy.
+ */
+export const suggestPosition = (
+  clients: Client[], target: Client, isoDate: string, allowMissing = false,
+): PositionSuggestion => {
+  const day = weekdayOf(isoDate);
+  const others = clients.filter((client) => client.id !== target.id);
+  const list = dayList(others, day);
+  // Atrasadas de otro día de semana figuran en «Hoy» pero no en esta lista.
+  const visiting = new Set(agendaFor(others, isoDate)
+    .filter((entry) => weekdayOf(entry.occurrence) === day)
+    .map((entry) => entry.client.id));
+  const stops = list.filter((client) => visiting.has(client.id) && !client.isNote);
+  const located = stops
+    .map((client) => ({ client, point: clientCoordinates(client) }))
+    .filter((stop): stop is { client: Client; point: Coordinates } => !!stop.point);
+  const missing = stops.filter((client) => !clientCoordinates(client)).map((client) => routeLabel(client, list));
+  const empty: PositionSuggestion = {
+    posicion: null, anterior: null, siguiente: null, desvio_metros: null,
+    paradas: stops.length, completa: !missing.length, sin_coordenadas: missing,
+  };
+  const point = clientCoordinates(target);
+  if (!point) {
+    return { ...empty, motivo: `${target.name || 'El cliente'} no tiene coordenadas (falta resolver el link de Maps de su ubicación).` };
+  }
+  if (missing.length && !allowMissing) {
+    return { ...empty, motivo: `${missing.length} de las ${stops.length} paradas del día no tienen coordenadas; no se sugiere una posición sin ellas.` };
+  }
+  const insertion = cheapestInsertion(located.map((stop) => stop.point), point);
+  if (!insertion) {
+    return { ...empty, motivo: stops.length ? 'Ninguna parada del día tiene coordenadas.' : 'No hay otras visitas ese día para ubicarlo.' };
+  }
+  const previous = located[insertion.index - 1]?.client ?? null;
+  const next = located[insertion.index]?.client ?? null;
+  const position = previous
+    ? list.findIndex((client) => client.id === previous.id) + 2
+    : list.findIndex((client) => client.id === next!.id) + 1;
+  return {
+    ...empty,
+    posicion: position,
+    anterior: previous ? routeLabel(previous, list) : null,
+    siguiente: next ? routeLabel(next, list) : null,
+    desvio_metros: Math.round(insertion.extraMeters),
+  };
+};

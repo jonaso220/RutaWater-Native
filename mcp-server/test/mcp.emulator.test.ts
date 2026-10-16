@@ -6,11 +6,11 @@ import { getDb } from '../src/config';
 import { loadAccount } from '../src/routes';
 import { Store } from '../src/store';
 import {
-  addDays, agendaFor, debtReport, debtTotalMessage, hasPendingTransfer, nextVisit, productCatalog, searchClients, todayKey,
-  weekdayOf,
+  addDays, agendaFor, debtReport, debtTotalMessage, hasPendingTransfer, nextVisit, productCatalog, searchClients,
+  suggestPosition, todayKey, weekdayOf,
 } from '../src/views';
 import {
-  advanceVisit, changeFrequency, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote, setProducts, setStar,
+  advanceVisit, changeFrequency, changePosition, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote, setProducts, setStar,
   undoDone,
 } from '../src/writes';
 
@@ -370,5 +370,128 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     await markDone(db, account, 'unavez', tomorrow);
     expect((await db.doc('clients/unavez').get()).data()?.isCompleted).toBe(true);
     await expect(markDone(db, account, 'unavez', tomorrow)).rejects.toThrow('ya está marcado');
+  });
+
+  describe('ubicación en el recorrido', () => {
+    // Una calle de oeste a este: Mario (km 0), Rosa (km 2), Ana (km 4).
+    const at = (km: number) => ({ lat: String(-34.8), lng: String(Number((-56 + km * 0.011).toFixed(6))) });
+    const route = async () => {
+      const account = await store.getAccount();
+      return { account, route: account.routes[0], clients: await store.getClients(account.routes[0]) };
+    };
+
+    beforeEach(async () => {
+      const batch = db.batch();
+      batch.update(db.doc('clients/mario'), at(0));
+      batch.update(db.doc('clients/rosa'), at(2));
+      batch.update(db.doc('clients/unavez'), { ...at(4), listOrders: { [tomorrowDay]: 3 } });
+      // Directorio queda entre Mario y Rosa, con coordenadas solo en su dirección.
+      batch.update(db.doc('clients/directorio'), {
+        addresses: [{ id: 'a1', type: 'home', address: 'Km 1', mapsLink: 'https://maps.app.goo.gl/km1', ...at(1) }],
+      });
+      // Quincenal que esa semana no va: está en la lista del día pero no es parada.
+      batch.set(db.doc('clients/libre'), client({
+        name: 'Quincenal libre', freq: 'biweekly', listOrders: { [tomorrowDay]: 1.5 },
+        lastVisited: new Date(`${addDays(tomorrow, -7)}T10:00:00`),
+      }));
+      await batch.commit();
+    });
+
+    test('sugerir: entre las dos paradas donde menos desvío agrega, contando toda la lista del día', async () => {
+      const { clients } = await route();
+      const target = clients.find((c) => c.id === 'directorio')!;
+      const suggestion = suggestPosition(clients, target, tomorrow);
+      expect(suggestion).toEqual(expect.objectContaining({
+        posicion: 2, completa: true, sin_coordenadas: [], paradas: 3,
+        anterior: { id: 'mario', nombre: 'Mario', posicion: 1 },
+        siguiente: { id: 'rosa', nombre: 'Rosa Jerez', posicion: 3 },
+      }));
+      expect(suggestion.desvio_metros).toBeLessThan(5);
+      // Más allá de Ana: después de la última.
+      const far = { ...target, lat: '-34.8', lng: String(-56 + 6 * 0.011), addresses: [] };
+      expect(suggestPosition(clients, far, tomorrow)).toEqual(expect.objectContaining({ posicion: 5, siguiente: null }));
+    });
+
+    test('sugerir: sin coordenadas no adivina', async () => {
+      await db.doc('clients/rosa').update({ lat: '', lng: '' });
+      const { clients } = await route();
+      const target = clients.find((c) => c.id === 'directorio')!;
+      const strict = suggestPosition(clients, target, tomorrow);
+      expect(strict).toEqual(expect.objectContaining({
+        posicion: null, completa: false, sin_coordenadas: [{ id: 'rosa', nombre: 'Rosa Jerez', posicion: 3 }],
+      }));
+      expect(strict.motivo).toContain('1 de las 3 paradas');
+      expect(suggestPosition(clients, target, tomorrow, true)).toEqual(expect.objectContaining({ posicion: 2, completa: false }));
+      const noPoint = suggestPosition(clients, clients.find((c) => c.id === 'rosa')!, tomorrow);
+      expect(noPoint.posicion).toBeNull();
+      expect(noPoint.motivo).toContain('no tiene coordenadas');
+    });
+
+    test('cambiar posición: el punto medio entre los vecinos nuevos, una sola escritura', async () => {
+      const { account, clients } = await route();
+      const result = await changePosition(db, account, clients, 'unavez', tomorrow, 2);
+      expect(result).toEqual(expect.objectContaining({
+        cambiado: true, antes: { dia: tomorrowDay, posicion: 4 },
+        despues: { dia: tomorrowDay, posicion: 2, anterior: 'Mario', siguiente: 'Quincenal libre' },
+      }));
+      expect((await db.doc('clients/unavez').get()).data()?.listOrders).toEqual({ [tomorrowDay]: 1.25 });
+      expect((await db.doc('clients/rosa').get()).data()?.listOrders).toEqual({ [tomorrowDay]: 2 });
+      // La copia en vivo recibe el cambio por el listener.
+      const live = async () => {
+        for (let i = 0; i < 50; i += 1) {
+          const list = await store.getClients(account.routes[0]);
+          if (list.find((c) => c.id === 'unavez')?.listOrders?.[tomorrowDay] === 1.25) return list;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+        throw new Error('el listener no se actualizó');
+      };
+      // Una posición mayor que la lista la deja última; la misma no escribe.
+      await changePosition(db, account, await live(), 'mario', tomorrow, 99);
+      expect((await db.doc('clients/mario').get()).data()?.listOrders).toEqual({ [tomorrowDay]: 3 });
+      const fresh = (await db.collection('clients').get()).docs.map((doc) => ({ ...doc.data(), id: doc.id }) as any);
+      const same = await changePosition(db, account, fresh.filter((c: any) => c.groupId === FAMILY), 'mario', tomorrow, 4);
+      expect(same.cambiado).toBe(false);
+    });
+
+    test('cambiar posición: rechaza si el orden cambió mientras tanto o la ficha no es de ese día', async () => {
+      const { account, clients } = await route();
+      await db.doc('clients/libre').update({ [`listOrders.${tomorrowDay}`]: 7 });
+      const stale = clients.map((c) => (c.id === 'libre' ? { ...c, listOrders: { [tomorrowDay]: 1.5 } } : c));
+      await expect(changePosition(db, account, stale, 'unavez', tomorrow, 2)).rejects.toThrow('cambió mientras tanto');
+      expect((await db.doc('clients/unavez').get()).data()?.listOrders).toEqual({ [tomorrowDay]: 3 });
+      await expect(changePosition(db, account, clients, 'directorio', tomorrow, 1)).rejects.toThrow('no está en la lista');
+      await expect(changePosition(db, account, clients, 'mario', addDays(tomorrow, 1), 1)).rejects.toThrow('no está en la lista');
+    });
+
+    test('agendar una vez con ubicar: queda entre Mario y la siguiente ficha, no primera', async () => {
+      const account = await store.refreshAccount();
+      const catalog = productCatalog(await store.getSettings());
+      const result = await scheduleOnce(db, account, catalog, 'directorio', tomorrow, { b20: 1 }, true);
+      expect(result.despues).toEqual(expect.objectContaining({ ficha_id: 'directorio', ficha: 'misma', posicion: 2 }));
+      expect(result.ubicacion).toEqual(expect.objectContaining({ aplicada: true, posicion: 2, completa: true }));
+      const saved = (await db.doc('clients/directorio').get()).data()!;
+      expect(saved.listOrders).toEqual({ [tomorrowDay]: 1.25 });
+      expect(saved.lat).toBe('-34.8');
+      const agenda = agendaFor(await store.getClients(account.routes[0]), tomorrow).map((entry) => entry.client.id);
+      expect(agenda).toEqual(['mario', 'directorio', 'rosa', 'unavez']);
+    });
+
+    test('agendar una vez con ubicar y coordenadas faltantes: queda primera y dice por qué', async () => {
+      await db.doc('clients/unavez').update({ lat: '', lng: '' });
+      const account = await store.refreshAccount();
+      const catalog = productCatalog(await store.getSettings());
+      const result = await scheduleOnce(db, account, catalog, 'mario', addDays(tomorrow, 7), { b12: 1 }, true);
+      expect(result.cambiado).toBe(false); // ya va esa semana
+      const placed = await scheduleOnce(db, account, catalog, 'directorio', tomorrow, { b20: 1 }, true);
+      expect(placed.despues).toEqual(expect.objectContaining({ posicion: 1 }));
+      expect(placed.ubicacion).toEqual(expect.objectContaining({
+        aplicada: false, posicion: null, sin_coordenadas: [{ id: 'unavez', nombre: 'Ana Una Vez', posicion: 4 }],
+      }));
+      expect((await db.doc('clients/directorio').get()).data()?.listOrders).toEqual({ [tomorrowDay]: 0 });
+      // Sin ubicar se comporta como antes.
+      const plain = await scheduleOnce(db, account, catalog, 'rosa', addDays(tomorrow, 1), { b20: 1 });
+      expect(plain.ubicacion).toBeUndefined();
+      expect(plain.despues).not.toHaveProperty('posicion');
+    });
   });
 });

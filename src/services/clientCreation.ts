@@ -1,6 +1,7 @@
 import auth from '@react-native-firebase/auth';
 import { db } from '../config/firebase';
 import { API_ENDPOINTS } from '../config/api';
+import { fillClientCoordinates } from './clientCoordinates';
 
 const MAX_CREATE_BATCH = 100;
 
@@ -53,7 +54,12 @@ export const createClientDocuments = async (
       id: id || db.collection('clients').doc().id,
       data,
     }));
-    createdIds.push(...await sendCreateRequest(items));
+    const ids = await sendCreateRequest(items);
+    createdIds.push(...ids);
+    // Coordenadas de los links de Maps, en segundo plano (no demora la creación).
+    items.forEach((item) => {
+      if (ids.includes(item.id)) void fillClientCoordinates(item.id, item.data);
+    });
   }
   return createdIds;
 };

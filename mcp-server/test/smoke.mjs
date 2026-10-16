@@ -69,9 +69,9 @@ const call = async (name, args = {}) => {
 
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
-  'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'buscar_clientes', 'cambiar_frecuencia', 'deshacer_listo', 'fijar_productos',
-  'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_revisar_transferencia', 'registrar_pago',
-  'ver_cliente', 'ver_productos',
+  'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'buscar_clientes', 'cambiar_frecuencia',
+  'cambiar_posicion', 'deshacer_listo', 'fijar_productos', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo',
+  'marcar_revisar_transferencia', 'registrar_pago', 'sugerir_posicion', 'ver_cliente', 'ver_productos',
 ]);
 
 const agenda = await call('agenda_del_dia', { fecha: 'mañana' });
@@ -119,12 +119,34 @@ const withOnce = await call('agenda_del_dia', { fecha: 'mañana' });
 assert.equal(withOnce.repartos[0].clientes[0].nombre, 'Sulay Fernandez');
 assert.equal(withOnce.repartos[0].clientes[0].una_vez, true);
 
+// Sin coordenadas no sugiere; con coordenadas ubica y cambiar_posicion lo aplica.
+const blind = await call('sugerir_posicion', { cliente_id: 'c2', fecha: 'mañana' });
+assert.equal(blind.posicion, null);
+assert.match(blind.motivo, /no tiene coordenadas/);
+await call('deshacer_listo', { cliente_id: 'c1' });
+await db.doc('clients/c1').update({ lat: '-34.8', lng: '-56', listOrders: { [day]: 1 } });
+await db.doc('clients/c2').update({ lat: '-34.8', lng: '-55.98' });
+await db.doc('clients/c3').set({
+  userId: 'smoke', scopeKey: 'user:smoke', name: 'Nilda Pérez', phone: '', address: 'Calle 9', lat: '-34.8', lng: '-55.96',
+  notes: '', freq: 'weekly', visitDay: day, visitDays: [day], specificDate: '', products: {}, listOrders: { [day]: 5 },
+  isStarred: false, isCompleted: false, isNote: false, lastVisited: null,
+});
+await new Promise((resolve) => setTimeout(resolve, 300));
+const suggestion = await call('sugerir_posicion', { cliente_id: 'c2', fecha: 'mañana' });
+assert.equal(suggestion.posicion, 2);
+assert.deepEqual(suggestion.anterior, { id: 'c1', nombre: 'Héctor Murgo', posicion: 1 });
+const moved = await call('cambiar_posicion', { cliente_id: 'c2', fecha: 'mañana', posicion: suggestion.posicion });
+assert.deepEqual(moved.despues, { dia: day, posicion: 2, anterior: 'Héctor Murgo', siguiente: 'Nilda Pérez' });
+await new Promise((resolve) => setTimeout(resolve, 200));
+const reordered = await call('agenda_del_dia', { fecha: 'mañana' });
+assert.deepEqual(reordered.repartos[0].clientes.map((c) => c.nombre), ['Héctor Murgo', 'Sulay Fernandez', 'Nilda Pérez']);
+
 const audit = fs.readFileSync(auditPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line).tool);
 assert.deepEqual(audit, [
   'fijar_productos', 'marcar_favorito', 'actualizar_nota', 'marcar_revisar_transferencia', 'registrar_pago', 'marcar_listo',
-  'agendar_una_vez',
+  'agendar_una_vez', 'deshacer_listo', 'cambiar_posicion',
 ]);
 
 await client.close();
-console.log('smoke: OK (16 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez y registro de auditoría)');
+console.log('smoke: OK (18 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
 process.exit(0);

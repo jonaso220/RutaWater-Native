@@ -12,9 +12,10 @@ Reutiliza la lógica de la app (`src/utils`): la agenda se calcula con `getNextV
 | `buscar_clientes` (nombre, dirección o teléfono) | `actualizar_nota` (con `nota_esperada` para no pisar cambios) |
 | `ver_cliente` (ficha completa, Parentesco con WhatsApp de cada familiar, deudas con total, transferencia pendiente y mensaje de «Enviar total») | `marcar_favorito` (fija, no alterna) |
 | `agenda_del_dia` («hoy», «mañana» o aaaa-mm-dd, con atrasadas y plantillas de WhatsApp) | `marcar_listo` (rechaza fechas que no son visita pendiente) |
+| `sugerir_posicion` (inserción más barata en el recorrido de una fecha, en línea recta; sin coordenadas no sugiere y dice cuáles faltan) | `cambiar_posicion` (como «Cambiar posición» de la tarjeta: mismo `planPositionChange` que la app, una escritura) |
 | `listar_deudas` | `deshacer_listo` |
 | | `adelantar_visita` (próxima visita a una fecha más cercana del mismo día) |
-| | `agendar_una_vez` (como Directorio → Agendar → Una vez: la ficha de directorio pasa a ser la visita; a un cliente en agenda se le agrega otra ficha; no duplica una visita del mismo día; rechaza fechas pasadas) |
+| | `agendar_una_vez` (como Directorio → Agendar → Una vez: la ficha de directorio pasa a ser la visita; a un cliente en agenda se le agrega otra ficha; no duplica una visita del mismo día; rechaza fechas pasadas; con `ubicar: true` la deja donde indica `sugerir_posicion` en vez de primera) |
 | | `cambiar_frecuencia` (semanal, quincenal, cada 3 semanas, mensual; mantiene los días) |
 | | `registrar_pago` (como Registrar pago / Editar deuda: salda las más viejas primero, deja el saldo de un pago parcial; exige `deuda_esperada` para no pagar dos veces; devuelve el `sobrante`) |
 | | `marcar_revisar_transferencia` (como «Revisar» en Deudas; no duplica y nunca marca como revisada) |
@@ -34,6 +35,22 @@ npm run build
 ### Copia instalada en el disco interno
 
 Para que el servidor no dependa del repo ni de un disco externo, `./install-local.sh` arma una copia autónoma en `~/.rutawater-mcp/server` (programa + `firebase-admin` + SDK de MCP). Claude Code la tiene registrada a nivel de usuario apuntando a `~/.rutawater-mcp/server/server.cjs`. **Después de cambiar el servidor, volver a correr `./install-local.sh`** para que los cambios lleguen a la copia instalada.
+
+## Coordenadas y posición en el recorrido
+
+Las fichas guardan `lat`/`lng` (strings, como el resto de la app) en cada dirección y en los campos de la ubicación principal. La app los completa en segundo plano al crear o editar una ubicación con link de Google Maps (`src/services/clientCoordinates.ts`): sigue la redirección del link corto y toma las coordenadas de la URL (`src/utils/geo.ts`). Un link que solo nombra un lugar (`?q=<nombre>&ftid=…`) no trae coordenadas y queda sin resolver.
+
+`sugerir_posicion` toma las paradas de esa fecha en el orden del día y busca el par consecutivo A, B que minimiza d(A,P) + d(P,B) − d(A,B) (haversine), o un extremo. Si al cliente o a una parada le falta lat/lng devuelve `posicion: null` con la lista `sin_coordenadas`, salvo `ignorar_sin_coordenadas: true`. `posicion` es el número de tarjeta en la lista completa de ese día de semana, el mismo que recibe `cambiar_posicion`.
+
+Para las fichas que ya existían, un script de una sola vez:
+
+```bash
+npm run build
+GOOGLE_APPLICATION_CREDENTIALS=~/.rutawater-mcp/service-account.json RUTAWATER_EMAIL=<email> \
+  node dist/completar-coordenadas.cjs --escribir
+```
+
+Lee las fichas de cada reparto una sola vez (una consulta por reparto), resuelve cada link distinto una vez (caché en `~/.rutawater-mcp/coordenadas-cache.json`) y escribe solo las fichas que cambian, con la hora de actualización leída como condición: si una ficha cambió mientras tanto no se pisa. Sin `--escribir` solo informa. Deja la cobertura y las fichas sin resolver en `~/.rutawater-mcp/coordenadas-reporte.json`.
 
 ## Configuración (variables de entorno)
 

@@ -1212,6 +1212,9 @@ PODS:
   - Firebase/Crashlytics (11.11.0):
     - Firebase/CoreOnly
     - FirebaseCrashlytics (~> 11.11.0)
+  - Firebase/Database (11.11.0):
+    - Firebase/CoreOnly
+    - FirebaseDatabase (~> 11.11.0)
   - Firebase/Firestore (11.11.0):
     - Firebase/CoreOnly
     - FirebaseFirestore (~> 11.11.0)
@@ -1246,6 +1249,12 @@ PODS:
     - GoogleUtilities/Environment (~> 8.0)
     - nanopb (~> 3.30910.0)
     - PromisesObjC (~> 2.4)
+  - FirebaseDatabase (11.11.0):
+    - FirebaseAppCheckInterop (~> 11.0)
+    - FirebaseCore (~> 11.11.0)
+    - FirebaseSharedSwift (~> 11.0)
+    - GoogleUtilities/UserDefaults (~> 8.0)
+    - leveldb-library (~> 1.22)
   - FirebaseFirestore (11.11.0):
     - FirebaseCore (~> 11.11.0)
     - FirebaseCoreExtension (~> 11.11.0)
@@ -2648,6 +2657,29 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - react-native-geolocation (3.4.0):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.11.18.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
+  - react-native-get-random-values (1.11.0):
+    - React-Core
   - react-native-safe-area-context (4.14.0):
     - DoubleConversion
     - glog
@@ -3042,6 +3074,10 @@ PODS:
     - FirebaseCoreExtension
     - React-Core
     - RNFBApp
+  - RNFBDatabase (21.14.0):
+    - Firebase/Database (= 11.11.0)
+    - React-Core
+    - RNFBApp
   - RNFBFirestore (21.14.0):
     - Firebase/Firestore (= 11.11.0)
     - React-Core
@@ -3255,6 +3291,8 @@ DEPENDENCIES:
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - "react-native-document-picker (from `../node_modules/@react-native-documents/picker`)"
+  - "react-native-geolocation (from `../node_modules/@react-native-community/geolocation`)"
+  - react-native-get-random-values (from `../node_modules/react-native-get-random-values`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - React-nativeconfig (from `../node_modules/react-native/ReactCommon`)
   - React-NativeModulesApple (from `../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)
@@ -3291,6 +3329,7 @@ DEPENDENCIES:
   - "RNFBApp (from `../node_modules/@react-native-firebase/app`)"
   - "RNFBAuth (from `../node_modules/@react-native-firebase/auth`)"
   - "RNFBCrashlytics (from `../node_modules/@react-native-firebase/crashlytics`)"
+  - "RNFBDatabase (from `../node_modules/@react-native-firebase/database`)"
   - "RNFBFirestore (from `../node_modules/@react-native-firebase/firestore`)"
   - "RNFBInstallations (from `../node_modules/@react-native-firebase/installations`)"
   - RNFS (from `../node_modules/react-native-fs`)
@@ -3317,6 +3356,7 @@ SPEC REPOS:
     - FirebaseCoreExtension
     - FirebaseCoreInternal
     - FirebaseCrashlytics
+    - FirebaseDatabase
     - FirebaseFirestore
     - FirebaseFirestoreInternal
     - FirebaseInstallations
@@ -3415,6 +3455,10 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
   react-native-document-picker:
     :path: "../node_modules/@react-native-documents/picker"
+  react-native-geolocation:
+    :path: "../node_modules/@react-native-community/geolocation"
+  react-native-get-random-values:
+    :path: "../node_modules/react-native-get-random-values"
   react-native-safe-area-context:
     :path: "../node_modules/react-native-safe-area-context"
   React-nativeconfig:
@@ -3487,6 +3531,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@react-native-firebase/auth"
   RNFBCrashlytics:
     :path: "../node_modules/@react-native-firebase/crashlytics"
+  RNFBDatabase:
+    :path: "../node_modules/@react-native-firebase/database"
   RNFBFirestore:
     :path: "../node_modules/@react-native-firebase/firestore"
   RNFBInstallations:
@@ -3528,6 +3574,7 @@ SPEC CHECKSUMS:
   FirebaseCoreExtension: 3a64994969dd05f4bcb7e6896c654eded238e75b
   FirebaseCoreInternal: 31ee350d87b30a9349e907f84bf49ef8e6791e5a
   FirebaseCrashlytics: 5058c465e10782f54337b394c37254e0595174e9
+  FirebaseDatabase: d91ea8ab77099cb8dbac6eb0d569ff0d525c4506
   FirebaseFirestore: 7b356f6d680b3a464ade6a0e60a6b38f8e40149e
   FirebaseFirestoreInternal: e06766e483f3a5b16a33dfcc65e116a6dfcccd55
   FirebaseInstallations: 781e0e37aa0e1c92b44d00e739aba79ad31b2dba
@@ -3579,6 +3626,8 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 90572a8bf2b34fce61c3a8839f14339259649190
   React-microtasksnativemodule: 5a6ce850fb68e542a7b312f396d88aff0d978f67
   react-native-document-picker: c400b1731f464d07ceabf5c1a2f19b1233bbfc3d
+  react-native-geolocation: 57a4a35c149d8613f81b89ff155e6ae28e76aea0
+  react-native-get-random-values: d16467cf726c618e9c7a8c3c39c31faa2244bbba
   react-native-safe-area-context: 33160e5336587e9e4d6f1248ce1e1dac8a6d7202
   React-nativeconfig: 29f53f7caa03e1d3f49396320f4f055ae42ab8db
   React-NativeModulesApple: 1fe64d61396453d56ee3965c0adf2f3284c92a8b
@@ -3617,6 +3666,7 @@ SPEC CHECKSUMS:
   RNFBApp: 4105e54d9ca4a1c10893a032268470f670181110
   RNFBAuth: 68dcd5fc893659b68b63646b1ff54d59001cb21a
   RNFBCrashlytics: d2d9dd4636bad3f3c3ec42f53c3c13780cd634f5
+  RNFBDatabase: e7a69275ed54549c2337d97cfb47641ee23ea702
   RNFBFirestore: 80b3fb2371c3289343766b8bb5a72a4abf4cc052
   RNFBInstallations: 0af3ed83ee414205ae466cc5dde4864c01179f99
   RNFS: 89de7d7f4c0f6bafa05343c578f61118c8282ed8

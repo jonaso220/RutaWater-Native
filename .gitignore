@@ -41,6 +41,8 @@ android/app/rutawater-release.keystore
 
 # Local Firebase emulator logs
 firestore-debug.log
+database-debug.log
+firebase-debug.log
 
 # Netlify
 .netlify/
@@ -61,3 +63,4 @@ Thumbs.db
 
 # Bundle
 *.jsbundle
+.firebase/

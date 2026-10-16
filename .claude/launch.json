@@ -4,8 +4,35 @@
     {
       "name": "rutawater-webapp",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8011", "--directory", "/Volumes/OLIVERA/RutaWater"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8011",
+        "--directory",
+        "/Volumes/OLIVERA/RutaWater"
+      ],
       "port": 8011
+    },
+    {
+      "name": "seguimiento",
+      "runtimeExecutable": "firebase",
+      "runtimeArgs": [
+        "emulators:start",
+        "--only",
+        "hosting,database",
+        "--project",
+        "demo-rutawater"
+      ],
+      "port": 5050
+    },
+    {
+      "name": "metro",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "react-native",
+        "start"
+      ],
+      "port": 8081
     }
   ]
 }

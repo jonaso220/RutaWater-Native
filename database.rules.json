@@ -1,0 +1,31 @@
+{
+  "rules": {
+    "seguimiento": {
+      "$token": {
+        ".read": "$token.matches(/^[A-Za-z0-9_-]{22,64}$/) && data.child('vence').val() > now",
+        ".write": "auth != null && $token.matches(/^[A-Za-z0-9_-]{22,64}$/) && (data.exists() ? data.child('ownerUid').val() === auth.uid : newData.child('ownerUid').val() === auth.uid)",
+        ".validate": "newData.hasChildren(['ownerUid', 'estado', 'dia', 'vence', 'actualizado']) && newData.child('vence').val() > now && (newData.child('estado').val() === 'en_camino' ? newData.hasChildren(['lat', 'lng']) : !newData.hasChild('lat') && !newData.hasChild('lng') && !newData.hasChild('precision') && !newData.hasChild('rumbo') && !newData.hasChild('rastro'))",
+        "ownerUid": { ".validate": "newData.val() === auth.uid" },
+        "estado": { ".validate": "newData.val() === 'preparado' || newData.val() === 'en_camino' || newData.val() === 'terminado'" },
+        "dia": { ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)" },
+        "vence": { ".validate": "newData.isNumber() && newData.val() > now && newData.val() <= now + 7200000" },
+        "actualizado": { ".validate": "newData.val() === now" },
+        "lat": { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
+        "lng": { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
+        "precision": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "rumbo": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() < 360" },
+        "titulo": { ".validate": "newData.isString() && newData.val().length <= 60" },
+        "rastro": {
+          "$punto": {
+            ".validate": "newData.hasChildren(['lat', 'lng', 't'])",
+            "lat": { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
+            "lng": { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
+            "t": { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "$otro": { ".validate": false }
+          }
+        },
+        "$otro": { ".validate": false }
+      }
+    }
+  }
+}

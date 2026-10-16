@@ -534,6 +534,7 @@ export default {
 
   // Client Card
   clientCard: {
+    trackingLinkLine: 'Veja o caminhão ao vivo: {{url}}',
     editShort: 'Editar',
     note: 'NOTA',
     changePosition: 'Mudar posição',
@@ -987,5 +988,11 @@ export default {
     aiBody: 'Cole a mensagem de WhatsApp do cliente em "Pedido IA" e o app preenche nome, endereço e produtos para você.',
     directoryTitle: 'Todos os seus clientes, no Diretório',
     directoryBody: 'Estão todos lá, com ou sem dia. Quem pede de vez em quando fica "sem dia fixo" e você agenda com "+ Visita".',
+  },
+  liveTracking: {
+    channel: 'Localização ao vivo',
+    notificationTitle: 'Compartilhando a localização do caminhão',
+    notificationBody: 'Os clientes avisados com "A caminho" veem o caminhão por {{minutes}} minutos.',
+    stop: 'Parar de compartilhar',
   },
 };

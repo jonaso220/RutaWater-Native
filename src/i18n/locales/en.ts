@@ -534,6 +534,7 @@ export default {
 
   // Client Card
   clientCard: {
+    trackingLinkLine: 'Watch the truck live: {{url}}',
     editShort: 'Edit',
     note: 'NOTE',
     changePosition: 'Change position',
@@ -987,5 +988,11 @@ export default {
     aiBody: 'Paste the client\'s WhatsApp message into "AI order" and the app fills in name, address and products for you.',
     directoryTitle: 'All your clients, in the Directory',
     directoryBody: 'Everyone is there, with or without a day. Occasional buyers stay with "no fixed day" and you schedule them with "+ Visit".',
+  },
+  liveTracking: {
+    channel: 'Live location',
+    notificationTitle: "Sharing the truck's location",
+    notificationBody: 'Customers you notified "On the way" can see the truck for {{minutes}} minutes.',
+    stop: 'Stop sharing',
   },
 };

@@ -1,3 +1,4 @@
 /* Spanish localization */
 "CFBundleDisplayName" = "RutaWater";
 "CFBundleName" = "RutaWaterNative";
+"NSLocationWhenInUseUsageDescription" = "RutaWater comparte la ubicación del camión con el cliente al que le avisás «En camino», durante 30 minutos.";

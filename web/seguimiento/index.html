@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="strict-origin">
+  <meta name="theme-color" content="#2563EB">
+  <title>Seguimiento del reparto</title>
+  <meta name="description" content="Dónde está el camión de reparto ahora.">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="map" aria-label="Mapa con la ubicación del camión"></div>
+
+  <button id="recenter" class="recenter" type="button" hidden>Centrar en el camión</button>
+
+  <section class="sheet" aria-live="polite">
+    <p class="brand" id="brand">RutaWater</p>
+    <h1 id="headline">Cargando…</h1>
+    <p id="detail" class="detail"></p>
+    <p id="updated" class="updated"></p>
+  </section>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

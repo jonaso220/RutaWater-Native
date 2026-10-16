@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking, Pressable, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -20,6 +20,8 @@ import {
   resolveClientCardWhatsAppMessage,
 } from '../utils/whatsAppTemplates';
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
+import { startEnCaminoLink } from '../services/liveTracking';
+import { withTrackingLink } from '../utils/liveTracking';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
 
@@ -131,17 +133,28 @@ const ClientCard: React.FC<ClientCardProps> = ({
     setShowPositionPrompt(true);
   };
 
-  const sendContextualWhatsAppMessage = () => {
-    if (!client.phone) return;
-    const cleanPhone = normalizePhone(client.phone);
-    const message = resolveClientCardWhatsAppMessage(
-      isTomorrowVisit,
-      enCaminoMessage,
-      tomorrowVisitMessage,
-    );
-    Linking.openURL(buildWhatsAppMessageUrl(cleanPhone, message)).catch(() => {
-      Alert.alert(t('error'), t('directory.errorWhatsApp'));
-    });
+  const sendingRef = useRef(false);
+  const sendContextualWhatsAppMessage = async () => {
+    if (!client.phone || sendingRef.current) return;
+    sendingRef.current = true;
+    try {
+      const cleanPhone = normalizePhone(client.phone);
+      let message = resolveClientCardWhatsAppMessage(
+        isTomorrowVisit,
+        enCaminoMessage,
+        tomorrowVisitMessage,
+      );
+      // «En camino» suma un link para ver el camión en vivo 30 minutos.
+      if (!isTomorrowVisit) {
+        const url = await startEnCaminoLink();
+        message = withTrackingLink(message, url, t('clientCard.trackingLinkLine', { url }));
+      }
+      await Linking.openURL(buildWhatsAppMessageUrl(cleanPhone, message)).catch(() => {
+        Alert.alert(t('error'), t('directory.errorWhatsApp'));
+      });
+    } finally {
+      sendingRef.current = false;
+    }
   };
 
   const openWhatsAppCamera = () => {

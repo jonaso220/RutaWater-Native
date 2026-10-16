@@ -6,9 +6,12 @@ import { getDb } from '../src/config';
 import { loadAccount } from '../src/routes';
 import { Store } from '../src/store';
 import {
-  addDays, agendaFor, debtReport, nextVisit, productCatalog, searchClients, todayKey, weekdayOf,
+  addDays, agendaFor, debtReport, debtTotalMessage, hasPendingTransfer, nextVisit, productCatalog, searchClients, todayKey,
+  weekdayOf,
 } from '../src/views';
-import { advanceVisit, changeFrequency, markDone, setNote, setProducts, setStar, undoDone } from '../src/writes';
+import {
+  advanceVisit, changeFrequency, markDone, markTransferForReview, registerPayment, setNote, setProducts, setStar, undoDone,
+} from '../src/writes';
 
 const emulator = process.env.FIRESTORE_EMULATOR_HOST;
 const describeWithEmulator = emulator ? describe : describe.skip;
@@ -210,6 +213,64 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     await expect(changeFrequency(db, account, 'mario', 'cada 2 meses')).rejects.toThrow('desconocida');
     await expect(changeFrequency(db, account, 'mario', 'semanal', addDays(tomorrow, 1))).rejects.toThrow('mantener el día');
     await expect(changeFrequency(db, account, 'unavez', 'semanal')).rejects.toThrow('agenda periódica');
+  });
+
+  test('registrar pago: salda las deudas más viejas primero, deja el saldo y no paga dos veces', async () => {
+    const account = await store.getAccount();
+    const clients = await store.getClients(account.routes[0]);
+    await expect(registerPayment(db, account, 'rosa', 100, 400, clients)).rejects.toThrow('cambió');
+
+    const partial = await registerPayment(db, account, 'rosa', 350, 450, clients);
+    expect(partial.antes).toEqual({
+      deuda_total: 450, deudas: [{ monto: 300, fecha: '2026-09-01' }, { monto: 150, fecha: '2026-10-01' }],
+    });
+    expect(partial.despues).toEqual({ deuda_total: 100, deudas: [{ monto: 100, fecha: '2026-10-01' }] });
+    expect(partial.aplicado_a_deuda).toBe(350);
+    expect(partial.sobrante).toBe(0);
+    expect((await db.doc('debts/d1').get()).exists).toBe(false);
+    expect((await db.doc('debts/d2').get()).data()?.amount).toBe(100);
+
+    // Un reintento con la deuda leída antes no vuelve a descontar.
+    await expect(registerPayment(db, account, 'rosa', 350, 450, clients)).rejects.toThrow('cambió');
+
+    const over = await registerPayment(db, account, 'rosa', 300, 100, clients);
+    expect(over.despues).toEqual({ deuda_total: 0, deudas: [] });
+    expect(over.aplicado_a_deuda).toBe(100);
+    expect(over.sobrante).toBe(200);
+    expect((await db.collection('debts').get()).size).toBe(0);
+
+    await expect(registerPayment(db, account, 'rosa', 50, 0, clients)).rejects.toThrow('no tiene deudas');
+    await expect(registerPayment(db, account, 'ajena', 50, 0, clients)).rejects.toThrow('no pertenece');
+    await expect(registerPayment(db, account, 'mario', -5, 0, clients)).rejects.toThrow('Monto inválido');
+  });
+
+  test('transferencia para revisar: mismo registro que la app y sin duplicar', async () => {
+    const account = await store.getAccount();
+    const route = account.routes[0];
+    const clients = await store.getClients(route);
+
+    const first = await markTransferForReview(db, account, 'rosa', clients);
+    expect(first.cambiado).toBe(true);
+    const docs = (await db.collection('transfers').get()).docs.map((doc) => doc.data());
+    expect(docs).toEqual([expect.objectContaining({
+      userId: UID, groupId: FAMILY, scopeKey: `scope:${FAMILY}`, clientId: 'rosa', customerId: 'rosa',
+      clientName: 'Rosa Jerez', clientAddress: 'Calle 26 y 28',
+    })]);
+    expect((await markTransferForReview(db, account, 'rosa', clients)).cambiado).toBe(false);
+    expect((await db.collection('transfers').get()).size).toBe(1);
+
+    const rosa = clients.find((candidate) => candidate.id === 'rosa')!;
+    expect(hasPendingTransfer(clients, await store.getTransfers(route), rosa)).toBe(true);
+
+    // Un registro viejo, sin customerId, también cuenta como pendiente.
+    await db.doc('transfers/vieja').set({ userId: UID, groupId: FAMILY, clientId: 'mario', clientName: 'Mario', createdAt: new Date() });
+    expect((await markTransferForReview(db, account, 'mario', clients)).cambiado).toBe(false);
+    await expect(markTransferForReview(db, account, 'ajena', clients)).rejects.toThrow('no pertenece');
+  });
+
+  test('mensaje de Enviar total como el botón de Deudas', () => {
+    expect(debtTotalMessage('', 1500)).toBe('La deuda es de $1.500. Saludos');
+    expect(debtTotalMessage('Hola, te quedan ${total} pendientes', 380)).toBe('Hola, te quedan $380 pendientes');
   });
 
   test('Listo de un pedido de una vez lo completa', async () => {

@@ -1,6 +1,13 @@
-import type { DocumentReference, Firestore, Transaction } from 'firebase-admin/firestore';
+import type { DocumentReference, Firestore, QueryDocumentSnapshot, Transaction } from 'firebase-admin/firestore';
 import type { Client } from '../../src/types';
 import { withDefaults } from '../../src/utils/clientDefaults';
+import {
+  buildClientIdentityIndex, getRelatedClientReference, getRelatedRecordStableClientId, getStableClientId,
+} from '../../src/utils/clientIdentity';
+import { dataScopeFields } from '../../src/utils/dataScope';
+import { parseDate, toLocalDateString } from '../../src/utils/helpers';
+import { belongsToProfileScope } from '../../src/utils/profileScope';
+import { scopeQueries } from './store';
 import {
   applyVisitCommand, createVisitCommand, newVisitId, undoForCompletedClient, VisitCommand, VisitResult,
 } from '../../src/utils/visitCompletion';
@@ -301,4 +308,116 @@ export const changeFrequency = (
   const after = { frecuencia: FREQ_LABELS[freq] || freq, proxima_visita: nextVisit({ ...current, ...updates } as Client) };
   transaction.update(loaded.ref, updates);
   return { cliente_id: current.id, nombre: current.name, reparto: loaded.route.name, cambiado: true, antes: before, despues: after };
+});
+
+
+/**
+ * Deudas o transferencias del cliente dentro de la transacción: mismas
+ * consultas de alcance que la app y misma identidad estable (customerId, o el
+ * id exacto de la ficha en registros viejos). `clients` son las fichas del
+ * reparto, para resolver esa identidad.
+ */
+const relatedRecords = async (
+  db: Firestore, transaction: Transaction, account: Account, route: Route,
+  collection: 'debts' | 'transfers', client: Client, clients: Client[],
+): Promise<QueryDocumentSnapshot[]> => {
+  const identity = buildClientIdentityIndex(clients);
+  const stableId = getStableClientId(client);
+  const snaps = await Promise.all(scopeQueries(db, collection, account.uid, route).map((query) => transaction.get(query)));
+  return snaps.flatMap((snap) => snap.docs)
+    .filter((doc) => belongsToProfileScope(doc.data(), account.uid, route.groupId))
+    .filter((doc) => getRelatedRecordStableClientId(doc.data() as any, identity) === stableId);
+};
+
+const round2 = (value: number): number => Math.round(value * 100) / 100;
+const CENT = 0.005;
+
+interface DebtLine { ref: DocumentReference; id: string; amount: number; date: Date | null }
+
+const describeDebts = (lines: DebtLine[]) => ({
+  deuda_total: round2(lines.reduce((sum, line) => sum + line.amount, 0)),
+  deudas: lines.map((line) => ({ monto: line.amount, fecha: line.date ? toLocalDateString(line.date) : null })),
+});
+
+/**
+ * Registra un pago de deuda igual que Deudas en la app: «Registrar pago»
+ * (borra la deuda) y, si el pago no la cubre entera, «Editar deuda» con el
+ * saldo que queda. Salda primero las deudas más viejas. Lo pagado por encima
+ * de la deuda vuelve como `sobrante` (saldo a favor): RutaWater no lo guarda,
+ * se anota en la nota. `expectedTotal` es la deuda que se leyó antes: si
+ * cambió (otro pago, un reintento), no se toca nada.
+ */
+export const registerPayment = (
+  db: Firestore, account: Account, clientId: string, amount: number, expectedTotal: number, clients: Client[],
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000_000) throw new WriteError(`Monto inválido: ${amount}.`);
+  if (!Number.isFinite(expectedTotal) || expectedTotal < 0) throw new WriteError(`deuda_esperada inválida: ${expectedTotal}.`);
+  const { client, route } = await loadForWrite(db, transaction, account, clientId);
+  const docs = await relatedRecords(db, transaction, account, route, 'debts', client, clients);
+  const lines: DebtLine[] = docs
+    .map((doc) => ({ ref: doc.ref, id: doc.id, amount: Number(doc.data().amount) || 0, date: parseDate(doc.data().createdAt) }))
+    .filter((line) => line.amount > 0)
+    .sort((a, b) => (a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0) || a.id.localeCompare(b.id));
+  const before = describeDebts(lines);
+  if (!lines.length) throw new WriteError('El cliente no tiene deudas registradas: no se registró nada (un pago adelantado se anota en la nota).');
+  if (Math.abs(before.deuda_total - expectedTotal) > CENT) {
+    throw new WriteError(`La deuda cambió mientras tanto: ahora es ${before.deuda_total} y se esperaba ${expectedTotal}. No se registró nada.`);
+  }
+  let remaining = round2(amount);
+  const left: DebtLine[] = [];
+  for (const line of lines) {
+    if (remaining >= line.amount - CENT) {
+      transaction.delete(line.ref);
+      remaining = round2(remaining - line.amount);
+    } else if (remaining > CENT) {
+      const rest = round2(line.amount - remaining);
+      transaction.update(line.ref, { amount: rest });
+      left.push({ ...line, amount: rest });
+      remaining = 0;
+    } else {
+      left.push(line);
+    }
+  }
+  const surplus = round2(Math.max(0, remaining));
+  return {
+    cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: true,
+    antes: before, despues: describeDebts(left),
+    monto_recibido: round2(amount), aplicado_a_deuda: round2(amount - surplus), sobrante: surplus,
+  };
+});
+
+/**
+ * «Revisar» en Deudas o «Gestionar transferencia → Agregar» en la tarjeta:
+ * deja al cliente en la lista Transferencias para que se controle si el
+ * dinero llegó. Mismo documento que crea la app (useTransfers.addTransfer).
+ * Si ya tenía una pendiente no crea otra. Marcarla como revisada (borrarla)
+ * queda solo para la app.
+ */
+export const markTransferForReview = (
+  db: Firestore, account: Account, clientId: string, clients: Client[],
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const { client, route } = await loadForWrite(db, transaction, account, clientId);
+  if (client.isNote) throw new WriteError('Las notas no tienen transferencias.');
+  const existing = await relatedRecords(db, transaction, account, route, 'transfers', client, clients);
+  if (existing.length) {
+    return {
+      cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: false,
+      antes: { transferencia_pendiente: true }, despues: { transferencia_pendiente: true },
+    };
+  }
+  const ref = db.collection('transfers').doc();
+  transaction.set(ref, {
+    ...dataScopeFields(account.uid, route.groupId),
+    ...getRelatedClientReference(client),
+    clientName: client.name,
+    clientAddress: client.address || '',
+    clientLat: client.lat || null,
+    clientLng: client.lng || null,
+    clientMapsLink: client.mapsLink || null,
+    createdAt: new Date(),
+  });
+  return {
+    cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: true,
+    antes: { transferencia_pendiente: false }, despues: { transferencia_pendiente: true },
+  };
 });

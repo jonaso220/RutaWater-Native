@@ -1,5 +1,5 @@
 import type { Firestore, Query } from 'firebase-admin/firestore';
-import type { Client, Debt } from '../../src/types';
+import type { Client, Debt, Transfer } from '../../src/types';
 import { withDefaults } from '../../src/utils/clientDefaults';
 import { belongsToProfileScope } from '../../src/utils/profileScope';
 import { Account, loadAccount, Route } from './routes';
@@ -49,7 +49,7 @@ class LiveCollection<T> {
 
 // Mismas consultas que la app en modo compatible (groupId / userId); después
 // se filtra con belongsToProfileScope para no mezclar Reparto 1 con otros.
-const scopeQueries = (db: Firestore, collection: string, uid: string, route: Route): Query[] => (
+export const scopeQueries = (db: Firestore, collection: string, uid: string, route: Route): Query[] => (
   route.groupId
     ? [db.collection(collection).where('groupId', '==', route.groupId)]
     : [db.collection(collection).where('userId', '==', uid)]
@@ -60,12 +60,15 @@ export interface Settings {
   customProducts: Array<{ id: string; label: string }>;
   whatsappTomorrowVisit: string;
   whatsappEnCamino: string;
+  // Plantilla de «Enviar total» (Ajustes → WhatsApp → deuda).
+  whatsappDeuda: string;
 }
 
 export class Store {
   private account: Promise<Account> | null = null;
   private clients = new Map<string, LiveCollection<Client>>();
   private debts = new Map<string, LiveCollection<Debt>>();
+  private transfers = new Map<string, LiveCollection<Transfer>>();
 
   constructor(readonly db: Firestore, readonly uid: string) {}
 
@@ -103,6 +106,17 @@ export class Store {
     return live.get();
   }
 
+  /** Transferencias pendientes de revisar (lista Transferencias de la app). */
+  async getTransfers(route: Route): Promise<Transfer[]> {
+    let live = this.transfers.get(route.id);
+    if (!live) {
+      live = new LiveCollection<Transfer>(scopeQueries(this.db, 'transfers', this.uid, route), (id, data) =>
+        belongsToProfileScope(data, this.uid, route.groupId) ? { ...data, id } as Transfer : null);
+      this.transfers.set(route.id, live);
+    }
+    return live.get();
+  }
+
   async getSettings(): Promise<Settings> {
     const account = await this.getAccount();
     const data = (await this.db.collection('settings').doc(account.settingsDocId).get()).data() || {};
@@ -111,12 +125,14 @@ export class Store {
       customProducts: Array.isArray(data.customProducts) ? data.customProducts : [],
       whatsappTomorrowVisit: typeof data.whatsappTomorrowVisit === 'string' ? data.whatsappTomorrowVisit : '',
       whatsappEnCamino: typeof data.whatsappEnCamino === 'string' ? data.whatsappEnCamino : '',
+      whatsappDeuda: typeof data.whatsappDeuda === 'string' ? data.whatsappDeuda : '',
     };
   }
 
   close(): void {
-    [...this.clients.values(), ...this.debts.values()].forEach((live) => live.close());
+    [...this.clients.values(), ...this.debts.values(), ...this.transfers.values()].forEach((live) => live.close());
     this.clients.clear();
     this.debts.clear();
+    this.transfers.clear();
   }
 }

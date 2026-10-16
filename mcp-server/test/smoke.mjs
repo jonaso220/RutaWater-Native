@@ -43,6 +43,11 @@ await db.doc('clients/c2').set({
   isStarred: false, isCompleted: false, isNote: false, lastVisited: null, relationships: { c1: 'otro' },
 });
 
+await db.doc('debts/s1').set({
+  userId: 'smoke', scopeKey: 'user:smoke', clientId: 'c1', customerId: 'c1', clientName: 'Héctor Murgo', amount: 500,
+  createdAt: new Date(),
+});
+
 const auditPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rw-mcp-')), 'audit.jsonl');
 const transport = new StdioClientTransport({
   command: process.execPath,
@@ -65,7 +70,8 @@ const call = async (name, args = {}) => {
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
   'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'buscar_clientes', 'cambiar_frecuencia', 'deshacer_listo', 'fijar_productos',
-  'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'ver_cliente', 'ver_productos',
+  'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_revisar_transferencia', 'registrar_pago',
+  'ver_cliente', 'ver_productos',
 ]);
 
 const agenda = await call('agenda_del_dia', { fecha: 'mañana' });
@@ -85,6 +91,19 @@ const detail = await call('ver_cliente', { cliente_id: 'c1' });
 assert.equal(detail.favorito, true);
 assert.equal(detail.notas, 'Pueden ser 2 o 3');
 assert.deepEqual(detail.parentesco.map((p) => [p.nombre, p.tipo, p.whatsapp]), [['Sulay Fernandez', 'otro', '59899333444']]);
+assert.equal(detail.deuda_total, 500);
+assert.equal(detail.transferencia_pendiente, false);
+assert.equal(detail.mensaje_total_deuda, 'La deuda es de $500. Saludos');
+
+assert.equal((await call('marcar_revisar_transferencia', { cliente_id: 'c1' })).cambiado, true);
+assert.equal((await call('marcar_revisar_transferencia', { cliente_id: 'c1' })).cambiado, false);
+const paid = await call('registrar_pago', { cliente_id: 'c1', monto: 200, deuda_esperada: 500 });
+assert.equal(paid.despues.deuda_total, 300);
+const repeated = await client.callTool({ name: 'registrar_pago', arguments: { cliente_id: 'c1', monto: 200, deuda_esperada: 500 } });
+assert.equal(repeated.isError, true);
+const after = await call('ver_cliente', { cliente_id: 'c1' });
+assert.equal(after.transferencia_pendiente, true);
+assert.equal(after.deuda_total, 300);
 
 const done = await call('marcar_listo', { cliente_id: 'c1', fecha: tomorrow });
 assert.equal(done.antes.visita, tomorrow);
@@ -93,8 +112,10 @@ const wrong = await client.callTool({ name: 'marcar_listo', arguments: { cliente
 assert.equal(wrong.isError, true);
 
 const audit = fs.readFileSync(auditPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line).tool);
-assert.deepEqual(audit, ['fijar_productos', 'marcar_favorito', 'actualizar_nota', 'marcar_listo']);
+assert.deepEqual(audit, [
+  'fijar_productos', 'marcar_favorito', 'actualizar_nota', 'marcar_revisar_transferencia', 'registrar_pago', 'marcar_listo',
+]);
 
 await client.close();
-console.log('smoke: OK (13 herramientas, lectura, escrituras y registro de auditoría)');
+console.log('smoke: OK (15 herramientas, lectura, escrituras, pagos, transferencias y registro de auditoría)');
 process.exit(0);

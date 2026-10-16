@@ -6,11 +6,12 @@ import type { ServerConfig } from './config';
 import { findRoute, Route } from './routes';
 import type { Store } from './store';
 import {
-  addDays, agendaFor, clientDetail, clientSummary, debtReport, debtsForClient, isValidIsoDate,
-  productCatalog, searchClients, todayKey, weekdayOf, whatsappTemplates,
+  addDays, agendaFor, clientDetail, clientSummary, debtReport, debtsForClient, debtTotalMessage, hasPendingTransfer,
+  isValidIsoDate, productCatalog, searchClients, todayKey, weekdayOf, whatsappTemplates,
 } from './views';
 import {
-  advanceVisit, ChangeResult, changeFrequency, markDone, setNote, setProducts, setStar, undoDone, WriteError,
+  advanceVisit, ChangeResult, changeFrequency, markDone, markTransferForReview, registerPayment, setNote, setProducts,
+  setStar, undoDone, WriteError,
 } from './writes';
 
 const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta configurada.
@@ -20,7 +21,9 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - marcar_favorito fija la estrella (no la alterna). marcar_listo usa la misma lógica que el botón Listo y se puede deshacer desde la app.
 - adelantar_visita trae la próxima visita de un cliente con frecuencia a una fecha más cercana del mismo día (como cambiar la fecha de inicio en Editar cliente).
 - cambiar_frecuencia cambia semanal/quincenal/cada 3 semanas/mensual manteniendo los días (como Editar cliente).
-- No hay herramientas para borrar clientes, cambiar deudas, precios ni días de visita.`;
+- registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: anotalo en la nota.
+- marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
+- No hay herramientas para borrar clientes, crear deudas, precios ni días de visita.`;
 
 const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 1) }] });
 const failure = (error: unknown) => ({
@@ -103,13 +106,20 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('ver_cliente', {
     title: 'Ver cliente',
-    description: 'Ficha completa: teléfonos, direcciones, productos, nota, estrella, próxima visita, Parentesco (familiares con su WhatsApp) y deudas.',
+    description: 'Ficha completa: teléfonos, direcciones, productos, nota, estrella, próxima visita, Parentesco (familiares con su WhatsApp), deudas con su total, si tiene una transferencia pendiente de revisar y el mensaje de «Enviar total».',
     inputSchema: { cliente_id: z.string().min(1) },
     annotations: { readOnlyHint: true },
   }, handle(async ({ cliente_id }: { cliente_id: string }) => {
     const { client, route, all } = await findClient(cliente_id);
     const debts = debtsForClient(all, await store.getDebts(route), client);
-    return clientDetail(client, { route, catalog: await catalog(), debts, clients: all });
+    const total = debts.reduce((sum, debt) => sum + (Number(debt.amount) || 0), 0);
+    const settings = await store.getSettings();
+    return {
+      ...clientDetail(client, { route, catalog: productCatalog(settings), debts, clients: all }),
+      transferencia_pendiente: hasPendingTransfer(all, await store.getTransfers(route), client),
+      // Texto exacto de «Enviar total ($X)» en Deudas, para mandarlo por WhatsApp.
+      ...(total > 0 ? { mensaje_total_deuda: debtTotalMessage(settings.whatsappDeuda, total) } : {}),
+    };
   }));
 
   server.registerTool('agenda_del_dia', {
@@ -241,6 +251,30 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
   }, write('cambiar_frecuencia', async ({ cliente_id, frecuencia, fecha_inicio }) => changeFrequency(
     store.db, await store.refreshAccount(), cliente_id, frecuencia, fecha_inicio ? resolveDate(fecha_inicio) : undefined,
   )));
+
+  server.registerTool('registrar_pago', {
+    title: 'Registrar pago',
+    description: 'Registra un pago de deuda como Deudas en la app: salda las deudas más viejas primero (Registrar pago) y, si el monto no cubre una, la deja con el saldo que queda (Editar deuda). deuda_esperada = deuda_total que leíste en ver_cliente: si cambió, no se registra nada (evita pagos dobles). Devuelve antes/después, aplicado_a_deuda y sobrante (pago de más: saldo a favor, que RutaWater no guarda). Falla si el cliente no tiene deudas.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      monto: z.number().positive().max(10_000_000).describe('Monto recibido, en pesos'),
+      deuda_esperada: z.number().min(0).describe('deuda_total actual según ver_cliente'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+  }, write('registrar_pago', async ({ cliente_id, monto, deuda_esperada }) => {
+    const { all } = await findClient(cliente_id);
+    return registerPayment(store.db, await store.refreshAccount(), cliente_id, monto, deuda_esperada, all);
+  }));
+
+  server.registerTool('marcar_revisar_transferencia', {
+    title: 'Marcar transferencia para revisar',
+    description: 'Deja al cliente en la lista Transferencias de la app, pendiente de que Jonathan controle si el dinero llegó (igual que «Revisar» en Deudas o «Gestionar transferencia → Agregar» en la tarjeta). Si ya tenía una pendiente no crea otra. No marca transferencias como revisadas.',
+    inputSchema: { cliente_id: z.string().min(1) },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('marcar_revisar_transferencia', async ({ cliente_id }) => {
+    const { all } = await findClient(cliente_id);
+    return markTransferForReview(store.db, await store.refreshAccount(), cliente_id, all);
+  }));
 };
 
 export const createServer = (store: Store, config: ServerConfig): McpServer => {

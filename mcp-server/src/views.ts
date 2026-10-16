@@ -1,4 +1,4 @@
-import type { Client, Debt } from '../../src/types';
+import type { Client, Debt, Transfer } from '../../src/types';
 import es from '../../src/i18n/locales/es';
 import {
   fuzzyMatch, getDayIndex, getNextVisitDate, matchScore, normalizePhone, parseDate, toLocalDateString,
@@ -269,3 +269,18 @@ export const debtsForClient = (clients: Client[], debts: Debt[], client: Client)
   const { byStableId } = debtIndex(clients, debts);
   return byStableId.get(getStableClientId(client)) || [];
 };
+
+/** Si el cliente figura en la lista Transferencias (pendiente de revisar). */
+export const hasPendingTransfer = (clients: Client[], transfers: Transfer[], client: Client): boolean => {
+  const identity = buildClientIdentityIndex(clients);
+  const stableId = getStableClientId(client);
+  return transfers.some((transfer) => getRelatedRecordStableClientId(transfer, identity) === stableId);
+};
+
+// Igual que formatMoney (src/utils/format.ts), sin arrastrar i18n al servidor.
+export const formatMoney = (n: number | undefined | null): string =>
+  `$${(Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })}`;
+
+/** Texto que manda «Enviar total ($X)» en Deudas (buildDebtTotalWhatsAppUrl). */
+export const debtTotalMessage = (template: string, total: number): string =>
+  (template || 'La deuda es de ${total}. Saludos').replace('${total}', formatMoney(total));

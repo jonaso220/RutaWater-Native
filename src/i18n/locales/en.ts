@@ -313,6 +313,12 @@ export default {
 
   // Settings
   settings: {
+    liveTrackingTitle: 'Live location',
+    liveTrackingShare: 'Share test link',
+    liveTrackingHint: 'Creates a link that shows the truck live for 30 minutes, just like "On the way", to send via WhatsApp or any other app.',
+    liveTrackingShareMessage: 'Watch the truck live for 30 minutes: {{url}}',
+    liveTrackingNoPermission: 'To share your location, allow location access in your phone settings.',
+    liveTrackingOpenSettings: 'Open settings',
     subscription: 'Subscription',
     premiumLabel: 'Premium',
     complimentaryPremium: 'Complimentary Premium access',

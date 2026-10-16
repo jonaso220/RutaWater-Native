@@ -313,6 +313,12 @@ export default {
 
   // Settings
   settings: {
+    liveTrackingTitle: 'Ubicación en vivo',
+    liveTrackingShare: 'Compartir link de prueba',
+    liveTrackingHint: 'Crea un link que muestra el camión en vivo durante 30 minutos, igual que «En camino», para mandarlo por WhatsApp o cualquier otra app.',
+    liveTrackingShareMessage: 'Mira el camión en vivo durante 30 minutos: {{url}}',
+    liveTrackingNoPermission: 'Para compartir la ubicación, permite el acceso a la ubicación en los ajustes del teléfono.',
+    liveTrackingOpenSettings: 'Abrir ajustes',
     subscription: 'Suscripción',
     premiumLabel: 'Premium',
     complimentaryPremium: 'Acceso Premium de cortesía',

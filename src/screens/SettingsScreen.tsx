@@ -12,6 +12,7 @@ import {
   Linking,
   Platform,
   KeyboardAvoidingView,
+  Share,
 } from 'react-native';
 import ModalOverlay from '../components/ModalOverlay';
 import { getModalWidth } from '../utils/helpers';
@@ -35,6 +36,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { isDeveloperPromoRedemptionAvailable } from '../utils/promoAvailability';
+import { startEnCaminoLink } from '../services/liveTracking';
 
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();
@@ -113,6 +115,27 @@ const SettingsScreen = () => {
     profileName: activeProfileName,
     scopeReadVersion,
   });
+
+  // Mismo link de 30 minutos que «En camino», para probarlo con quien sea.
+  const [sharingLink, setSharingLink] = useState(false);
+  const handleShareTrackingLink = async () => {
+    setSharingLink(true);
+    try {
+      const url = await startEnCaminoLink();
+      if (!url) {
+        Alert.alert(t('settings.liveTrackingTitle'), t('settings.liveTrackingNoPermission'), [
+          { text: t('cancel'), style: 'cancel' },
+          { text: t('settings.liveTrackingOpenSettings'), onPress: () => { Linking.openSettings().catch(() => {}); } },
+        ]);
+        return;
+      }
+      await Share.share({ message: t('settings.liveTrackingShareMessage', { url }) });
+    } catch (error) {
+      reportError(error, 'Share tracking link');
+    } finally {
+      setSharingLink(false);
+    }
+  };
 
   if (!firebaseUser) return null;
   const user = {
@@ -409,6 +432,30 @@ const SettingsScreen = () => {
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textHint} />
           </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Ubicación en vivo: el mismo link de 30 minutos que «En camino», para compartirlo con cualquiera */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="navigate" size={20} color={colors.textMuted} />
+          <Text style={styles.sectionTitle}>{t('settings.liveTrackingTitle')}</Text>
+        </View>
+        <View style={styles.sectionCard}>
+          <TouchableOpacity
+            onPress={handleShareTrackingLink}
+            style={[styles.exportBtn, sharingLink && { opacity: 0.6 }]}
+            disabled={sharingLink}
+            accessibilityRole="button"
+          >
+            {sharingLink ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Ionicons name="share-social-outline" size={18} color={colors.primary} />
+            )}
+            <Text style={styles.exportBtnText}>{t('settings.liveTrackingShare')}</Text>
+          </TouchableOpacity>
+          <Text style={styles.cardGroupHint}>{t('settings.liveTrackingHint')}</Text>
         </View>
       </View>
 

@@ -46,14 +46,39 @@ export const registerLiveTrackingService = (): void => {
   notifee.registerForegroundService(() => new Promise<void>((resolve) => { stopService = resolve; }));
 };
 
+// Ninguna API de permiso responde siempre: en iOS requestAuthorization solo
+// avisa cuando el permiso cambia (ya concedido = nunca), y en Android con RN 0.77
+// pedir uno ya concedido puede quedar pendiente. Android consulta antes de
+// pedir; iOS pide una posición, que pregunta si hace falta y falla enseguida si
+// está negado. Igual, «En camino» nunca espera más que esto para abrir WhatsApp.
+const PERMISSION_TIMEOUT_MS = 20000;
+const START_TIMEOUT_MS = 25000;
+
 const requestPermission = async (): Promise<boolean> => {
   if (Platform.OS === 'android') {
-    const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
-    return result === PermissionsAndroid.RESULTS.GRANTED;
+    const permission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+    if (await PermissionsAndroid.check(permission)) return true;
+    return (await PermissionsAndroid.request(permission)) === PermissionsAndroid.RESULTS.GRANTED;
   }
   Geolocation.setRNConfiguration({ skipPermissionRequests: false, authorizationLevel: 'whenInUse' });
-  return new Promise((resolve) => Geolocation.requestAuthorization(() => resolve(true), () => resolve(false)));
+  return new Promise((resolve) => Geolocation.getCurrentPosition(
+    (position) => {
+      onFix(position);
+      resolve(true);
+    },
+    // Sin señal todavía (timeout) no es falta de permiso.
+    (error) => resolve(error.code !== error.PERMISSION_DENIED),
+    { enableHighAccuracy: false, timeout: PERMISSION_TIMEOUT_MS, maximumAge: 60000 },
+  ));
 };
+
+const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => new Promise((resolve) => {
+  const timer = setTimeout(() => resolve(fallback), ms);
+  promise.then(
+    (value) => { clearTimeout(timer); resolve(value); },
+    () => { clearTimeout(timer); resolve(fallback); },
+  );
+});
 
 const startAndroidService = async (): Promise<void> => {
   if (Platform.OS !== 'android') return;
@@ -171,7 +196,7 @@ export const startEnCaminoLink = async (): Promise<string | null> => {
   const uid = auth().currentUser?.uid;
   if (!uid) return null;
   try {
-    if (!(await requestPermission())) return null;
+    if (!(await withTimeout(requestPermission(), START_TIMEOUT_MS, false))) return null;
     const now = Date.now();
     const link: TrackingLink = { token: newTrackingToken(randomBytes), vence: now + TRACKING_LINK_MINUTES * 60000 };
     const fix = isFreshFix(lastFix, now) ? lastFix : null;

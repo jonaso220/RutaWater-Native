@@ -10,8 +10,8 @@ import {
   isValidIsoDate, productCatalog, searchClients, todayKey, weekdayOf, whatsappTemplates,
 } from './views';
 import {
-  advanceVisit, ChangeResult, changeFrequency, markDone, markTransferForReview, registerPayment, setNote, setProducts,
-  setStar, undoDone, WriteError,
+  advanceVisit, ChangeResult, changeFrequency, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote,
+  setProducts, setStar, undoDone, WriteError,
 } from './writes';
 
 const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta configurada.
@@ -20,6 +20,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - Las escrituras devuelven antes/después confirmado por el servidor; si «cambiado» es false ya estaba así.
 - marcar_favorito fija la estrella (no la alterna). marcar_listo usa la misma lógica que el botón Listo y se puede deshacer desde la app.
 - adelantar_visita trae la próxima visita de un cliente con frecuencia a una fecha más cercana del mismo día (como cambiar la fecha de inicio en Editar cliente).
+- agendar_una_vez agenda una visita de una vez con sus productos (como Directorio → Agendar → Una vez): una ficha de directorio pasa a ser esa visita; a un cliente que ya está en agenda se le agrega otra ficha sin tocar la suya. La ficha de la visita queda sin nota ni estrella, como en la app. Si ya tiene visita ese día no agrega otra.
 - cambiar_frecuencia cambia semanal/quincenal/cada 3 semanas/mensual manteniendo los días (como Editar cliente).
 - registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: anotalo en la nota.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
@@ -250,6 +251,19 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   }, write('cambiar_frecuencia', async ({ cliente_id, frecuencia, fecha_inicio }) => changeFrequency(
     store.db, await store.refreshAccount(), cliente_id, frecuencia, fecha_inicio ? resolveDate(fecha_inicio) : undefined,
+  )));
+
+  server.registerTool('agendar_una_vez', {
+    title: 'Agendar una vez',
+    description: 'Agenda una visita de una vez para esa fecha con esos productos, igual que Directorio → Agendar / + Visita → Una vez: si la ficha es solo de directorio, esa misma ficha pasa a ser la visita; si el cliente ya está en agenda, se agrega otra ficha con el mismo cliente y la suya no cambia. Queda primera en la lista del día. Como en la app, la ficha de la visita queda con nota vacía y sin estrella (en una ficha de directorio, antes muestra la nota y la estrella que tenía, para restaurarlas con actualizar_nota y marcar_favorito). Si el cliente ya tiene una visita esa fecha no agrega otra (cambiado=false, devuelve su ficha_id para fijar_productos). Rechaza fechas pasadas.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      fecha: z.string().describe('aaaa-mm-dd, «hoy» o «mañana»'),
+      productos: z.record(z.string(), z.number().int().min(0).max(9999)).describe('{ id_producto: cantidad }, ids de ver_productos'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('agendar_una_vez', async ({ cliente_id, fecha, productos }) => scheduleOnce(
+    store.db, await store.refreshAccount(), await catalog(), cliente_id, resolveDate(fecha), productos,
   )));
 
   server.registerTool('registrar_pago', {

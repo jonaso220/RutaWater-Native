@@ -14,6 +14,7 @@ Reutiliza la lógica de la app (`src/utils`): la agenda se calcula con `getNextV
 | `agenda_del_dia` («hoy», «mañana» o aaaa-mm-dd, con atrasadas y plantillas de WhatsApp) | `marcar_listo` (rechaza fechas que no son visita pendiente) |
 | `listar_deudas` | `deshacer_listo` |
 | | `adelantar_visita` (próxima visita a una fecha más cercana del mismo día) |
+| | `agendar_una_vez` (como Directorio → Agendar → Una vez: la ficha de directorio pasa a ser la visita; a un cliente en agenda se le agrega otra ficha; no duplica una visita del mismo día; rechaza fechas pasadas) |
 | | `cambiar_frecuencia` (semanal, quincenal, cada 3 semanas, mensual; mantiene los días) |
 | | `registrar_pago` (como Registrar pago / Editar deuda: salda las más viejas primero, deja el saldo de un pago parcial; exige `deuda_esperada` para no pagar dos veces; devuelve el `sobrante`) |
 | | `marcar_revisar_transferencia` (como «Revisar» en Deudas; no duplica y nunca marca como revisada) |

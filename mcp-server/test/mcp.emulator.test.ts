@@ -10,7 +10,8 @@ import {
   weekdayOf,
 } from '../src/views';
 import {
-  advanceVisit, changeFrequency, markDone, markTransferForReview, registerPayment, setNote, setProducts, setStar, undoDone,
+  advanceVisit, changeFrequency, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote, setProducts, setStar,
+  undoDone,
 } from '../src/writes';
 
 const emulator = process.env.FIRESTORE_EMULATOR_HOST;
@@ -266,6 +267,97 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     await db.doc('transfers/vieja').set({ userId: UID, groupId: FAMILY, clientId: 'mario', clientName: 'Mario', createdAt: new Date() });
     expect((await markTransferForReview(db, account, 'mario', clients)).cambiado).toBe(false);
     await expect(markTransferForReview(db, account, 'ajena', clients)).rejects.toThrow('no pertenece');
+  });
+
+  test('agendar una vez: una ficha de directorio pasa a ser la visita (mismo id)', async () => {
+    const account = await store.getAccount();
+    const catalog = productCatalog(await store.getSettings());
+    await db.doc('clients/directorio').update({ notes: 'Timbre 2', isStarred: true });
+    const before = (await db.collection('clients').get()).size;
+
+    const result = await scheduleOnce(db, account, catalog, 'directorio', tomorrow, { b12: 1, b20: 0 });
+    expect(result.cambiado).toBe(true);
+    // Igual que la app: la nota y la estrella de la ficha se pierden, y se informan.
+    expect(result.antes).toEqual({ frecuencia: 'sin agenda (directorio)', proxima_visita: null, nota: 'Timbre 2', favorito: true });
+    expect(result.despues).toEqual({
+      ficha_id: 'directorio', ficha: 'misma', fecha: tomorrow, dia: tomorrowDay, productos: { b12: 1 }, nota: '', favorito: false,
+    });
+    expect((await db.collection('clients').get()).size).toBe(before);
+    const after = (await db.doc('clients/directorio').get()).data()!;
+    expect(after).toEqual(expect.objectContaining({
+      customerId: 'directorio', freq: 'once', specificDate: tomorrow, visitDay: tomorrowDay, visitDays: [tomorrowDay],
+      products: { b12: 1 }, isCompleted: false, isInactive: false, notes: '', isStarred: false, userId: UID, groupId: FAMILY,
+      // Primera del día: mario (1), rosa (2) y unavez (sin orden → 0).
+      listOrder: -1, listOrders: { [tomorrowDay]: -1 },
+    }));
+    const agenda = agendaFor(await store.getClients(account.routes[0]), tomorrow).map((entry) => entry.client.id);
+    expect(agenda[0]).toBe('directorio');
+  });
+
+  test('agendar una vez: a un cliente en agenda le agrega otra ficha sin tocar la suya', async () => {
+    const account = await store.getAccount();
+    const catalog = productCatalog(await store.getSettings());
+    const dayAfter = addDays(tomorrow, 1);
+    const marioBefore = (await db.doc('clients/mario').get()).data();
+
+    const result = await scheduleOnce(db, account, catalog, 'mario', dayAfter, { b12: 2 });
+    expect(result.cambiado).toBe(true);
+    expect(result.antes).toEqual({ frecuencia: 'semanal', proxima_visita: tomorrow, nota: '', favorito: false });
+    const { ficha_id: newId, ficha } = result.despues as Record<string, string>;
+    expect(ficha).toBe('nueva');
+    expect(newId).not.toBe('mario');
+    expect((await db.doc('clients/mario').get()).data()).toEqual(marioBefore);
+    const created = (await db.doc(`clients/${newId}`).get()).data()!;
+    expect(created).toEqual(expect.objectContaining({
+      customerId: 'mario', name: 'Mario', address: 'Rambla', freq: 'once', specificDate: dayAfter,
+      visitDay: weekdayOf(dayAfter), visitDays: [weekdayOf(dayAfter)], products: { b12: 2 }, listOrders: { [weekdayOf(dayAfter)]: -1 },
+      userId: UID, groupId: FAMILY, scopeKey: `scope:${FAMILY}`, isNote: false, creationVersion: 1,
+    }));
+    expect(created.createdAt).toBeTruthy();
+    expect((await db.doc(`users/${UID}`).get()).data()?.clientCreateVersion).toBe(1);
+
+    // Con una ficha de directorio duplicada (mismo nombre y teléfono), la reutiliza como la app.
+    await db.doc('clients/rosa-dup').set(client({ name: 'Rosa Jerez', phone: '099 123 456', freq: 'on_demand', customerId: 'rosa-dup' }));
+    const reused = await scheduleOnce(db, account, catalog, 'rosa', dayAfter, { b20: 1 });
+    expect(reused.despues).toEqual(expect.objectContaining({ ficha_id: 'rosa-dup', ficha: 'reutilizada' }));
+    expect((await db.doc('clients/rosa-dup').get()).data()).toEqual(expect.objectContaining({
+      freq: 'once', specificDate: dayAfter, customerId: 'rosa', products: { b20: 1 },
+    }));
+    expect((await db.doc('clients/rosa').get()).data()?.freq).toBe('weekly');
+  });
+
+  test('agendar una vez: no duplica una visita del mismo día', async () => {
+    const account = await store.getAccount();
+    const catalog = productCatalog(await store.getSettings());
+    const dayAfter = addDays(tomorrow, 1);
+    const first = await scheduleOnce(db, account, catalog, 'mario', dayAfter, { b12: 2 });
+    const count = (await db.collection('clients').get()).size;
+
+    const again = await scheduleOnce(db, account, catalog, 'mario', dayAfter, { b12: 3 });
+    expect(again.cambiado).toBe(false);
+    expect(again.despues).toEqual({ ficha_id: (first.despues as any).ficha_id, fecha: dayAfter, dia: weekdayOf(dayAfter), productos: { b12: 2 } });
+    // Su visita semanal de mañana y la de dentro de una semana ya existen.
+    expect((await scheduleOnce(db, account, catalog, 'mario', tomorrow, { b12: 1 })).despues)
+      .toEqual(expect.objectContaining({ ficha_id: 'mario' }));
+    expect((await scheduleOnce(db, account, catalog, 'mario', addDays(tomorrow, 7), { b12: 1 })).cambiado).toBe(false);
+    // La ficha de una vez de Ana ya tiene esa fecha.
+    expect((await scheduleOnce(db, account, catalog, 'unavez', tomorrow, { b12: 1 })).cambiado).toBe(false);
+
+    await scheduleOnce(db, account, catalog, 'directorio', tomorrow, { b12: 1 });
+    expect((await scheduleOnce(db, account, catalog, 'directorio', tomorrow, { b12: 1 })).cambiado).toBe(false);
+    expect((await db.collection('clients').get()).size).toBe(count);
+  });
+
+  test('agendar una vez: rechaza fechas pasadas, productos desconocidos y fichas ajenas', async () => {
+    const account = await store.getAccount();
+    const catalog = productCatalog(await store.getSettings());
+    await expect(scheduleOnce(db, account, catalog, 'directorio', addDays(todayKey(), -1), { b12: 1 })).rejects.toThrow('ya pasó');
+    await expect(scheduleOnce(db, account, catalog, 'directorio', '2026-02-30', { b12: 1 })).rejects.toThrow('inválida');
+    await expect(scheduleOnce(db, account, catalog, 'directorio', tomorrow, { inventado: 1 })).rejects.toThrow('desconocidos');
+    await expect(scheduleOnce(db, account, catalog, 'ajena', tomorrow, { b12: 1 })).rejects.toThrow('no pertenece');
+    expect((await db.doc('clients/directorio').get()).data()?.freq).toBe('on_demand');
+    // Hoy sí se puede.
+    expect((await scheduleOnce(db, account, catalog, 'directorio', todayKey(), { b12: 1 })).cambiado).toBe(true);
   });
 
   test('mensaje de Enviar total como el botón de Deudas', () => {

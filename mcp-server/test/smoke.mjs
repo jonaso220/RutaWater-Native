@@ -69,7 +69,7 @@ const call = async (name, args = {}) => {
 
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
-  'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'buscar_clientes', 'cambiar_frecuencia', 'deshacer_listo', 'fijar_productos',
+  'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'buscar_clientes', 'cambiar_frecuencia', 'deshacer_listo', 'fijar_productos',
   'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_revisar_transferencia', 'registrar_pago',
   'ver_cliente', 'ver_productos',
 ]);
@@ -111,11 +111,20 @@ assert.equal(done.antes.visita, tomorrow);
 const wrong = await client.callTool({ name: 'marcar_listo', arguments: { cliente_id: 'c1', fecha: tomorrow } });
 assert.equal(wrong.isError, true);
 
+const scheduled = await call('agendar_una_vez', { cliente_id: 'c2', fecha: 'mañana', productos: { b12: 1 } });
+assert.equal(scheduled.cambiado, true);
+assert.deepEqual(scheduled.despues, { ficha_id: 'c2', ficha: 'misma', fecha: tomorrow, dia: day, productos: { b12: 1 }, nota: '', favorito: false });
+assert.equal((await call('agendar_una_vez', { cliente_id: 'c2', fecha: tomorrow, productos: { b12: 1 } })).cambiado, false);
+const withOnce = await call('agenda_del_dia', { fecha: 'mañana' });
+assert.equal(withOnce.repartos[0].clientes[0].nombre, 'Sulay Fernandez');
+assert.equal(withOnce.repartos[0].clientes[0].una_vez, true);
+
 const audit = fs.readFileSync(auditPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line).tool);
 assert.deepEqual(audit, [
   'fijar_productos', 'marcar_favorito', 'actualizar_nota', 'marcar_revisar_transferencia', 'registrar_pago', 'marcar_listo',
+  'agendar_una_vez',
 ]);
 
 await client.close();
-console.log('smoke: OK (15 herramientas, lectura, escrituras, pagos, transferencias y registro de auditoría)');
+console.log('smoke: OK (16 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez y registro de auditoría)');
 process.exit(0);

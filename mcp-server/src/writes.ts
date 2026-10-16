@@ -5,16 +5,21 @@ import {
   buildClientIdentityIndex, getRelatedClientReference, getRelatedRecordStableClientId, getStableClientId,
 } from '../../src/utils/clientIdentity';
 import { dataScopeFields } from '../../src/utils/dataScope';
-import { parseDate, toLocalDateString } from '../../src/utils/helpers';
+import { getNextVisitDate, intervalWeeksForFreq, parseDate, toLocalDateString } from '../../src/utils/helpers';
 import { belongsToProfileScope } from '../../src/utils/profileScope';
 import { scopeQueries } from './store';
 import {
   applyVisitCommand, createVisitCommand, newVisitId, undoForCompletedClient, VisitCommand, VisitResult,
 } from '../../src/utils/visitCompletion';
 import { getLastVisitDate } from '../../src/utils/recency';
+import { getClientAddresses, locationFields } from '../../src/utils/clientAddresses';
+import { getClientPhones } from '../../src/utils/clientPhones';
+import { findExactClientMatch } from '../../src/utils/clientDuplicates';
+import { toExistingClientUpdate } from '../../src/utils/clientWriteData';
+import { sanitizeClientData } from '../../netlify/functions/_shared/clientCreationService';
 import { Account, Route, routeForRecord } from './routes';
 import {
-  CatalogProduct, clientDays, FREQ_LABELS, isValidIsoDate, nextVisit, quantity, todayKey, weekdayOf,
+  agendaFor, CatalogProduct, clientDays, FREQ_LABELS, isValidIsoDate, nextVisit, quantity, todayKey, weekdayOf,
 } from './views';
 
 export class WriteError extends Error {}
@@ -57,15 +62,7 @@ export interface ChangeResult {
   [extra: string]: unknown;
 }
 
-/**
- * Igual que «Guardar productos» (ClientProductsModal): guarda el mapa completo
- * con cantidades > 0. `changes` modifica solo esos productos (0 lo quita);
- * con `replaceAll` el resultado es exactamente `changes`.
- */
-export const setProducts = (
-  db: Firestore, account: Account, catalog: CatalogProduct[],
-  clientId: string, changes: Record<string, number>, replaceAll: boolean,
-): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+const validateProducts = (catalog: CatalogProduct[], changes: Record<string, number>): void => {
   const unknown = Object.keys(changes).filter((id) => !catalog.some((product) => product.id === id));
   if (unknown.length) {
     throw new WriteError(`Productos desconocidos: ${unknown.join(', ')}. Usá ver_productos para los ids.`);
@@ -75,6 +72,18 @@ export const setProducts = (
       throw new WriteError(`Cantidad inválida para ${id}: ${amount}.`);
     }
   });
+};
+
+/**
+ * Igual que «Guardar productos» (ClientProductsModal): guarda el mapa completo
+ * con cantidades > 0. `changes` modifica solo esos productos (0 lo quita);
+ * con `replaceAll` el resultado es exactamente `changes`.
+ */
+export const setProducts = (
+  db: Firestore, account: Account, catalog: CatalogProduct[],
+  clientId: string, changes: Record<string, number>, replaceAll: boolean,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  validateProducts(catalog, changes);
   const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
   const before = productMap(client);
   const after: Record<string, number> = replaceAll ? {} : { ...before };
@@ -308,6 +317,168 @@ export const changeFrequency = (
   const after = { frecuencia: FREQ_LABELS[freq] || freq, proxima_visita: nextVisit({ ...current, ...updates } as Client) };
   transaction.update(loaded.ref, updates);
   return { cliente_id: current.id, nombre: current.name, reparto: loaded.route.name, cambiado: true, antes: before, despues: after };
+});
+
+/** Todas las fichas del reparto leídas dentro de la transacción (las mismas que clientsRef en la app). */
+const routeClients = async (
+  db: Firestore, transaction: Transaction, account: Account, route: Route,
+): Promise<Array<{ ref: DocumentReference; client: Client }>> => {
+  const snaps = await Promise.all(scopeQueries(db, 'clients', account.uid, route).map((query) => transaction.get(query)));
+  return snaps.flatMap((snap) => snap.docs)
+    .filter((doc) => belongsToProfileScope(doc.data(), account.uid, route.groupId))
+    .map((doc) => ({ ref: doc.ref, client: withDefaults(doc.id, doc.data()) }));
+};
+
+const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+/**
+ * Si una ficha periódica pasará ese día más adelante en su ciclo (p. ej. un
+ * semanal cuya próxima visita es la semana anterior): agendaFor solo mira la
+ * próxima visita pendiente.
+ */
+const cycleFallsOn = (client: Client, date: string): boolean => {
+  if (client.freq === 'once' || client.freq === 'on_demand' || client.isCompleted) return false;
+  const day = weekdayOf(date);
+  if (!clientDays(client).includes(day)) return false;
+  const next = getNextVisitDate(client, day);
+  if (!next) return false;
+  const from = new Date(`${toLocalDateString(next)}T12:00:00`).getTime();
+  const days = Math.round((new Date(`${date}T12:00:00`).getTime() - from) / 86_400_000);
+  return days >= 0 && days % (intervalWeeksForFreq(client.freq) * 7) === 0;
+};
+
+/**
+ * «Directorio → Agendar / + Visita → Una vez» (ScheduleModal +
+ * scheduleFromDirectory en modo 'add'), con los mismos datos y las mismas tres
+ * salidas que la app:
+ * - ficha de directorio (on_demand o «Sin Asignar»): esa misma ficha pasa a
+ *   ser la visita de una vez;
+ * - cliente que ya está en agenda: reutiliza una ficha on_demand duplicada
+ *   (mismo nombre y teléfono) o crea otra con el mismo customerId, sin tocar
+ *   la original. La ficha nueva se arma como la función create-client.
+ * La visita queda primera en la lista de ese día. Si el cliente (misma
+ * identidad estable) ya tiene una visita esa fecha, no agrega otra.
+ */
+export const scheduleOnce = (
+  db: Firestore, account: Account, catalog: CatalogProduct[],
+  clientId: string, date: string, products: Record<string, number>,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (!isValidIsoDate(date)) throw new WriteError(`Fecha inválida: ${date}. Usá aaaa-mm-dd.`);
+  if (date < todayKey()) throw new WriteError('La fecha ya pasó.');
+  validateProducts(catalog, products);
+  const loaded = await loadForWrite(db, transaction, account, clientId);
+  const { route } = loaded;
+  const clientData = loaded.client;
+  if (clientData.isNote) throw new WriteError('Las notas no se agendan.');
+  if (Array.isArray(clientData.visitCommands) && clientData.visitCommands.length) {
+    throw new WriteError('La ficha tiene un Listo pendiente de aplicar desde la app; reintentar en unos segundos.');
+  }
+  const all = await routeClients(db, transaction, account, route);
+  const cleanProducts: Record<string, number> = {};
+  Object.entries(products).forEach(([id, amount]) => { if (amount > 0) cleanProducts[id] = amount; });
+  const dayName = DAY_NAMES[new Date(`${date}T12:00:00`).getDay()];
+  const base = { cliente_id: clientData.id, nombre: clientData.name, reparto: route.name };
+
+  const stableId = getStableClientId(clientData);
+  const sameClient = all
+    .filter((entry) => getStableClientId(entry.client) === stableId)
+    .map((entry) => projectPending(entry.client))
+    .filter((client): client is Client => !!client && !client.isNote);
+  const existing = agendaFor(sameClient, date)[0]?.client || sameClient.find((client) => cycleFallsOn(client, date));
+  if (existing) {
+    const visit = { ficha_id: existing.id, fecha: date, dia: dayName, productos: productMap(existing) };
+    return {
+      ...base, cambiado: false, antes: visit, despues: visit,
+      aviso: 'Ya tiene una visita ese día; no se agregó otra. Para cambiar lo que lleva, usá fijar_productos con ficha_id.',
+    };
+  }
+
+  const savedAddresses = getClientAddresses(clientData);
+  const newData: Record<string, any> = {
+    customerId: clientData.customerId || clientData.id,
+    name: clientData.name,
+    phone: clientData.phone,
+    phones: getClientPhones(clientData),
+    addresses: savedAddresses,
+    ...locationFields(savedAddresses[0]),
+    ...dataScopeFields(account.uid, route.groupId),
+    userId: account.uid,
+    freq: 'once',
+    scheduleRevision: newVisitId(),
+    updatedAt: new Date(),
+    notes: '',
+    isPinned: false,
+    isCompleted: false,
+    isStarred: false,
+    isNote: false,
+    isInactive: false,
+    alarm: '',
+    alarmDay: '',
+    alarmScheduledFor: null,
+    products: cleanProducts,
+    completedAt: null,
+    previousDeliveredAt: null,
+  };
+  const sourceLastDelivery = getLastVisitDate(clientData);
+  if (sourceLastDelivery) newData.lastDeliveredAt = sourceLastDelivery;
+
+  // Primera del día: una posición antes de la menor de las fichas activas ese día.
+  const existingInDay = all.map((entry) => entry.client).filter((c) =>
+    c.freq !== 'on_demand' && !c.isCompleted
+    && ((c.visitDays && c.visitDays.includes(dayName)) || c.visitDay === dayName));
+  const minOrder = existingInDay.length
+    ? Math.min(...existingInDay.map((c) => {
+      const order = c.listOrders?.[dayName] ?? c.listOrder ?? 0;
+      return order > 100000 ? 0 : order;
+    }))
+    : 0;
+  const newOrder = minOrder - 1;
+  newData.visitDay = dayName;
+  newData.visitDays = [dayName];
+  newData.specificDate = date;
+  newData.listOrder = newOrder;
+  newData.listOrders = { [dayName]: newOrder };
+
+  // Como el modal de la app, la ficha de la visita queda con nota vacía y sin
+  // estrella: en una ficha de directorio eso pisa su nota y su estrella.
+  const before = {
+    frecuencia: FREQ_LABELS[clientData.freq] || clientData.freq, proxima_visita: nextVisit(clientData),
+    nota: clientData.notes || '', favorito: !!clientData.isStarred,
+  };
+  const after = (fichaId: string, ficha: 'misma' | 'reutilizada' | 'nueva') => ({
+    ficha_id: fichaId, ficha, fecha: date, dia: dayName, productos: cleanProducts, nota: '', favorito: false,
+  });
+
+  const wasInDirectory = clientData.freq === 'on_demand' || clientData.visitDay === 'Sin Asignar';
+  if (wasInDirectory) {
+    transaction.update(loaded.ref, toExistingClientUpdate(newData));
+    return { ...base, cambiado: true, antes: before, despues: after(clientData.id, 'misma') };
+  }
+
+  const reusable = findExactClientMatch(
+    all.map((entry) => entry.client).filter((candidate) => candidate.id !== clientData.id && candidate.freq === 'on_demand'),
+    clientData.name,
+    clientData.phone,
+  );
+  if (reusable) {
+    const existingDelivery = getLastVisitDate(reusable);
+    if (existingDelivery && (!newData.lastDeliveredAt || existingDelivery.getTime() > newData.lastDeliveredAt.getTime())) {
+      newData.lastDeliveredAt = existingDelivery;
+    }
+    transaction.update(db.collection('clients').doc(reusable.id), toExistingClientUpdate(newData));
+    return { ...base, cambiado: true, antes: before, despues: after(reusable.id, 'reutilizada') };
+  }
+
+  newData.lastDeliveredAt = getLastVisitDate(clientData);
+  newData.createdAt = new Date();
+  // La app manda newData por HTTP (JSON) a create-client, que lo sanea y lo crea.
+  const ref = db.collection('clients').doc();
+  const { data } = sanitizeClientData({ id: ref.id, data: JSON.parse(JSON.stringify(newData)) }, account.uid);
+  // create-client controla además el límite del plan gratis, que sale de
+  // RevenueCat; este servidor corre como el dueño de la cuenta y no lo consulta.
+  transaction.create(ref, data);
+  transaction.set(db.collection('users').doc(account.uid), { clientCreateVersion: 1 }, { merge: true });
+  return { ...base, cambiado: true, antes: before, despues: after(ref.id, 'nueva') };
 });
 
 

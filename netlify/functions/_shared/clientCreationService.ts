@@ -140,7 +140,7 @@ const parseOptionalDate = (value: unknown): Date | null => {
   return new Date(millis);
 };
 
-const sanitizeClientData = (
+export const sanitizeClientData = (
   item: ClientCreateItem,
   uid: string,
 ): { groupId?: string; data: DocumentData } => {

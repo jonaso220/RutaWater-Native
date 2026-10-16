@@ -64,6 +64,7 @@ const startAndroidService = async (): Promise<void> => {
     body: i18n.t('liveTracking.notificationBody', { minutes: TRACKING_LINK_MINUTES }),
     android: {
       channelId: CHANNEL_ID,
+      smallIcon: 'ic_notification',
       asForegroundService: true,
       foregroundServiceTypes: [AndroidForegroundServiceType.FOREGROUND_SERVICE_TYPE_LOCATION],
       ongoing: true,

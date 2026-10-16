@@ -62,6 +62,20 @@ Lee las fichas de cada reparto una sola vez (una consulta por reparto), resuelve
 | `RUTAWATER_MCP_READONLY=1` | Registra solo las herramientas de lectura. |
 | `RUTAWATER_MCP_AUDIT` | Ruta alternativa del registro de auditoría. |
 | `RUTAWATER_TZ` | Zona horaria de la agenda (por defecto `America/Montevideo`). |
+| `RUTAWATER_MCP_CARGAS_DIARIAS` | Tope de cargas completas por día (por defecto `60`; `0` = sin tope). Ver abajo. |
+| `RUTAWATER_MCP_CARGAS_DIR` | Carpeta del registro diario de cargas (por defecto `~/.rutawater-mcp/cargas`). |
+
+### Tope diario de cargas completas
+
+Cada vez que el servidor arranca vuelve a leer, una vez por reparto, todas las fichas, deudas o transferencias que necesita. También lo hacen `agendar_una_vez`, `registrar_pago` y `marcar_revisar_transferencia`, dentro de su transacción. Esas son las «cargas completas», y son las lecturas que más pesan en la cuota de Firestore. Esa cuota es de toda la cuenta: la comparte con la app. Si un agente entra en un bucle que abre el servidor una y otra vez, la puede agotar.
+
+Cada carga se anota como una línea (con cuántos documentos trajo) en `~/.rutawater-mcp/cargas/<día>.jsonl`. El registro es compartido entre todos los procesos del servidor. Al llegar al tope, las herramientas que necesitan otra carga devuelven un error y no leen nada. Lo que ya está cargado en un proceso sigue funcionando en vivo.
+
+El día es el de la cuota de Firestore: cambia a la medianoche del Pacífico, que son las 04:00 de Uruguay (o las 05:00 durante el horario de invierno de EE. UU.). Para ver cuánto se usó hoy:
+
+```bash
+wc -l ~/.rutawater-mcp/cargas/*.jsonl
+```
 
 Ejemplo de `.mcp.json` (Claude Code):
 

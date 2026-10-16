@@ -3,11 +3,16 @@ process.env.TZ = process.env.RUTAWATER_TZ || 'America/Montevideo';
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { getDb, loadConfig } from './config';
+import { ReadBudget, setReadBudget } from './readBudget';
 import { Store } from './store';
 import { createServer } from './tools';
 
 const main = async () => {
   const config = await loadConfig();
+  if (!Number.isInteger(config.dailyLoads) || config.dailyLoads < 0) {
+    throw new Error('RUTAWATER_MCP_CARGAS_DIARIAS tiene que ser un entero (0 = sin tope).');
+  }
+  setReadBudget(new ReadBudget(config.loadsDir, config.dailyLoads));
   const store = new Store(getDb(), config.uid);
   const server = createServer(store, config);
   const shutdown = () => {

@@ -54,6 +54,7 @@ const transport = new StdioClientTransport({
   args: [path.join(here, '..', 'dist', 'server.cjs')],
   env: {
     ...process.env, RUTAWATER_UID: 'smoke', FIREBASE_PROJECT_ID: 'demo-rutawater', RUTAWATER_MCP_AUDIT: auditPath,
+    RUTAWATER_MCP_CARGAS_DIR: path.join(path.dirname(auditPath), 'cargas'),
   },
   stderr: 'inherit',
 });

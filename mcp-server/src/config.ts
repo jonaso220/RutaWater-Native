@@ -10,9 +10,16 @@ export interface ServerConfig {
   uid: string;
   readOnly: boolean;
   auditPath: string;
+  /** Tope de cargas completas por día de cuota (0 = sin tope). */
+  dailyLoads: number;
+  loadsDir: string;
 }
 
 const env = (name: string): string => (process.env[name] || '').trim();
+
+// Con ~60 cargas de unos cientos de fichas el MCP usa menos de la mitad de las
+// 50.000 lecturas gratis por día; el resto queda para la app.
+const DEFAULT_DAILY_LOADS = 60;
 
 /**
  * Credenciales, en este orden:
@@ -50,5 +57,7 @@ export const loadConfig = async (): Promise<ServerConfig> => {
     uid,
     readOnly: env('RUTAWATER_MCP_READONLY') === '1',
     auditPath: env('RUTAWATER_MCP_AUDIT') || path.join(os.homedir(), '.rutawater-mcp', 'audit.jsonl'),
+    dailyLoads: env('RUTAWATER_MCP_CARGAS_DIARIAS') ? Number(env('RUTAWATER_MCP_CARGAS_DIARIAS')) : DEFAULT_DAILY_LOADS,
+    loadsDir: env('RUTAWATER_MCP_CARGAS_DIR') || path.join(os.homedir(), '.rutawater-mcp', 'cargas'),
   };
 };

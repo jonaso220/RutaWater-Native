@@ -2,6 +2,7 @@ import type { Firestore, Query } from 'firebase-admin/firestore';
 import type { Client, Debt, Transfer } from '../../src/types';
 import { withDefaults } from '../../src/utils/clientDefaults';
 import { belongsToProfileScope } from '../../src/utils/profileScope';
+import { checkFullLoad, recordFullLoad } from './readBudget';
 import { Account, loadAccount, Route } from './routes';
 
 type Unsubscribe = () => void;
@@ -16,10 +17,19 @@ class LiveCollection<T> {
   private ready: Promise<void> | null = null;
   private unsubscribers: Unsubscribe[] = [];
 
-  constructor(private queries: Query[], private map: (id: string, data: any) => T | null) {}
+  constructor(
+    private label: string,
+    private queries: Query[],
+    private map: (id: string, data: any) => T | null,
+  ) {}
 
   get(): Promise<T[]> {
     if (!this.ready) {
+      try {
+        checkFullLoad(this.label);
+      } catch (error) {
+        return Promise.reject(error);
+      }
       const partial: T[][] = this.queries.map(() => []);
       this.ready = Promise.all(this.queries.map((query, index) => new Promise<void>((resolve, reject) => {
         let first = true;
@@ -28,7 +38,11 @@ class LiveCollection<T> {
             .map((doc) => this.map(doc.id, doc.data()))
             .filter((item): item is NonNullable<T> => item !== null) as T[];
           this.items = partial.flat();
-          if (first) { first = false; resolve(); }
+          if (first) {
+            first = false;
+            recordFullLoad(this.label, snap.size);
+            resolve();
+          }
         }, (error) => {
           if (first) { first = false; reject(error); }
           // Un listener caído se recrea en la próxima consulta.
@@ -46,6 +60,9 @@ class LiveCollection<T> {
     this.ready = null;
   }
 }
+
+/** Nombre de una carga completa en el registro diario y en el aviso de tope. */
+export const loadLabel = (collection: string, route: Route): string => `${collection} de «${route.name}»`;
 
 // Mismas consultas que la app en modo compatible (groupId / userId); después
 // se filtra con belongsToProfileScope para no mezclar Reparto 1 con otros.
@@ -89,7 +106,7 @@ export class Store {
   async getClients(route: Route): Promise<Client[]> {
     let live = this.clients.get(route.id);
     if (!live) {
-      live = new LiveCollection<Client>(scopeQueries(this.db, 'clients', this.uid, route), (id, data) =>
+      live = new LiveCollection<Client>(loadLabel('clients', route), scopeQueries(this.db, 'clients', this.uid, route), (id, data) =>
         belongsToProfileScope(data, this.uid, route.groupId) ? withDefaults(id, data) : null);
       this.clients.set(route.id, live);
     }
@@ -99,7 +116,7 @@ export class Store {
   async getDebts(route: Route): Promise<Debt[]> {
     let live = this.debts.get(route.id);
     if (!live) {
-      live = new LiveCollection<Debt>(scopeQueries(this.db, 'debts', this.uid, route), (id, data) =>
+      live = new LiveCollection<Debt>(loadLabel('debts', route), scopeQueries(this.db, 'debts', this.uid, route), (id, data) =>
         belongsToProfileScope(data, this.uid, route.groupId) ? { ...data, id } as Debt : null);
       this.debts.set(route.id, live);
     }
@@ -110,7 +127,7 @@ export class Store {
   async getTransfers(route: Route): Promise<Transfer[]> {
     let live = this.transfers.get(route.id);
     if (!live) {
-      live = new LiveCollection<Transfer>(scopeQueries(this.db, 'transfers', this.uid, route), (id, data) =>
+      live = new LiveCollection<Transfer>(loadLabel('transfers', route), scopeQueries(this.db, 'transfers', this.uid, route), (id, data) =>
         belongsToProfileScope(data, this.uid, route.groupId) ? { ...data, id } as Transfer : null);
       this.transfers.set(route.id, live);
     }

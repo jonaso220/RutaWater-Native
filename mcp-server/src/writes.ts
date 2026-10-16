@@ -7,7 +7,8 @@ import {
 import { dataScopeFields } from '../../src/utils/dataScope';
 import { getNextVisitDate, intervalWeeksForFreq, parseDate, toLocalDateString } from '../../src/utils/helpers';
 import { belongsToProfileScope } from '../../src/utils/profileScope';
-import { scopeQueries } from './store';
+import { checkFullLoad, recordFullLoad } from './readBudget';
+import { loadLabel, scopeQueries } from './store';
 import {
   applyVisitCommand, createVisitCommand, newVisitId, undoForCompletedClient, VisitCommand, VisitResult,
 } from '../../src/utils/visitCompletion';
@@ -321,11 +322,22 @@ export const changeFrequency = (
   return { cliente_id: current.id, nombre: current.name, reparto: loaded.route.name, cambiado: true, antes: before, despues: after };
 });
 
+/** Una colección entera del reparto dentro de la transacción; cuenta para el tope diario (cada reintento también). */
+const fullScopeRead = (
+  db: Firestore, transaction: Transaction, account: Account, route: Route, collection: string,
+) => Promise.all(scopeQueries(db, collection, account.uid, route).map(async (query) => {
+  const label = loadLabel(collection, route);
+  checkFullLoad(label);
+  const snap = await transaction.get(query);
+  recordFullLoad(label, snap.size);
+  return snap;
+}));
+
 /** Todas las fichas del reparto leídas dentro de la transacción (las mismas que clientsRef en la app). */
 const routeClients = async (
   db: Firestore, transaction: Transaction, account: Account, route: Route,
 ): Promise<Array<{ ref: DocumentReference; client: Client }>> => {
-  const snaps = await Promise.all(scopeQueries(db, 'clients', account.uid, route).map((query) => transaction.get(query)));
+  const snaps = await fullScopeRead(db, transaction, account, route, 'clients');
   return snaps.flatMap((snap) => snap.docs)
     .filter((doc) => belongsToProfileScope(doc.data(), account.uid, route.groupId))
     .map((doc) => ({ ref: doc.ref, client: withDefaults(doc.id, doc.data()) }));
@@ -577,7 +589,7 @@ const relatedRecords = async (
 ): Promise<QueryDocumentSnapshot[]> => {
   const identity = buildClientIdentityIndex(clients);
   const stableId = getStableClientId(client);
-  const snaps = await Promise.all(scopeQueries(db, collection, account.uid, route).map((query) => transaction.get(query)));
+  const snaps = await fullScopeRead(db, transaction, account, route, collection);
   return snaps.flatMap((snap) => snap.docs)
     .filter((doc) => belongsToProfileScope(doc.data(), account.uid, route.groupId))
     .filter((doc) => getRelatedRecordStableClientId(doc.data() as any, identity) === stableId);

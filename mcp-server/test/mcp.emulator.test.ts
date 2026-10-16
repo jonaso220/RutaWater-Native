@@ -1,8 +1,12 @@
 process.env.TZ = 'America/Montevideo';
 process.env.FIREBASE_PROJECT_ID = 'demo-rutawater';
 
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import type { Firestore } from 'firebase-admin/firestore';
 import { getDb } from '../src/config';
+import { ReadBudget, ReadLimitError, setReadBudget } from '../src/readBudget';
 import { loadAccount } from '../src/routes';
 import { Store } from '../src/store';
 import {
@@ -358,6 +362,31 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     expect((await db.doc('clients/directorio').get()).data()?.freq).toBe('on_demand');
     // Hoy sí se puede.
     expect((await scheduleOnce(db, account, catalog, 'directorio', todayKey(), { b12: 1 })).cambiado).toBe(true);
+  });
+
+  test('tope diario de cargas completas: corta antes de leer, también en escrituras', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rutawater-cargas-'));
+    setReadBudget(new ReadBudget(dir, 2));
+    try {
+      const account = await store.getAccount();
+      const [primary, costa] = account.routes;
+      await store.getClients(primary);
+      await store.getDebts(primary);
+      // Lo ya cargado sigue en vivo sin gastar otra carga.
+      expect(await store.getClients(primary)).toHaveLength(4);
+      await expect(store.getClients(costa)).rejects.toThrow('límite diario de 2 cargas');
+      const catalog = productCatalog(await store.getSettings());
+      await expect(scheduleOnce(db, account, catalog, 'directorio', tomorrow, { b20: 1 })).rejects.toThrow(ReadLimitError);
+      expect((await db.doc('clients/directorio').get()).data()?.freq).toBe('on_demand');
+      const [file] = fs.readdirSync(dir);
+      const lines = fs.readFileSync(path.join(dir, file), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+      expect(lines.map((line) => [line.carga, line.docs])).toEqual([
+        ['clients de «Reparto 1»', 4], ['debts de «Reparto 1»', 2],
+      ]);
+    } finally {
+      setReadBudget(null);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('mensaje de Enviar total como el botón de Deudas', () => {

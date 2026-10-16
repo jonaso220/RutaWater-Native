@@ -28,6 +28,10 @@ npm run build
 
 `firebase-admin` se toma de `node_modules` de la app (correr `npm install` en la raíz).
 
+### Copia instalada en el disco interno
+
+Para que el servidor no dependa del repo ni de un disco externo, `./install-local.sh` arma una copia autónoma en `~/.rutawater-mcp/server` (programa + `firebase-admin` + SDK de MCP). Claude Code la tiene registrada a nivel de usuario apuntando a `~/.rutawater-mcp/server/server.cjs`. **Después de cambiar el servidor, volver a correr `./install-local.sh`** para que los cambios lleguen a la copia instalada.
+
 ## Configuración (variables de entorno)
 
 | Variable | Uso |
@@ -46,7 +50,7 @@ Ejemplo de `.mcp.json` (Claude Code):
   "mcpServers": {
     "rutawater": {
       "command": "node",
-      "args": ["/Volumes/OLIVERA/RutaWater-Native/mcp-server/dist/server.cjs"],
+      "args": ["/Users/<usuario>/.rutawater-mcp/server/server.cjs"],
       "env": {
         "GOOGLE_APPLICATION_CREDENTIALS": "/Users/<usuario>/.rutawater-mcp/service-account.json",
         "RUTAWATER_EMAIL": "<email de la cuenta>",

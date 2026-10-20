@@ -1,0 +1,35 @@
+diff --git a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm b/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
+index 03df64d..b914e21 100644
+--- a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
++++ b/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
+@@ -64,7 +64,8 @@ + (RNCGeolocationConfiguration)RNCGeolocationConfiguration:(id)json
+ 
+   return (RNCGeolocationConfiguration) {
+     .skipPermissionRequests = [RCTConvert BOOL:options[@"skipPermissionRequests"]],
+-    .authorizationLevel = [RCTConvert RNCGeolocationAuthorizationLevel:options[@"authorizationLevel"]]
++    .authorizationLevel = [RCTConvert RNCGeolocationAuthorizationLevel:options[@"authorizationLevel"]],
++    .enableBackgroundLocationUpdates = [RCTConvert BOOL:options[@"enableBackgroundLocationUpdates"]]
+   };
+ }
+ 
+@@ -186,6 +187,9 @@ - (void)beginLocationUpdatesWithDesiredAccuracy:(CLLocationAccuracy)desiredAccur
+ 
+   _locationManager.distanceFilter  = distanceFilter;
+   _locationManager.desiredAccuracy = desiredAccuracy;
++  if (_locationConfiguration.enableBackgroundLocationUpdates) {
++    [self enableBackgroundLocationUpdates];
++  }
+   _usingSignificantChanges = useSignificantChanges;
+ 
+   if (@available(iOS 14.0, *)) {
+@@ -301,6 +305,10 @@ - (void)enableBackgroundLocationUpdates
+     if ([_locationManager respondsToSelector:@selector(setAllowsBackgroundLocationUpdates:)]) {
+       [_locationManager setAllowsBackgroundLocationUpdates:YES];
+     }
++    _locationManager.pausesLocationUpdatesAutomatically = NO;
++    if ([_locationManager respondsToSelector:@selector(setShowsBackgroundLocationIndicator:)]) {
++      _locationManager.showsBackgroundLocationIndicator = YES;
++    }
+   }
+ #endif
+ }

@@ -26,7 +26,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - sugerir_posicion calcula dónde conviene una ficha en el recorrido de una fecha: entre las dos paradas consecutivas donde menos desvío agrega en línea recta. Si al cliente o a alguna parada le faltan coordenadas no sugiere nada y dice cuáles faltan.
 - cambiar_posicion mueve una ficha al número indicado de la lista de ese día (como «Cambiar posición» en la tarjeta).
 - cambiar_frecuencia cambia semanal/quincenal/cada 3 semanas/mensual manteniendo los días (como Editar cliente).
-- registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: anotalo en la nota.
+- registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: es propina salvo que el cliente pida dejarlo a favor (ahí, anotalo en la nota).
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
 - transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
@@ -307,7 +307,7 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('registrar_pago', {
     title: 'Registrar pago',
-    description: 'Registra un pago de deuda como Deudas en la app: salda las deudas más viejas primero (Registrar pago) y, si el monto no cubre una, la deja con el saldo que queda (Editar deuda). deuda_esperada = deuda_total que leíste en ver_cliente: si cambió, no se registra nada (evita pagos dobles). Devuelve antes/después, aplicado_a_deuda y sobrante (pago de más: saldo a favor, que RutaWater no guarda). Falla si el cliente no tiene deudas.',
+    description: 'Registra un pago de deuda como Deudas en la app: salda las deudas más viejas primero (Registrar pago) y, si el monto no cubre una, la deja con el saldo que queda (Editar deuda). deuda_esperada = deuda_total que leíste en ver_cliente: si cambió, no se registra nada (evita pagos dobles). Devuelve antes/después, aplicado_a_deuda y sobrante (pago de más, que RutaWater no guarda). Falla si el cliente no tiene deudas.',
     inputSchema: {
       cliente_id: z.string().min(1),
       monto: z.number().positive().max(10_000_000).describe('Monto recibido, en pesos'),

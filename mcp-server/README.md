@@ -20,6 +20,11 @@ Reutiliza la lógica de la app (`src/utils`): la agenda se calcula con `getNextV
 | | `registrar_pago` (como Registrar pago / Editar deuda: salda las más viejas primero, deja el saldo de un pago parcial; exige `deuda_esperada` para no pagar dos veces; devuelve el `sobrante`) |
 | | `marcar_revisar_transferencia` (como «Revisar» en Deudas; no duplica y nunca marca como revisada) |
 
+Fuera de Firestore, en el Mac donde corre el servidor (para que también las usen las tareas de la nube, cuyos comandos corren en una VM):
+
+- `abrir_whatsapp` abre `whatsapp://send` con el número de la ficha y un borrador: el aviso de mañana de Ajustes (`plantilla: "aviso_manana"`) o un `texto`, con `reemplazar` opcional (`«viejo=>nuevo»`, cada uno exactamente una vez). Es el mismo enlace que Avisar o el ícono de WhatsApp de la tarjeta; no envía.
+- `transcribir_audio` transcribe con Whisper los últimos audios de WhatsApp guardados en `~/Downloads` (script de la skill `whatsapp-rutawater`; rutas en `RUTAWATER_WHISPER_PYTHON`, `RUTAWATER_TRANSCRIBIR` y `RUTAWATER_DESCARGAS`).
+
 No hay herramientas para borrar clientes, crear o editar deudas a mano, marcar transferencias como revisadas, tocar precios ni cambiar el día de visita. Cada escritura queda en `~/.rutawater-mcp/audit.jsonl` con el antes y el después.
 
 ## Instalación
@@ -62,7 +67,7 @@ Lee las fichas de cada reparto una sola vez (una consulta por reparto), resuelve
 | `RUTAWATER_MCP_READONLY=1` | Registra solo las herramientas de lectura. |
 | `RUTAWATER_MCP_AUDIT` | Ruta alternativa del registro de auditoría. |
 | `RUTAWATER_TZ` | Zona horaria de la agenda (por defecto `America/Montevideo`). |
-| `RUTAWATER_MCP_CARGAS_DIARIAS` | Tope de cargas completas por día (por defecto `60`; `0` = sin tope). Ver abajo. |
+| `RUTAWATER_MCP_CARGAS_DIARIAS` | Tope de cargas completas por día (por defecto `250`, unas 50.000 lecturas, el límite gratis de Firestore; `0` = sin tope). Ver abajo. |
 | `RUTAWATER_MCP_CARGAS_DIR` | Carpeta del registro diario de cargas (por defecto `~/.rutawater-mcp/cargas`). |
 
 ### Tope diario de cargas completas

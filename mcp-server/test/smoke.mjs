@@ -70,10 +70,16 @@ const call = async (name, args = {}) => {
 
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
-  'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'buscar_clientes', 'cambiar_frecuencia',
+  'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'buscar_clientes', 'cambiar_frecuencia',
   'cambiar_posicion', 'deshacer_listo', 'fijar_productos', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo',
-  'marcar_revisar_transferencia', 'registrar_pago', 'sugerir_posicion', 'ver_cliente', 'ver_productos',
+  'marcar_revisar_transferencia', 'registrar_pago', 'sugerir_posicion', 'transcribir_audio', 'ver_cliente', 'ver_productos',
 ]);
+
+// abrir_whatsapp valida antes de abrir nada: estos casos fallan sin tocar WhatsApp.
+const abrir = (args) => client.callTool({ name: 'abrir_whatsapp', arguments: args });
+assert.match((await abrir({ telefono: '1234567', texto: 'x' })).content[0].text, /at least 8|inválido/);
+assert.match((await abrir({ telefono: '59899123456', plantilla: 'aviso_manana', texto: 'x' })).content[0].text, /plantilla o texto/);
+assert.match((await abrir({ telefono: '59899123456', texto: 'hola', reemplazar: ['chau=>x'] })).content[0].text, /0 veces/);
 
 const agenda = await call('agenda_del_dia', { fecha: 'mañana' });
 assert.equal(agenda.fecha, tomorrow);
@@ -149,5 +155,5 @@ assert.deepEqual(audit, [
 ]);
 
 await client.close();
-console.log('smoke: OK (18 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
+console.log('smoke: OK (20 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
 process.exit(0);

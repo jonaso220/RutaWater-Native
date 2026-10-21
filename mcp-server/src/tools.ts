@@ -2,6 +2,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Client } from '../../src/types';
 import { appendAudit } from './audit';
+import { transcribeAudios } from './audio';
+import { applyReplacements, openWhatsapp } from './whatsapp';
 import type { ServerConfig } from './config';
 import { findRoute, Route } from './routes';
 import type { Store } from './store';
@@ -26,6 +28,8 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - cambiar_frecuencia cambia semanal/quincenal/cada 3 semanas/mensual manteniendo los días (como Editar cliente).
 - registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: anotalo en la nota.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
+- abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
+- transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
 - No hay herramientas para borrar clientes, crear deudas, precios ni días de visita.`;
 
 const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 1) }] });
@@ -314,6 +318,36 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     const { all } = await findClient(cliente_id);
     return registerPayment(store.db, await store.refreshAccount(), cliente_id, monto, deuda_esperada, all);
   }));
+
+  server.registerTool('abrir_whatsapp', {
+    title: 'Abrir chat de WhatsApp en el Mac',
+    description: 'Abre WhatsApp en el Mac en el chat del número indicado, con un borrador opcional: el mismo enlace whatsapp://send que usan el botón Avisar y el ícono de WhatsApp de la tarjeta, sin tocar la app de RutaWater. plantilla="aviso_manana" usa el aviso de mañana de Ajustes (el de agenda_del_dia); texto pone un mensaje propio; sin ninguno abre el chat vacío. reemplazar aplica cambios «viejo=>nuevo» al texto (cada «viejo» tiene que aparecer una sola vez, p. ej. «por tu casa=>por el local»). NO envía: después hay que verificar destinatario y borrador en WhatsApp y apretar Enviar.',
+    inputSchema: {
+      telefono: z.string().min(8).describe('Campo whatsapp de la ficha (solo dígitos, con código de país)'),
+      plantilla: z.enum(['aviso_manana']).optional().describe('Usar el aviso de mañana de Ajustes'),
+      texto: z.string().max(4000).optional().describe('Mensaje propio para el borrador'),
+      reemplazar: z.array(z.string()).max(5).optional().describe('Cambios «texto viejo=>texto nuevo» sobre el borrador'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, handle(async ({ telefono, plantilla, texto, reemplazar }: { telefono: string; plantilla?: 'aviso_manana'; texto?: string; reemplazar?: string[] }) => {
+    if (plantilla && texto) throw new Error('Pasá plantilla o texto, no los dos.');
+    let borrador = plantilla ? whatsappTemplates(await store.getSettings()).aviso_manana : texto;
+    if (reemplazar?.length) {
+      if (!borrador) throw new Error('reemplazar necesita plantilla o texto.');
+      borrador = applyReplacements(borrador, reemplazar);
+    }
+    return openWhatsapp(telefono.replace(/\D/g, ''), borrador || undefined);
+  }));
+
+  server.registerTool('transcribir_audio', {
+    title: 'Transcribir audios de WhatsApp',
+    description: 'Transcribe en el Mac, con Whisper, los audios «WhatsApp Audio …» más nuevos de Descargas (los que se guardan con «Guardar en Descargas»), en orden cronológico. Devuelve por audio texto, confianza, dudoso, segundos y hora_mensaje (para cotejar con la burbuja). Con borrar=true borra el archivo si la transcripción no quedó dudosa. Espera hasta 10 s a que aparezca el archivo. No toca RutaWater.',
+    inputSchema: {
+      cantidad: z.number().int().min(1).max(10).optional().describe('Cuántos audios, los más nuevos (por defecto 1)'),
+      borrar: z.boolean().optional().describe('Borrar el archivo después de transcribirlo bien (por defecto true)'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  }, handle(async ({ cantidad, borrar }: { cantidad?: number; borrar?: boolean }) => transcribeAudios(cantidad ?? 1, borrar ?? true)));
 
   server.registerTool('marcar_revisar_transferencia', {
     title: 'Marcar transferencia para revisar',

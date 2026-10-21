@@ -17,9 +17,10 @@ export interface ServerConfig {
 
 const env = (name: string): string => (process.env[name] || '').trim();
 
-// Con ~60 cargas de unos cientos de fichas el MCP usa menos de la mitad de las
-// 50.000 lecturas gratis por día; el resto queda para la app.
-const DEFAULT_DAILY_LOADS = 60;
+// Cada carga trae unos 200 documentos: 250 cargas son unas 50.000 lecturas, el
+// límite gratis de Firestore por día (Jonathan lo subió de 60 el 20/10/2026, con
+// el plan Blaze; lo que la app lea de más se cobra por centavos).
+const DEFAULT_DAILY_LOADS = 250;
 
 /**
  * Credenciales, en este orden:

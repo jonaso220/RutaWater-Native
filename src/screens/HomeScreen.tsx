@@ -1460,22 +1460,6 @@ const HomeScreen = () => {
             <View style={styles.actionCompactStack}>
               <View style={styles.actionCompactRow}>
                 <TouchableOpacity
-                  style={[styles.actionCompactButton, styles.actionCompactAi]}
-                  onPress={() => {
-                    hapticSelection();
-                    setShowSmartModal(true);
-                  }}
-                  activeOpacity={0.78}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('home.aiOrder')}
-                >
-                  <Ionicons name="sparkles" size={chromeSize(17)} color={colors.textWhite} />
-                  <Text style={styles.actionCompactAiText} numberOfLines={1}>
-                    {t('home.aiOrder')}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
                   style={[styles.actionCompactButton, styles.actionCompactClient]}
                   onPress={() => {
                     hapticSelection();
@@ -2041,18 +2025,6 @@ const getStyles = (
     alignItems: 'center',
     justifyContent: 'center',
     gap: s(3),
-  },
-  actionCompactAi: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primaryDark,
-  },
-  actionCompactAiText: {
-    width: '100%',
-    textAlign: 'center',
-    fontSize: s(12),
-    lineHeight: s(15),
-    fontWeight: '800',
-    color: colors.textWhite,
   },
   actionCompactClient: {
     backgroundColor: colors.primaryLighter,

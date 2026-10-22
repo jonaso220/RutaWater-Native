@@ -161,7 +161,7 @@ const applyCommand = async (
   return { client, outcome };
 };
 
-const projectPending = (client: Client): Client | null => {
+export const projectPending = (client: Client): Client | null => {
   let projected: Client | null = client;
   for (const command of Array.isArray(client.visitCommands) ? client.visitCommands : []) {
     if (!projected) break;
@@ -324,7 +324,7 @@ export const changeFrequency = (
 });
 
 /** Una colección entera del reparto dentro de la transacción; cuenta para el tope diario (cada reintento también). */
-const fullScopeRead = (
+export const fullScopeRead = (
   db: Firestore, transaction: Transaction, account: Account, route: Route, collection: string,
 ) => Promise.all(scopeQueries(db, collection, account.uid, route).map(async (query) => {
   const label = loadLabel(collection, route);
@@ -335,7 +335,7 @@ const fullScopeRead = (
 }));
 
 /** Todas las fichas del reparto leídas dentro de la transacción (las mismas que clientsRef en la app). */
-const routeClients = async (
+export const routeClients = async (
   db: Firestore, transaction: Transaction, account: Account, route: Route,
 ): Promise<Array<{ ref: DocumentReference; client: Client }>> => {
   const snaps = await fullScopeRead(db, transaction, account, route, 'clients');

@@ -8,6 +8,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { getDb } from '../src/config';
 import { ReadBudget, ReadLimitError, setReadBudget } from '../src/readBudget';
 import { loadAccount } from '../src/routes';
+import { mergeClients, undoMerge } from '../src/merge';
 import { Store } from '../src/store';
 import {
   addDays, agendaFor, debtReport, debtTotalMessage, hasPendingTransfer, nextVisit, productCatalog, searchClients,
@@ -389,6 +390,62 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     // Después se agenda como cualquier ficha de directorio: pasa a ser la visita.
     const visit = await scheduleOnce(db, account, productCatalog(await store.getSettings()), created.cliente_id, tomorrow, {});
     expect(visit.despues).toMatchObject({ ficha: 'misma', fecha: tomorrow });
+  });
+
+  test('fusionar duplicados: queda la de agenda con los datos de la copia, mueve deuda y Parentesco, y se deshace', async () => {
+    const batch = db.batch();
+    // Copia de directorio = la ficha original del cliente (su id es el customerId de la de agenda).
+    batch.set(db.doc('clients/raiz'), client({
+      name: 'Laura Copia', freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [], address: 'Calle 1',
+      phones: [{ id: 'primary', number: '099 111 111', isPrimary: true }, { id: 'p2', number: '098 222 222', isPrimary: false }],
+      phone: '099 111 111', mapsLink: 'https://maps.app.goo.gl/x', lat: '-34.8', lng: '-55.9',
+      notes: 'Timbre roto', rut: '123456', relationships: { hija: 'Hija' }, sameHousehold: { hija: true },
+      lastDeliveredAt: new Date('2026-10-10T12:00:00'),
+    }));
+    batch.set(db.doc('clients/agenda'), client({
+      name: 'Laura', customerId: 'raiz', address: 'Calle 1', phone: '099111111',
+      phones: [{ id: 'primary', number: '099111111', isPrimary: true }], notes: '', products: { b20: 1 },
+      lastDeliveredAt: new Date('2026-10-01T12:00:00'),
+    }));
+    batch.set(db.doc('clients/hija'), client({ name: 'Hija', freq: 'on_demand', visitDays: [], relationships: { raiz: 'Madre' }, sameHousehold: { raiz: true } }));
+    batch.set(db.doc('debts/dl'), { userId: UID, groupId: FAMILY, clientId: 'raiz', clientName: 'Laura', amount: 200, createdAt: new Date('2026-10-02T12:00:00') });
+    await batch.commit();
+    const account = await loadAccount(db, UID);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fusiones-'));
+    const cache = async () => ({
+      clients: (await db.collection('clients').get()).docs.map((doc) => ({ ...doc.data(), id: doc.id }) as any),
+      debts: (await db.collection('debts').get()).docs.map((doc) => ({ ...doc.data(), id: doc.id })),
+      transfers: (await db.collection('transfers').get()).docs.map((doc) => ({ ...doc.data(), id: doc.id })),
+    });
+
+    const preview = await mergeClients(db, account, 'raiz', 'agenda', false, dir, await cache());
+    expect(preview.cambiado).toBe(false);
+    expect((preview as any).plan).toMatchObject({ deudas_movidas: 1, familiares_actualizados: ['Hija'] });
+    expect((await db.doc('clients/raiz').get()).exists).toBe(true);
+
+    const merged = await mergeClients(db, account, 'raiz', 'agenda', true, dir, await cache());
+    expect(merged).toMatchObject({ cambiado: true, cliente_id: 'agenda' });
+    expect((await db.doc('clients/raiz').get()).exists).toBe(false);
+    const kept = (await db.doc('clients/agenda').get()).data()!;
+    expect(kept.phones.map((p: any) => p.number)).toEqual(['099111111', '098 222 222']);
+    expect(kept).toMatchObject({
+      name: 'Laura', notes: 'Timbre roto', rut: '123456', mapsLink: 'https://maps.app.goo.gl/x', lat: '-34.8', lng: '-55.9',
+      relationships: { hija: 'Hija' }, sameHousehold: { hija: true }, products: { b20: 1 }, customerId: 'raiz', freq: 'weekly',
+    });
+    expect(kept.lastDeliveredAt.toDate().getTime()).toBe(new Date('2026-10-10T12:00:00').getTime());
+    const hija = (await db.doc('clients/hija').get()).data()!;
+    expect(hija.relationships).toEqual({ agenda: 'Madre' });
+    expect(hija.sameHousehold).toEqual({ agenda: true });
+    expect((await db.doc('debts/dl').get()).data()).toMatchObject({ clientId: 'agenda', customerId: 'raiz' });
+
+    // Dos fichas con visitas no se fusionan.
+    await expect(mergeClients(db, account, 'agenda', 'rosa', true, dir, await cache())).rejects.toThrow('tienen visitas');
+
+    await undoMerge(db, account, (merged as any).copia);
+    expect((await db.doc('clients/raiz').get()).data()).toMatchObject({ name: 'Laura Copia', notes: 'Timbre roto' });
+    expect((await db.doc('clients/agenda').get()).data()).toMatchObject({ notes: '', phones: [{ id: 'primary', number: '099111111', isPrimary: true }] });
+    expect((await db.doc('clients/hija').get()).data()!.relationships).toEqual({ raiz: 'Madre' });
+    expect((await db.doc('debts/dl').get()).data()!.clientId).toBe('raiz');
   });
 
   test('tope diario de cargas completas: corta antes de leer, también en escrituras', async () => {

@@ -4,6 +4,8 @@ import type { Client } from '../../src/types';
 import { appendAudit } from './audit';
 import { transcribeAudios } from './audio';
 import { applyReplacements, openWhatsapp } from './whatsapp';
+import { mergeClients, undoMerge } from './merge';
+import path from 'path';
 import type { ServerConfig } from './config';
 import { findRoute, Route } from './routes';
 import type { Store } from './store';
@@ -29,9 +31,10 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: es propina salvo que el cliente pida dejarlo a favor (ahí, anotalo en la nota).
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
+- fusionar_duplicados junta dos fichas de la misma persona: queda la de agenda (o la más completa), se le suman los datos que solo tenía la otra y la otra se borra; deudas, transferencias y Parentesco pasan a la que queda. Primero sin aplicar (vista previa) y después con aplicar=true. deshacer_fusion la revierte con la copia que deja.
 - abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
 - transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
-- No hay herramientas para borrar clientes, crear deudas, precios ni días de visita.`;
+- No hay herramientas para borrar clientes (salvo la copia que sobra al fusionar), crear deudas, precios ni días de visita.`;
 
 const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 1) }] });
 const failure = (error: unknown) => ({
@@ -310,6 +313,34 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     return createClient(store.db, account, route, {
       name: nombre, address: direccion || '', phone: telefono || '', mapsLink: link_maps || '', notes: nota || '',
     });
+  }));
+
+  const mergeBackups = path.join(path.dirname(config.auditPath), 'fusiones');
+
+  server.registerTool('fusionar_duplicados', {
+    title: 'Fusionar fichas duplicadas',
+    description: 'Junta dos fichas de la misma persona (por ejemplo, la de agenda y una copia en el directorio). Queda la que tiene visitas en la agenda; si ninguna tiene, la activa con más datos. A esa se le suman los datos que solo tenía la otra (teléfonos, direcciones, link de Maps y coordenadas, nota, RUT/razón social/email, Parentesco, última entrega) y la otra se borra. Las deudas, transferencias, familiares y otras fichas que apuntaban a la borrada pasan a la que queda. No fusiona dos fichas que tienen visitas (se perdería una). Sin aplicar devuelve la vista previa (qué queda, qué se suma, qué se mueve) y no escribe nada; con aplicar=true fusiona y guarda una copia de todo lo que tocó (campo copia) para deshacer_fusion.',
+    inputSchema: {
+      cliente_a: z.string().min(1),
+      cliente_b: z.string().min(1),
+      aplicar: z.boolean().optional().describe('false o ausente: solo vista previa'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+  }, write('fusionar_duplicados', async ({ cliente_a, cliente_b, aplicar }) => {
+    const { route, all } = await findClient(cliente_a);
+    const cache = { clients: all, debts: await store.getDebts(route), transfers: await store.getTransfers(route) };
+    return mergeClients(store.db, await store.refreshAccount(), cliente_a, cliente_b, !!aplicar, mergeBackups, cache);
+  }));
+
+  server.registerTool('deshacer_fusion', {
+    title: 'Deshacer una fusión',
+    description: 'Vuelve a dejar las fichas, deudas, transferencias y familiares como estaban antes de una fusión, con la copia que devolvió fusionar_duplicados (campo copia). La ficha borrada vuelve con el mismo id. Pisa los cambios que se hayan hecho después en esas fichas.',
+    inputSchema: { copia: z.string().min(1).describe('Ruta del archivo de copia') },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  }, write('deshacer_fusion', async ({ copia }) => {
+    const file = path.resolve(copia);
+    if (path.dirname(file) !== path.resolve(mergeBackups)) throw new Error(`La copia tiene que estar en ${mergeBackups}.`);
+    return undoMerge(store.db, await store.refreshAccount(), file);
   }));
 
   server.registerTool('cambiar_posicion', {

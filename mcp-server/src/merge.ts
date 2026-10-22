@@ -30,6 +30,19 @@ const millis = (value: any): number | null => {
   return null;
 };
 const BILLING = ['rut', 'businessName', 'email'] as const;
+// Palabras que no distinguen una dirección de otra («Restingas esq. Gaviotas» es la
+// misma que «Restingas esq. Stella Maris y Gaviotas»).
+const FILLER = new Set(['y', 'e', 'esq', 'esquina', 'av', 'avda', 'avenida', 'calle', 'c', 'de', 'del', 'la', 'las', 'los',
+  'el', 'entre', 'm', 'mz', 'manz', 'manzana', 's', 'sol', 'solar', 'casa', 'n', 'nro', 'detalle']);
+const words = (value: string): string[] => normal(value).split(' ').filter((word) => word && !FILLER.has(word));
+/** La otra dirección no agrega nada: sus palabras ya están todas en esta, o es solo el nombre del cliente. */
+const coveredBy = (place: string, existing: string, clientName: string): boolean => {
+  const other = words(place);
+  if (!other.length) return true;
+  if (normal(place) === normal(clientName)) return true;
+  const have = new Set(words(existing));
+  return other.every((word) => have.has(word));
+};
 const DELIVERY = ['lastDeliveredAt', 'lastVisited'] as const;
 
 const isScheduled = (client: Client): boolean => client.freq !== 'on_demand';
@@ -60,13 +73,20 @@ const pickKept = (a: Client, b: Client): [Client, Client] => {
 interface Merged {
   updates: Record<string, any>;
   added: string[];
+  pendingNote: string;
 }
 
-const mergeFields = (keep: Client, drop: Client): Merged => {
+const mergeFields = (keep: Client, drop: Client, includeNote: boolean): Merged => {
   const updates: Record<string, any> = {};
   const added: string[] = [];
 
-  if (!text(keep.name) && text(drop.name)) { updates.name = drop.name; added.push('nombre'); }
+  // El nombre más completo («Romi» → «Romina Ferrari») entre dos de directorio, si el de la que queda es
+  // el comienzo del otro. Una ficha de agenda conserva el suyo.
+  if (text(drop.name) && (!text(keep.name) || (!isScheduled(keep)
+    && normal(drop.name).length > normal(keep.name).length && normal(drop.name).startsWith(normal(keep.name))))) {
+    updates.name = drop.name;
+    added.push(`nombre «${drop.name}»`);
+  }
 
   // Teléfonos: los de la que queda y, a continuación, los que solo tenía la otra.
   const phones: ClientPhone[] = getClientPhones(keep).map((phone) => ({ ...phone }));
@@ -91,8 +111,15 @@ const mergeFields = (keep: Client, drop: Client): Merged => {
   const keyOf = (place: ClientAddress) => normal(place.address) || text(place.mapsLink);
   for (const place of getClientAddresses(drop).filter((candidate) => text(candidate.address) || text(candidate.mapsLink))) {
     const same = places.find((current) => keyOf(current) === keyOf(place)
-      || (text(place.mapsLink) && text(current.mapsLink) === text(place.mapsLink)));
+      || (text(place.mapsLink) && text(current.mapsLink) === text(place.mapsLink))
+      || coveredBy(place.address, current.address, keep.name || drop.name));
     if (same) {
+      // Mismo lugar escrito con más detalle en la copia: queda el texto más completo.
+      if (coveredBy(same.address, place.address, '') && words(place.address).length > words(same.address).length) {
+        same.address = place.address;
+        placesChanged = true;
+        added.push(`dirección más completa «${place.address}»`);
+      }
       if (!text(same.mapsLink) && text(place.mapsLink)) { same.mapsLink = place.mapsLink; placesChanged = true; added.push('link de Maps'); }
       if (!(text(same.lat) && text(same.lng)) && text(place.lat) && text(place.lng)) {
         same.lat = place.lat; same.lng = place.lng; placesChanged = true; added.push('coordenadas');
@@ -109,11 +136,18 @@ const mergeFields = (keep: Client, drop: Client): Merged => {
     Object.assign(updates, locationFields(places[0]));
   }
 
+  // La nota de una copia de directorio suele ser de un pedido viejo («dejó la plata»…): a una
+  // ficha de agenda no se le suma sola, queda en la vista previa para decidirla a mano.
   const keepNotes = text(keep.notes);
   const dropNotes = text(drop.notes);
+  let pendingNote = '';
   if (dropNotes && !normal(keepNotes).includes(normal(dropNotes))) {
-    updates.notes = keepNotes ? `${keepNotes}\n${dropNotes}` : dropNotes;
-    added.push('nota');
+    if (isScheduled(keep) && !isScheduled(drop) && !includeNote) {
+      pendingNote = dropNotes;
+    } else {
+      updates.notes = keepNotes ? `${keepNotes}\n${dropNotes}` : dropNotes;
+      added.push('nota');
+    }
   }
 
   for (const field of BILLING) {
@@ -166,7 +200,7 @@ const mergeFields = (keep: Client, drop: Client): Merged => {
   }
 
   if (Object.keys(updates).length) updates.updatedAt = new Date();
-  return { updates, added };
+  return { updates, added, pendingNote };
 };
 
 const summary = (client: Client) => ({
@@ -206,6 +240,7 @@ export interface MergeCache { clients: Client[]; debts: Array<{ id: string }>; t
 
 export const mergeClients = async (
   db: Firestore, account: Account, idA: string, idB: string, apply: boolean, backupDir: string, cache: MergeCache,
+  includeNote = false,
 ): Promise<MergeResult> => {
   if (idA === idB) throw new WriteError('Son la misma ficha.');
   type Backup = { fecha: string; documentos: Record<string, DocumentData | null> };
@@ -231,7 +266,7 @@ export const mergeClients = async (
     const [keep, drop] = pickKept(a, b);
     const keepStable = getStableClientId(keep);
     const dropStable = getStableClientId(drop);
-    const { updates, added } = mergeFields(keep, drop);
+    const { updates, added, pendingNote } = mergeFields(keep, drop, includeNote);
 
     // Lo que apuntaba a la ficha que se borra (deudas, transferencias, Parentesco y otras fichas del
     // cliente): se busca en la copia en vivo y cada documento se vuelve a leer acá antes de tocarlo.
@@ -273,6 +308,7 @@ export const mergeClients = async (
       transferencias_movidas: records.filter((record) => record.kind === 'transferencia').length,
       familiares_actualizados: relatives.map((client) => client.name),
       otras_fichas_del_cliente: siblings.map((client) => client.name),
+      ...(pendingNote ? { nota_de_la_copia_sin_sumar: pendingNote } : {}),
     };
     if (!apply) {
       return {

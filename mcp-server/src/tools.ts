@@ -319,17 +319,18 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('fusionar_duplicados', {
     title: 'Fusionar fichas duplicadas',
-    description: 'Junta dos fichas de la misma persona (por ejemplo, la de agenda y una copia en el directorio). Queda la que tiene visitas en la agenda; si ninguna tiene, la activa con más datos. A esa se le suman los datos que solo tenía la otra (teléfonos, direcciones, link de Maps y coordenadas, nota, RUT/razón social/email, Parentesco, última entrega) y la otra se borra. Las deudas, transferencias, familiares y otras fichas que apuntaban a la borrada pasan a la que queda. No fusiona dos fichas que tienen visitas (se perdería una). Sin aplicar devuelve la vista previa (qué queda, qué se suma, qué se mueve) y no escribe nada; con aplicar=true fusiona y guarda una copia de todo lo que tocó (campo copia) para deshacer_fusion.',
+    description: 'Junta dos fichas de la misma persona (por ejemplo, la de agenda y una copia en el directorio). Queda la que tiene visitas en la agenda; si ninguna tiene, la activa con más datos. A esa se le suman los datos que solo tenía la otra (teléfonos, direcciones que no estaban, link de Maps y coordenadas, RUT/razón social/email, Parentesco, última entrega; la nota de una copia de directorio solo con sumar_nota=true) y la otra se borra. Las deudas, transferencias, familiares y otras fichas que apuntaban a la borrada pasan a la que queda. No fusiona dos fichas que tienen visitas (se perdería una). Sin aplicar devuelve la vista previa (qué queda, qué se suma, qué se mueve) y no escribe nada; con aplicar=true fusiona y guarda una copia de todo lo que tocó (campo copia) para deshacer_fusion.',
     inputSchema: {
       cliente_a: z.string().min(1),
       cliente_b: z.string().min(1),
       aplicar: z.boolean().optional().describe('false o ausente: solo vista previa'),
+      sumar_nota: z.boolean().optional().describe('true: suma también la nota de la copia de directorio a la ficha de agenda (por defecto queda afuera, en nota_de_la_copia_sin_sumar)'),
     },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-  }, write('fusionar_duplicados', async ({ cliente_a, cliente_b, aplicar }) => {
+  }, write('fusionar_duplicados', async ({ cliente_a, cliente_b, aplicar, sumar_nota }) => {
     const { route, all } = await findClient(cliente_a);
     const cache = { clients: all, debts: await store.getDebts(route), transfers: await store.getTransfers(route) };
-    return mergeClients(store.db, await store.refreshAccount(), cliente_a, cliente_b, !!aplicar, mergeBackups, cache);
+    return mergeClients(store.db, await store.refreshAccount(), cliente_a, cliente_b, !!aplicar, mergeBackups, cache, !!sumar_nota);
   }));
 
   server.registerTool('deshacer_fusion', {

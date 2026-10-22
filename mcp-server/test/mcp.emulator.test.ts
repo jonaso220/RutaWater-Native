@@ -396,14 +396,14 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     const batch = db.batch();
     // Copia de directorio = la ficha original del cliente (su id es el customerId de la de agenda).
     batch.set(db.doc('clients/raiz'), client({
-      name: 'Laura Copia', freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [], address: 'Calle 1',
+      name: 'Laura Copia', freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [], address: 'Calle 1 esq.',
       phones: [{ id: 'primary', number: '099 111 111', isPrimary: true }, { id: 'p2', number: '098 222 222', isPrimary: false }],
       phone: '099 111 111', mapsLink: 'https://maps.app.goo.gl/x', lat: '-34.8', lng: '-55.9',
       notes: 'Timbre roto', rut: '123456', relationships: { hija: 'Hija' }, sameHousehold: { hija: true },
       lastDeliveredAt: new Date('2026-10-10T12:00:00'),
     }));
     batch.set(db.doc('clients/agenda'), client({
-      name: 'Laura', customerId: 'raiz', address: 'Calle 1', phone: '099111111',
+      name: 'Laura', customerId: 'raiz', address: 'Calle 1 esq. Pinos', phone: '099111111',
       phones: [{ id: 'primary', number: '099111111', isPrimary: true }], notes: '', products: { b20: 1 },
       lastDeliveredAt: new Date('2026-10-01T12:00:00'),
     }));
@@ -420,10 +420,14 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
 
     const preview = await mergeClients(db, account, 'raiz', 'agenda', false, dir, await cache());
     expect(preview.cambiado).toBe(false);
-    expect((preview as any).plan).toMatchObject({ deudas_movidas: 1, familiares_actualizados: ['Hija'] });
+    expect((preview as any).plan).toMatchObject({
+      deudas_movidas: 1, familiares_actualizados: ['Hija'], nota_de_la_copia_sin_sumar: 'Timbre roto',
+    });
+    // «Calle 1 esq.» no agrega nada a «Calle 1 esq. Pinos»: no se suma como otra dirección.
+    expect((preview as any).plan.se_suma.join()).not.toContain('dirección');
     expect((await db.doc('clients/raiz').get()).exists).toBe(true);
 
-    const merged = await mergeClients(db, account, 'raiz', 'agenda', true, dir, await cache());
+    const merged = await mergeClients(db, account, 'raiz', 'agenda', true, dir, await cache(), true);
     expect(merged).toMatchObject({ cambiado: true, cliente_id: 'agenda' });
     expect((await db.doc('clients/raiz').get()).exists).toBe(false);
     const kept = (await db.doc('clients/agenda').get()).data()!;
@@ -437,6 +441,17 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     expect(hija.relationships).toEqual({ agenda: 'Madre' });
     expect(hija.sameHousehold).toEqual({ agenda: true });
     expect((await db.doc('debts/dl').get()).data()).toMatchObject({ clientId: 'agenda', customerId: 'raiz' });
+
+    // Dos de directorio del mismo lugar: queda el nombre y la dirección más completos.
+    await db.doc('clients/romi').set(client({ name: 'Romi', freq: 'on_demand', visitDays: [], address: 'Centro Bambú',
+      mapsLink: 'https://maps.app.goo.gl/b', phone: '099385608', products: { b20: 1 } }));
+    await db.doc('clients/romina').set(client({ name: 'Romina Ferrari', freq: 'on_demand', visitDays: [],
+      address: 'Juan Caruso esq. Diagonal Honduras (Centro Bambú)', mapsLink: 'https://maps.app.goo.gl/b', phone: '099385608' }));
+    const romi = await mergeClients(db, account, 'romina', 'romi', true, dir, await cache());
+    expect(romi.cliente_id).toBe('romi');
+    expect((await db.doc('clients/romi').get()).data()).toMatchObject({
+      name: 'Romina Ferrari', address: 'Juan Caruso esq. Diagonal Honduras (Centro Bambú)',
+    });
 
     // Dos fichas con visitas no se fusionan.
     await expect(mergeClients(db, account, 'agenda', 'rosa', true, dir, await cache())).rejects.toThrow('tienen visitas');

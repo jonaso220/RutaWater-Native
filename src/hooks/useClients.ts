@@ -12,6 +12,7 @@ import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { alarmTargetsDay } from '../utils/alarmReconciliation';
 import { findExactClientMatch, planDuplicateClientCleanup } from '../utils/clientDuplicates';
 import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../utils/recency';
+import { planClearCompleted } from '../utils/clearCompleted';
 import { ALL_DAYS, Frequency, RecurringFrequency } from '../constants/products';
 import {
   scheduleClientAlarm,
@@ -323,25 +324,40 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
 
   // Clear all completed clients for a day:
   // - Notes (isNote): delete permanently
-  // - Real clients: move back to directory (on_demand) so they stay in the system
+  // - Real clients: move back to directory (on_demand) so they stay in the system,
+  //   unless the customer already has another record (an extra order of a client
+  //   on the route): then the completed one is deleted and its last delivery
+  //   passes to the record that stays (planClearCompleted).
   const deleteAllCompleted = useCallback(async (day: string) => {
     try {
       const completed = getCompletedClients(day);
       if (completed.length === 0) return;
-
-      const BATCH_SIZE = 450;
-      for (let i = 0; i < completed.length; i += BATCH_SIZE) {
-        const chunk = completed.slice(i, i + BATCH_SIZE);
-        const chunkIds = chunk.map((completedClient) => completedClient.id);
-        const batch = db.batch();
-        chunk.forEach((c) => {
-          const ref = db.collection('clients').doc(c.id);
-          if (c.isNote) {
-            // Notes: delete permanently (they don't belong in the directory)
-            batch.delete(ref);
-          } else {
-            // Real clients: move to directory instead of deleting
-            const historyUpdate = getDirectoryDeliveryHistoryUpdate(c);
+      const { actions, keeperDeliveries } = planClearCompleted(completed, clientsRef.current);
+      const FieldValue = firestore.FieldValue;
+      const loadedIds = new Set(clientsRef.current.map((candidate) => candidate.id));
+      type Write = (batch: FirebaseFirestoreTypes.WriteBatch) => void;
+      const writes: Array<{ ids: string[]; apply: Write }> = actions.map((action) => {
+        const c = action.client;
+        const ref = db.collection('clients').doc(c.id);
+        if (action.kind === 'delete-note') return { ids: [c.id], apply: (batch) => { batch.delete(ref); } };
+        if (action.kind === 'delete-extra') {
+          // Como deleteClient: los familiares que apuntaban a esta ficha dejan de hacerlo.
+          const related = Object.keys(c.relationships || {}).filter((relatedId) => loadedIds.has(relatedId));
+          return {
+            ids: [c.id],
+            apply: (batch) => {
+              batch.delete(ref);
+              related.forEach((relatedId) => batch.update(db.collection('clients').doc(relatedId), {
+                [`relationships.${c.id}`]: FieldValue.delete(),
+                [`sameHousehold.${c.id}`]: FieldValue.delete(),
+              }));
+            },
+          };
+        }
+        const historyUpdate = getDirectoryDeliveryHistoryUpdate(c);
+        return {
+          ids: [c.id],
+          apply: (batch) => {
             batch.update(ref, {
               scheduleRevision: newVisitId(),
               freq: 'on_demand',
@@ -359,13 +375,32 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
               alarmScheduledFor: null,
               updatedAt: new Date(),
             });
-          }
+          },
+        };
+      });
+      const deleted = new Set(actions.filter((action) => action.kind !== 'to-directory').map((action) => action.client.id));
+      keeperDeliveries.forEach((date, keeperId) => {
+        if (deleted.has(keeperId)) return;
+        writes.push({
+          ids: [],
+          apply: (batch) => {
+            batch.update(db.collection('clients').doc(keeperId), { lastDeliveredAt: date, updatedAt: new Date() });
+          },
         });
+      });
+
+      // Varios cambios por elemento (familiares): lotes chicos para no pasar de 500 escrituras.
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < writes.length; i += BATCH_SIZE) {
+        const chunk = writes.slice(i, i + BATCH_SIZE);
+        const chunkIds = chunk.flatMap((write) => write.ids);
+        const batch = db.batch();
+        chunk.forEach((write) => write.apply(batch));
         await cancelAlarmsThenMutate(
-          () => alarmSnapshotsForClients(chunk.map((completedClient) =>
-            clientsRef.current.find((candidate) => candidate.id === completedClient.id)
-              || completedClient,
-          ), userId),
+          () => alarmSnapshotsForClients(chunkIds.map((id) =>
+            clientsRef.current.find((candidate) => candidate.id === id)
+              || completed.find((candidate) => candidate.id === id),
+          ).filter(Boolean) as Client[], userId),
           () => batch.commit(),
           chunkIds,
         );

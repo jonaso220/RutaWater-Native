@@ -12,7 +12,7 @@ import {
   isValidIsoDate, productCatalog, searchClients, suggestPosition, todayKey, weekdayOf, whatsappTemplates,
 } from './views';
 import {
-  advanceVisit, ChangeResult, changeFrequency, changePosition, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote,
+  advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote,
   setProducts, setStar, undoDone, WriteError,
 } from './writes';
 
@@ -28,6 +28,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - cambiar_frecuencia cambia semanal/quincenal/cada 3 semanas/mensual manteniendo los días (como Editar cliente).
 - registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: es propina salvo que el cliente pida dejarlo a favor (ahí, anotalo en la nota).
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
+- crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
 - abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
 - transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
 - No hay herramientas para borrar clientes, crear deudas, precios ni días de visita.`;
@@ -290,6 +291,26 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
   }, write('agendar_una_vez', async ({ cliente_id, fecha, productos, ubicar }) => scheduleOnce(
     store.db, await store.refreshAccount(), await catalog(), cliente_id, resolveDate(fecha), productos, !!ubicar,
   )));
+
+  server.registerTool('crear_cliente', {
+    title: 'Crear cliente',
+    description: 'Crea una ficha nueva solo de directorio, igual que Directorio → «+» en la app: nombre, dirección, teléfono, link de Google Maps (de ahí saca las coordenadas) y nota opcional; sin productos, sin día ni visitas. Antes busca en el reparto la misma persona o el mismo teléfono: si existe no crea nada (cambiado=false) y devuelve esas fichas. Para que aparezca en la agenda, después usar agendar_una_vez con su cliente_id. Usar solo cuando Jonathan pide dar de alta a alguien.',
+    inputSchema: {
+      nombre: z.string().min(1).max(200),
+      direccion: z.string().max(500).optional(),
+      telefono: z.string().max(40).optional().describe('Como lo guarda la app, por ejemplo 099309717'),
+      link_maps: z.string().max(500).optional(),
+      nota: z.string().max(2000).optional(),
+      reparto: z.string().optional().describe('Id o nombre; por defecto el reparto principal'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('crear_cliente', async ({ nombre, direccion, telefono, link_maps, nota, reparto }) => {
+    const account = await store.refreshAccount();
+    const route = reparto ? findRoute(account, reparto) : (account.routes.find((candidate) => candidate.isPrimary) || account.routes[0]);
+    return createClient(store.db, account, route, {
+      name: nombre, address: direccion || '', phone: telefono || '', mapsLink: link_maps || '', notes: nota || '',
+    });
+  }));
 
   server.registerTool('cambiar_posicion', {
     title: 'Cambiar posición',

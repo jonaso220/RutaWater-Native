@@ -19,13 +19,14 @@ Reutiliza la lógica de la app (`src/utils`): la agenda se calcula con `getNextV
 | | `cambiar_frecuencia` (semanal, quincenal, cada 3 semanas, mensual; mantiene los días) |
 | | `registrar_pago` (como Registrar pago / Editar deuda: salda las más viejas primero, deja el saldo de un pago parcial; exige `deuda_esperada` para no pagar dos veces; devuelve el `sobrante`) |
 | | `marcar_revisar_transferencia` (como «Revisar» en Deudas; no duplica y nunca marca como revisada) |
+| | `crear_cliente` (como Directorio → «+»: ficha solo de directorio, sin productos ni visitas, con coordenadas del link de Maps; si ya hay una ficha con ese teléfono no crea otra) |
 
 Fuera de Firestore, en el Mac donde corre el servidor (para que también las usen las tareas de la nube, cuyos comandos corren en una VM):
 
 - `abrir_whatsapp` abre `whatsapp://send` con el número de la ficha y un borrador: el aviso de mañana de Ajustes (`plantilla: "aviso_manana"`) o un `texto`, con `reemplazar` opcional (`«viejo=>nuevo»`, cada uno exactamente una vez). Es el mismo enlace que Avisar o el ícono de WhatsApp de la tarjeta; no envía.
 - `transcribir_audio` transcribe con Whisper los últimos audios de WhatsApp guardados en `~/Downloads` (script de la skill `whatsapp-rutawater`; rutas en `RUTAWATER_WHISPER_PYTHON`, `RUTAWATER_TRANSCRIBIR` y `RUTAWATER_DESCARGAS`).
 
-No hay herramientas para borrar clientes, crear o editar deudas a mano, marcar transferencias como revisadas, tocar precios ni cambiar el día de visita. Cada escritura queda en `~/.rutawater-mcp/audit.jsonl` con el antes y el después.
+No hay herramientas para borrar clientes ni editar sus contactos, crear o editar deudas a mano, marcar transferencias como revisadas, tocar precios ni cambiar el día de visita. Cada escritura queda en `~/.rutawater-mcp/audit.jsonl` con el antes y el después.
 
 ## Instalación
 

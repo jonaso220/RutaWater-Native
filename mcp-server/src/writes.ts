@@ -24,6 +24,7 @@ import {
   suggestPosition, todayKey, weekdayOf,
 } from './views';
 import { moveItemToPosition, planPositionChange, readDayOrder } from '../../src/utils/clientOrder';
+import { formatCoordinate, resolveMapsCoordinates } from '../../src/utils/geo';
 
 export class WriteError extends Error {}
 
@@ -687,3 +688,94 @@ export const markTransferForReview = (
     antes: { transferencia_pendiente: false }, despues: { transferencia_pendiente: true },
   };
 });
+
+const phoneDigits = (value: string): string => (value || '').replace(/\D/g, '').slice(-8);
+
+/**
+ * Directorio → «+» (useClients.addClient sin día): una ficha nueva solo de
+ * directorio, sin productos ni visitas. Antes de crearla busca en el reparto
+ * la misma persona (nombre + teléfono, findExactClientMatch) y cualquier ficha
+ * con el mismo teléfono: si hay, no crea nada y las devuelve. Las coordenadas
+ * salen del link de Maps antes de escribir, como fillClientCoordinates en la app.
+ */
+export const createClient = async (
+  db: Firestore, account: Account, route: Route,
+  fields: { name: string; address: string; phone: string; mapsLink: string; notes: string },
+): Promise<ChangeResult> => {
+  if (!route.writable) throw new WriteError(`El reparto «${route.name}» no admite cambios ahora (cuenta o grupo inactivo).`);
+  const name = fields.name.trim();
+  const phone = fields.phone.trim();
+  const mapsLink = fields.mapsLink.trim();
+  if (!name) throw new WriteError('Falta el nombre.');
+  if (phone && phoneDigits(phone).length < 8) throw new WriteError(`Teléfono inválido: «${phone}».`);
+  // Fuera de la transacción: sigue la redirección del link corto (puede tardar unos segundos).
+  const point = mapsLink ? await resolveMapsCoordinates(mapsLink).catch(() => null) : null;
+
+  return db.runTransaction(async (transaction) => {
+    const all = (await routeClients(db, transaction, account, route)).map((entry) => entry.client);
+    const digits = phoneDigits(phone);
+    const sameName = findExactClientMatch(all, name, phone);
+    const samePhone = digits
+      ? all.filter((client) => !client.isNote && getClientPhones(client).some((entry) => phoneDigits(entry.number) === digits))
+      : [];
+    const matches = [...new Map([...(sameName ? [sameName] : []), ...samePhone].map((client) => [client.id, client])).values()];
+    const base = { cliente_id: matches[0]?.id || '', nombre: name, reparto: route.name };
+    if (matches.length) {
+      const found = matches.map((client) => ({
+        id: client.id, nombre: client.name, direccion: client.address, frecuencia: FREQ_LABELS[client.freq] || client.freq,
+      }));
+      return {
+        ...base, cambiado: false, antes: found, despues: found,
+        aviso: 'Ya hay una ficha con ese nombre y teléfono, o con ese teléfono: no se creó otra. Usá su id (agendar_una_vez, etc.).',
+      };
+    }
+    const ref = db.collection('clients').doc();
+    const lat = point ? formatCoordinate(point.lat) : '';
+    const lng = point ? formatCoordinate(point.lng) : '';
+    const newData: Record<string, any> = {
+      ...dataScopeFields(account.uid, route.groupId),
+      userId: account.uid,
+      name,
+      address: fields.address.trim(),
+      phone,
+      phones: phone ? [{ id: 'primary', number: phone, isPrimary: true }] : [],
+      lat,
+      lng,
+      mapsLink,
+      notes: fields.notes.trim(),
+      freq: 'on_demand',
+      visitDay: 'Sin Asignar',
+      visitDays: [],
+      specificDate: '',
+      products: {},
+      listOrder: 0,
+      listOrders: {},
+      isCompleted: false,
+      isStarred: false,
+      isPinned: false,
+      isNote: false,
+      alarm: '',
+      alarmDay: '',
+      alarmScheduledFor: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    // Igual que create-client: se sanea como lo haría la función de Netlify.
+    // El límite del plan gratis sale de RevenueCat y no se consulta (ver scheduleOnce).
+    const { data } = sanitizeClientData({ id: ref.id, data: JSON.parse(JSON.stringify(newData)) }, account.uid);
+    transaction.create(ref, data);
+    transaction.set(db.collection('users').doc(account.uid), { clientCreateVersion: 1 }, { merge: true });
+    return {
+      ...base,
+      cliente_id: ref.id,
+      cambiado: true,
+      antes: null,
+      despues: {
+        direccion: newData.address, telefono: phone, mapa: mapsLink, notas: newData.notes,
+        frecuencia: 'sin agenda (directorio)',
+        coordenadas: point ? { lat, lng } : null,
+        ...(mapsLink && !point ? { aviso: 'No se pudieron sacar coordenadas del link: la ficha queda sin ubicación para ordenar el recorrido.' } : {}),
+      },
+    };
+  });
+};

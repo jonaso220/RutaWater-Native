@@ -14,7 +14,7 @@ import {
   suggestPosition, todayKey, weekdayOf,
 } from '../src/views';
 import {
-  advanceVisit, changeFrequency, changePosition, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote, setProducts, setStar,
+  advanceVisit, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote, setProducts, setStar,
   undoDone,
 } from '../src/writes';
 
@@ -362,6 +362,33 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     expect((await db.doc('clients/directorio').get()).data()?.freq).toBe('on_demand');
     // Hoy sí se puede.
     expect((await scheduleOnce(db, account, catalog, 'directorio', todayKey(), { b12: 1 })).cambiado).toBe(true);
+  });
+
+  test('crear cliente: ficha de directorio con coordenadas del link, y sin duplicar por teléfono', async () => {
+    const account = await loadAccount(db, UID);
+    const primary = account.routes.find((route) => route.isPrimary)!;
+    const created = await createClient(db, account, primary, {
+      name: 'Irma', address: 'Sarandí y Baltasar Brum', phone: '099 309 717',
+      mapsLink: 'https://www.google.com/maps/place/x/@-34.7701234,-55.8301234,17z', notes: 'Pasar a levantar todo',
+    });
+    expect(created.cambiado).toBe(true);
+    const saved = (await db.doc(`clients/${created.cliente_id}`).get()).data()!;
+    expect(saved).toMatchObject({
+      userId: UID, groupId: FAMILY, name: 'Irma', freq: 'on_demand', visitDays: [], products: {},
+      notes: 'Pasar a levantar todo', lat: '-34.770123', lng: '-55.830123', isNote: false,
+    });
+    expect(saved.phones).toEqual([{ id: 'primary', number: '099 309 717', isPrimary: true }]);
+
+    // Mismo teléfono (con otro formato): no crea otra y devuelve la que hay.
+    const again = await createClient(db, account, primary, { name: 'Otra', address: '', phone: '099309717', mapsLink: '', notes: '' });
+    expect(again.cambiado).toBe(false);
+    expect(again.cliente_id).toBe(created.cliente_id);
+    const rosa = await createClient(db, account, primary, { name: 'Rosa', address: '', phone: '099123456', mapsLink: '', notes: '' });
+    expect(rosa).toMatchObject({ cambiado: false, cliente_id: 'rosa' });
+
+    // Después se agenda como cualquier ficha de directorio: pasa a ser la visita.
+    const visit = await scheduleOnce(db, account, productCatalog(await store.getSettings()), created.cliente_id, tomorrow, {});
+    expect(visit.despues).toMatchObject({ ficha: 'misma', fecha: tomorrow });
   });
 
   test('tope diario de cargas completas: corta antes de leer, también en escrituras', async () => {

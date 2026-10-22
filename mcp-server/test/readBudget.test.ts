@@ -36,6 +36,19 @@ describe('tope diario de cargas completas', () => {
     expect(() => budget.check('clients de «Reparto 1»')).not.toThrow();
   });
 
+  test('corta a un proceso que lee demasiado en una hora, sin frenar a los demás', () => {
+    let now = new Date('2026-10-22T15:00:00Z');
+    const budget = new ReadBudget(dir, 250, () => now, 1000);
+    budget.record('clients de «Reparto 1»', 756);
+    expect(() => budget.check('debts de «Reparto 1»')).not.toThrow();
+    budget.record('debts de «Reparto 1»', 300);
+    expect(() => budget.check('clients de «Reparto 1»')).toThrow(/ya leyó 1056 documentos en la última hora/);
+    // Otro proceso que leyó mucho no cuenta para este.
+    fs.appendFileSync(path.join(dir, '2026-10-22.jsonl'), `${JSON.stringify({ at: now.toISOString(), pid: process.pid + 1, carga: 'x', docs: 5000 })}\n`);
+    now = new Date('2026-10-22T16:01:00Z');
+    expect(() => budget.check('clients de «Reparto 1»')).not.toThrow();
+  });
+
   test('0 es sin tope', () => {
     const budget = new ReadBudget(dir, 0);
     budget.record('clients de «Reparto 1»', 10);

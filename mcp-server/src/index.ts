@@ -12,7 +12,10 @@ const main = async () => {
   if (!Number.isInteger(config.dailyLoads) || config.dailyLoads < 0) {
     throw new Error('RUTAWATER_MCP_CARGAS_DIARIAS tiene que ser un entero (0 = sin tope).');
   }
-  setReadBudget(new ReadBudget(config.loadsDir, config.dailyLoads));
+  if (!Number.isInteger(config.hourlyDocs) || config.hourlyDocs < 0) {
+    throw new Error('RUTAWATER_MCP_LECTURAS_POR_HORA tiene que ser un entero (0 = sin tope).');
+  }
+  setReadBudget(new ReadBudget(config.loadsDir, config.dailyLoads, undefined, config.hourlyDocs));
   const store = new Store(getDb(), config.uid);
   const server = createServer(store, config);
   const shutdown = () => {

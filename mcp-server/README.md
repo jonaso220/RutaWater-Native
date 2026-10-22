@@ -69,6 +69,7 @@ Lee las fichas de cada reparto una sola vez (una consulta por reparto), resuelve
 | `RUTAWATER_MCP_AUDIT` | Ruta alternativa del registro de auditoría. |
 | `RUTAWATER_TZ` | Zona horaria de la agenda (por defecto `America/Montevideo`). |
 | `RUTAWATER_MCP_CARGAS_DIARIAS` | Tope de cargas completas por día (por defecto `250`, unas 50.000 lecturas, el límite gratis de Firestore; `0` = sin tope). Ver abajo. |
+| `RUTAWATER_MCP_LECTURAS_POR_HORA` | Tope de documentos que un mismo proceso puede leer en cargas completas en una hora (por defecto `10000`; `0` = sin tope). Corta un bucle que relee todo antes de agotar la cuota del día. |
 | `RUTAWATER_MCP_CARGAS_DIR` | Carpeta del registro diario de cargas (por defecto `~/.rutawater-mcp/cargas`). |
 
 ### Tope diario de cargas completas

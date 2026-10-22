@@ -7,6 +7,12 @@ import path from 'path';
  * vuelve a leer todo cada vez y agota la cuota de Firestore, que es de toda
  * la cuenta (también la usa la app). El conteo vive en disco para sumar entre
  * procesos: un archivo por día, una línea por carga (append es atómico).
+ *
+ * Además, cada proceso tiene un tope de documentos leídos por hora
+ * (22/10/2026): un error que releía todo dentro de un bucle leyó 38.000
+ * documentos en 2 minutos desde un solo proceso y dejó a la app sin cuota.
+ * Un uso normal (el servidor de la app de Claude lee unos 2.000 por día) no
+ * se acerca; un bucle se corta a los pocos minutos.
  */
 export class ReadLimitError extends Error {}
 
@@ -31,13 +37,14 @@ export class ReadBudget {
     private readonly dir: string,
     private readonly limit: number,
     private readonly now: () => Date = () => new Date(),
+    private readonly hourlyDocsLimit = 0,
   ) {}
 
   private file(): string {
     return path.join(this.dir, `${quotaDay(this.now())}.jsonl`);
   }
 
-  private today(): LoadLine[] {
+  private today(): Array<LoadLine & { at?: string; pid?: number }> {
     try {
       return fs.readFileSync(this.file(), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
     } catch {
@@ -47,10 +54,22 @@ export class ReadBudget {
 
   /** Antes de una carga completa: corta si hoy ya se llegó al tope. */
   check(what: string): void {
-    if (this.limit <= 0) return;
+    if (this.limit <= 0 && this.hourlyDocsLimit <= 0) return;
     const loads = this.today();
-    if (loads.length < this.limit) return;
     const docs = loads.reduce((sum, line) => sum + (line.docs || 0), 0);
+    if (this.hourlyDocsLimit > 0) {
+      const since = this.now().getTime() - 60 * 60 * 1000;
+      const mine = loads
+        .filter((line) => line.pid === process.pid && line.at && Date.parse(line.at) >= since)
+        .reduce((sum, line) => sum + (line.docs || 0), 0);
+      if (mine >= this.hourlyDocsLimit) {
+        throw new ReadLimitError(
+          `Este proceso del servidor MCP ya leyó ${mine} documentos en la última hora (tope ${this.hourlyDocsLimit}). `
+          + `No se cargó ${what}: parece un bucle que relee todo. No reintentes: avisale al usuario.`,
+        );
+      }
+    }
+    if (this.limit <= 0 || loads.length < this.limit) return;
     throw new ReadLimitError(
       `Se alcanzó el límite diario de ${this.limit} cargas completas del servidor MCP `
       + `(hoy: ${loads.length} cargas, ${docs} documentos leídos). No se cargó ${what}, `

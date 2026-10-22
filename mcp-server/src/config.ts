@@ -12,6 +12,8 @@ export interface ServerConfig {
   auditPath: string;
   /** Tope de cargas completas por día de cuota (0 = sin tope). */
   dailyLoads: number;
+  /** Tope de documentos leídos por hora en un mismo proceso (0 = sin tope). */
+  hourlyDocs: number;
   loadsDir: string;
 }
 
@@ -21,6 +23,8 @@ const env = (name: string): string => (process.env[name] || '').trim();
 // límite gratis de Firestore por día (Jonathan lo subió de 60 el 20/10/2026, con
 // el plan Blaze; lo que la app lea de más se cobra por centavos).
 const DEFAULT_DAILY_LOADS = 250;
+// Un proceso normal lee pocos miles por día; 10.000 en una hora es un bucle (22/10/2026).
+const DEFAULT_HOURLY_DOCS = 10000;
 
 /**
  * Credenciales, en este orden:
@@ -59,6 +63,7 @@ export const loadConfig = async (): Promise<ServerConfig> => {
     readOnly: env('RUTAWATER_MCP_READONLY') === '1',
     auditPath: env('RUTAWATER_MCP_AUDIT') || path.join(os.homedir(), '.rutawater-mcp', 'audit.jsonl'),
     dailyLoads: env('RUTAWATER_MCP_CARGAS_DIARIAS') ? Number(env('RUTAWATER_MCP_CARGAS_DIARIAS')) : DEFAULT_DAILY_LOADS,
+    hourlyDocs: env('RUTAWATER_MCP_LECTURAS_POR_HORA') ? Number(env('RUTAWATER_MCP_LECTURAS_POR_HORA')) : DEFAULT_HOURLY_DOCS,
     loadsDir: env('RUTAWATER_MCP_CARGAS_DIR') || path.join(os.homedir(), '.rutawater-mcp', 'cargas'),
   };
 };

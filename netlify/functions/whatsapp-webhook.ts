@@ -138,6 +138,8 @@ export const createWhatsappWebhookHandler = (dependencies: WebhookDependencies) 
     return new Response(null, { status: 400 });
   }
   const record = toRecord(event, excludedPhones(dependencies.readEnvironment('WHATSAPP_EXCLUDED_PHONES')), now);
+  // Solo el tipo de evento y qué se hizo: nunca teléfonos ni contenido.
+  console.log('whatsapp-webhook', String(event.type || '?'), record ? `guardado ${record.direction}` : 'descartado');
   if (!record) return new Response(null, { status: 204 });
   try {
     const db = dependencies.getFirestore(dependencies.readEnvironment);

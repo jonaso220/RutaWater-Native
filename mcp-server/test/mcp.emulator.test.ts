@@ -15,7 +15,7 @@ import {
   suggestPosition, todayKey, weekdayOf,
 } from '../src/views';
 import {
-  advanceVisit, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote, setProducts, setStar,
+  advanceVisit, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote, setProducts, setStar,
   undoDone,
 } from '../src/writes';
 
@@ -219,6 +219,87 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     await expect(changeFrequency(db, account, 'mario', 'cada 2 meses')).rejects.toThrow('desconocida');
     await expect(changeFrequency(db, account, 'mario', 'semanal', addDays(tomorrow, 1))).rejects.toThrow('mantener el día');
     await expect(changeFrequency(db, account, 'unavez', 'semanal')).rejects.toThrow('agenda periódica');
+  });
+
+  test('cambiar fecha: posterga, cambia de día con la frecuencia y mueve un pedido de una vez', async () => {
+    const dayAfter = addDays(tomorrow, 1);
+    const otherDay = weekdayOf(dayAfter);
+    await db.doc('clients/otrodia').set(client({ name: 'Otro Día', visitDay: otherDay, visitDays: [otherDay], listOrders: { [otherDay]: 5 } }));
+    await db.doc('clients/dosdias').set(client({ name: 'Dos Días', visitDays: [tomorrowDay, weekdayOf(addDays(tomorrow, 2))] }));
+    await db.doc('clients/nota').set(client({ name: 'Nota', isNote: true, freq: 'once', specificDate: tomorrow }));
+    const account = await store.refreshAccount();
+    const clients = await store.getClients(account.routes[0]);
+
+    const later = await rescheduleClient(db, account, clients, 'rosa', addDays(tomorrow, 7));
+    expect(later.antes).toEqual({ frecuencia: 'semanal', dias: [tomorrowDay], proxima_visita: tomorrow });
+    expect(later.despues).toMatchObject({ frecuencia: 'semanal', dias: [tomorrowDay], proxima_visita: addDays(tomorrow, 7) });
+    expect((await rescheduleClient(db, account, clients, 'rosa', addDays(tomorrow, 7))).cambiado).toBe(false);
+
+    const moved = await rescheduleClient(db, account, clients, 'rosa', dayAfter, 'quincenal');
+    expect(moved.despues).toMatchObject({ frecuencia: 'quincenal', dias: [otherDay], proxima_visita: dayAfter });
+    const rosa = (await db.doc('clients/rosa').get()).data()!;
+    expect(rosa).toMatchObject({ freq: 'biweekly', visitDay: otherDay, visitDays: [otherDay], specificDate: dayAfter, lastVisited: null });
+    expect(rosa.listOrders).toEqual({ [otherDay]: 2 });
+
+    const once = await rescheduleClient(db, account, clients, 'unavez', dayAfter);
+    expect(once.despues).toMatchObject({ frecuencia: 'una vez', dias: [otherDay], proxima_visita: dayAfter, posicion: 1 });
+    const unavez = (await db.doc('clients/unavez').get()).data()!;
+    expect(unavez).toMatchObject({ freq: 'once', specificDate: dayAfter, visitDay: otherDay });
+    expect(unavez.listOrders[otherDay]).toBe(4);
+
+    await expect(rescheduleClient(db, account, clients, 'directorio', tomorrow)).rejects.toThrow('agendar_una_vez');
+    await expect(rescheduleClient(db, account, clients, 'mario', addDays(todayKey(), -1))).rejects.toThrow('ya pasó');
+    await expect(rescheduleClient(db, account, clients, 'mario', tomorrow, 'cada 2 meses')).rejects.toThrow('desconocida');
+    await expect(rescheduleClient(db, account, clients, 'dosdias', dayAfter)).rejects.toThrow('varios días');
+    await expect(rescheduleClient(db, account, clients, 'nota', dayAfter)).rejects.toThrow('notas');
+  });
+
+  test('cambiar fecha con ubicar: queda entre las dos paradas donde menos se desvía', async () => {
+    const dayAfter = addDays(tomorrow, 1);
+    const otherDay = weekdayOf(dayAfter);
+    const stop = (id: string, order: number, lng: number) => db.doc(`clients/${id}`).set(client({
+      name: id, visitDay: otherDay, visitDays: [otherDay], listOrders: { [otherDay]: order }, lat: '-34.8', lng: String(lng),
+    }));
+    await stop('a', 1, -56.00);
+    await stop('b', 2, -55.98);
+    await stop('c', 3, -55.96);
+    await db.doc('clients/rosa').update({ lat: '-34.8', lng: '-55.97' });
+    const account = await store.refreshAccount();
+    const clients = await store.getClients(account.routes[0]);
+    const placed = await rescheduleClient(db, account, clients, 'rosa', dayAfter, undefined, true);
+    expect(placed.despues).toMatchObject({ dias: [otherDay], proxima_visita: dayAfter, posicion: 3 });
+    expect((placed as any).ubicacion).toMatchObject({ aplicada: true, anterior: { id: 'b' }, siguiente: { id: 'c' } });
+  });
+
+  test('quitar de la lista: un día de varios, al directorio, y borra el pedido repetido', async () => {
+    const secondDay = weekdayOf(addDays(tomorrow, 2));
+    await db.doc('clients/dosdias').set(client({ name: 'Dos Días', visitDays: [tomorrowDay, secondDay] }));
+    await db.doc('clients/extra').set(client({ name: 'Rosa Jerez', customerId: 'rosa', freq: 'once', specificDate: tomorrow }));
+    await db.doc('clients/extra2').set(client({ name: 'Mario', customerId: 'mario', freq: 'once', specificDate: tomorrow }));
+    await db.doc('debts/d3').set({ userId: UID, groupId: FAMILY, clientId: 'extra2', clientName: 'Mario', amount: 80, createdAt: new Date() });
+    await db.doc('clients/mario').update({ lastVisited: new Date(`${addDays(tomorrow, -7)}T10:00:00`) });
+    const account = await store.refreshAccount();
+    const route = account.routes[0];
+    const clients = await store.getClients(route);
+    const related = async () => [...await store.getDebts(route), ...await store.getTransfers(route)];
+
+    const oneDay = await removeFromList(db, account, clients, 'dosdias', tomorrow, related);
+    expect(oneDay.despues).toMatchObject({ dias: [secondDay] });
+    expect((await db.doc('clients/dosdias').get()).data()).toMatchObject({ visitDay: secondDay, visitDays: [secondDay] });
+
+    const extra = await removeFromList(db, account, clients, 'extra', tomorrow, related);
+    expect(extra.despues).toMatchObject({ ficha_eliminada: true, queda: { ficha_id: 'rosa' } });
+    expect((await db.doc('clients/extra').get()).exists).toBe(false);
+    await expect(removeFromList(db, account, clients, 'extra2', tomorrow, related)).rejects.toThrow('deudas');
+
+    const toDirectory = await removeFromList(db, account, clients, 'mario', tomorrow, related);
+    expect(toDirectory.despues).toEqual({ frecuencia: 'sin agenda (directorio)', dias: [], proxima_visita: null });
+    const mario = (await db.doc('clients/mario').get()).data()!;
+    expect(mario).toMatchObject({ freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [], specificDate: '', listOrders: {}, lastVisited: null });
+    expect(mario.lastDeliveredAt.toDate().toISOString()).toBe(new Date(`${addDays(tomorrow, -7)}T10:00:00`).toISOString());
+
+    expect((await removeFromList(db, account, clients, 'directorio', tomorrow, related)).cambiado).toBe(false);
+    await expect(removeFromList(db, account, clients, 'rosa', addDays(tomorrow, 1), related)).rejects.toThrow('no está en la lista');
   });
 
   test('registrar pago: salda las deudas más viejas primero, deja el saldo y no paga dos veces', async () => {

@@ -70,9 +70,9 @@ const call = async (name, args = {}) => {
 
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
-  'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'buscar_clientes', 'cambiar_frecuencia',
+  'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'buscar_clientes', 'cambiar_fecha', 'cambiar_frecuencia',
   'cambiar_posicion', 'crear_cliente', 'deshacer_fusion', 'deshacer_listo', 'fijar_productos', 'fusionar_duplicados', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo',
-  'marcar_revisar_transferencia', 'registrar_pago', 'sugerir_posicion', 'transcribir_audio', 'ver_cliente', 'ver_productos',
+  'marcar_revisar_transferencia', 'quitar_de_la_lista', 'registrar_pago', 'sugerir_posicion', 'transcribir_audio', 'ver_cliente', 'ver_productos',
 ]);
 
 // abrir_whatsapp valida antes de abrir nada: estos casos fallan sin tocar WhatsApp.
@@ -155,5 +155,5 @@ assert.deepEqual(audit, [
 ]);
 
 await client.close();
-console.log('smoke: OK (23 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
+console.log('smoke: OK (25 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
 process.exit(0);

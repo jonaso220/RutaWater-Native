@@ -14,7 +14,7 @@ import {
   isValidIsoDate, productCatalog, searchClients, suggestPosition, todayKey, weekdayOf, whatsappTemplates,
 } from './views';
 import {
-  advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, scheduleOnce, setNote,
+  advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote,
   setProducts, setStar, undoDone, WriteError,
 } from './writes';
 
@@ -28,13 +28,15 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - sugerir_posicion calcula dónde conviene una ficha en el recorrido de una fecha: entre las dos paradas consecutivas donde menos desvío agrega en línea recta. Si al cliente o a alguna parada le faltan coordenadas no sugiere nada y dice cuáles faltan.
 - cambiar_posicion mueve una ficha al número indicado de la lista de ese día (como «Cambiar posición» en la tarjeta).
 - cambiar_frecuencia cambia semanal/quincenal/cada 3 semanas/mensual manteniendo los días (como Editar cliente).
+- cambiar_fecha pasa la próxima visita a otra fecha, antes o después (como la fecha de inicio de Editar cliente), y opcionalmente cambia la frecuencia en la misma llamada. Si la fecha cae otro día de semana, un cliente de un solo día o un pedido de una vez pasa a ese día (con ubicar=true, donde indica sugerir_posicion).
+- quitar_de_la_lista saca al cliente de la lista de ese día de semana (como «Quitar de la lista» en Inicio): con varios días le saca solo ese; si era el único, vuelve al Directorio. Un pedido de una vez de alguien que tiene otra ficha se borra en vez de dejar una copia en el Directorio.
 - registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: es propina salvo que el cliente pida dejarlo a favor (ahí, anotalo en la nota).
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
 - fusionar_duplicados junta dos fichas de la misma persona: queda la de agenda (o la más completa), se le suman los datos que solo tenía la otra y la otra se borra; deudas, transferencias y Parentesco pasan a la que queda. Primero sin aplicar (vista previa) y después con aplicar=true. deshacer_fusion la revierte con la copia que deja.
 - abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
 - transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
-- No hay herramientas para borrar clientes (salvo la copia que sobra al fusionar), crear deudas, precios ni días de visita.`;
+- No hay herramientas para borrar clientes (salvo la copia que sobra al fusionar o un pedido de una vez repetido), crear deudas, precios ni días de visita de clientes con varios días.`;
 
 const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 1) }] });
 const failure = (error: unknown) => ({
@@ -280,6 +282,35 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
   }, write('cambiar_frecuencia', async ({ cliente_id, frecuencia, fecha_inicio }) => changeFrequency(
     store.db, await store.refreshAccount(), cliente_id, frecuencia, fecha_inicio ? resolveDate(fecha_inicio) : undefined,
   )));
+
+  server.registerTool('cambiar_fecha', {
+    title: 'Cambiar fecha',
+    description: 'Pasa la próxima visita a otra fecha, antes o después, igual que cambiar la fecha de inicio en Editar cliente: el ciclo sigue desde esa fecha. Sirve para clientes con frecuencia y para pedidos de una vez. Con frecuencia (semanal, quincenal, cada 3 semanas, mensual) cambia también la frecuencia en la misma escritura; en un pedido de una vez lo vuelve periódico desde esa fecha. Si la fecha cae otro día de semana, un cliente de un solo día pasa a ese día y conserva su número de orden, y un pedido de una vez queda primero; con ubicar=true queda donde indica sugerir_posicion. Un cliente con varios días solo se mueve dentro de sus días. Devuelve frecuencia, días, próxima visita y posición antes y después. Rechaza fechas pasadas, fichas de directorio (usar agendar_una_vez), notas y fichas con alarma.',
+    inputSchema: {
+      cliente_id: z.string().min(1).describe('Id de la ficha que figura en la agenda'),
+      fecha: z.string().describe('Nueva fecha de la próxima visita: aaaa-mm-dd, «hoy» o «mañana»'),
+      frecuencia: z.string().optional().describe('semanal, quincenal, cada 3 semanas o mensual; si no se pasa, queda la que tiene'),
+      ubicar: z.boolean().optional().describe('Si cambia de día de semana: ubicarla donde indica sugerir_posicion'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('cambiar_fecha', async ({ cliente_id, fecha, frecuencia, ubicar }) => {
+    const { all } = await findClient(cliente_id);
+    return rescheduleClient(store.db, await store.refreshAccount(), all, cliente_id, resolveDate(fecha), frecuencia, !!ubicar);
+  }));
+
+  server.registerTool('quitar_de_la_lista', {
+    title: 'Quitar de la lista',
+    description: 'Saca al cliente de la lista del día de semana de esa fecha, igual que «Quitar de la lista» en Inicio: si va varios días le saca solo ese día; si era el único, la ficha vuelve al Directorio (sin agenda, conserva su última entrega, nota, productos y deudas). Un pedido de una vez de alguien que ya tiene otra ficha (agenda o directorio) se borra en vez de dejar una copia en el Directorio (despues.queda dice cuál ficha sigue). Para que no vaya una sola vez, usar marcar_listo o cambiar_fecha. Rechaza notas y fichas con alarma.',
+    inputSchema: {
+      cliente_id: z.string().min(1).describe('Id de la ficha que figura en la agenda'),
+      fecha: z.string().describe('aaaa-mm-dd, «hoy» o «mañana»; se usa su día de semana'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  }, write('quitar_de_la_lista', async ({ cliente_id, fecha }) => {
+    const { all, route } = await findClient(cliente_id);
+    const related = async () => [...await store.getDebts(route), ...await store.getTransfers(route)];
+    return removeFromList(store.db, await store.refreshAccount(), all, cliente_id, resolveDate(fecha), related);
+  }));
 
   server.registerTool('agendar_una_vez', {
     title: 'Agendar una vez',

@@ -12,7 +12,7 @@ import { loadLabel, scopeQueries } from './store';
 import {
   applyVisitCommand, createVisitCommand, newVisitId, undoForCompletedClient, VisitCommand, VisitResult,
 } from '../../src/utils/visitCompletion';
-import { getLastVisitDate } from '../../src/utils/recency';
+import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../../src/utils/recency';
 import { getClientAddresses, locationFields } from '../../src/utils/clientAddresses';
 import { getClientPhones } from '../../src/utils/clientPhones';
 import { findExactClientMatch } from '../../src/utils/clientDuplicates';
@@ -577,6 +577,209 @@ export const changePosition = (
   };
 });
 
+
+/** Lee y controla los vecinos de los que depende un orden nuevo, como changePosition. */
+const checkNeighbors = async (
+  db: Firestore, transaction: Transaction, live: Client[], day: string,
+): Promise<void> => {
+  if (!live.length) return;
+  const snaps = await transaction.getAll(...live.map((client) => db.collection('clients').doc(client.id)));
+  snaps.forEach((snap, index) => {
+    if (!snap.exists || readDayOrder(withDefaults(snap.id, snap.data()), day) !== readDayOrder(live[index], day)) {
+      throw new WriteError('El orden de ese día cambió mientras tanto (alguien lo movió desde la app); volvé a intentar.');
+    }
+  });
+};
+
+/**
+ * Cambia la fecha de la próxima visita (y opcionalmente la frecuencia), igual
+ * que la fecha de inicio de Editar cliente (EditClientModal.handleSave): fija
+ * specificDate, reinicia lastVisited/doneFor en las periódicas y conserva la
+ * última entrega. Si la fecha cae otro día de semana, un cliente de un solo
+ * día (o un pedido de una vez) pasa a ese día: la periódica conserva su número
+ * de orden y la de una vez queda primera, como en la app; con `place`, donde
+ * indica sugerir_posicion. `clients` es la copia en vivo del reparto: no se
+ * relee la colección.
+ */
+export const rescheduleClient = (
+  db: Firestore, account: Account, clients: Client[], clientId: string, date: string,
+  frequency?: string, place = false,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (!isValidIsoDate(date)) throw new WriteError(`Fecha inválida: ${date}. Usá aaaa-mm-dd.`);
+  if (date < todayKey()) throw new WriteError('La fecha ya pasó.');
+  const freq = frequency === undefined ? undefined : FREQUENCIES[frequency.trim().toLowerCase()];
+  if (frequency !== undefined && !freq) {
+    throw new WriteError(`Frecuencia desconocida: ${frequency}. Usá semanal, quincenal, cada 3 semanas o mensual.`);
+  }
+  const loaded = await loadForWrite(db, transaction, account, clientId);
+  const current = projectPending(loaded.client);
+  if (!current) throw new WriteError('La ficha ya no existe.');
+  if (current.isNote) throw new WriteError('Las notas no se reagendan.');
+  if (current.freq === 'on_demand') throw new WriteError('Está en el directorio, sin visita: para agendarlo usá agendar_una_vez.');
+  if (current.isCompleted) throw new WriteError('Ese pedido de una vez ya está Listo; para otra visita usá agendar_una_vez.');
+  if (current.alarm) throw new WriteError('La ficha tiene una alarma: cambiale la fecha desde la app.');
+  if (Array.isArray(loaded.client.visitCommands) && loaded.client.visitCommands.length) {
+    throw new WriteError('La ficha tiene un Listo pendiente de aplicar desde la app; reintentar en unos segundos.');
+  }
+  const newFreq = freq || current.freq;
+  const newDay = weekdayOf(date);
+  const days = clientDays(current);
+  const oldDay = current.visitDay && current.visitDay !== 'Sin Asignar' ? current.visitDay : days[0];
+  const moves = !days.includes(newDay);
+  if (moves && days.length > 1) {
+    throw new WriteError(`El cliente va ${days.join(', ')} y ${date} es ${newDay}: con varios días, el día se cambia desde la app.`);
+  }
+  const stableId = getStableClientId(current);
+  const siblings = clients
+    .filter((client) => client.id !== current.id && getStableClientId(client) === stableId)
+    .map((client) => projectPending(client))
+    .filter((client): client is Client => !!client && !client.isNote);
+  if (agendaFor(siblings, date).length || siblings.some((client) => cycleFallsOn(client, date))) {
+    throw new WriteError(`Ya tiene otra ficha con visita el ${date}; no se cambió nada.`);
+  }
+  const base = { cliente_id: current.id, nombre: current.name, reparto: loaded.route.name };
+  const before = {
+    frecuencia: FREQ_LABELS[current.freq] || current.freq, dias: days, proxima_visita: nextVisit(current),
+  };
+  if (newFreq === current.freq && before.proxima_visita === date) {
+    return { ...base, cambiado: false, antes: before, despues: before };
+  }
+
+  const updates: Record<string, any> = {
+    specificDate: date, scheduleRevision: newVisitId(), isCompleted: false, completedAt: null,
+  };
+  if (newFreq !== current.freq) updates.freq = newFreq;
+  if (newFreq !== 'once') {
+    updates.lastVisited = null;
+    updates.doneFor = '';
+  }
+  const lastDelivery = getLastVisitDate(current);
+  if (lastDelivery) updates.lastDeliveredAt = lastDelivery;
+  if (current.isInactive) updates.isInactive = false;
+  const others = clients.filter((client) => client.id !== current.id);
+  let reorder: Array<{ id: string; position: number }> = [];
+  let placement: (PositionSuggestion & { aplicada: boolean }) | undefined;
+  if (moves) {
+    updates.visitDay = newDay;
+    updates.visitDays = [newDay];
+    const orders: Record<string, number> = { ...(current.listOrders || {}) };
+    if (oldDay) delete orders[oldDay];
+    if (newFreq === 'once') {
+      const inDay = dayList(others, newDay).map((client) => {
+        const order = client.listOrders?.[newDay] ?? client.listOrder ?? 0;
+        return typeof order === 'number' && isFinite(order) && order < 100000 ? order : 0;
+      });
+      orders[newDay] = (inDay.length ? Math.min(...inDay) : 0) - 1;
+    } else {
+      orders[newDay] = (oldDay ? current.listOrders?.[oldDay] : undefined) ?? current.listOrder ?? 0;
+    }
+    updates.listOrders = orders;
+    if (place) {
+      const moved = { ...current, ...updates } as Client;
+      const suggestion = suggestPosition([...others, moved], moved, date);
+      placement = { ...suggestion, aplicada: false };
+      if (suggestion.posicion !== null) {
+        const list = dayList([...others, moved], newDay);
+        const plan = planPositionChange(list, current.id, suggestion.posicion, newDay);
+        const own = plan.updates.find((update) => update.id === current.id);
+        if (own) orders[newDay] = own.position;
+        reorder = plan.updates.filter((update) => update.id !== current.id);
+        await checkNeighbors(db, transaction, list.filter((client) => reorder.some((update) => update.id === client.id)), newDay);
+        placement.aplicada = true;
+      }
+    }
+  }
+  const afterClient = { ...current, ...updates } as Client;
+  const afterDate = nextVisit(afterClient);
+  if (afterDate !== date) throw new WriteError(`La app calcularía ${afterDate} en lugar de ${date}; no se cambió nada.`);
+  transaction.update(loaded.ref, updates);
+  reorder.forEach(({ id, position }) => {
+    transaction.update(db.collection('clients').doc(id), { [`listOrders.${newDay}`]: position });
+  });
+  const list = dayList([...others, afterClient], newDay);
+  return {
+    ...base, cambiado: true, antes: before,
+    despues: {
+      frecuencia: FREQ_LABELS[newFreq] || newFreq, dias: clientDays(afterClient), proxima_visita: afterDate,
+      posicion: list.findIndex((client) => client.id === current.id) + 1,
+    },
+    ...(placement ? { ubicacion: placement } : {}),
+  };
+});
+
+/**
+ * «Quitar de la lista» de Inicio (useClients.deleteFromDay) sobre el día de
+ * semana de `date`: con varios días le saca solo ese; si era el único, la ficha
+ * vuelve al Directorio con su última entrega. Diferencia con la app: un pedido
+ * de una vez de alguien que ya tiene otra ficha (agenda o directorio) se borra
+ * en vez de volver al Directorio como copia, igual que Borrar completados.
+ * `related` da las deudas y transferencias en caché, solo para ese caso.
+ */
+export const removeFromList = (
+  db: Firestore, account: Account, clients: Client[], clientId: string, date: string,
+  related: () => Promise<Array<{ clientId?: string; customerId?: string }>>,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (!isValidIsoDate(date)) throw new WriteError(`Fecha inválida: ${date}. Usá aaaa-mm-dd.`);
+  const loaded = await loadForWrite(db, transaction, account, clientId);
+  const current = projectPending(loaded.client);
+  if (!current) throw new WriteError('La ficha ya no existe.');
+  if (current.isNote) throw new WriteError('Las notas se borran desde la app.');
+  if (current.alarm) throw new WriteError('La ficha tiene una alarma: quitala desde la app.');
+  if (Array.isArray(loaded.client.visitCommands) && loaded.client.visitCommands.length) {
+    throw new WriteError('La ficha tiene un Listo pendiente de aplicar desde la app; reintentar en unos segundos.');
+  }
+  const base = { cliente_id: current.id, nombre: current.name, reparto: loaded.route.name };
+  const days = clientDays(current);
+  const before = { frecuencia: FREQ_LABELS[current.freq] || current.freq, dias: days, proxima_visita: nextVisit(current) };
+  if (current.freq === 'on_demand') return { ...base, cambiado: false, antes: before, despues: before, aviso: 'Ya está en el directorio.' };
+  const day = weekdayOf(date);
+  if (!days.includes(day)) throw new WriteError(`${current.name} no está en la lista del ${day} (va ${days.join(', ') || 'sin día'}).`);
+
+  if (days.length > 1) {
+    const remaining = days.filter((candidate) => candidate !== day);
+    const updates = { scheduleRevision: newVisitId(), visitDays: remaining, visitDay: remaining[0] };
+    transaction.update(loaded.ref, updates);
+    const after = { ...current, ...updates } as Client;
+    return { ...base, cambiado: true, antes: before, despues: { frecuencia: before.frecuencia, dias: remaining, proxima_visita: nextVisit(after) } };
+  }
+
+  const stableId = getStableClientId(current);
+  const keeper = current.freq === 'once'
+    ? clients.find((client) => client.id !== current.id && !client.isNote && getStableClientId(client) === stableId)
+    : undefined;
+  if (keeper) {
+    const linked = Object.keys(current.relationships || {}).length
+      || clients.some((client) => client.id !== current.id && client.relationships?.[current.id]);
+    if (linked) throw new WriteError('Esa ficha tiene Parentesco; quitala desde la app.');
+    const records = await related();
+    if (records.some((record) => record.clientId === current.id && !record.customerId)) {
+      throw new WriteError('Esa ficha tiene deudas o transferencias propias; quitala desde la app.');
+    }
+    transaction.delete(loaded.ref);
+    return {
+      ...base, cambiado: true, antes: before,
+      despues: { ficha_eliminada: true, queda: { ficha_id: keeper.id, nombre: keeper.name, frecuencia: FREQ_LABELS[keeper.freq] || keeper.freq } },
+    };
+  }
+
+  transaction.update(loaded.ref, {
+    scheduleRevision: newVisitId(),
+    freq: 'on_demand',
+    visitDay: 'Sin Asignar',
+    visitDays: [],
+    specificDate: '',
+    listOrders: {},
+    listOrder: 0,
+    isCompleted: false,
+    completedAt: null,
+    previousDeliveredAt: null,
+    ...getDirectoryDeliveryHistoryUpdate(current),
+    alarm: '',
+    alarmDay: '',
+    alarmScheduledFor: null,
+  });
+  return { ...base, cambiado: true, antes: before, despues: { frecuencia: FREQ_LABELS.on_demand, dias: [], proxima_visita: null } };
+});
 
 /**
  * Deudas o transferencias del cliente dentro de la transacción: mismas

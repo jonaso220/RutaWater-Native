@@ -20,7 +20,7 @@ interface Question {
   cliente?: string; telefono?: string; mensaje_cliente?: string; whatsapp_ids?: string[]; respondida?: boolean;
 }
 interface Answer {
-  id: string; fecha: string; texto: string; consulta_id: string | null; aplicada: boolean;
+  id: string; fecha: string; texto: string; consulta_id: string | null; tipo?: 'respuesta' | 'instruccion'; aplicada: boolean;
 }
 interface State { chat_id?: number; offset?: number; seq?: number; preguntas: Question[]; respuestas: Answer[] }
 
@@ -65,12 +65,14 @@ export const pullAnswers = async (fetcher: typeof fetch = fetch): Promise<State>
     if (message.chat.id !== state.chat_id || !message.text || message.text === '/start') continue;
     const replied = message.reply_to_message?.message_id;
     let question = state.preguntas.find((q) => q.message_id === replied);
+    // «Regla: …» u «Orden: …» (o «cambio», «nuevo»): instrucción suya, no la respuesta a una duda.
+    const instruction = /^\s*(regla|orden|cambio|nuevo|nueva)\b/i.test(message.text);
     // Sin «responder», se asume la última pregunta abierta.
-    if (!question) question = [...state.preguntas].reverse().find((q) => !q.respondida);
+    if (!question && !instruction) question = [...state.preguntas].reverse().find((q) => !q.respondida);
     if (question) question.respondida = true;
     state.respuestas.push({
       id: `R${message.message_id}`, fecha: uyNow(), texto: String(message.text).slice(0, 2000),
-      consulta_id: question?.id || null, aplicada: false,
+      consulta_id: question?.id || null, tipo: question ? 'respuesta' : 'instruccion', aplicada: false,
     });
   }
   // Solo lo de las últimas semanas: el archivo no crece sin fin.

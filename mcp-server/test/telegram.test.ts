@@ -55,7 +55,12 @@ describe('dudas por Telegram', () => {
     expect(respuestas[0].consulta).toMatchObject({ cliente: 'Noelia', whatsapp_ids: ['w1'] });
     expect(preguntas_sin_respuesta).toEqual([]);
 
+    expect(respuestas.map((r) => r.tipo)).toEqual(['respuesta', 'respuesta']);
     expect(markAnswersApplied(respuestas.map((r) => r.id)).aplicadas).toHaveLength(2);
-    expect((await readAnswers(bot.fetcher)).respuestas).toEqual([]);
+
+    await askJonathan({ pregunta: '¿Otra?' }, bot.fetcher);
+    bot.message(5, 42, 'Regla: a los de Solymar llevarles siempre 20 L');
+    const rule = (await readAnswers(bot.fetcher)).respuestas;
+    expect(rule.map((r) => [r.tipo, r.consulta_id])).toEqual([['instruccion', null]]);
   });
 });

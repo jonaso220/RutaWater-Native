@@ -510,7 +510,7 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('leer_respuestas_jonathan', {
     title: 'Leer respuestas de Jonathan (Telegram)',
-    description: 'Respuestas que Jonathan mandó por Telegram y todavía no se aplicaron, cada una con su consulta (pregunta, cliente, telefono y whatsapp_ids del caso). Una respuesta sin «responder» se asocia a la última pregunta abierta: si no encaja, tomarla como instrucción general. También lista las preguntas sin respuesta.',
+    description: 'Mensajes que Jonathan mandó al bot de Telegram y todavía no se aplicaron. tipo «respuesta»: contesta una duda (consulta trae pregunta, cliente, telefono y whatsapp_ids del caso); sin «responder» se asocia a la última pregunta abierta, y si no encaja, tomarla como instrucción. tipo «instruccion»: una orden puntual («a Noelia agendale 2 de 20 para el jueves») o una regla nueva («Regla: …»). También lista las preguntas sin respuesta.',
     inputSchema: {},
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, handle(async () => readAnswers()));

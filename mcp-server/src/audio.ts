@@ -43,7 +43,7 @@ const newestAudios = async (cantidad: number): Promise<string[]> => {
   }
 };
 
-interface Resultado { archivo: string; dudoso?: boolean; error?: string; borrado?: boolean }
+export interface Resultado { archivo: string; dudoso?: boolean; error?: string; borrado?: boolean }
 
 export const transcribeAudios = async (cantidad: number, borrar: boolean): Promise<unknown> => {
   for (const [what, path] of [['el Python de Whisper', PYTHON], ['el script de transcripción', SCRIPT], ['la carpeta Descargas', DESCARGAS]]) {
@@ -75,7 +75,7 @@ export const transcribeAudios = async (cantidad: number, borrar: boolean): Promi
   }
 };
 
-const runScript = (files: string[], cwd: string): Promise<Resultado[]> => new Promise((resolve, reject) => {
+export const runScript = (files: string[], cwd: string): Promise<Resultado[]> => new Promise((resolve, reject) => {
   execFile(PYTHON, ['-I', SCRIPT, ...files, '--json'], {
     // Por la misma razón, nunca la carpeta del servidor (puede estar en un disco externo).
     cwd,

@@ -4,6 +4,7 @@ import type { Client } from '../../src/types';
 import { appendAudit } from './audit';
 import { transcribeAudios } from './audio';
 import { applyReplacements, openWhatsapp } from './whatsapp';
+import { downloadInboxMedia, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
 import { mergeClients, undoMerge } from './merge';
 import path from 'path';
 import type { ServerConfig } from './config';
@@ -36,6 +37,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - fusionar_duplicados junta dos fichas de la misma persona: queda la de agenda (o la más completa), se le suman los datos que solo tenía la otra y la otra se borra; deudas, transferencias y Parentesco pasan a la que queda. Primero sin aplicar (vista previa) y después con aplicar=true. deshacer_fusion la revierte con la copia que deja.
 - abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
 - transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
+- WhatsApp por la API (coexistencia, gratis): leer_whatsapp trae los mensajes de clientes sin atender con su conversación y sus fichas; transcribir_whatsapp transcribe sus audios; ver_archivo_whatsapp muestra una foto o comprobante; responder_whatsapp contesta dentro de las 24 h (hasta el tope del mes); marcar_whatsapp_atendido los da por resueltos y los marca leídos. Avisos y recordatorios NUNCA por la API: se cobran; van por la app en el Mac.
 - No hay herramientas para borrar clientes (salvo la copia que sobra al fusionar o un pedido de una vez repetido), crear deudas, precios ni días de visita de clientes con varios días.`;
 
 const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 1) }] });
@@ -199,6 +201,33 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
       ...suggestPosition(all, client, date, !!ignorar_sin_coordenadas),
     };
   }));
+
+  const allClients = async () => (await Promise.all((await routesFor()).map((route) => store.getClients(route)))).flat();
+
+  server.registerTool('leer_whatsapp', {
+    title: 'Leer WhatsApp (API)',
+    description: 'Mensajes de clientes que todavía no se atendieron, recibidos por la API de WhatsApp (gratis, sin abrir WhatsApp en el Mac), agrupados por chat y en orden de llegada. Por chat: telefono, nombre_perfil (el de WhatsApp), fichas de RutaWater con ese teléfono, pendientes (id, hora, tipo, texto; los audios y fotos dicen archivo), conversacion (últimas 48 h, con lo que mandamos desde la app o la API) y responder_hasta (fin de la ventana de 24 h). uso: respuestas por API este mes y cuántas quedan. Los chats excluidos y los grupos no llegan. Solo lectura.',
+    inputSchema: {},
+    annotations: { readOnlyHint: true },
+  }, handle(async () => readInbox(store.db, await allClients())));
+
+  server.registerTool('ver_archivo_whatsapp', {
+    title: 'Ver archivo de WhatsApp',
+    description: 'Baja la foto o el documento de un mensaje recibido por la API (por ejemplo un comprobante) y lo devuelve: las fotos como imagen para mirarlas, los documentos como ruta en el Mac. Solo lectura.',
+    inputSchema: { id: z.string().min(1).describe('id del mensaje (de leer_whatsapp)') },
+    annotations: { readOnlyHint: true },
+  }, async ({ id }: { id: string }) => {
+    try {
+      const { data, ...info } = await downloadInboxMedia(store.db, id);
+      const content: any[] = [{ type: 'text', text: JSON.stringify(info, null, 1) }];
+      if (info.mime.startsWith('image/') && data.length < 5_000_000) {
+        content.push({ type: 'image', data: data.toString('base64'), mimeType: info.mime.split(';')[0] });
+      }
+      return { content };
+    } catch (error) {
+      return failure(error);
+    }
+  });
 
   if (config.readOnly) return;
 
@@ -432,6 +461,37 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, handle(async ({ cantidad, borrar }: { cantidad?: number; borrar?: boolean }) => transcribeAudios(cantidad ?? 1, borrar ?? true)));
+
+  server.registerTool('transcribir_whatsapp', {
+    title: 'Transcribir audios de WhatsApp (API)',
+    description: 'Baja los audios de esos mensajes (ids de leer_whatsapp) y los transcribe con Whisper en el Mac, sin abrir WhatsApp. Devuelve por audio id, texto, confianza, dudoso y segundos. No toca RutaWater ni WhatsApp.',
+    inputSchema: { ids: z.array(z.string().min(1)).min(1).max(10) },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, handle(async ({ ids }: { ids: string[] }) => transcribeInboxAudios(store.db, ids)));
+
+  server.registerTool('responder_whatsapp', {
+    title: 'Responder por WhatsApp (API)',
+    description: 'Envía un mensaje de texto al cliente por la API de WhatsApp, desde el número del negocio (aparece también en la app). Solo dentro de las 24 h desde el último mensaje del cliente (si no, se contesta desde la app en el Mac), nunca a un chat excluido y sin pasar el tope del mes (las primeras 1.000 son gratis; después ~US$0,0113 cada una hasta el tope). NO sirve para avisos ni recordatorios. Devuelve enviado, id y el uso del mes. Un envío que falló no cuenta; ante un resultado dudoso, mirar leer_whatsapp antes de reintentar.',
+    inputSchema: {
+      telefono: z.string().min(10).describe('telefono del chat, como lo da leer_whatsapp (598…)'),
+      texto: z.string().min(1).max(4000),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, handle(async ({ telefono, texto }: { telefono: string; texto: string }) => {
+    const result = await sendReply(store.db, telefono, texto);
+    appendAudit(config.auditPath, { tool: 'responder_whatsapp', args: { telefono }, cliente: telefono, reparto: '', antes: null, despues: { id: result.id } });
+    return result;
+  }));
+
+  server.registerTool('marcar_whatsapp_atendido', {
+    title: 'Marcar WhatsApp atendido',
+    description: 'Da por resueltos esos mensajes (ids de leer_whatsapp) para que no vuelvan a aparecer y, por chat, marca el último como leído en WhatsApp (tildes azules, también en la app; gratis). Con marcar_leido=false solo los saca de la lista. Lo que queda para Jonathan no se marca: sigue pendiente y sin leer.',
+    inputSchema: {
+      ids: z.array(z.string().min(1)).min(1).max(50),
+      marcar_leido: z.boolean().optional().describe('Marcar leído en WhatsApp (por defecto true)'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, handle(async ({ ids, marcar_leido }: { ids: string[]; marcar_leido?: boolean }) => markHandled(store.db, ids, marcar_leido ?? true)));
 
   server.registerTool('marcar_revisar_transferencia', {
     title: 'Marcar transferencia para revisar',

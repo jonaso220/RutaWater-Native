@@ -5,6 +5,7 @@ import { appendAudit } from './audit';
 import { transcribeAudios } from './audio';
 import { applyReplacements, openWhatsapp } from './whatsapp';
 import { downloadInboxMedia, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
+import { askJonathan, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
 import { mergeClients, undoMerge } from './merge';
 import path from 'path';
 import type { ServerConfig } from './config';
@@ -38,6 +39,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
 - transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
 - WhatsApp por la API (coexistencia, gratis): leer_whatsapp trae los mensajes de clientes sin atender con su conversación y sus fichas; transcribir_whatsapp transcribe sus audios; ver_archivo_whatsapp muestra una foto o comprobante; responder_whatsapp contesta dentro de las 24 h (hasta el tope del mes); marcar_whatsapp_atendido los da por resueltos y los marca leídos. Avisos y recordatorios NUNCA por la API: se cobran; van por la app en el Mac.
+- Dudas para Jonathan por Telegram: consultar_jonathan le manda la pregunta a su bot; leer_respuestas_jonathan trae lo que contestó (con la pregunta a la que responde); marcar_respuesta_aplicada las da por hechas; avisar_jonathan manda un aviso corto sin pregunta.
 - No hay herramientas para borrar clientes (salvo la copia que sobra al fusionar o un pedido de una vez repetido), crear deudas, precios ni días de visita de clientes con varios días.`;
 
 const text = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 1) }] });
@@ -492,6 +494,40 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   }, handle(async ({ ids, marcar_leido }: { ids: string[]; marcar_leido?: boolean }) => markHandled(store.db, ids, marcar_leido ?? true)));
+
+  server.registerTool('consultar_jonathan', {
+    title: 'Consultar a Jonathan (Telegram)',
+    description: 'Le manda a Jonathan una duda por Telegram (su bot de RutaWater), con el cliente y el mensaje literal, para que conteste desde el teléfono. Devuelve consulta_id. Una duda por llamada, con la pregunta concreta. La respuesta se lee después con leer_respuestas_jonathan. El mensaje del cliente queda pendiente en WhatsApp hasta aplicar la respuesta.',
+    inputSchema: {
+      pregunta: z.string().min(1).max(1500).describe('La pregunta concreta, p. ej. «¿Le agendo 12 o 20 L?»'),
+      cliente: z.string().max(200).optional().describe('Nombre y dirección de la ficha'),
+      mensaje_cliente: z.string().max(1500).optional().describe('Texto literal del cliente (o la transcripción)'),
+      telefono: z.string().max(20).optional().describe('telefono del chat (no se le muestra a Jonathan)'),
+      whatsapp_ids: z.array(z.string()).max(20).optional().describe('ids de leer_whatsapp de ese caso'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, handle(async (args: { pregunta: string; cliente?: string; mensaje_cliente?: string; telefono?: string; whatsapp_ids?: string[] }) => askJonathan(args)));
+
+  server.registerTool('leer_respuestas_jonathan', {
+    title: 'Leer respuestas de Jonathan (Telegram)',
+    description: 'Respuestas que Jonathan mandó por Telegram y todavía no se aplicaron, cada una con su consulta (pregunta, cliente, telefono y whatsapp_ids del caso). Una respuesta sin «responder» se asocia a la última pregunta abierta: si no encaja, tomarla como instrucción general. También lista las preguntas sin respuesta.',
+    inputSchema: {},
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  }, handle(async () => readAnswers()));
+
+  server.registerTool('marcar_respuesta_aplicada', {
+    title: 'Marcar respuesta aplicada',
+    description: 'Da por aplicadas esas respuestas de Jonathan (ids R… de leer_respuestas_jonathan) para que no vuelvan a aparecer.',
+    inputSchema: { ids: z.array(z.string().min(1)).min(1).max(50) },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, handle(async ({ ids }: { ids: string[] }) => markAnswersApplied(ids)));
+
+  server.registerTool('avisar_jonathan', {
+    title: 'Avisar a Jonathan (Telegram)',
+    description: 'Manda un aviso corto a Jonathan por Telegram, sin esperar respuesta (por ejemplo, que se llegó al tope del mes o que la API se desconectó). Para dudas usar consultar_jonathan.',
+    inputSchema: { texto: z.string().min(1).max(3500) },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, handle(async ({ texto }: { texto: string }) => notifyJonathan(texto)));
 
   server.registerTool('marcar_revisar_transferencia', {
     title: 'Marcar transferencia para revisar',

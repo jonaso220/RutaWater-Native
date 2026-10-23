@@ -21,7 +21,7 @@ interface Question {
   cliente?: string; telefono?: string; mensaje_cliente?: string; whatsapp_ids?: string[]; respondida?: boolean;
 }
 interface Answer {
-  id: string; fecha: string; texto: string; consulta_id: string | null; tipo?: 'respuesta' | 'instruccion'; aplicada: boolean;
+  id: string; fecha: string; texto: string; consulta_id: string | null; tipo?: 'respuesta' | 'respuesta_varias' | 'instruccion'; aplicada: boolean;
   /** Audio de Telegram todavía sin transcribir. */
   audio_file_id?: string; por_audio?: boolean; dudoso?: boolean;
 }
@@ -41,6 +41,21 @@ const token = (): string => {
   if (!existsSync(tokenFile())) throw new WriteError(`Falta el token del bot de Telegram en ${tokenFile()}.`);
   return readFileSync(tokenFile(), 'utf8').trim();
 };
+const INSTRUCTION = /^\s*(regla|orden|cambio|nuevo|nueva)\b/i;
+
+/**
+ * A qué duda contesta un mensaje sin citar: con una sola abierta, a esa; con
+ * varias, a ninguna en particular («respuesta_varias»: la pasada reparte por
+ * cliente); «Regla: …», «Orden: …» o sin dudas abiertas, es una instrucción.
+ */
+const classify = (state: State, text: string, cited?: Question) => {
+  if (cited) { cited.respondida = true; return { consulta_id: cited.id, tipo: 'respuesta' as const }; }
+  const open = state.preguntas.filter((q) => !q.respondida);
+  if (INSTRUCTION.test(text) || !open.length) return { consulta_id: null, tipo: 'instruccion' as const };
+  if (open.length === 1) { open[0].respondida = true; return { consulta_id: open[0].id, tipo: 'respuesta' as const }; }
+  return { consulta_id: null, tipo: 'respuesta_varias' as const };
+};
+
 const uyNow = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
 
 const call = async (method: string, body: Record<string, unknown>, fetcher: typeof fetch) => {
@@ -67,27 +82,18 @@ export const pullAnswers = async (fetcher: typeof fetch = fetch): Promise<State>
     if (state.chat_id === undefined) { state.chat_id = message.chat.id; continue; }
     const voice = message.voice || message.audio;
     if (message.chat.id !== state.chat_id || (!message.text && !voice) || message.text === '/start') continue;
+    const cited = state.preguntas.find((q) => q.message_id === message.reply_to_message?.message_id);
     if (voice) {
-      // El audio se transcribe al leer las respuestas; mientras, va a la última pregunta abierta si la cita.
-      const repliedTo = state.preguntas.find((q) => q.message_id === message.reply_to_message?.message_id);
-      if (repliedTo) repliedTo.respondida = true;
+      // El audio se clasifica cuando se transcribe (al leer las respuestas), salvo que cite una duda.
+      if (cited) cited.respondida = true;
       state.respuestas.push({
-        id: `R${message.message_id}`, fecha: uyNow(), texto: '', consulta_id: repliedTo?.id || null,
-        tipo: repliedTo ? 'respuesta' : undefined, aplicada: false, audio_file_id: voice.file_id, por_audio: true,
+        id: `R${message.message_id}`, fecha: uyNow(), texto: '', consulta_id: cited?.id || null,
+        tipo: cited ? 'respuesta' : undefined, aplicada: false, audio_file_id: voice.file_id, por_audio: true,
       });
       continue;
     }
-    const replied = message.reply_to_message?.message_id;
-    let question = state.preguntas.find((q) => q.message_id === replied);
-    // «Regla: …» u «Orden: …» (o «cambio», «nuevo»): instrucción suya, no la respuesta a una duda.
-    const instruction = /^\s*(regla|orden|cambio|nuevo|nueva)\b/i.test(message.text);
-    // Sin «responder», se asume la última pregunta abierta.
-    if (!question && !instruction) question = [...state.preguntas].reverse().find((q) => !q.respondida);
-    if (question) question.respondida = true;
-    state.respuestas.push({
-      id: `R${message.message_id}`, fecha: uyNow(), texto: String(message.text).slice(0, 2000),
-      consulta_id: question?.id || null, tipo: question ? 'respuesta' : 'instruccion', aplicada: false,
-    });
+    const text = String(message.text).slice(0, 2000);
+    state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto: text, ...classify(state, text, cited), aplicada: false });
   }
   // Solo lo de las últimas semanas: el archivo no crece sin fin.
   state.preguntas = state.preguntas.slice(-200);
@@ -147,12 +153,7 @@ const transcribeVoices = async (state: State, fetcher: typeof fetch) => {
       answer.texto = String(result.texto || '').trim() || '(audio vacío)';
       answer.dudoso = !!result.dudoso;
       delete answer.audio_file_id;
-      if (!answer.tipo) {
-        const instruction = /^\s*(regla|orden|cambio|nuevo|nueva)\b/i.test(answer.texto);
-        const open = instruction ? undefined : [...state.preguntas].reverse().find((q) => !q.respondida);
-        if (open) { open.respondida = true; answer.consulta_id = open.id; }
-        answer.tipo = open ? 'respuesta' : 'instruccion';
-      }
+      if (!answer.tipo) Object.assign(answer, classify(state, answer.texto));
     }
   } finally {
     rmSync(work, { recursive: true, force: true });
@@ -168,16 +169,25 @@ export const readAnswers = async (fetcher: typeof fetch = fetch) => {
     respuestas: state.respuestas.filter((answer) => !answer.aplicada && answer.texto).map(({ audio_file_id: _pending, ...answer }) => ({
       ...answer, consulta: state.preguntas.find((q) => q.id === answer.consulta_id) || null,
     })),
-    preguntas_sin_respuesta: state.preguntas.filter((q) => !q.respondida).map(({ id, fecha, cliente, pregunta }) => ({ id, fecha, cliente, pregunta })),
+    // Con sus datos: una «respuesta_varias» se reparte entre estas por cliente.
+    preguntas_sin_respuesta: state.preguntas.filter((q) => !q.respondida)
+      .map(({ id, fecha, cliente, pregunta, mensaje_cliente, telefono, whatsapp_ids }) => ({ id, fecha, cliente, pregunta, mensaje_cliente, telefono, whatsapp_ids })),
   };
 };
 
-export const markAnswersApplied = (ids: string[]) => {
+/** Da por aplicadas esas respuestas y, si se indican, cierra esas dudas (las que contestó una «respuesta_varias»). */
+export const markAnswersApplied = (ids: string[], questionIds: string[] = []) => {
   const state = load();
   const done = state.respuestas.filter((answer) => ids.includes(answer.id));
   done.forEach((answer) => { answer.aplicada = true; });
+  const closed = state.preguntas.filter((q) => questionIds.includes(q.id));
+  closed.forEach((q) => { q.respondida = true; });
   save(state);
-  return { aplicadas: done.map((answer) => answer.id), no_encontradas: ids.filter((id) => !done.some((answer) => answer.id === id)) };
+  return {
+    aplicadas: done.map((answer) => answer.id),
+    dudas_cerradas: closed.map((q) => q.id),
+    no_encontradas: [...ids, ...questionIds].filter((id) => !done.some((a) => a.id === id) && !closed.some((q) => q.id === id)),
+  };
 };
 
 /** Aviso corto a Jonathan (sin esperar respuesta), por ejemplo el resumen de una pasada. */

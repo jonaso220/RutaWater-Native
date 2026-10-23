@@ -58,9 +58,15 @@ describe('dudas por Telegram', () => {
     expect(respuestas.map((r) => r.tipo)).toEqual(['respuesta', 'respuesta']);
     expect(markAnswersApplied(respuestas.map((r) => r.id)).aplicadas).toHaveLength(2);
 
-    await askJonathan({ pregunta: '¿Otra?' }, bot.fetcher);
+    await askJonathan({ pregunta: '¿12 o 20?', cliente: 'Ana' }, bot.fetcher);
+    await askJonathan({ pregunta: '¿Le cobro?', cliente: 'Luis' }, bot.fetcher);
     bot.message(5, 42, 'Regla: a los de Solymar llevarles siempre 20 L');
-    const rule = (await readAnswers(bot.fetcher)).respuestas;
-    expect(rule.map((r) => [r.tipo, r.consulta_id])).toEqual([['instruccion', null]]);
+    bot.message(6, 42, 'A Ana 20 litros y a Luis no le cobres');
+    const many = await readAnswers(bot.fetcher);
+    expect(many.respuestas.map((r) => [r.tipo, r.consulta_id])).toEqual([['instruccion', null], ['respuesta_varias', null]]);
+    expect(many.preguntas_sin_respuesta.map((q) => q.cliente)).toEqual(['Ana', 'Luis']);
+    const closed = markAnswersApplied(many.respuestas.map((r) => r.id), many.preguntas_sin_respuesta.map((q) => q.id));
+    expect(closed.dudas_cerradas).toHaveLength(2);
+    expect((await readAnswers(bot.fetcher)).preguntas_sin_respuesta).toEqual([]);
   });
 });

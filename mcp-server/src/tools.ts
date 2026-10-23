@@ -510,17 +510,20 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('leer_respuestas_jonathan', {
     title: 'Leer respuestas de Jonathan (Telegram)',
-    description: 'Mensajes que Jonathan mandó al bot de Telegram y todavía no se aplicaron. tipo «respuesta»: contesta una duda (consulta trae pregunta, cliente, telefono y whatsapp_ids del caso); sin «responder» se asocia a la última pregunta abierta, y si no encaja, tomarla como instrucción. tipo «instruccion»: una orden puntual («a Noelia agendale 2 de 20 para el jueves») o una regla nueva («Regla: …»). También lista las preguntas sin respuesta.',
+    description: 'Mensajes que Jonathan mandó al bot de Telegram y todavía no se aplicaron. tipo «respuesta»: contesta una duda (consulta trae pregunta, cliente, telefono y whatsapp_ids del caso); sin «responder» se asocia a la última pregunta abierta, y si no encaja, tomarla como instrucción. tipo «respuesta_varias»: contesta varias dudas abiertas en un mismo mensaje o audio, nombrando a cada cliente; repartirlo entre preguntas_sin_respuesta por cliente y cerrar esas dudas con marcar_respuesta_aplicada (consultas). tipo «instruccion»: una orden puntual («a Noelia agendale 2 de 20 para el jueves») o una regla nueva («Regla: …»). También lista las preguntas sin respuesta, con cliente, mensaje, teléfono e ids.',
     inputSchema: {},
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   }, handle(async () => readAnswers()));
 
   server.registerTool('marcar_respuesta_aplicada', {
     title: 'Marcar respuesta aplicada',
-    description: 'Da por aplicadas esas respuestas de Jonathan (ids R… de leer_respuestas_jonathan) para que no vuelvan a aparecer.',
-    inputSchema: { ids: z.array(z.string().min(1)).min(1).max(50) },
+    description: 'Da por aplicadas esas respuestas de Jonathan (ids R… de leer_respuestas_jonathan) para que no vuelvan a aparecer. consultas: las dudas (ids D…) que quedaron contestadas por una respuesta_varias; las que no nombró siguen abiertas.',
+    inputSchema: {
+      ids: z.array(z.string().min(1)).min(1).max(50),
+      consultas: z.array(z.string().min(1)).max(50).optional(),
+    },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, handle(async ({ ids }: { ids: string[] }) => markAnswersApplied(ids)));
+  }, handle(async ({ ids, consultas }: { ids: string[]; consultas?: string[] }) => markAnswersApplied(ids, consultas)));
 
   server.registerTool('avisar_jonathan', {
     title: 'Avisar a Jonathan (Telegram)',

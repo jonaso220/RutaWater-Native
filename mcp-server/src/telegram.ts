@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { runScript } from './audio';
 import { WriteError } from './writes';
 
 // Dudas para Jonathan por Telegram (23/10/2026). El vigilante y las pasadas le
@@ -21,6 +22,8 @@ interface Question {
 }
 interface Answer {
   id: string; fecha: string; texto: string; consulta_id: string | null; tipo?: 'respuesta' | 'instruccion'; aplicada: boolean;
+  /** Audio de Telegram todavía sin transcribir. */
+  audio_file_id?: string; por_audio?: boolean; dudoso?: boolean;
 }
 interface State { chat_id?: number; offset?: number; seq?: number; preguntas: Question[]; respuestas: Answer[] }
 
@@ -62,7 +65,18 @@ export const pullAnswers = async (fetcher: typeof fetch = fetch): Promise<State>
     if (!message?.chat || message.chat.type !== 'private') continue;
     // El primer mensaje (el «hola») solo fija el chat.
     if (state.chat_id === undefined) { state.chat_id = message.chat.id; continue; }
-    if (message.chat.id !== state.chat_id || !message.text || message.text === '/start') continue;
+    const voice = message.voice || message.audio;
+    if (message.chat.id !== state.chat_id || (!message.text && !voice) || message.text === '/start') continue;
+    if (voice) {
+      // El audio se transcribe al leer las respuestas; mientras, va a la última pregunta abierta si la cita.
+      const repliedTo = state.preguntas.find((q) => q.message_id === message.reply_to_message?.message_id);
+      if (repliedTo) repliedTo.respondida = true;
+      state.respuestas.push({
+        id: `R${message.message_id}`, fecha: uyNow(), texto: '', consulta_id: repliedTo?.id || null,
+        tipo: repliedTo ? 'respuesta' : undefined, aplicada: false, audio_file_id: voice.file_id, por_audio: true,
+      });
+      continue;
+    }
     const replied = message.reply_to_message?.message_id;
     let question = state.preguntas.find((q) => q.message_id === replied);
     // «Regla: …» u «Orden: …» (o «cambio», «nuevo»): instrucción suya, no la respuesta a una duda.
@@ -109,11 +123,49 @@ export const askJonathan = async (
   return { enviada: true, consulta_id: id };
 };
 
+/** Baja los audios pendientes del bot y los transcribe con el Whisper del Mac. */
+const transcribeVoices = async (state: State, fetcher: typeof fetch) => {
+  const pending = state.respuestas.filter((answer) => answer.audio_file_id && !answer.texto);
+  if (!pending.length) return;
+  const work = mkdtempSync(join(tmpdir(), 'rutawater-tg-audio-'));
+  try {
+    const files: Array<{ answer: Answer; name: string }> = [];
+    for (const answer of pending) {
+      const file = await call('getFile', { file_id: answer.audio_file_id }, fetcher);
+      const response = await fetcher(`${API}/file/bot${token()}/${file.file_path}`);
+      if (!response.ok) continue;
+      const stamp = answer.fecha.replace(' ', ' at ').replace(':', '.');
+      const name = `WhatsApp Audio ${stamp}.00 ${answer.id}.ogg`;
+      writeFileSync(join(work, name), Buffer.from(await response.arrayBuffer()));
+      files.push({ answer, name });
+    }
+    if (!files.length) return;
+    const results = await runScript(files.map(({ name }) => join(work, name)), work);
+    for (const { answer, name } of files) {
+      const result: any = results.find((entry) => entry.archivo === name);
+      if (!result || result.error) continue;
+      answer.texto = String(result.texto || '').trim() || '(audio vacío)';
+      answer.dudoso = !!result.dudoso;
+      delete answer.audio_file_id;
+      if (!answer.tipo) {
+        const instruction = /^\s*(regla|orden|cambio|nuevo|nueva)\b/i.test(answer.texto);
+        const open = instruction ? undefined : [...state.preguntas].reverse().find((q) => !q.respondida);
+        if (open) { open.respondida = true; answer.consulta_id = open.id; }
+        answer.tipo = open ? 'respuesta' : 'instruccion';
+      }
+    }
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+  save(state);
+};
+
 /** Respuestas de Jonathan sin aplicar, cada una con la pregunta que contesta. */
 export const readAnswers = async (fetcher: typeof fetch = fetch) => {
   const state = await pullAnswers(fetcher);
+  await transcribeVoices(state, fetcher);
   return {
-    respuestas: state.respuestas.filter((answer) => !answer.aplicada).map((answer) => ({
+    respuestas: state.respuestas.filter((answer) => !answer.aplicada && answer.texto).map(({ audio_file_id: _pending, ...answer }) => ({
       ...answer, consulta: state.preguntas.find((q) => q.id === answer.consulta_id) || null,
     })),
     preguntas_sin_respuesta: state.preguntas.filter((q) => !q.respondida).map(({ id, fecha, cliente, pregunta }) => ({ id, fecha, cliente, pregunta })),

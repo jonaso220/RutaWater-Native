@@ -23,6 +23,15 @@ Reutiliza la lógica de la app (`src/utils`): la agenda se calcula con `getNextV
 | | `marcar_revisar_transferencia` (como «Revisar» en Deudas; no duplica y nunca marca como revisada) |
 | | `crear_cliente` (como Directorio → «+»: ficha solo de directorio, sin productos ni visitas, con coordenadas del link de Maps; si ya hay una ficha con ese teléfono no crea otra) |
 
+WhatsApp por la API de YCloud (coexistencia con la app de WhatsApp Business, desde el 23/10/2026): la función de Netlify `whatsapp-webhook` (`/api/whatsapp-webhook`, firma `YCloud-Signature` con `YCLOUD_WEBHOOK_SECRET`) guarda en `whatsappInbox` los mensajes de clientes y los que salen desde la app, menos los chats de `WHATSAPP_EXCLUDED_PHONES` y los grupos. El servidor los usa con:
+
+- `leer_whatsapp` (pendientes por chat, con 48 h de conversación, fichas por teléfono y fin de la ventana de 24 h; `uso` del mes)
+- `transcribir_whatsapp` (baja los audios con la clave y los transcribe con Whisper) y `ver_archivo_whatsapp` (fotos como imagen)
+- `responder_whatsapp` (texto dentro de las 24 h, nunca a excluidos, con tope mensual en `whatsappUsage/AAAA-MM`; por defecto 3.600 = 1.000 gratis + ~US$30)
+- `marcar_whatsapp_atendido` (los saca de pendientes y marca leído el último de cada chat)
+
+Clave en `~/.rutawater-mcp/ycloud.key` (no se respalda) y configuración en `~/.rutawater-mcp/whatsapp.json` (`negocio`, `excluidos`, `tope_mes`). Los avisos y recordatorios no van por la API: son plantillas y se cobran siempre.
+
 Fuera de Firestore, en el Mac donde corre el servidor (para que también las usen las tareas de la nube, cuyos comandos corren en una VM):
 
 - `abrir_whatsapp` abre `whatsapp://send` con el número de la ficha y un borrador: el aviso de mañana de Ajustes (`plantilla: "aviso_manana"`) o un `texto`, con `reemplazar` opcional (`«viejo=>nuevo»`, cada uno exactamente una vez). Es el mismo enlace que Avisar o el ícono de WhatsApp de la tarjeta; no envía.

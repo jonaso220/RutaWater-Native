@@ -6,6 +6,7 @@ import { transcribeAudios } from './audio';
 import { applyReplacements, openWhatsapp } from './whatsapp';
 import { downloadInboxMedia, forwardReceiptToAquapura, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
 import { askJonathan, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
+import { scheduledPass } from './vigilanteControl';
 import { mergeClients, undoMerge } from './merge';
 import path from 'path';
 import type { ServerConfig } from './config';
@@ -39,6 +40,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
 - transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
 - WhatsApp por la API (coexistencia, gratis): leer_whatsapp trae los mensajes de clientes sin atender con su conversación y sus fichas; transcribir_whatsapp transcribe sus audios; ver_archivo_whatsapp muestra una foto o comprobante; responder_whatsapp contesta dentro de las 24 h (hasta el tope del mes); marcar_whatsapp_atendido los da por resueltos y los marca leídos. Avisos y recordatorios NUNCA por la API: se cobran; van por la app en el Mac.
+- pasada_programada: las pasadas de 9 y 18 avisan «empieza» y «termina»; contestar y agendar lo hace el vigilante.
 - Dudas para Jonathan por Telegram: consultar_jonathan le manda la pregunta a su bot; leer_respuestas_jonathan trae lo que contestó (con la pregunta a la que responde); marcar_respuesta_aplicada las da por hechas; avisar_jonathan manda un aviso corto sin pregunta.
 - No hay herramientas para borrar clientes (salvo la copia que sobra al fusionar o un pedido de una vez repetido), crear deudas, precios ni días de visita de clientes con varios días.`;
 
@@ -499,6 +501,16 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     appendAudit(config.auditPath, { tool: 'enviar_comprobante_aquapura', args: { id, monto }, cliente, reparto: '', antes: null, despues: result });
     return result;
   }));
+
+  server.registerTool('pasada_programada', {
+    title: 'Avisar al vigilante (pasada programada)',
+    description: 'Lo usan las pasadas programadas de las 9 y las 18: estado «empieza» al arrancar (el vigilante deja de contestar mientras se mandan avisos o recordatorios) y «termina» apenas se manda el último (el vigilante se reanuda y se despierta enseguida para contestar y agendar). Llamar a «termina» siempre, también si la pasada se corta. Si nadie avisa, la pausa vence sola a las 3 h.',
+    inputSchema: {
+      estado: z.enum(['empieza', 'termina']),
+      pasada: z.string().max(40).optional().describe('«9 hs» o «18 hs»'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, handle(async ({ estado, pasada }: { estado: 'empieza' | 'termina'; pasada?: string }) => scheduledPass(estado, pasada)));
 
   server.registerTool('marcar_whatsapp_atendido', {
     title: 'Marcar WhatsApp atendido',

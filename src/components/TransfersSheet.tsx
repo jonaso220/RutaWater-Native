@@ -7,13 +7,13 @@ import {
   FlatList,
   StyleSheet,
   Alert,
-  Linking,
   Platform,
   useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
 import { Client, Transfer } from '../types';
-import { getModalWidth, normalizePhone } from '../utils/helpers';
+import { getModalWidth } from '../utils/helpers';
+import { openWhatsAppChat } from '../utils/whatsAppChat';
 import {
   buildClientIdentityIndex,
   getRelatedRecordStableClientId,
@@ -144,10 +144,8 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   [transfers, pendingReview, committingIds]);
 
   // Abre el chat del cliente, por ejemplo para responder al comprobante (Jonathan, 24/10/2026).
-  const openWhatsAppChat = (phone: string) => {
-    Linking.openURL(`whatsapp://send?phone=${normalizePhone(phone)}`).catch(() => {
-      Alert.alert(t('error'), t('directory.errorWhatsApp'));
-    });
+  const openChat = (phone: string) => {
+    openWhatsAppChat(phone, () => Alert.alert(t('error'), t('directory.errorWhatsApp')));
   };
 
   const renderTransfer = ({ item }: { item: Transfer }) => {
@@ -183,7 +181,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
         <View style={styles.cardActions}>
           {phone ? (
             <TouchableOpacity
-              onPress={() => openWhatsAppChat(phone)}
+              onPress={() => openChat(phone)}
               style={styles.actionBtn}
               accessibilityRole="button"
               accessibilityLabel={t('debtsSheet.openChat')}

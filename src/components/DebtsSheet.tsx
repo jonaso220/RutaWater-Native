@@ -25,6 +25,7 @@ import {
 } from '../utils/clientIdentity';
 import { formatMoney, formatShortDate } from '../utils/format';
 import { buildDebtTotalWhatsAppUrl } from '../utils/debtTotalMessage';
+import { openWhatsAppChat } from '../utils/whatsAppChat';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -418,12 +419,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     );
   };
 
-  const openWhatsAppChat = (group: ClientDebtGroup) => {
-    if (!group.clientPhone) return;
-    const cleanPhone = normalizePhone(group.clientPhone);
-    Linking.openURL(`whatsapp://send?phone=${cleanPhone}`).catch(() => {
-      Alert.alert(t('error'), t('directory.errorWhatsApp'));
-    });
+  const openGroupChat = (group: ClientDebtGroup) => {
+    openWhatsAppChat(group.clientPhone, () => Alert.alert(t('error'), t('directory.errorWhatsApp')));
   };
 
   const sendDebtTotal = (group: ClientDebtGroup) => {
@@ -562,7 +559,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
         <View style={styles.secondaryActions}>
           {item.clientPhone ? (
             <TouchableOpacity
-              onPress={() => openWhatsAppChat(item)}
+              onPress={() => openGroupChat(item)}
               style={styles.secondaryActionBtn}
               accessibilityRole="button"
               accessibilityLabel={t('debtsSheet.openChat')}

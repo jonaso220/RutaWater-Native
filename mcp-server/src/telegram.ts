@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runScript } from './audio';
@@ -32,11 +32,47 @@ const load = (): State => {
   return { preguntas: [], respuestas: [], ...raw };
 };
 const save = (state: State) => {
-  // Se reescribe entero: varias copias del servidor pueden tocarlo.
   const tmp = `${stateFile()}.tmp`;
   writeFileSync(tmp, JSON.stringify(state, null, 1), { mode: 0o600 });
   renameSync(tmp, stateFile());
 };
+const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * Leer, cambiar y guardar el estado con un candado: lo tocan a la vez la escucha
+ * de Telegram, el servidor de la app de Claude y el del vigilante.
+ */
+const withState = <T>(change: (state: State) => T): T => {
+  const lock = `${stateFile()}.lock`;
+  for (let tries = 0; ; tries += 1) {
+    try {
+      closeSync(openSync(lock, 'wx'));
+      break;
+    } catch {
+      // Un candado de más de 15 s quedó de un proceso que se cortó.
+      try { if (Date.now() - statSync(lock).mtimeMs > 15000) rmSync(lock, { force: true }); } catch { /* ya no está */ }
+      if (tries > 100) throw new WriteError('El estado del bot de Telegram está ocupado; reintentar.');
+      pause(50);
+    }
+  }
+  try {
+    const state = load();
+    const result = change(state);
+    save(state);
+    return result;
+  } finally {
+    rmSync(lock, { force: true });
+  }
+};
+
+// La escucha (telegram-escucha) toca este archivo en cada vuelta: mientras está
+// viva, ella es la única que le pide mensajes a Telegram (dos lectores a la vez
+// se cortan entre sí) y los demás leen lo que dejó guardado.
+const heartbeatFile = () => `${stateFile()}.escucha`;
+const listenerAlive = () => {
+  try { return Date.now() - statSync(heartbeatFile()).mtimeMs < 120000; } catch { return false; }
+};
+export const touchHeartbeat = () => writeFileSync(heartbeatFile(), new Date().toISOString());
 const token = (): string => {
   if (!existsSync(tokenFile())) throw new WriteError(`Falta el token del bot de Telegram en ${tokenFile()}.`);
   return readFileSync(tokenFile(), 'utf8').trim();
@@ -67,14 +103,10 @@ const call = async (method: string, body: Record<string, unknown>, fetcher: type
   return data.result;
 };
 
-/**
- * Trae lo nuevo del bot. La primera vez fija el chat de quien le escribió (Jonathan);
- * después ignora cualquier otro chat. Las respuestas quedan guardadas hasta aplicarlas.
- */
-export const pullAnswers = async (fetcher: typeof fetch = fetch): Promise<State> => {
-  const state = load();
-  const updates: any[] = await call('getUpdates', { offset: state.offset, timeout: 0, allowed_updates: ['message'] }, fetcher);
+/** Guarda en el estado los mensajes nuevos (los de update_id >= offset). */
+const applyUpdates = (state: State, updates: any[]) => {
   for (const update of updates) {
+    if (state.offset !== undefined && update.update_id < state.offset) continue;
     state.offset = update.update_id + 1;
     const message = update.message;
     if (!message?.chat || message.chat.type !== 'private') continue;
@@ -98,8 +130,18 @@ export const pullAnswers = async (fetcher: typeof fetch = fetch): Promise<State>
   // Solo lo de las últimas semanas: el archivo no crece sin fin.
   state.preguntas = state.preguntas.slice(-200);
   state.respuestas = state.respuestas.slice(-200);
-  save(state);
-  return state;
+};
+
+/**
+ * Trae lo nuevo del bot. La primera vez fija el chat de quien le escribió (Jonathan);
+ * después ignora cualquier otro chat. Las respuestas quedan guardadas hasta aplicarlas.
+ * Con `waitSeconds` espera a que llegue algo (lo usa la escucha). Si la escucha
+ * está viva, una lectura sin espera no va a Telegram: usa lo que ella guardó.
+ */
+export const pullAnswers = async (fetcher: typeof fetch = fetch, waitSeconds = 0): Promise<State> => {
+  if (!waitSeconds && listenerAlive()) return load();
+  const updates: any[] = await call('getUpdates', { offset: load().offset, timeout: waitSeconds, allowed_updates: ['message'] }, fetcher);
+  return withState((state) => { applyUpdates(state, updates); return state; });
 };
 
 export const askJonathan = async (
@@ -108,7 +150,8 @@ export const askJonathan = async (
 ) => {
   const state = await pullAnswers(fetcher);
   if (state.chat_id === undefined) throw new WriteError('El bot todavía no conoce el chat de Jonathan: tiene que mandarle «hola» al bot.');
-  const seq = (state.seq || 0) + 1;
+  // El número se reserva con el candado: dos pasadas a la vez no repiten «D…».
+  const seq = withState((fresh) => { fresh.seq = (fresh.seq || 0) + 1; return fresh.seq; });
   const id = `D${seq}`;
   const lines = [
     `❓ Duda ${id}`,
@@ -120,12 +163,13 @@ export const askJonathan = async (
     'Respondé a este mensaje (deslizá a la izquierda) con lo que hay que hacer.',
   ].filter((line, index, all) => line || all[index - 1]);
   const sent = await call('sendMessage', { chat_id: state.chat_id, text: lines.join('\n') }, fetcher);
-  state.seq = seq;
-  state.preguntas.push({
-    id, message_id: sent.message_id, fecha: uyNow(), pregunta: input.pregunta,
-    cliente: input.cliente, telefono: input.telefono, mensaje_cliente: input.mensaje_cliente, whatsapp_ids: input.whatsapp_ids,
+  withState((fresh) => {
+    fresh.seq = Math.max(fresh.seq || 0, seq);
+    fresh.preguntas.push({
+      id, message_id: sent.message_id, fecha: uyNow(), pregunta: input.pregunta,
+      cliente: input.cliente, telefono: input.telefono, mensaje_cliente: input.mensaje_cliente, whatsapp_ids: input.whatsapp_ids,
+    });
   });
-  save(state);
   return { enviada: true, consulta_id: id };
 };
 
@@ -147,24 +191,26 @@ const transcribeVoices = async (state: State, fetcher: typeof fetch) => {
     }
     if (!files.length) return;
     const results = await runScript(files.map(({ name }) => join(work, name)), work);
-    for (const { answer, name } of files) {
-      const result: any = results.find((entry) => entry.archivo === name);
-      if (!result || result.error) continue;
-      answer.texto = String(result.texto || '').trim() || '(audio vacío)';
-      answer.dudoso = !!result.dudoso;
-      delete answer.audio_file_id;
-      if (!answer.tipo) Object.assign(answer, classify(state, answer.texto));
-    }
+    withState((fresh) => {
+      for (const { answer, name } of files) {
+        const result: any = results.find((entry) => entry.archivo === name);
+        const stored = fresh.respuestas.find((entry) => entry.id === answer.id);
+        if (!result || result.error || !stored || stored.texto) continue;
+        stored.texto = String(result.texto || '').trim() || '(audio vacío)';
+        stored.dudoso = !!result.dudoso;
+        delete stored.audio_file_id;
+        if (!stored.tipo) Object.assign(stored, classify(fresh, stored.texto));
+      }
+    });
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
-  save(state);
 };
 
 /** Respuestas de Jonathan sin aplicar, cada una con la pregunta que contesta. */
 export const readAnswers = async (fetcher: typeof fetch = fetch) => {
-  const state = await pullAnswers(fetcher);
-  await transcribeVoices(state, fetcher);
+  await transcribeVoices(await pullAnswers(fetcher), fetcher);
+  const state = load();
   return {
     respuestas: state.respuestas.filter((answer) => !answer.aplicada && answer.texto).map(({ audio_file_id: _pending, ...answer }) => ({
       ...answer, consulta: state.preguntas.find((q) => q.id === answer.consulta_id) || null,
@@ -176,19 +222,17 @@ export const readAnswers = async (fetcher: typeof fetch = fetch) => {
 };
 
 /** Da por aplicadas esas respuestas y, si se indican, cierra esas dudas (las que contestó una «respuesta_varias»). */
-export const markAnswersApplied = (ids: string[], questionIds: string[] = []) => {
-  const state = load();
+export const markAnswersApplied = (ids: string[], questionIds: string[] = []) => withState((state) => {
   const done = state.respuestas.filter((answer) => ids.includes(answer.id));
   done.forEach((answer) => { answer.aplicada = true; });
   const closed = state.preguntas.filter((q) => questionIds.includes(q.id));
   closed.forEach((q) => { q.respondida = true; });
-  save(state);
   return {
     aplicadas: done.map((answer) => answer.id),
     dudas_cerradas: closed.map((q) => q.id),
     no_encontradas: [...ids, ...questionIds].filter((id) => !done.some((a) => a.id === id) && !closed.some((q) => q.id === id)),
   };
-};
+});
 
 /** Aviso corto a Jonathan (sin esperar respuesta), por ejemplo el resumen de una pasada. */
 export const notifyJonathan = async (text: string, fetcher: typeof fetch = fetch) => {

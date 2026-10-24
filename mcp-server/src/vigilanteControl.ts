@@ -15,6 +15,8 @@ export const scheduledPass = async (estado: 'empieza' | 'termina', pasada?: stri
   const file = flagFile();
   if (estado === 'empieza') {
     writeFileSync(file, JSON.stringify({ pasada: pasada || '', desde: new Date().toISOString() }));
+    // Marca que las tareas ya usan este aviso: el vigilante deja de usar sus pausas fijas.
+    writeFileSync(`${file}.usado`, new Date().toISOString());
     return { vigilante: 'en pausa', hasta: 'que la pasada avise «termina» (o 3 h como máximo)' };
   }
   const before = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;

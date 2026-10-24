@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   View,
@@ -20,7 +20,8 @@ import {
   resolveClientForRelatedRecord,
   resolveClientForStableId,
 } from '../utils/clientIdentity';
-import { formatShortDateTime } from '../utils/format';
+import { formatMoney, formatShortDateTime } from '../utils/format';
+import { parseDate } from '../utils/helpers';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
@@ -32,14 +33,35 @@ interface TransfersSheetProps {
   transfers: Transfer[];
   // Para encontrar el teléfono del cliente (la transferencia no lo guarda).
   clients: Client[];
+  // Deuda actual del cliente: para transferencias viejas que no guardaron el monto.
+  getDebtTotal: (clientId: string) => number;
+  // Tocar la tarjeta abre la ficha del cliente.
+  onOpenClient: (client: Client) => void;
   onReview: (transfer: Transfer) => Promise<void>;
   onClose: () => void;
 }
+
+const OLD_DAYS = 7;
+const UNDO_MS = 5000;
+
+/** «HOTEL CENTRAL» → «Hotel Central»; lo que ya está en minúsculas queda igual. */
+const displayName = (name: string): string => {
+  const letters = name.replace(/[^A-Za-zÁÉÍÓÚÑÜáéíóúñü]/g, '');
+  if (!letters || letters !== letters.toUpperCase()) return name;
+  return name.toLowerCase().replace(/(^|[\s(\-/])([a-záéíóúñü])/g, (_m, sep, ch) => sep + ch.toUpperCase());
+};
+
+const daysSince = (value: unknown): number | null => {
+  const date = parseDate(value as any);
+  return date ? Math.floor((Date.now() - date.getTime()) / 86400000) : null;
+};
 
 const TransfersSheet: React.FC<TransfersSheetProps> = ({
   visible,
   transfers,
   clients,
+  getDebtTotal,
+  onOpenClient,
   onReview,
   onClose,
 }) => {
@@ -56,42 +78,67 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const reviewingRef = useRef<string | null>(null);
 
-  const requestClose = () => {
-    if (!reviewingRef.current) onClose();
+  // «Revisada» se aplica a los 5 s: mientras tanto la tarjeta se oculta y abajo
+  // aparece «Deshacer» (Jonathan, 24/10/2026; antes pedía confirmar cada una).
+  const [pendingReview, setPendingReview] = useState<Transfer | null>(null);
+  const pendingRef = useRef<{ transfer: Transfer; timer: ReturnType<typeof setTimeout> } | null>(null);
+
+  const commitReview = async (transfer: Transfer) => {
+    if (reviewingRef.current) return;
+    reviewingRef.current = transfer.id;
+    setReviewingId(transfer.id);
+    try {
+      await onReview(transfer);
+    } catch {
+      Alert.alert(t('error'), t('transfers.reviewError'));
+    } finally {
+      reviewingRef.current = null;
+      setReviewingId(null);
+    }
+  };
+
+  const flushPending = () => {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingRef.current = null;
+    setPendingReview(null);
+    commitReview(pending.transfer);
   };
 
   const handleReview = (transfer: Transfer) => {
-    Alert.alert(
-      t('transfers.reviewTitle'),
-      t('transfers.reviewMsg', { name: transfer.clientName }),
-      [
-        { text: t('cancel'), style: 'cancel' },
-        {
-          text: t('transfers.reviewed'),
-          onPress: async () => {
-            if (reviewingRef.current) return;
-            reviewingRef.current = transfer.id;
-            setReviewingId(transfer.id);
-            try {
-              await onReview(transfer);
-            } catch {
-              Alert.alert(t('error'), t('transfers.reviewError'));
-            } finally {
-              reviewingRef.current = null;
-              setReviewingId(null);
-            }
-          },
-        },
-      ],
-    );
+    flushPending();
+    const timer = setTimeout(flushPending, UNDO_MS);
+    pendingRef.current = { transfer, timer };
+    setPendingReview(transfer);
+  };
+
+  const undoReview = () => {
+    if (pendingRef.current) clearTimeout(pendingRef.current.timer);
+    pendingRef.current = null;
+    setPendingReview(null);
+  };
+
+  // Al cerrar (o desmontar) se aplica lo que estaba esperando el «Deshacer».
+  useEffect(() => () => flushPending(), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const requestClose = () => {
+    flushPending();
+    if (!reviewingRef.current) onClose();
   };
 
   const identityIndex = useMemo(() => buildClientIdentityIndex(clients), [clients]);
-  const phoneFor = (transfer: Transfer): string => {
-    const client = resolveClientForStableId(getRelatedRecordStableClientId(transfer, identityIndex), identityIndex)
-      || resolveClientForRelatedRecord(transfer, identityIndex);
-    return client?.phone || '';
-  };
+  const clientFor = (transfer: Transfer): Client | null => (
+    resolveClientForStableId(getRelatedRecordStableClientId(transfer, identityIndex), identityIndex)
+      || resolveClientForRelatedRecord(transfer, identityIndex)
+      || null
+  );
+
+  // Las más viejas primero: son las que quedaron colgadas.
+  const visibleTransfers = useMemo(() => transfers
+    .filter((transfer) => transfer.id !== pendingReview?.id)
+    .sort((a, b) => (parseDate(a.createdAt as any)?.getTime() || 0) - (parseDate(b.createdAt as any)?.getTime() || 0)),
+  [transfers, pendingReview]);
 
   // Abre el chat del cliente, por ejemplo para responder al comprobante (Jonathan, 24/10/2026).
   const openWhatsAppChat = (phone: string) => {
@@ -100,38 +147,58 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
     });
   };
 
-  const renderTransfer = ({ item }: { item: Transfer }) => (
-    <View style={styles.card}>
-      <View style={styles.cardContent}>
-        <Text style={styles.clientName}>
-          {(item.clientName || '').toUpperCase()}
-        </Text>
-        {item.clientAddress ? (
-          <Text style={styles.clientAddress}>{item.clientAddress}</Text>
-        ) : null}
-        <Text style={styles.date}>{formatShortDateTime(item.createdAt)}</Text>
-      </View>
-      <View style={styles.cardActions}>
-        {phoneFor(item) ? (
-          <TouchableOpacity
-            onPress={() => openWhatsAppChat(phoneFor(item))}
-            style={styles.actionBtn}
-            accessibilityRole="button"
-            accessibilityLabel={t('debtsSheet.openChat')}
-          >
-            <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
-          </TouchableOpacity>
-        ) : null}
+  const renderTransfer = ({ item }: { item: Transfer }) => {
+    const client = clientFor(item);
+    const phone = client?.phone || '';
+    const days = daysSince(item.createdAt);
+    const isOld = days !== null && days > OLD_DAYS;
+    const currentDebt = !item.amount && client ? getDebtTotal(client.id) : 0;
+    return (
+      <View style={styles.card}>
         <TouchableOpacity
-          onPress={() => handleReview(item)}
-          style={styles.reviewBtn}
-          disabled={reviewingId !== null}
+          style={styles.cardContent}
+          onPress={client ? () => { flushPending(); onOpenClient(client); } : undefined}
+          disabled={!client}
+          accessibilityRole="button"
         >
-          <Text style={styles.reviewBtnText}>{t('transfers.reviewed')}</Text>
+          <Text style={styles.clientName}>{displayName(item.clientName || '')}</Text>
+          {item.amount ? (
+            <Text style={styles.amount}>
+              {formatMoney(item.amount)}{item.account ? ` · ${item.account}` : ''}
+            </Text>
+          ) : currentDebt > 0 ? (
+            <Text style={styles.amountMuted}>{t('transfers.currentDebt', { amount: formatMoney(currentDebt) })}</Text>
+          ) : null}
+          {item.clientAddress ? (
+            <Text style={styles.clientAddress}>{item.clientAddress}</Text>
+          ) : null}
+          <Text style={[styles.date, isOld && styles.dateOld]}>
+            {formatShortDateTime(item.createdAt)}
+            {days !== null ? ` · ${days === 0 ? t('transfers.today') : t('transfers.daysAgo', { count: days })}` : ''}
+          </Text>
         </TouchableOpacity>
+        <View style={styles.cardActions}>
+          {phone ? (
+            <TouchableOpacity
+              onPress={() => openWhatsAppChat(phone)}
+              style={styles.actionBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t('debtsSheet.openChat')}
+            >
+              <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            onPress={() => handleReview(item)}
+            style={styles.reviewBtn}
+            disabled={reviewingId !== null}
+          >
+            <Text style={styles.reviewBtnText}>{t('transfers.reviewed')}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <ModalOverlay visible={visible} onClose={requestClose} animationType="slide">
@@ -141,7 +208,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
             <View>
               <Text style={styles.headerTitle}>{t('transfers.title')}</Text>
               <Text style={styles.headerCount}>
-                {t('transfers.pendingCount', { count: transfers.length })}
+                {t('transfers.pendingCount', { count: visibleTransfers.length })}
               </Text>
             </View>
             <TouchableOpacity onPress={requestClose} style={styles.closeBtn} disabled={reviewingId !== null}>
@@ -150,7 +217,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
           </View>
 
           <FlatList
-            data={transfers}
+            data={visibleTransfers}
             renderItem={renderTransfer}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.list}
@@ -163,6 +230,16 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
               </View>
             }
           />
+          {pendingReview ? (
+            <View style={styles.undoBar}>
+              <Text style={styles.undoText} numberOfLines={1}>
+                {t('transfers.markedReviewed', { name: displayName(pendingReview.clientName || '') })}
+              </Text>
+              <TouchableOpacity onPress={undoReview} accessibilityRole="button" style={styles.undoBtn}>
+                <Text style={styles.undoBtnText}>{t('transfers.undo')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
         </View>
       </View>
     </ModalOverlay>
@@ -247,6 +324,35 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
     color: colors.textHint,
     marginTop: s(4),
   },
+  dateOld: {
+    color: colors.dangerBright,
+    fontWeight: '600',
+  },
+  amount: {
+    fontSize: s(16),
+    fontWeight: '700',
+    color: colors.success,
+    marginTop: s(2),
+  },
+  amountMuted: {
+    fontSize: s(14),
+    color: colors.textSecondary,
+    marginTop: s(2),
+  },
+  undoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: s(12),
+    marginBottom: s(12),
+    paddingHorizontal: s(14),
+    paddingVertical: s(10),
+    borderRadius: s(10),
+    backgroundColor: colors.sectionBackground,
+  },
+  undoText: { flex: 1, fontSize: s(14), color: colors.textPrimary, marginRight: s(12) },
+  undoBtn: { paddingHorizontal: s(8), paddingVertical: s(4) },
+  undoBtnText: { fontSize: s(15), fontWeight: '700', color: colors.primary },
   cardActions: {
     flexDirection: 'row',
     gap: s(8),

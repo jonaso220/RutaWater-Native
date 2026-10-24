@@ -163,6 +163,10 @@ export interface Transfer {
   clientLat?: string | null;
   clientLng?: string | null;
   clientMapsLink?: string | null;
+  // Monto a controlar: la deuda del cliente al marcarla, o lo del comprobante.
+  amount?: number | null;
+  // Cuenta de destino, si se sabe (Mercado Pago, OCA Blue, Prex, BROU…).
+  account?: string | null;
   createdAt: FirebaseFirestoreTypes.Timestamp | null;
   userId: string;
   groupId?: string;

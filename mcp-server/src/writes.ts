@@ -864,7 +864,7 @@ export const registerPayment = (
  * queda solo para la app.
  */
 export const markTransferForReview = (
-  db: Firestore, account: Account, clientId: string, clients: Client[],
+  db: Firestore, account: Account, clientId: string, clients: Client[], amount?: number, accountName?: string,
 ): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
   const { client, route } = await loadForWrite(db, transaction, account, clientId);
   if (client.isNote) throw new WriteError('Las notas no tienen transferencias.');
@@ -884,11 +884,14 @@ export const markTransferForReview = (
     clientLat: client.lat || null,
     clientLng: client.lng || null,
     clientMapsLink: client.mapsLink || null,
+    // Lo que se ve en Transferencias para controlar en el banco (24/10/2026).
+    amount: amount && amount > 0 ? amount : null,
+    account: accountName?.trim() || null,
     createdAt: new Date(),
   });
   return {
     cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: true,
-    antes: { transferencia_pendiente: false }, despues: { transferencia_pendiente: true },
+    antes: { transferencia_pendiente: false }, despues: { transferencia_pendiente: true, monto: amount || null, cuenta: accountName || null },
   };
 });
 

@@ -898,7 +898,7 @@ const HomeScreen = () => {
               text: t('add'),
               onPress: async () => {
                 try {
-                  const created = await addTransfer(client);
+                  const created = await addTransfer(client, getClientDebtTotal(client.id));
                   if (created === false) setShowTransfersSheet(true);
                 } catch {
                   Alert.alert(t('error'), t('home.transferSaveError'));
@@ -909,7 +909,7 @@ const HomeScreen = () => {
         );
       }
     },
-    [hasPendingTransfer, addTransfer],
+    [hasPendingTransfer, addTransfer, getClientDebtTotal],
   );
 
   const pendingTransferCount = transfers.length;
@@ -1036,6 +1036,10 @@ const HomeScreen = () => {
   const closeSmartModal = useCallback(() => setShowSmartModal(false), []);
   const closeDebtsSheet = useCallback(() => setShowDebtsSheet(false), []);
   const closeTransfersSheet = useCallback(() => setShowTransfersSheet(false), []);
+  const openClientFromTransfers = useCallback((client: Client) => {
+    setShowTransfersSheet(false);
+    setEditingClient(client);
+  }, []);
   const closeRelationshipsModal = useCallback(() => setRelationshipClient(null), []);
   const closeAlarmPicker = useCallback(() => setAlarmPromptClient(null), []);
   const closeProfileSwitcher = useCallback(() => setProfileSwitcherVisible(false), [setProfileSwitcherVisible]);
@@ -1044,11 +1048,11 @@ const HomeScreen = () => {
     const client = clients.find((c) => c.id === clientId);
     if (!client) return;
     if (!hasPendingTransfer(clientId)) {
-      addTransfer(client);
+      addTransfer(client, getClientDebtTotal(client.id));
     }
     setShowDebtsSheet(false);
     setShowTransfersSheet(true);
-  }, [clients, hasPendingTransfer, addTransfer]);
+  }, [clients, hasPendingTransfer, addTransfer, getClientDebtTotal]);
 
   // Stable handler wrappers — read from a ref so renderListItem
   // doesn't have to depend on individual handler identities. Without this,
@@ -1903,6 +1907,8 @@ const HomeScreen = () => {
         visible={showTransfersSheet}
         transfers={transfers}
         clients={clients}
+        getDebtTotal={getClientDebtTotal}
+        onOpenClient={openClientFromTransfers}
         onReview={markTransferReviewed}
         onClose={closeTransfersSheet}
       />

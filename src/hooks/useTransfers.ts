@@ -67,7 +67,7 @@ export const useTransfers = ({
   );
 
   const addTransfer = useCallback(
-    async (client: Client) => {
+    async (client: Client, amount?: number) => {
       const stableClientId = getStableClientId(client);
       const key = `add-${stableClientId}`;
       if (busyRef.current.has(key)) return false;
@@ -88,6 +88,8 @@ export const useTransfers = ({
           clientLat: client.lat || null,
           clientLng: client.lng || null,
           clientMapsLink: client.mapsLink || null,
+          // La deuda en ese momento: se sigue viendo aunque después se salde.
+          amount: amount && amount > 0 ? amount : null,
           createdAt: new Date(),
         });
         return true;

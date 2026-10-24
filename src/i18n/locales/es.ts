@@ -847,6 +847,12 @@ export default {
     reviewMsg: 'Confirmar que revisaste la transferencia de {{name}}',
     reviewError: 'No se pudo marcar la transferencia como revisada. Inténtalo de nuevo.',
     noTransfers: 'No hay transferencias pendientes',
+    today: 'hoy',
+    daysAgo_one: 'hace {{count}} día',
+    daysAgo_other: 'hace {{count}} días',
+    currentDebt: 'Deuda actual {{amount}}',
+    markedReviewed: '{{name}}: revisada',
+    undo: 'Deshacer',
   },
 
   // Debt Modal

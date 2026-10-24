@@ -847,6 +847,12 @@ export default {
     reviewMsg: 'Confirm you reviewed the transfer from {{name}}',
     reviewError: 'The transfer could not be marked as reviewed. Please try again.',
     noTransfers: 'No pending transfers',
+    today: 'today',
+    daysAgo_one: '{{count}} day ago',
+    daysAgo_other: '{{count}} days ago',
+    currentDebt: 'Current debt {{amount}}',
+    markedReviewed: '{{name}}: reviewed',
+    undo: 'Undo',
   },
 
   // Debt Modal

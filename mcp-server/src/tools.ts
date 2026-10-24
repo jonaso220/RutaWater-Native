@@ -579,12 +579,16 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('marcar_revisar_transferencia', {
     title: 'Marcar transferencia para revisar',
-    description: 'Deja al cliente en la lista Transferencias de la app, pendiente de que Jonathan controle si el dinero llegó (igual que «Revisar» en Deudas o «Gestionar transferencia → Agregar» en la tarjeta). Si ya tenía una pendiente no crea otra. No marca transferencias como revisadas.',
-    inputSchema: { cliente_id: z.string().min(1) },
+    description: 'Deja al cliente en la lista Transferencias de la app, pendiente de que Jonathan controle si el dinero llegó (igual que «Revisar» en Deudas o «Gestionar transferencia → Agregar» en la tarjeta). Pasá monto (el del comprobante) y cuenta (Mercado Pago, OCA Blue, Prex, Santander, BROU…): se muestran en la lista para controlar en el banco. Si ya tenía una pendiente no crea otra. No marca transferencias como revisadas.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      monto: z.number().positive().max(10_000_000).optional().describe('Monto del comprobante, en pesos'),
+      cuenta: z.string().max(60).optional().describe('Cuenta de destino: Mercado Pago, OCA Blue, Prex, Santander, BROU'),
+    },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, write('marcar_revisar_transferencia', async ({ cliente_id }) => {
+  }, write('marcar_revisar_transferencia', async ({ cliente_id, monto, cuenta }) => {
     const { all } = await findClient(cliente_id);
-    return markTransferForReview(store.db, await store.refreshAccount(), cliente_id, all);
+    return markTransferForReview(store.db, await store.refreshAccount(), cliente_id, all, monto, cuenta);
   }));
 };
 

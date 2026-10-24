@@ -5,7 +5,7 @@ interface TransfersStore {
   transfers: Transfer[];
   getClientTransfers: (clientId: string) => Transfer[];
   hasPendingTransfer: (clientId: string) => boolean;
-  addTransfer: (client: Client) => Promise<boolean | undefined>;
+  addTransfer: (client: Client, amount?: number) => Promise<boolean | undefined>;
   markTransferReviewed: (transfer: Transfer) => Promise<void>;
 }
 

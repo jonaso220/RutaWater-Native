@@ -71,7 +71,7 @@ const call = async (name, args = {}) => {
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
   'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'avisar_jonathan', 'buscar_clientes', 'cambiar_fecha', 'cambiar_frecuencia',
-  'cambiar_posicion', 'consultar_jonathan', 'crear_cliente', 'deshacer_fusion', 'deshacer_listo', 'fijar_productos', 'fusionar_duplicados', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_respuesta_aplicada',
+  'cambiar_posicion', 'consultar_jonathan', 'crear_cliente', 'deshacer_fusion', 'deshacer_listo', 'enviar_comprobante_aquapura', 'fijar_productos', 'fusionar_duplicados', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_respuesta_aplicada',
   'marcar_revisar_transferencia', 'marcar_whatsapp_atendido', 'quitar_de_la_lista', 'registrar_pago', 'responder_whatsapp', 'sugerir_posicion', 'transcribir_audio', 'transcribir_whatsapp', 'ver_archivo_whatsapp', 'ver_cliente', 'ver_productos',
 ]);
 
@@ -155,5 +155,5 @@ assert.deepEqual(audit, [
 ]);
 
 await client.close();
-console.log('smoke: OK (34 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
+console.log('smoke: OK (35 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
 process.exit(0);

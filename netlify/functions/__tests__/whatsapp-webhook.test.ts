@@ -1,6 +1,6 @@
 import { createHmac } from 'crypto';
 import type { Firestore } from 'firebase-admin/firestore';
-import { createWhatsappWebhookHandler, excludedPhones, toRecord, validSignature } from '../whatsapp-webhook';
+import { createWhatsappWebhookHandler, excludedInbound, excludedPhones, toRecord, validSignature } from '../whatsapp-webhook';
 
 const SECRET = 'whsec_test';
 const NOW = new Date('2026-10-23T15:00:00Z');
@@ -21,7 +21,8 @@ const inbound = (overrides: Record<string, unknown> = {}) => ({
 
 const makeHandler = (env: Record<string, string | undefined> = {}) => {
   const create = jest.fn(async () => undefined);
-  const doc = jest.fn(() => ({ create }));
+  const set = jest.fn(async () => undefined);
+  const doc = jest.fn(() => ({ create, set }));
   const db = { collection: jest.fn(() => ({ doc })) } as unknown as Firestore;
   const handler = createWhatsappWebhookHandler({
     readEnvironment: (name) => ({ YCLOUD_WEBHOOK_SECRET: SECRET, WHATSAPP_EXCLUDED_PHONES: '099 111 222', ...env })[name],
@@ -78,6 +79,15 @@ describe('whatsapp-webhook', () => {
       whatsappMessage: { id: 'out1', from: '+59891667066', to: '+59899123456', type: 'text', text: { body: 'Mañana pasamos' } },
     }, new Set(), NOW);
     expect(sent).toMatchObject({ direction: 'out', phone: '59899123456', handled: true, text: 'Mañana pasamos' });
+  });
+
+  test('de un chat excluido solo se guarda la hora, sin contenido', async () => {
+    const { handler, create, doc } = makeHandler();
+    expect(excludedInbound(inbound({ from: '+59899111222' }), excludedPhones('099111222'))).toBe('59899111222');
+    const response = await handler(post(JSON.stringify(inbound({ from: '+59899111222', text: { body: 'privado' } }))));
+    expect(response.status).toBe(200);
+    expect(create).not.toHaveBeenCalled();
+    expect(doc).toHaveBeenCalledWith('59899111222');
   });
 
   test('un evento repetido no da error', async () => {

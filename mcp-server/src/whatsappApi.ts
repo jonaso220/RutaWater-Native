@@ -32,7 +32,7 @@ const last8 = (value: unknown): string => digits(value).slice(-8);
 const uyIso = (date: Date): string => new Date(date.getTime() - UY_OFFSET_MS).toISOString().replace('Z', '-03:00');
 const monthKey = (date: Date): string => uyIso(date).slice(0, 7);
 
-interface LocalConfig { negocio: string; excluidos: string[]; tope_mes: number }
+interface LocalConfig { negocio: string; excluidos: string[]; tope_mes: number; aquapura: string }
 
 /** ~/.rutawater-mcp/whatsapp.json: número del negocio, chats excluidos (los mismos que en Netlify) y tope. */
 export const localConfig = (): LocalConfig => {
@@ -41,6 +41,7 @@ export const localConfig = (): LocalConfig => {
     negocio: digits(raw.negocio),
     excluidos: Array.isArray(raw.excluidos) ? raw.excluidos.map(digits).filter(Boolean) : [],
     tope_mes: Number.isInteger(raw.tope_mes) && raw.tope_mes >= 0 ? raw.tope_mes : DEFAULT_MONTHLY_LIMIT,
+    aquapura: digits(raw.aquapura),
   };
 };
 
@@ -230,4 +231,79 @@ export const downloadInboxMedia = async (db: Firestore, id: string, fetcher = fe
   writeFileSync(path, data);
   // Las fotos vuelven también como imagen: en la nube la ruta del Mac no se puede abrir.
   return { id, tipo: message.type, mime: message.media.mime, archivo: path, texto: message.text, data };
+};
+
+const AQUAPURA_TEMPLATE = 'comprobante_cliente_brou';
+
+/** Reserva un envío en el contador del mes; devuelve cómo devolverlo si el envío falla. */
+const reserveSend = async (db: Firestore, now: Date, config: LocalConfig) => {
+  const usageRef = db.collection(USAGE).doc(monthKey(now));
+  await db.runTransaction(async (transaction) => {
+    const sent = Number((await transaction.get(usageRef)).data()?.sent || 0);
+    if (sent >= config.tope_mes) throw new WriteError(`Se llegó al tope de ${config.tope_mes} mensajes por API este mes: hacerlo desde la app en el Mac.`);
+    transaction.set(usageRef, { sent: sent + 1, updatedAt: now }, { merge: true });
+  });
+  return () => db.runTransaction(async (transaction) => {
+    const sent = Number((await transaction.get(usageRef)).data()?.sent || 0);
+    transaction.set(usageRef, { sent: Math.max(0, sent - 1) }, { merge: true });
+  });
+};
+
+/**
+ * Le manda a Aquapura el comprobante de una transferencia a su cuenta BROU
+ * (Jonathan, 24/10/2026). Si Aquapura escribió en las últimas 24 h (lo anota el
+ * webhook en whatsappWindows), va solo el archivo, gratis; si no, con la
+ * plantilla de utilidad «comprobante_cliente_brou» (cliente y monto), que se
+ * cobra como utilidad. Nunca reenvía lo que escribió el cliente.
+ */
+export const forwardReceiptToAquapura = async (
+  db: Firestore, id: string, cliente: string, monto: number, now = new Date(), fetcher = fetch,
+) => {
+  const config = localConfig();
+  if (!config.negocio || !config.aquapura) throw new WriteError(`Faltan «negocio» o «aquapura» en ${configFile()}.`);
+  const snap = await db.collection(INBOX).doc(id).get();
+  if (!snap.exists) throw new WriteError(`No existe el mensaje ${id}.`);
+  const message = readDoc(snap);
+  if (!message.media?.link || !['document', 'image'].includes(message.type)) throw new WriteError('Ese mensaje no es un comprobante (foto o PDF).');
+  const download = await fetcher(message.media.link, { headers: { 'X-API-Key': apiKey() } });
+  if (!download.ok) throw new WriteError(`No se pudo bajar el comprobante (${download.status}).`);
+  const mime = message.media.mime.split(';')[0] || 'application/pdf';
+  const filename = message.media.filename || `comprobante.${message.type === 'image' ? 'jpg' : 'pdf'}`;
+  const form = new FormData();
+  form.append('file', new Blob([await download.arrayBuffer()], { type: mime }), filename);
+  const upload = await fetcher(`${API}/whatsapp/media/${encodeURIComponent(`+${config.negocio}`)}/upload`, {
+    method: 'POST', headers: { 'X-API-Key': apiKey() }, body: form,
+  });
+  const uploaded: any = await upload.json().catch(() => ({}));
+  if (!upload.ok || !uploaded.id) throw new WriteError(`YCloud no aceptó el archivo: ${uploaded?.error?.message || upload.status}.`);
+
+  const window = (await db.collection('whatsappWindows').doc(config.aquapura).get()).data();
+  const lastIn = window?.lastInboundAt ? toDate(window.lastInboundAt).getTime() : 0;
+  const free = now.getTime() - lastIn < WINDOW_MS - 10 * 60e3;
+  const media = message.type === 'image' ? { image: { id: uploaded.id } } : { document: { id: uploaded.id, filename } };
+  const body = free
+    ? { from: `+${config.negocio}`, to: `+${config.aquapura}`, type: message.type, ...media }
+    : {
+      from: `+${config.negocio}`, to: `+${config.aquapura}`, type: 'template',
+      template: {
+        name: AQUAPURA_TEMPLATE, language: { code: 'es' },
+        components: [
+          { type: 'header', parameters: [{ type: message.type === 'image' ? 'image' : 'document', ...media }] },
+          { type: 'body', parameters: [{ type: 'text', text: cliente.slice(0, 60) }, { type: 'text', text: String(monto) }] },
+        ],
+      },
+    };
+  const release = await reserveSend(db, now, config);
+  let result: any;
+  try {
+    const response = await fetcher(`${API}/whatsapp/messages/sendDirectly`, {
+      method: 'POST', headers: { 'X-API-Key': apiKey(), 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new WriteError(`YCloud no lo envió: ${result?.error?.message || response.status}. Reenviarlo por la app en el Mac.`);
+  } catch (error) {
+    await release();
+    throw error;
+  }
+  return { enviado: true, id: result.id || '', como: free ? 'solo el archivo (ventana abierta, gratis)' : 'plantilla de utilidad (se cobra)', estado: result.status || 'accepted' };
 };

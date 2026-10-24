@@ -11,6 +11,10 @@ import { EnvironmentReader, getAdminFirestore } from './_shared/firebaseAdmin';
 // reglas: solo se accede con la cuenta de servicio.
 
 export const INBOX = 'whatsappInbox';
+// Solo la hora del último mensaje de los chats excluidos, sin contenido: con eso
+// se sabe si su ventana de 24 h está abierta (p. ej. para mandarle a Aquapura un
+// comprobante gratis).
+export const WINDOWS = 'whatsappWindows';
 const TOLERANCE_SECONDS = 300;
 
 const digits = (value: unknown): string => String(value || '').replace(/\D/g, '');
@@ -107,6 +111,15 @@ export const toRecord = (event: Record<string, any>, excluded: Set<string>, now:
   };
 };
 
+/** Teléfono del cliente de un mensaje entrante de un chat excluido (fuera de grupos), o null. */
+export const excludedInbound = (event: Record<string, any>, excluded: Set<string>): string | null => {
+  if (event.type !== 'whatsapp.inbound_message.received') return null;
+  const message = event.whatsappInboundMessage;
+  const phone = digits(message?.from);
+  if (!message || message.groupId || !phone) return null;
+  return excluded.has(phone) || excluded.has(phone.slice(-8)) ? phone : null;
+};
+
 export const excludedPhones = (value: string | undefined): Set<string> => {
   const set = new Set<string>();
   (value || '').split(',').map(digits).filter(Boolean).forEach((phone) => {
@@ -137,9 +150,20 @@ export const createWhatsappWebhookHandler = (dependencies: WebhookDependencies) 
   } catch {
     return new Response(null, { status: 400 });
   }
-  const record = toRecord(event, excludedPhones(dependencies.readEnvironment('WHATSAPP_EXCLUDED_PHONES')), now);
+  const excluded = excludedPhones(dependencies.readEnvironment('WHATSAPP_EXCLUDED_PHONES'));
+  const record = toRecord(event, excluded, now);
+  const windowPhone = record ? null : excludedInbound(event, excluded);
   // Solo el tipo de evento y qué se hizo: nunca teléfonos ni contenido.
-  console.log('whatsapp-webhook', String(event.type || '?'), record ? `guardado ${record.direction}` : 'descartado');
+  console.log('whatsapp-webhook', String(event.type || '?'), record ? `guardado ${record.direction}` : (windowPhone ? 'ventana' : 'descartado'));
+  if (windowPhone) {
+    try {
+      await dependencies.getFirestore(dependencies.readEnvironment).collection(WINDOWS).doc(windowPhone).set({ lastInboundAt: now });
+    } catch (error) {
+      console.error('whatsapp-webhook error:', error instanceof Error ? error.name : 'unknown');
+      return new Response(null, { status: 500 });
+    }
+    return new Response(null, { status: 200 });
+  }
   if (!record) return new Response(null, { status: 204 });
   try {
     const db = dependencies.getFirestore(dependencies.readEnvironment);

@@ -4,7 +4,7 @@ import type { Client } from '../../src/types';
 import { appendAudit } from './audit';
 import { transcribeAudios } from './audio';
 import { applyReplacements, openWhatsapp } from './whatsapp';
-import { downloadInboxMedia, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
+import { downloadInboxMedia, forwardReceiptToAquapura, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
 import { askJonathan, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
 import { mergeClients, undoMerge } from './merge';
 import path from 'path';
@@ -482,6 +482,21 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
   }, handle(async ({ telefono, texto }: { telefono: string; texto: string }) => {
     const result = await sendReply(store.db, telefono, texto);
     appendAudit(config.auditPath, { tool: 'responder_whatsapp', args: { telefono }, cliente: telefono, reparto: '', antes: null, despues: { id: result.id } });
+    return result;
+  }));
+
+  server.registerTool('enviar_comprobante_aquapura', {
+    title: 'Enviar comprobante a Aquapura (API)',
+    description: 'Le manda a Fabrica Aquapura el comprobante (PDF o foto) de un cliente que transfirió a la cuenta BROU de Aquapura, por la API: si Aquapura escribió en las últimas 24 h va solo el archivo (gratis); si no, con la plantilla «Comprobante de la transferencia de {cliente} por $ {monto} a la cuenta BROU de Aquapura.» (se cobra como utilidad). Solo el comprobante: nunca lo que escribió el cliente. Usar después de registrar el pago.',
+    inputSchema: {
+      id: z.string().min(1).describe('id del mensaje del comprobante (de leer_whatsapp)'),
+      cliente: z.string().min(1).max(60).describe('Nombre del cliente como lo conoce Aquapura'),
+      monto: z.number().positive().max(10_000_000),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, handle(async ({ id, cliente, monto }: { id: string; cliente: string; monto: number }) => {
+    const result = await forwardReceiptToAquapura(store.db, id, cliente, monto);
+    appendAudit(config.auditPath, { tool: 'enviar_comprobante_aquapura', args: { id, monto }, cliente, reparto: '', antes: null, despues: result });
     return result;
   }));
 

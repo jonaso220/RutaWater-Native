@@ -9,13 +9,13 @@ import type { Firestore } from 'firebase-admin/firestore';
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rutawater-wa-test-'));
 process.env.RUTAWATER_WHATSAPP_CONFIG = path.join(dir, 'whatsapp.json');
 process.env.RUTAWATER_YCLOUD_KEY = path.join(dir, 'ycloud.key');
-fs.writeFileSync(process.env.RUTAWATER_WHATSAPP_CONFIG, JSON.stringify({ negocio: '59891667066', excluidos: ['099111222'], tope_mes: 2 }));
+fs.writeFileSync(process.env.RUTAWATER_WHATSAPP_CONFIG, JSON.stringify({ negocio: '59891667066', excluidos: ['099111222'], tope_mes: 2, aquapura: '59892684859' }));
 fs.writeFileSync(process.env.RUTAWATER_YCLOUD_KEY, 'test-key\n');
 
 // eslint-disable-next-line import/first
 import { getDb } from '../src/config';
 // eslint-disable-next-line import/first
-import { markHandled, readInbox, sendReply } from '../src/whatsappApi';
+import { forwardReceiptToAquapura, markHandled, readInbox, sendReply } from '../src/whatsappApi';
 
 const emulator = process.env.FIRESTORE_EMULATOR_HOST;
 const describeWithEmulator = emulator ? describe : describe.skip;
@@ -76,6 +76,31 @@ describeWithEmulator('WhatsApp por la API', () => {
     const failing = jest.fn(async () => new Response(JSON.stringify({ error: { message: 'no' } }), { status: 400 })) as unknown as typeof fetch;
     await expect(sendReply(db, '59899123456', 'Hola', NOW, failing)).rejects.toThrow('no lo envió');
     expect((await db.doc('whatsappUsage/2026-10').get()).data()?.sent).toBe(0);
+  });
+
+  test('comprobante a Aquapura: solo el archivo con la ventana abierta, plantilla si no', async () => {
+    await db.doc('whatsappInbox/pdf1').set(message('pdf1', { type: 'document', media: { id: 'm', link: 'https://api.ycloud.com/m/pdf1', mime: 'application/pdf', filename: 'recibo.pdf' } }));
+    const calls: any[] = [];
+    const fetcher = jest.fn(async (url: string, init: any = {}) => {
+      calls.push({ url, body: typeof init.body === 'string' ? JSON.parse(init.body) : null });
+      if (url.includes('/media/') && url.endsWith('/upload')) return new Response(JSON.stringify({ id: 'media1' }));
+      if (url.endsWith('/sendDirectly')) return new Response(JSON.stringify({ id: 'out9', status: 'accepted' }));
+      return new Response(new Uint8Array([37, 80, 68, 70]));
+    }) as unknown as typeof fetch;
+
+    const closed = await forwardReceiptToAquapura(db, 'pdf1', 'Letu Bianchi', 473, NOW, fetcher);
+    expect(closed.como).toContain('plantilla');
+    const tpl = calls.find((c) => c.url.endsWith('/sendDirectly')).body;
+    expect(tpl).toMatchObject({ to: '+59892684859', type: 'template', template: { name: 'comprobante_cliente_brou' } });
+    expect(tpl.template.components[1].parameters.map((p: any) => p.text)).toEqual(['Letu Bianchi', '473']);
+
+    await db.doc('whatsappWindows/59892684859').set({ lastInboundAt: minutesAgo(60) });
+    calls.length = 0;
+    const open = await forwardReceiptToAquapura(db, 'pdf1', 'Letu Bianchi', 473, NOW, fetcher);
+    expect(open.como).toContain('solo el archivo');
+    expect(calls.find((c) => c.url.endsWith('/sendDirectly')).body).toEqual({
+      from: '+59891667066', to: '+59892684859', type: 'document', document: { id: 'media1', filename: 'recibo.pdf' },
+    });
   });
 
   test('atendido: sale de la lista y marca leído el último de cada chat', async () => {

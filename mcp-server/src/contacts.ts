@@ -50,10 +50,10 @@ export const saveContact = (input: { nombre: string; direccion?: string; link_ma
   const { first, last } = contactName(input.nombre, input.direccion || '', input.link_maps || '');
   if (!input.nombre.trim()) throw new WriteError('Falta el nombre.');
   return new Promise<unknown>((resolve, reject) => {
-    execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', SCRIPT, first, last, phone], { timeout: 120000 }, (error, stdout, stderr) => {
+    execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', SCRIPT, first, last, phone], { timeout: 30000 }, (error, stdout, stderr) => {
       if (error) {
         const detail = stderr.trim().split('\n').pop() || error.message;
-        return reject(new WriteError(`No se pudo guardar el contacto: ${detail}. Si dice que no hay permiso, en el Mac: Ajustes → Privacidad → Contactos.`));
+        return reject(new WriteError(`No se pudo guardar el contacto: ${detail}. Puede faltar el permiso de Contactos en el Mac (o quedó esperando que lo acepten): el cliente en RutaWater no se toca; anotarlo en state/contactos-pendientes.jsonl para guardarlo después.`));
       }
       resolve({ contacto: `${first} ${last}`.trim(), telefono: phone, ...JSON.parse(stdout.trim() || '{}') });
     });

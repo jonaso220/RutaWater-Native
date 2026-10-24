@@ -12,19 +12,26 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
-import { Transfer } from '../types';
-import { getModalWidth } from '../utils/helpers';
+import { Client, Transfer } from '../types';
+import { getModalWidth, normalizePhone } from '../utils/helpers';
+import {
+  buildClientIdentityIndex,
+  getRelatedRecordStableClientId,
+  resolveClientForRelatedRecord,
+  resolveClientForStableId,
+} from '../utils/clientIdentity';
 import { formatShortDateTime } from '../utils/format';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
-import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 
 interface TransfersSheetProps {
   visible: boolean;
   transfers: Transfer[];
+  // Para encontrar el teléfono del cliente (la transferencia no lo guarda).
+  clients: Client[];
   onReview: (transfer: Transfer) => Promise<void>;
   onClose: () => void;
 }
@@ -32,6 +39,7 @@ interface TransfersSheetProps {
 const TransfersSheet: React.FC<TransfersSheetProps> = ({
   visible,
   transfers,
+  clients,
   onReview,
   onClose,
 }) => {
@@ -78,23 +86,18 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
     );
   };
 
-  const openMaps = (transfer: Transfer) => {
-    if (transfer.clientLat && transfer.clientLng) {
-      Linking.openURL(
-        `https://www.google.com/maps/dir/?api=1&destination=${transfer.clientLat},${transfer.clientLng}`,
-      ).catch(() => {
-        Alert.alert(t('error'), t('directory.errorMaps'));
-      });
-    } else if (transfer.clientMapsLink) {
-      const mapsLink = normalizeGoogleMapsLink(transfer.clientMapsLink);
-      if (!mapsLink) {
-        Alert.alert(t('error'), t('directory.errorMapsLink'));
-        return;
-      }
-      Linking.openURL(mapsLink).catch(() => {
-        Alert.alert(t('error'), t('directory.errorMapsLink'));
-      });
-    }
+  const identityIndex = useMemo(() => buildClientIdentityIndex(clients), [clients]);
+  const phoneFor = (transfer: Transfer): string => {
+    const client = resolveClientForStableId(getRelatedRecordStableClientId(transfer, identityIndex), identityIndex)
+      || resolveClientForRelatedRecord(transfer, identityIndex);
+    return client?.phone || '';
+  };
+
+  // Abre el chat del cliente, por ejemplo para responder al comprobante (Jonathan, 24/10/2026).
+  const openWhatsAppChat = (phone: string) => {
+    Linking.openURL(`whatsapp://send?phone=${normalizePhone(phone)}`).catch(() => {
+      Alert.alert(t('error'), t('directory.errorWhatsApp'));
+    });
   };
 
   const renderTransfer = ({ item }: { item: Transfer }) => (
@@ -109,14 +112,16 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
         <Text style={styles.date}>{formatShortDateTime(item.createdAt)}</Text>
       </View>
       <View style={styles.cardActions}>
-        {((item.clientLat && item.clientLng) || item.clientMapsLink) && (
+        {phoneFor(item) ? (
           <TouchableOpacity
-            onPress={() => openMaps(item)}
+            onPress={() => openWhatsAppChat(phoneFor(item))}
             style={styles.actionBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('debtsSheet.openChat')}
           >
-            <Ionicons name="location-sharp" size={18} color={colors.textSecondary} />
+            <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
           </TouchableOpacity>
-        )}
+        ) : null}
         <TouchableOpacity
           onPress={() => handleReview(item)}
           style={styles.reviewBtn}

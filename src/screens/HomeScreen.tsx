@@ -1902,6 +1902,7 @@ const HomeScreen = () => {
       <TransfersSheet
         visible={showTransfersSheet}
         transfers={transfers}
+        clients={clients}
         onReview={markTransferReviewed}
         onClose={closeTransfersSheet}
       />

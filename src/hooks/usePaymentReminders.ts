@@ -20,13 +20,21 @@ import { formatMoney } from '../utils/format';
 const REMINDER_HOUR = 9;
 const HORIZON_DAYS = 62;
 const NAMES_IN_BODY = 4;
+// The notification that launched the app is handled once, not on every remount.
+let initialNotificationHandled = false;
 
 /**
  * Agenda en este teléfono el aviso «Hoy toca cobrar» para los clientes con
  * deuda que tienen fecha de cobro y «Recordarme». Solo avisa a quien usa la
- * app: al cliente no se le manda nada.
+ * app: al cliente no se le manda nada. En un reparto compartido, solo en los
+ * teléfonos de quien marcó «Recordarme».
  */
-export const usePaymentReminders = (clients: Client[], debts: Debt[], onOpen: () => void) => {
+export const usePaymentReminders = (
+  clients: Client[],
+  debts: Debt[],
+  uid: string | undefined,
+  onOpen: () => void,
+) => {
   const { t } = useTranslation();
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;
@@ -44,10 +52,13 @@ export const usePaymentReminders = (clients: Client[], debts: Debt[], onOpen: ()
       const schedule = client.paymentSchedule;
       const total = totals.get(key) || 0;
       if (seen.has(key) || !isValidPaymentSchedule(schedule) || !schedule.remind || total <= 0) return [];
+      if (schedule.remindBy && schedule.remindBy !== uid) return [];
       seen.add(key);
       return [{ name: client.name || '', total, schedule }];
     });
-  }, [clients, debts]);
+  }, [clients, debts, uid]);
+  // Clients change on every Listo; only resync when what the reminders show changed.
+  const signature = useMemo(() => JSON.stringify(entries), [entries]);
 
   const buildReminders = useRef<() => PaymentReminder[]>(() => []);
   buildReminders.current = () => {
@@ -91,16 +102,19 @@ export const usePaymentReminders = (clients: Client[], debts: Debt[], onOpen: ()
       clearTimeout(timer);
       subscription.remove();
     };
-  }, [entries, t]);
+  }, [signature, t]);
 
   // Tapping the reminder opens Deudas.
   useEffect(() => {
     const isPaymentReminder = (data?: Record<string, unknown>) => data?.kind === PAYMENT_REMINDER_KIND;
-    notifee.getInitialNotification()
-      .then((initial) => {
-        if (isPaymentReminder(initial?.notification?.data)) onOpenRef.current();
-      })
-      .catch(() => {});
+    if (!initialNotificationHandled) {
+      initialNotificationHandled = true;
+      notifee.getInitialNotification()
+        .then((initial) => {
+          if (isPaymentReminder(initial?.notification?.data)) onOpenRef.current();
+        })
+        .catch(() => {});
+    }
     return notifee.onForegroundEvent(({ type, detail }) => {
       if (type === EventType.PRESS && isPaymentReminder(detail.notification?.data)) onOpenRef.current();
     });

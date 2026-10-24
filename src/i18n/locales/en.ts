@@ -867,6 +867,7 @@ export default {
 
   // Payment dates (Deudas)
   paymentSchedule: {
+    longDate: '{{weekday}}, {{month}} {{day}}',
     title: 'Payment date',
     add: 'Payment date',
     monthly: 'Every month',

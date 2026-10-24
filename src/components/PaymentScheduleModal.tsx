@@ -44,7 +44,7 @@ const PaymentScheduleModal: React.FC<PaymentScheduleModalProps> = ({
   onClose,
 }) => {
   const { colors, isDark } = useTheme();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { width: windowWidth } = useWindowDimensions();
   const { fontScale } = useLayout();
   const isTablet = windowWidth >= 600;
@@ -79,9 +79,17 @@ const PaymentScheduleModal: React.FC<PaymentScheduleModalProps> = ({
 
   const monthNames = t('monthNames', { returnObjects: true }) as string[];
   const dayNames = t('dayNames', { returnObjects: true }) as string[];
+  // Spanish and Portuguese write weekdays and months in lowercase mid-sentence.
+  const midSentence = (word: string) => (i18n.language.startsWith('en') ? word : word.toLowerCase());
   const longDate = (key: string) => {
     const date = parseDateKey(key);
-    return date ? `${dayNames[date.getDay()].toLowerCase()} ${date.getDate()} de ${monthNames[date.getMonth()].toLowerCase()}` : key;
+    return date
+      ? t('paymentSchedule.longDate', {
+        weekday: midSentence(dayNames[date.getDay()]),
+        day: date.getDate(),
+        month: midSentence(monthNames[date.getMonth()]),
+      })
+      : key;
   };
 
   const draft: PaymentSchedule = kind === 'monthly'

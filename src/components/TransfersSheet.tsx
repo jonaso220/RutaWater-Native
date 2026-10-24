@@ -75,8 +75,10 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
     () => getStyles(colors, isTablet, modalWidth, fontScale),
     [colors, isTablet, modalWidth, fontScale],
   );
-  const [reviewingId, setReviewingId] = useState<string | null>(null);
-  const reviewingRef = useRef<string | null>(null);
+  // Revisadas que se están guardando: siguen ocultas hasta que Firestore las
+  // borra. Son independientes entre sí, así que sin señal ninguna se pierde ni
+  // bloquea el cierre de la ventana.
+  const [committingIds, setCommittingIds] = useState<ReadonlySet<string>>(() => new Set());
 
   // «Revisada» se aplica a los 5 s: mientras tanto la tarjeta se oculta y abajo
   // aparece «Deshacer» (Jonathan, 24/10/2026; antes pedía confirmar cada una).
@@ -84,16 +86,17 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
   const pendingRef = useRef<{ transfer: Transfer; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   const commitReview = async (transfer: Transfer) => {
-    if (reviewingRef.current) return;
-    reviewingRef.current = transfer.id;
-    setReviewingId(transfer.id);
+    setCommittingIds((ids) => new Set(ids).add(transfer.id));
     try {
       await onReview(transfer);
     } catch {
       Alert.alert(t('error'), t('transfers.reviewError'));
     } finally {
-      reviewingRef.current = null;
-      setReviewingId(null);
+      setCommittingIds((ids) => {
+        const next = new Set(ids);
+        next.delete(transfer.id);
+        return next;
+      });
     }
   };
 
@@ -124,7 +127,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
 
   const requestClose = () => {
     flushPending();
-    if (!reviewingRef.current) onClose();
+    onClose();
   };
 
   const identityIndex = useMemo(() => buildClientIdentityIndex(clients), [clients]);
@@ -136,9 +139,9 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
 
   // Las más viejas primero: son las que quedaron colgadas.
   const visibleTransfers = useMemo(() => transfers
-    .filter((transfer) => transfer.id !== pendingReview?.id)
+    .filter((transfer) => transfer.id !== pendingReview?.id && !committingIds.has(transfer.id))
     .sort((a, b) => (parseDate(a.createdAt as any)?.getTime() || 0) - (parseDate(b.createdAt as any)?.getTime() || 0)),
-  [transfers, pendingReview]);
+  [transfers, pendingReview, committingIds]);
 
   // Abre el chat del cliente, por ejemplo para responder al comprobante (Jonathan, 24/10/2026).
   const openWhatsAppChat = (phone: string) => {
@@ -191,7 +194,6 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
           <TouchableOpacity
             onPress={() => handleReview(item)}
             style={styles.reviewBtn}
-            disabled={reviewingId !== null}
           >
             <Text style={styles.reviewBtnText}>{t('transfers.reviewed')}</Text>
           </TouchableOpacity>
@@ -211,7 +213,7 @@ const TransfersSheet: React.FC<TransfersSheetProps> = ({
                 {t('transfers.pendingCount', { count: visibleTransfers.length })}
               </Text>
             </View>
-            <TouchableOpacity onPress={requestClose} style={styles.closeBtn} disabled={reviewingId !== null}>
+            <TouchableOpacity onPress={requestClose} style={styles.closeBtn}>
               <Ionicons name="close" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           </View>

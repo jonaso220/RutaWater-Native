@@ -867,6 +867,7 @@ export default {
 
   // Payment dates (Deudas)
   paymentSchedule: {
+    longDate: '{{weekday}} {{day}} de {{month}}',
     title: 'Fecha de cobro',
     add: 'Fecha de cobro',
     monthly: 'Todos los meses',

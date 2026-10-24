@@ -1050,9 +1050,10 @@ const HomeScreen = () => {
   const closeProfileSwitcher = useCallback(() => setProfileSwitcherVisible(false), [setProfileSwitcherVisible]);
   const closeCalendar = useCallback(() => setShowCalendar(false), []);
   const openDebtsSheet = useCallback(() => setShowDebtsSheet(true), []);
-  usePaymentReminders(clients, debts, openDebtsSheet);
+  usePaymentReminders(clients, debts, user?.uid, openDebtsSheet);
   const savePaymentSchedule = useCallback(async (clientId: string, schedule: PaymentSchedule | null) => {
-    const saved = await updateClient(clientId, { paymentSchedule: schedule });
+    const value = schedule?.remind && user?.uid ? { ...schedule, remindBy: user.uid } : schedule;
+    const saved = await updateClient(clientId, { paymentSchedule: value });
     if (!saved) throw new Error('PAYMENT_SCHEDULE_SAVE_FAILED');
     if (!schedule?.remind) return;
     const allowed = await requestNotificationPermission()
@@ -1062,7 +1063,7 @@ const HomeScreen = () => {
     if (!allowed) {
       Alert.alert(t('paymentSchedule.notificationsOffTitle'), t('paymentSchedule.notificationsOffMsg'));
     }
-  }, [updateClient, t]);
+  }, [updateClient, t, user?.uid]);
   const handleDebtsTransferPayment = useCallback((clientId: string) => {
     const client = clients.find((c) => c.id === clientId);
     if (!client) return;

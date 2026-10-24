@@ -19,9 +19,11 @@ export interface ClientPhone {
 }
 
 // Client document in Firestore 'clients' collection
+// `remindBy`: uid de quien pidió «Recordarme». En un reparto compartido el
+// aviso sale solo en sus teléfonos, no en los de los demás integrantes.
 export type PaymentSchedule =
-  | { kind: 'monthly'; fromDay: number; toDay: number; remind: boolean }
-  | { kind: 'date'; from: string; to?: string; remind: boolean };
+  | { kind: 'monthly'; fromDay: number; toDay: number; remind: boolean; remindBy?: string }
+  | { kind: 'date'; from: string; to?: string; remind: boolean; remindBy?: string };
 
 export interface Client {
   id: string;

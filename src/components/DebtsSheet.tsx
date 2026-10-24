@@ -38,6 +38,7 @@ import {
   comparePaymentStates,
   getPaymentScheduleState,
   isValidPaymentSchedule,
+  toDateKey,
 } from '../utils/paymentSchedule';
 import { paymentScheduleLabel, paymentStatusLabel } from '../utils/paymentScheduleLabel';
 
@@ -117,6 +118,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const [editAmount, setEditAmount] = useState('');
 
   const now = Date.now();
+  // Recomputes «Toca cobrar / En N días» when the day changes, not only the data.
+  const todayKey = toDateKey(new Date(now));
 
   const getAgeDays = (timestamp: any): number => {
     const d = parseDate(timestamp);
@@ -207,7 +210,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
     }
 
     return groups;
-  }, [debts, clients, sortMode, identityIndex]);
+  }, [debts, clients, sortMode, identityIndex, todayKey]);
 
   // Deferred: keystrokes update the input first; the fuzzy filtering over
   // every group/client runs as a lower-priority render right after.

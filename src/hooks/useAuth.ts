@@ -9,7 +9,7 @@ import { db } from '../config/firebase';
 import { Group } from '../types';
 import { API_ENDPOINTS } from '../config/api';
 import { logoutRevenueCatSession } from '../services/revenueCatSession';
-import { cancelScheduledAlarmsForOwner } from '../services/notifications';
+import { cancelPaymentReminders, cancelScheduledAlarmsForOwner } from '../services/notifications';
 import { reportAppCompatibility } from '../services/appCompatibilityHeartbeat';
 import { planSessionRetry } from '../utils/sessionRetry';
 
@@ -428,6 +428,8 @@ export const useAuth = () => {
         await cancelScheduledAlarmsForOwner(signingOutUserId, true)
           .catch((e) => reportError(e, 'Alarm Sign-Out Cleanup Error'));
       }
+      await cancelPaymentReminders()
+        .catch((e) => reportError(e, 'Payment reminders Sign-Out Cleanup Error'));
       // Clear user first to unmount StoreSync and detach Firestore listeners
       // BEFORE Firebase auth signs out (avoids permission-denied crashes)
       setUser(null);
@@ -519,6 +521,8 @@ export const useAuth = () => {
         .catch((e) => reportError(e, 'Post-delete RevenueCat sign-out error'));
       await cancelScheduledAlarmsForOwner(currentUser.uid, true)
         .catch((e) => reportError(e, 'Post-delete alarm cleanup error'));
+      await cancelPaymentReminders()
+        .catch((e) => reportError(e, 'Post-delete payment reminders cleanup error'));
       setUser(null);
       setGroupData(null);
       setUserScopeReadVersion(0);

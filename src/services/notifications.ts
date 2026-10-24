@@ -464,3 +464,91 @@ export const cancelForeignScheduledAlarms = async (
   }
   if (firstError) throw firstError;
 };
+
+// Recordatorios de cobro (Deudas → Fecha de cobro). Una notificación por día,
+// con todos los clientes que empiezan a pagar ese día. Son locales y se
+// recalculan desde la app cada vez que cambian las deudas o las fechas.
+const PAYMENT_CHANNEL_ID = 'payment-reminders';
+const PAYMENT_PREFIX = 'cobro-';
+
+let paymentChannelPromise: Promise<string> | null = null;
+
+const ensurePaymentChannel = async (): Promise<string> => {
+  if (Platform.OS !== 'android') return PAYMENT_CHANNEL_ID;
+  if (!paymentChannelPromise) {
+    paymentChannelPromise = notifee
+      .createChannel({
+        id: PAYMENT_CHANNEL_ID,
+        name: 'Recordatorios de cobro',
+        importance: AndroidImportance.DEFAULT,
+        sound: 'default',
+      })
+      .catch((e) => {
+        paymentChannelPromise = null;
+        throw e;
+      });
+  }
+  return paymentChannelPromise;
+};
+
+export interface PaymentReminder {
+  /** aaaa-mm-dd del día del aviso. */
+  date: string;
+  timestamp: number;
+  title: string;
+  body: string;
+}
+
+export const PAYMENT_REMINDER_KIND = 'payment-reminder';
+
+/** Deja programados exactamente estos avisos de cobro y borra los demás. */
+export const syncPaymentReminders = async (reminders: PaymentReminder[]): Promise<void> => {
+  const settings = await notifee.getNotificationSettings();
+  const allowed = settings.authorizationStatus >= AuthorizationStatus.AUTHORIZED;
+  const wanted = new Map(
+    (allowed ? reminders : []).map((reminder) => [`${PAYMENT_PREFIX}${reminder.date}`, reminder]),
+  );
+  const existing = await notifee.getTriggerNotifications();
+  const current = new Map<string, { body: string; timestamp?: number }>();
+  for (const { notification, trigger } of existing) {
+    const id = notification.id || '';
+    if (!id.startsWith(PAYMENT_PREFIX)) continue;
+    if (!wanted.has(id)) {
+      await notifee.cancelTriggerNotification(id);
+      continue;
+    }
+    current.set(id, {
+      body: notification.body || '',
+      timestamp: 'timestamp' in trigger ? trigger.timestamp : undefined,
+    });
+  }
+  if (wanted.size === 0) return;
+  const channelId = await ensurePaymentChannel();
+  for (const [id, reminder] of wanted) {
+    const before = current.get(id);
+    if (before && before.body === reminder.body && before.timestamp === reminder.timestamp) continue;
+    const trigger: TimestampTrigger = { type: TriggerType.TIMESTAMP, timestamp: reminder.timestamp };
+    await notifee.createTriggerNotification(
+      {
+        id,
+        title: reminder.title,
+        body: reminder.body,
+        data: { kind: PAYMENT_REMINDER_KIND, date: reminder.date },
+        android: {
+          channelId,
+          pressAction: { id: 'default' },
+          smallIcon: 'ic_notification',
+        },
+        ios: { sound: 'default' },
+      },
+      trigger,
+    );
+  }
+};
+
+export const cancelPaymentReminders = async (): Promise<void> => {
+  const ids = await notifee.getTriggerNotificationIds();
+  await Promise.all(
+    ids.filter((id) => id.startsWith(PAYMENT_PREFIX)).map((id) => notifee.cancelTriggerNotification(id)),
+  );
+};

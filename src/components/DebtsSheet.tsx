@@ -13,7 +13,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import ModalOverlay from './ModalOverlay';
-import { Client, Debt } from '../types';
+import { Client, Debt, PaymentSchedule } from '../types';
+import PaymentScheduleModal from './PaymentScheduleModal';
 import { normalizePhone, fuzzyMatch, matchScore, getModalWidth, parseMoneyInput, parseDate } from '../utils/helpers';
 import {
   buildClientIdentityIndex,
@@ -32,6 +33,13 @@ import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { useValueWhileVisible } from '../hooks/useValueWhileVisible';
 import { getClientPhoneSearchText } from '../utils/clientPhones';
+import {
+  PaymentScheduleState,
+  comparePaymentStates,
+  getPaymentScheduleState,
+  isValidPaymentSchedule,
+} from '../utils/paymentSchedule';
+import { paymentScheduleLabel, paymentStatusLabel } from '../utils/paymentScheduleLabel';
 
 interface DebtsSheetProps {
   visible: boolean;
@@ -46,9 +54,11 @@ interface DebtsSheetProps {
   onAddDebt?: (client: Client, amount: number) => Promise<void>;
   reminderTemplate?: string;
   debtTemplate?: string;
+  onSaveSchedule?: (clientId: string, schedule: PaymentSchedule | null) => Promise<void>;
 }
 
-type SortMode = 'date' | 'amount';
+type SortMode = 'date' | 'amount' | 'payment';
+type FilterMode = 'all' | 'monthly' | 'date';
 
 interface ClientDebtGroup {
   stableClientId: string;
@@ -60,6 +70,9 @@ interface ClientDebtGroup {
   total: number;
   debts: Debt[];
   maxAgeDays: number;
+  schedule: PaymentSchedule | null;
+  paymentState: PaymentScheduleState;
+  oldestDebtAt: number;
 }
 
 const DebtsSheet: React.FC<DebtsSheetProps> = ({
@@ -75,6 +88,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   onAddDebt,
   reminderTemplate,
   debtTemplate,
+  onSaveSchedule,
 }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
@@ -91,6 +105,8 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   );
   const [searchTerm, setSearchTerm] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('date');
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [scheduleTarget, setScheduleTarget] = useState<ClientDebtGroup | null>(null);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [addSearch, setAddSearch] = useState('');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -138,6 +154,9 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           total: 0,
           debts: [],
           maxAgeDays: 0,
+          schedule: isValidPaymentSchedule(client?.paymentSchedule) ? client!.paymentSchedule! : null,
+          paymentState: { status: 'none', window: null, days: 0 },
+          oldestDebtAt: 0,
         });
       } else {
         if (client) group.isUnlinked = false;
@@ -147,6 +166,9 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
         }
         if (client && !identityIndex.clientByDocumentId.has(group.clientId)) {
           group.clientId = client.id;
+        }
+        if (!group.schedule && isValidPaymentSchedule(client?.paymentSchedule)) {
+          group.schedule = client!.paymentSchedule!;
         }
       }
       const targetGroup = grouped.get(key)!;
@@ -158,11 +180,24 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
         targetGroup.maxAgeDays = age;
       }
       if (createdAtMs > (latestByKey.get(key) || 0)) latestByKey.set(key, createdAtMs);
+      if (createdAtMs && (!targetGroup.oldestDebtAt || createdAtMs < targetGroup.oldestDebtAt)) {
+        targetGroup.oldestDebtAt = createdAtMs;
+      }
     });
 
     const groups = Array.from(grouped.values());
+    const today = new Date(now);
+    groups.forEach((group) => {
+      group.paymentState = getPaymentScheduleState(
+        group.schedule,
+        today,
+        group.oldestDebtAt ? new Date(group.oldestDebtAt) : null,
+      );
+    });
 
-    if (sortMode === 'amount') {
+    if (sortMode === 'payment') {
+      groups.sort((a, b) => comparePaymentStates(a.paymentState, b.paymentState) || b.total - a.total);
+    } else if (sortMode === 'amount') {
       groups.sort((a, b) => b.total - a.total);
     } else {
       // Sort by most recent debt
@@ -179,13 +214,79 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const deferredAddSearch = useDeferredValue(addSearch);
 
+  const scheduleCounts = useMemo(() => ({
+    monthly: clientGroups.filter((g) => g.schedule?.kind === 'monthly').length,
+    date: clientGroups.filter((g) => g.schedule?.kind === 'date').length,
+  }), [clientGroups]);
+  const hasSchedules = scheduleCounts.monthly + scheduleCounts.date > 0;
+  // A filter left empty (its last date was removed) falls back to «Todos».
+  const activeFilter: FilterMode = filterMode !== 'all' && scheduleCounts[filterMode] > 0 ? filterMode : 'all';
+
   const filteredGroups = useMemo(() => {
-    if (!deferredSearchTerm.trim()) return clientGroups;
+    const byKind = activeFilter === 'all'
+      ? clientGroups
+      : clientGroups.filter((g) => g.schedule?.kind === activeFilter);
+    if (!deferredSearchTerm.trim()) return byKind;
     const matcher = fuzzyMatch(deferredSearchTerm);
-    return clientGroups.filter((g) =>
+    return byKind.filter((g) =>
       matcher(g.clientName || '', g.clientAddress || '', g.clientPhone || ''),
     );
-  }, [clientGroups, deferredSearchTerm]);
+  }, [clientGroups, deferredSearchTerm, activeFilter]);
+
+  const saveSchedule = async (schedule: PaymentSchedule | null) => {
+    if (!scheduleTarget || !onSaveSchedule) return;
+    try {
+      await onSaveSchedule(scheduleTarget.clientId, schedule);
+      setScheduleTarget(null);
+    } catch {
+      Alert.alert(t('error'), t('paymentSchedule.saveError'));
+    }
+  };
+
+  const renderPaymentChip = (item: ClientDebtGroup) => {
+    if (item.isUnlinked || !onSaveSchedule) return null;
+    if (!item.schedule) {
+      return (
+        <TouchableOpacity
+          onPress={() => setScheduleTarget(item)}
+          style={styles.paymentAdd}
+          accessibilityRole="button"
+          accessibilityLabel={t('paymentSchedule.edit', { name: item.clientName })}
+        >
+          <Ionicons name="add" size={14} color={colors.textMuted} />
+          <Text style={styles.paymentAddText}>{t('paymentSchedule.add')}</Text>
+        </TouchableOpacity>
+      );
+    }
+    const { status } = item.paymentState;
+    const tone = status === 'overdue'
+      ? { bg: colors.dangerLight, fg: colors.danger }
+      : status === 'now'
+        ? { bg: colors.warningAmberBg, fg: colors.warningAmber }
+        : { bg: colors.sectionBackground, fg: colors.textSecondary };
+    const statusText = paymentStatusLabel(t, item.paymentState);
+    return (
+      <TouchableOpacity
+        onPress={() => setScheduleTarget(item)}
+        style={[styles.paymentChip, { backgroundColor: tone.bg }]}
+        accessibilityRole="button"
+        accessibilityLabel={t('paymentSchedule.edit', { name: item.clientName })}
+      >
+        <Ionicons
+          name={item.schedule.kind === 'monthly' ? 'repeat' : 'calendar-outline'}
+          size={13}
+          color={tone.fg}
+        />
+        <Text style={[styles.paymentChipText, { color: tone.fg }]} numberOfLines={1}>
+          {paymentScheduleLabel(t, item.schedule)}
+          {statusText ? <Text style={styles.paymentChipStatus}>{`  ·  ${statusText}`}</Text> : null}
+        </Text>
+        {item.schedule.remind ? (
+          <Ionicons name="notifications" size={12} color={tone.fg} />
+        ) : null}
+      </TouchableOpacity>
+    );
+  };
 
   const indebtedStableIds = useMemo(() => {
     const set = new Set<string>();
@@ -359,6 +460,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           {item.isUnlinked ? (
             <Text style={styles.unlinkedLabel}>{t('debtsSheet.unlinkedLabel')}</Text>
           ) : null}
+          {renderPaymentChip(item)}
         </View>
         <View style={styles.totalBlock}>
           <Text style={styles.totalLabel}>{t('debtsSheet.owes')}</Text>
@@ -618,7 +720,7 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
 
           {/* Sort toggle */}
           {debts.length > 0 && (
-            <View style={styles.sortRow}>
+            <View style={[styles.sortRow, hasSchedules && styles.sortRowJoined]}>
               <TouchableOpacity
                 onPress={() => setSortMode('date')}
                 style={[styles.sortBtn, sortMode === 'date' && styles.sortBtnActive]}
@@ -635,8 +737,46 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
                   {t('debtsSheet.sortAmount')}
                 </Text>
               </TouchableOpacity>
+              {onSaveSchedule ? (
+                <TouchableOpacity
+                  onPress={() => setSortMode('payment')}
+                  style={[styles.sortBtn, sortMode === 'payment' && styles.sortBtnActive]}
+                >
+                  <Text
+                    style={[styles.sortBtnText, sortMode === 'payment' && styles.sortBtnTextActive]}
+                    numberOfLines={1}
+                  >
+                    {t('debtsSheet.sortPayment')}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           )}
+
+          {debts.length > 0 && hasSchedules ? (
+            <View style={styles.filterRow}>
+              {([
+                ['all', t('debtsSheet.filterAll'), clientGroups.length],
+                ['monthly', t('debtsSheet.filterMonthly'), scheduleCounts.monthly],
+                ['date', t('debtsSheet.filterDated'), scheduleCounts.date],
+              ] as Array<[FilterMode, string, number]>).map(([mode, label, count]) => (
+                <TouchableOpacity
+                  key={mode}
+                  onPress={() => setFilterMode(mode)}
+                  style={[styles.filterChip, activeFilter === mode && styles.filterChipActive]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: activeFilter === mode }}
+                >
+                  <Text style={[styles.filterChipText, activeFilter === mode && styles.filterChipTextActive]}>
+                    {label}
+                  </Text>
+                  <Text style={[styles.filterChipCount, activeFilter === mode && styles.filterChipTextActive]}>
+                    {count}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
 
           <FlatList
             data={filteredGroups}
@@ -655,6 +795,14 @@ const DebtsSheet: React.FC<DebtsSheetProps> = ({
           />
         </View>
       </KeyboardAvoidingView>
+
+      <PaymentScheduleModal
+        visible={!!scheduleTarget}
+        clientName={scheduleTarget?.clientName || ''}
+        schedule={scheduleTarget?.schedule}
+        onSave={saveSchedule}
+        onClose={() => setScheduleTarget(null)}
+      />
 
       {/* Add Debt Panel */}
       <ModalOverlay visible={showAddPanel} onClose={closeAddPanel} animationType="slide">
@@ -963,6 +1111,83 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   },
   sortBtnTextActive: {
     color: colors.textWhite,
+  },
+  sortRowJoined: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: s(6),
+    paddingHorizontal: s(12),
+    paddingVertical: s(8),
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(5),
+    paddingHorizontal: s(10),
+    paddingVertical: s(5),
+    borderRadius: s(14),
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  filterChipActive: {
+    backgroundColor: colors.textPrimary,
+    borderColor: colors.textPrimary,
+  },
+  filterChipText: {
+    fontSize: s(13),
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  filterChipCount: {
+    fontSize: s(12),
+    fontWeight: '700',
+    color: colors.textHint,
+    fontVariant: ['tabular-nums'],
+  },
+  filterChipTextActive: {
+    color: colors.card,
+  },
+  paymentChip: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(5),
+    maxWidth: '100%',
+    marginTop: s(7),
+    paddingHorizontal: s(8),
+    paddingVertical: s(4),
+    borderRadius: s(8),
+  },
+  paymentChipText: {
+    flexShrink: 1,
+    fontSize: s(12),
+    fontWeight: '700',
+  },
+  paymentChipStatus: {
+    fontWeight: '600',
+  },
+  paymentAdd: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(3),
+    marginTop: s(7),
+    paddingHorizontal: s(8),
+    paddingVertical: s(3),
+    borderRadius: s(8),
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.cardBorder,
+  },
+  paymentAddText: {
+    fontSize: s(12),
+    fontWeight: '600',
+    color: colors.textMuted,
   },
   // List
   list: { padding: s(12) },

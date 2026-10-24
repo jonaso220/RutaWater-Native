@@ -19,6 +19,10 @@ export interface ClientPhone {
 }
 
 // Client document in Firestore 'clients' collection
+export type PaymentSchedule =
+  | { kind: 'monthly'; fromDay: number; toDay: number; remind: boolean }
+  | { kind: 'date'; from: string; to?: string; remind: boolean };
+
 export interface Client {
   id: string;
   // Identidad estable del cliente humano. Los pedidos extra conservan un id
@@ -40,6 +44,9 @@ export interface Client {
   rut?: string;
   businessName?: string;
   email?: string;
+  // Cuándo suele pagar: todos los meses entre dos días, o una fecha (o rango)
+  // puntual. `remind` agenda una notificación local para el primer día.
+  paymentSchedule?: PaymentSchedule | null;
   lat: string;
   lng: string;
   mapsLink: string;

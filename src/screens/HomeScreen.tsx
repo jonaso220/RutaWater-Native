@@ -20,7 +20,7 @@ import {
   AppState,
 } from 'react-native';
 import { useScrollToTop, useFocusEffect } from '@react-navigation/native';
-import { Client } from '../types';
+import { Client, PaymentSchedule } from '../types';
 import { createVisitCommand } from '../utils/visitCompletion';
 import { useProducts } from '../stores/productCatalogStore';
 import { getTodayDayName, fuzzyMatch, getNextVisitDate, toLocalDateString, settingsDocId } from '../utils/helpers';
@@ -121,6 +121,8 @@ const reorderLayoutAnimation = {
 import DaySelector from '../components/DaySelector';
 import { ProductLabel } from '../components/ProductIcon';
 import DebouncedSearchInput, { DebouncedSearchInputHandle } from '../components/DebouncedSearchInput';
+import { usePaymentReminders } from '../hooks/usePaymentReminders';
+import { getAlarmPermissionIssue, requestNotificationPermission } from '../services/notifications';
 
 // --- Memoized wrapper to prevent ClientCard re-renders on every day switch ---
 interface ClientItemProps {
@@ -1044,6 +1046,20 @@ const HomeScreen = () => {
   const closeAlarmPicker = useCallback(() => setAlarmPromptClient(null), []);
   const closeProfileSwitcher = useCallback(() => setProfileSwitcherVisible(false), [setProfileSwitcherVisible]);
   const closeCalendar = useCallback(() => setShowCalendar(false), []);
+  const openDebtsSheet = useCallback(() => setShowDebtsSheet(true), []);
+  usePaymentReminders(clients, debts, openDebtsSheet);
+  const savePaymentSchedule = useCallback(async (clientId: string, schedule: PaymentSchedule | null) => {
+    const saved = await updateClient(clientId, { paymentSchedule: schedule });
+    if (!saved) throw new Error('PAYMENT_SCHEDULE_SAVE_FAILED');
+    if (!schedule?.remind) return;
+    const allowed = await requestNotificationPermission()
+      .then(() => getAlarmPermissionIssue())
+      .then((issue) => issue !== 'notifications')
+      .catch(() => false);
+    if (!allowed) {
+      Alert.alert(t('paymentSchedule.notificationsOffTitle'), t('paymentSchedule.notificationsOffMsg'));
+    }
+  }, [updateClient, t]);
   const handleDebtsTransferPayment = useCallback((clientId: string) => {
     const client = clients.find((c) => c.id === clientId);
     if (!client) return;
@@ -1900,6 +1916,7 @@ const HomeScreen = () => {
         reminderTemplate={appSettings?.whatsappRecordatorio}
         debtTemplate={appSettings?.whatsappDeuda}
         onTransferPayment={handleDebtsTransferPayment}
+        onSaveSchedule={savePaymentSchedule}
       />
 
       {/* Transfers Sheet */}

@@ -325,7 +325,7 @@ const DirectoryScreen = () => {
               setShowNewClient(true);
             }}
           >
-            <Text style={styles.importBtnText}><Ionicons name="add" size={16} /></Text>
+            <Ionicons name="person-add-outline" size={Math.round(20 * fontScale)} color={colors.textWhite} />
           </TouchableOpacity>
         </View>
         {/* Filter chips */}
@@ -601,11 +601,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
     paddingVertical: s(10),
     borderRadius: s(10),
     justifyContent: 'center',
-  },
-  importBtnText: {
-    fontSize: s(16),
-    fontWeight: '700',
-    color: colors.textWhite,
+    alignItems: 'center',
   },
   emptyContainer: {
     alignItems: 'center',

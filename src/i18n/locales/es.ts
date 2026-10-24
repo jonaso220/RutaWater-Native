@@ -796,7 +796,6 @@ export default {
   // Add Client Modal
   addModal: {
     title: 'Nuevo cliente',
-    pasteOrder: 'Pegar pedido',
     destination: 'Destino',
     directoryOnly: 'Sin día fijo',
     frequency: 'Frecuencia',
@@ -830,10 +829,6 @@ export default {
     nameRequired: 'El nombre del cliente es obligatorio.',
     dayRequired: 'Selecciona un día para agendar.',
     saveError: 'No se pudo guardar el cliente.',
-    pasteTitle: 'Pegar pedido',
-    pasteHint: 'Pega el texto del pedido y los campos se completarán automáticamente',
-    pastePlaceholder: 'Pega aquí el texto del pedido...',
-    process: 'Procesar',
   },
 
   // Alarm Banner

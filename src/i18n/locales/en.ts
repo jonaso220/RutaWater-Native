@@ -796,7 +796,6 @@ export default {
   // Add Client Modal
   addModal: {
     title: 'New Client',
-    pasteOrder: 'Paste Order',
     destination: 'Destination',
     directoryOnly: 'No fixed day',
     frequency: 'Frequency',
@@ -830,10 +829,6 @@ export default {
     nameRequired: 'Client name is required.',
     dayRequired: 'Select a day to schedule.',
     saveError: 'Could not save the client.',
-    pasteTitle: 'Paste Order',
-    pasteHint: 'Paste the order text and fields will be filled automatically',
-    pastePlaceholder: 'Paste order text here...',
-    process: 'Process',
   },
 
   // Alarm Banner

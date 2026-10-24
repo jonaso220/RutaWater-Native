@@ -796,7 +796,6 @@ export default {
   // Add Client Modal
   addModal: {
     title: 'Novo Cliente',
-    pasteOrder: 'Colar Pedido',
     destination: 'Destino',
     directoryOnly: 'Sem dia fixo',
     frequency: 'Frequência',
@@ -830,10 +829,6 @@ export default {
     nameRequired: 'O nome do cliente é obrigatório.',
     dayRequired: 'Selecione um dia para agendar.',
     saveError: 'Não foi possível salvar o cliente.',
-    pasteTitle: 'Colar Pedido',
-    pasteHint: 'Cole o texto do pedido e os campos serão preenchidos automaticamente',
-    pastePlaceholder: 'Cole o texto do pedido aqui...',
-    process: 'Processar',
   },
 
   // Alarm Banner

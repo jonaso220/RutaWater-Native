@@ -7,6 +7,7 @@ import { getTodayDayName } from '../utils/helpers';
 import { millisecondsUntilNextLocalDay } from '../utils/localDayClock';
 import { ThemeColors } from '../theme/colors';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
+import { useContentRail, useContentRailStore } from '../stores/contentRailStore';
 
 interface DaySelectorProps {
   selectedDay: string;
@@ -36,6 +37,8 @@ const DaySelector = React.memo<DaySelectorProps>(({
   useTranslation();
   const styles = useMemo(() => getStyles(colors, fontScale, isWide, compact), [colors, fontScale, isWide, compact]);
   const [todayName, setTodayName] = useState(getTodayDayName);
+  const contentRail = useContentRail();
+  const setDayRowWidth = useContentRailStore((state) => state.setDayRowWidth);
 
   useEffect(() => {
     let rolloverTimer: ReturnType<typeof setTimeout> | undefined;
@@ -74,8 +77,10 @@ const DaySelector = React.memo<DaySelectorProps>(({
       <GHScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.daySelector}
+        style={[styles.daySelector, contentRail.rail]}
         contentContainerStyle={styles.daySelectorContent}
+        // The full week sets the width of the whole screen on large displays.
+        onContentSizeChange={(width) => { if (isWide) setDayRowWidth(width); }}
       >
         {ALL_DAYS.map((day) => {
           const isToday = day === todayName;

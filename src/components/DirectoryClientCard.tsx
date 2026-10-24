@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { getClientPhones } from '../utils/clientPhones';
+import { useContentRail } from '../stores/contentRailStore';
 
 const AVATAR_COLORS = ['#3B82F6','#22C55E','#A855F7','#F97316','#EC4899','#14B8A6','#6366F1','#EF4444'];
 const ACTION_HIT_SLOP = { top: 3, bottom: 3, left: 3, right: 3 };
@@ -54,6 +55,7 @@ const DirectoryClientCard = ({
 }: Props) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
+  const contentRail = useContentRail();
   const { fontScale, width } = useLayout();
   const wideLayout = width >= 900;
   const styles = getSharedStyles(colors, fontScale);
@@ -159,7 +161,7 @@ const DirectoryClientCard = ({
   const additionalPhoneCount = Math.max(0, getClientPhones(item).length - 1);
 
   return (
-    <View style={[styles.card, debtTotal > 0 && styles.cardDebt]}>
+    <View style={[styles.card, contentRail.rail, debtTotal > 0 && styles.cardDebt]}>
       <View style={[styles.cardContent, wideLayout && styles.cardContentWide]}>
         <View style={styles.infoColumn}>
         {/* HEADER: Avatar + Name + Phone */}

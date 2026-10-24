@@ -69,6 +69,7 @@ import { Frequency } from '../constants/products';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { getClientPhoneSearchText } from '../utils/clientPhones';
+import { useContentRail } from '../stores/contentRailStore';
 
 type ListItem =
   | { type: 'header'; key: string; title: string; count: number; isToday: boolean }
@@ -221,6 +222,7 @@ const ClientItem = React.memo<ClientItemProps>(({
 
 const HomeScreen = () => {
   const { t } = useTranslation();
+  const contentRail = useContentRail();
   const { colors, isDark } = useTheme();
   const { fontScale, isWide, isPhoneLandscape, width: screenWidth, height: screenHeight } = useLayout();
   // Always a single column. On wide screens (Mac/iPad) the card itself switches
@@ -485,11 +487,12 @@ const HomeScreen = () => {
   const clientListContentStyle = useMemo(
     () => [
       styles.listContent,
+      contentRail.railPadded,
       // Keep the list viewport fixed. Its content starts below the floating
       // header, while native transforms move the chrome out of view.
       { paddingTop: listChromeHeight + 12 },
     ],
-    [styles.listContent, listChromeHeight],
+    [styles.listContent, contentRail.railPadded, listChromeHeight],
   );
 
   // Pull-to-refresh: force a server-side read of clients so the user can
@@ -1476,7 +1479,7 @@ const HomeScreen = () => {
 
           {/* Quick actions — collapse with the calendar and load summary. */}
           <View style={styles.actionPanel}>
-            <View style={styles.actionPanelContent}>
+            <View style={[styles.actionPanelContent, contentRail.rail]}>
             <View style={styles.actionCompactStack}>
               <View style={styles.actionCompactRow}>
                 <TouchableOpacity
@@ -1608,7 +1611,7 @@ const HomeScreen = () => {
         >
       {/* Search bar + Filters */}
       <View style={styles.searchSection}>
-        <View style={styles.searchRow}>
+        <View style={[styles.searchRow, contentRail.rail]}>
           {/* Owns its keystrokes; only the debounced term re-renders Home. */}
           <DebouncedSearchInput
             ref={searchInputRef}
@@ -1639,6 +1642,7 @@ const HomeScreen = () => {
         {showFilters && (
           <View style={[
             styles.filtersPanel,
+            contentRail.rail,
             isPhoneLandscape && { maxHeight: Math.round(screenHeight * 0.4) },
           ]}>
             <View style={styles.filtersPanelHeader}>

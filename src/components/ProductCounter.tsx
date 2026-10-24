@@ -7,6 +7,7 @@ import { useAllProducts } from '../stores/productCatalogStore';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
+import { useContentRail } from '../stores/contentRailStore';
 import { calculateProductTotals } from '../utils/productCounter';
 
 interface ProductCounterProps {
@@ -20,6 +21,7 @@ interface ProductCounterProps {
 const ProductCounter: React.FC<ProductCounterProps> = ({ clients, whenLabel, fontScale = 1, compact = false }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
+  const contentRail = useContentRail();
   const styles = React.useMemo(() => getStyles(colors, fontScale, compact), [colors, fontScale, compact]);
   const s = (v: number) => Math.round(v * fontScale);
   // Existing scheduled quantities must remain in the truck load even after a
@@ -47,7 +49,7 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, whenLabel, fon
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.row}>
+      <View style={[styles.row, contentRail.rail]}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}

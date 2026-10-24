@@ -37,10 +37,12 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { isDeveloperPromoRedemptionAvailable } from '../utils/promoAvailability';
 import { startEnCaminoLink } from '../services/liveTracking';
+import { useContentRail } from '../stores/contentRailStore';
 
 const SettingsScreen = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const contentRail = useContentRail();
   const { colors, isDark } = useTheme();
   const { fontScale, width: screenWidth } = useLayout();
   const isTablet = screenWidth >= 600;
@@ -249,7 +251,7 @@ const SettingsScreen = () => {
 
   return (
     <>
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.container} contentContainerStyle={[styles.contentContainer, contentRail.rail]} keyboardShouldPersistTaps="handled">
       {/* User info */}
       <View style={styles.section}>
         <View style={styles.userCard}>

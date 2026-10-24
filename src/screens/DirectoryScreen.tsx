@@ -36,10 +36,12 @@ import { FlashList } from '@shopify/flash-list';
 import { useLayout } from '../hooks/useLayout';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import { isClientLimitError } from '../services/clientCreation';
+import { useContentRail } from '../stores/contentRailStore';
 
 const DirectoryScreen = () => {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const contentRail = useContentRail();
   const { fontScale, isWide } = useLayout();
   const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
   const navigation = useNavigation<any>();
@@ -284,7 +286,7 @@ const DirectoryScreen = () => {
       <View style={{ flex: 1 }}>
       {/* Search bar + Import */}
       <View style={styles.searchContainer}>
-        <View style={styles.searchContainerInner}>
+        <View style={[styles.searchContainerInner, contentRail.rail]}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
             <TextInput
@@ -379,7 +381,7 @@ const DirectoryScreen = () => {
         </View>
       </View>
 
-      <View style={styles.countRow}>
+      <View style={[styles.countRow, contentRail.rail]}>
         <Text style={styles.countBadge}>
           {t('directory.clientCount', { count: filteredClients.length })} {activeFilter !== 'all' ? t('directory.ofTotal', { total: counts.total }) : t('directory.inDirectory')}
         </Text>
@@ -390,7 +392,7 @@ const DirectoryScreen = () => {
           pipeline gets stuck on []→populated transitions, causing the list
           to look empty until the user types. */}
       {clientsLoading && clients.length === 0 ? (
-        <View style={styles.skeletonList}>
+        <View style={[styles.skeletonList, contentRail.rail]}>
           {[0, 1, 2, 3, 4, 5].map((i) => (
             <SkeletonCard key={i} />
           ))}
@@ -402,7 +404,7 @@ const DirectoryScreen = () => {
           data={filteredClients}
           renderItem={renderClient}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, contentRail.railPadded]}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={{ fontSize: 40, marginBottom: 8 }}>{search ? '🔍' : '📋'}</Text>

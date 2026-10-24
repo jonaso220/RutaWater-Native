@@ -22,6 +22,7 @@ import {
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { startEnCaminoLink } from '../services/liveTracking';
 import { withTrackingLink } from '../utils/liveTracking';
+import { useContentRail } from '../stores/contentRailStore';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
 
@@ -99,6 +100,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
 }) => {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const contentRail = useContentRail();
   const s = (v: number) => Math.round(v * fontScale);
   const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
   const [showPositionPrompt, setShowPositionPrompt] = useState(false);
@@ -332,7 +334,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
       </TouchableOpacity>
     );
     return (
-      <View style={[styles.card, styles.noteCard, wideLayout && styles.cardWide]}>
+      <View style={[styles.card, styles.noteCard, wideLayout && [styles.cardWide, contentRail.rail]]}>
         {positionPromptMounted && (
           <PromptModal
             visible={showPositionPrompt}
@@ -392,7 +394,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
     <View
       style={[
         styles.card,
-        wideLayout && styles.cardWide,
+        wideLayout && [styles.cardWide, contentRail.rail],
         (client.freq === 'once') && styles.cardOnce,
         client.isStarred && styles.cardStarred,
       ]}

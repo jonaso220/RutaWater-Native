@@ -30,9 +30,10 @@ const main = async () => {
         await wakeVigilante();
       }
     } catch (error) {
-      // Sin internet o Telegram caído: reintentar sin apurar.
-      console.log(`${stamp()} ${error instanceof Error ? error.message : String(error)}`);
-      await sleep(30000);
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(`${stamp()} ${message}`);
+      // Otro lector lo cortó (no debería pasar): reintentar enseguida. Sin internet: sin apurar.
+      await sleep(/Conflict/.test(message) ? 2000 : 30000);
     }
   }
 };

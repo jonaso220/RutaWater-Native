@@ -7,6 +7,7 @@ import { applyReplacements, openWhatsapp } from './whatsapp';
 import { downloadInboxMedia, forwardReceiptToAquapura, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
 import { askJonathan, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
 import { scheduledPass } from './vigilanteControl';
+import { saveContact } from './contacts';
 import { mergeClients, undoMerge } from './merge';
 import path from 'path';
 import type { ServerConfig } from './config';
@@ -40,6 +41,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
 - transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
 - WhatsApp por la API (coexistencia, gratis): leer_whatsapp trae los mensajes de clientes sin atender con su conversación y sus fichas; transcribir_whatsapp transcribe sus audios; ver_archivo_whatsapp muestra una foto o comprobante; responder_whatsapp contesta dentro de las 24 h (hasta el tope del mes); marcar_whatsapp_atendido los da por resueltos y los marca leídos. Avisos y recordatorios NUNCA por la API: se cobran; van por la app en el Mac.
+- guardar_contacto guarda o renombra al cliente en los Contactos de iCloud (iPhone y WhatsApp) como «Nombre - Dirección -» + link de Maps.
 - pasada_programada: las pasadas de 9 y 18 avisan «empieza» y «termina»; contestar y agendar lo hace el vigilante.
 - Dudas para Jonathan por Telegram: consultar_jonathan le manda la pregunta a su bot; leer_respuestas_jonathan trae lo que contestó (con la pregunta a la que responde); marcar_respuesta_aplicada las da por hechas; avisar_jonathan manda un aviso corto sin pregunta.
 - No hay herramientas para borrar clientes (salvo la copia que sobra al fusionar o un pedido de una vez repetido), crear deudas, precios ni días de visita de clientes con varios días.`;
@@ -511,6 +513,22 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, handle(async ({ estado, pasada }: { estado: 'empieza' | 'termina'; pasada?: string }) => scheduledPass(estado, pasada)));
+
+  server.registerTool('guardar_contacto', {
+    title: 'Guardar contacto (iCloud)',
+    description: 'Guarda al cliente en los Contactos del Mac (iCloud: los mismos del iPhone y de WhatsApp) como «Nombre - Dirección -» con el link de Maps al final. Si ya hay un contacto con ese teléfono le cambia el nombre (también a los duplicados); si no, lo crea. Usar con los mismos datos de la ficha de RutaWater (nombre y dirección con mayúscula inicial). Nunca guardar la cédula ni otros documentos.',
+    inputSchema: {
+      nombre: z.string().min(1).max(200),
+      direccion: z.string().max(500).optional(),
+      link_maps: z.string().max(500).optional(),
+      telefono: z.string().min(8).max(40).describe('Como 099123456 o +59899123456'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, handle(async (args: { nombre: string; direccion?: string; link_maps?: string; telefono: string }) => {
+    const result = await saveContact(args);
+    appendAudit(config.auditPath, { tool: 'guardar_contacto', args: { nombre: args.nombre }, cliente: args.nombre, reparto: '', antes: null, despues: result });
+    return result;
+  }));
 
   server.registerTool('marcar_whatsapp_atendido', {
     title: 'Marcar WhatsApp atendido',

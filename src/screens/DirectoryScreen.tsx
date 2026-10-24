@@ -595,9 +595,9 @@ const getStyles = (colors: ThemeColors, scale: number = 1, isWide: boolean = fal
   },
   importBtn: {
     backgroundColor: colors.primary,
-    minWidth: s(44),
+    minWidth: s(60),
     minHeight: s(44),
-    paddingHorizontal: s(12),
+    paddingHorizontal: s(18),
     paddingVertical: s(10),
     borderRadius: s(10),
     justifyContent: 'center',

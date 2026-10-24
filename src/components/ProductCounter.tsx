@@ -48,26 +48,27 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, whenLabel, fon
   return (
     <View style={styles.wrapper}>
       <View style={styles.row}>
-      {/* Título en dos líneas chicas a la izquierda: no suma altura a la barra
-          y queda fijo mientras los productos se deslizan. */}
-      <View
-        style={styles.title}
-        accessible
-        accessibilityRole="header"
-        accessibilityLabel={`${t('productCounter.title')} ${whenLabel}`}
-      >
-        <MaterialCommunityIcons name="truck-delivery-outline" size={s(compact ? 15 : 17)} color={colors.primary} />
-        <View>
-          <Text style={styles.titleText} numberOfLines={1}>{t('productCounter.title')}</Text>
-          <Text style={styles.whenText} numberOfLines={1}>{whenLabel}</Text>
-        </View>
-      </View>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.container}
         contentContainerStyle={styles.content}
       >
+        {/* Título en dos líneas chicas a la izquierda: no suma altura a la barra
+            y se desliza junto con los productos, así en pantallas chicas no
+            les quita lugar (Jonathan, 24/10/2026). */}
+        <View
+          style={styles.title}
+          accessible
+          accessibilityRole="header"
+          accessibilityLabel={`${t('productCounter.title')} ${whenLabel}`}
+        >
+          <MaterialCommunityIcons name="truck-delivery-outline" size={s(compact ? 15 : 17)} color={colors.primary} />
+          <View>
+            <Text style={styles.titleText} numberOfLines={1}>{t('productCounter.title')}</Text>
+            <Text style={styles.whenText} numberOfLines={1}>{whenLabel}</Text>
+          </View>
+        </View>
         {displayProductIds.map((productId) => {
           if (totals[productId] <= 0) return null;
           const product = productsById.get(productId);
@@ -113,8 +114,8 @@ const getStyles = (colors: ThemeColors, scale: number = 1, compact = false) => {
     flexDirection: 'row',
     alignItems: 'center',
     gap: s(5),
-    marginLeft: s(12),
     paddingRight: s(8),
+    marginRight: s(2),
     borderRightWidth: 1,
     borderRightColor: colors.primaryLight,
   },
@@ -134,7 +135,7 @@ const getStyles = (colors: ThemeColors, scale: number = 1, compact = false) => {
     flex: 1,
   },
   content: {
-    paddingLeft: s(8),
+    paddingLeft: s(12),
     paddingRight: s(12),
     paddingVertical: s(compact ? 4 : 10),
     gap: s(8),

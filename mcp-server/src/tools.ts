@@ -562,13 +562,16 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('marcar_respuesta_aplicada', {
     title: 'Marcar respuesta aplicada',
-    description: 'Da por aplicadas esas respuestas de Jonathan (ids R… de leer_respuestas_jonathan) para que no vuelvan a aparecer. consultas: las dudas (ids D…) que quedaron contestadas por una respuesta_varias; las que no nombró siguen abiertas.',
+    description: 'Da por aplicadas esas respuestas de Jonathan (ids R… de leer_respuestas_jonathan) para que no vuelvan a aparecer. consultas: las dudas (ids D…) que quedaron contestadas por una respuesta_varias, o que se resolvieron sin Jonathan (el audio se pudo transcribir después, el cliente aclaró): en ese caso ids va vacío. Las que no se nombran siguen abiertas.',
     inputSchema: {
-      ids: z.array(z.string().min(1)).min(1).max(50),
+      ids: z.array(z.string().min(1)).max(50),
       consultas: z.array(z.string().min(1)).max(50).optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, handle(async ({ ids, consultas }: { ids: string[]; consultas?: string[] }) => markAnswersApplied(ids, consultas)));
+  }, handle(async ({ ids, consultas }: { ids: string[]; consultas?: string[] }) => {
+    if (!ids.length && !consultas?.length) throw new WriteError('Pasá al menos una respuesta (ids) o una duda (consultas).');
+    return markAnswersApplied(ids, consultas);
+  }));
 
   server.registerTool('avisar_jonathan', {
     title: 'Avisar a Jonathan (Telegram)',

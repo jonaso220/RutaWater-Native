@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { DocumentSnapshot, Firestore } from 'firebase-admin/firestore';
+import { FieldValue, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore';
 import type { Client } from '../../src/types';
 import { getClientPhones } from '../../src/utils/clientPhones';
 import { runScript } from './audio';
@@ -20,6 +20,11 @@ const configFile = () => env('RUTAWATER_WHATSAPP_CONFIG', join(home, '.rutawater
 const API = 'https://api.ycloud.com/v2';
 const INBOX = 'whatsappInbox';
 const USAGE = 'whatsappUsage';
+// Excluidos de la base (los lee también el webhook de Netlify): los que Jonathan
+// le pide al vigilante que excluya, sumados a los de whatsapp.json (27/10/2026).
+const EXCLUDED_COLLECTION = 'whatsappConfig';
+const EXCLUDED_DOC = 'excluidos';
+const NAME_SEARCH_MS = 14 * 24 * 3600e3;
 // Meta regala 1.000 respuestas por número y por mes; después ~US$0,0113 cada
 // una. Jonathan acepta hasta ~US$30 por mes sobre lo gratis: 1.000 + 2.600.
 const DEFAULT_MONTHLY_LIMIT = 3600;
@@ -50,8 +55,16 @@ const apiKey = (): string => {
   return readFileSync(keyFile(), 'utf8').trim();
 };
 
-const isExcluded = (config: LocalConfig, phone: string) =>
-  config.excluidos.some((excluded) => excluded === phone || excluded.slice(-8) === phone.slice(-8));
+const excludedRef = (db: Firestore) => db.collection(EXCLUDED_COLLECTION).doc(EXCLUDED_DOC);
+
+/** Los de whatsapp.json más los de la base. */
+const loadExcluded = async (db: Firestore, config: LocalConfig): Promise<string[]> => {
+  const phones = (await excludedRef(db).get()).data()?.phones;
+  return [...config.excluidos, ...(Array.isArray(phones) ? phones.map(digits).filter(Boolean) : [])];
+};
+
+const isExcluded = (excluded: string[], phone: string) =>
+  excluded.some((entry) => entry === phone || last8(entry) === last8(phone));
 
 const toDate = (value: any): Date => (value?.toDate ? value.toDate() : new Date(value));
 
@@ -93,11 +106,12 @@ const usage = async (db: Firestore, now: Date, config: LocalConfig) => {
  */
 export const readInbox = async (db: Firestore, clients: Client[], now = new Date()) => {
   const config = localConfig();
-  const [pendingSnap, recentSnap] = await Promise.all([
+  const [pendingSnap, recentSnap, excluded] = await Promise.all([
     db.collection(INBOX).where('handled', '==', false).get(),
     db.collection(INBOX).where('sentAt', '>=', new Date(now.getTime() - CONTEXT_MS)).get(),
+    loadExcluded(db, config),
   ]);
-  const pending = pendingSnap.docs.map(readDoc).filter((message) => message.direction === 'in' && !isExcluded(config, message.phone));
+  const pending = pendingSnap.docs.map(readDoc).filter((message) => message.direction === 'in' && !isExcluded(excluded, message.phone));
   const recent = recentSnap.docs.map(readDoc);
   const phones = [...new Set(pending.map((message) => message.phone))];
   const chats = phones.map((phone) => {
@@ -152,7 +166,7 @@ export const sendReply = async (db: Firestore, phoneInput: string, body: string,
   const phone = digits(phoneInput);
   if (phone.length < 10) throw new WriteError('Teléfono inválido: pasá el número con código de país (598…).');
   if (!config.negocio) throw new WriteError(`Falta «negocio» en ${configFile()}.`);
-  if (isExcluded(config, phone)) throw new WriteError('Ese chat está excluido: no se contesta.');
+  if (isExcluded(await loadExcluded(db, config), phone)) throw new WriteError('Ese chat está excluido: no se contesta.');
   const text = body.trim();
   if (!text) throw new WriteError('El mensaje está vacío.');
   const inbound = (await db.collection(INBOX).where('phone', '==', phone).where('direction', '==', 'in').get()).docs.map(readDoc);
@@ -190,6 +204,80 @@ export const sendReply = async (db: Firestore, phoneInput: string, body: string,
     replyTo: '', sentAt: now, receivedAt: now, handled: true, type: 'text', text, media: null,
   });
   return { enviado: true, id, estado: result.status || 'accepted', telefono: phone, uso: await usage(db, now, config) };
+};
+
+const normalizeName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+/** Teléfono con código de país: un celular uruguayo 09… pasa a 5989…. */
+const fullPhone = (value: string) => {
+  const phone = digits(value);
+  return phone.length === 9 && phone.startsWith('09') ? `598${phone.slice(1)}` : phone;
+};
+
+/**
+ * Excluye un chat que no es de clientes (Jonathan, 27/10/2026: un amigo, un
+ * familiar): lo suma a la lista de la base, que leen el webhook y este servidor,
+ * y borra de la bandeja lo que ya se había guardado de ese chat (el chat sigue
+ * intacto en WhatsApp). Si el teléfono es de una ficha de RutaWater pide
+ * confirmarlo, para no dejar de atender a un cliente. Con deshacer lo vuelve a
+ * incluir (lo borrado no vuelve).
+ */
+export const excludeChat = async (
+  db: Firestore,
+  clients: Client[],
+  input: { telefono?: string; nombre?: string; motivo?: string; aunque_sea_cliente?: boolean; deshacer?: boolean },
+  now = new Date(),
+) => {
+  const config = localConfig();
+  let phone = fullPhone(input.telefono || '');
+  let profile = '';
+  if (!phone) {
+    const wanted = normalizeName(input.nombre || '');
+    if (!wanted) throw new WriteError('Pasá el teléfono o el nombre del chat.');
+    const excluded = await loadExcluded(db, config);
+    const recent = (await db.collection(INBOX).where('sentAt', '>=', new Date(now.getTime() - NAME_SEARCH_MS)).get()).docs
+      .map(readDoc).filter((message) => message.direction === 'in' && !isExcluded(excluded, message.phone)
+        && normalizeName(message.name || '').includes(wanted));
+    const found = [...new Map(recent.map((message) => [message.phone, message.name])).entries()];
+    if (!found.length) throw new WriteError(`No hay mensajes de «${input.nombre}» en los últimos 14 días: pasá el teléfono.`);
+    if (found.length > 1) {
+      throw new WriteError(`Hay ${found.length} chats con ese nombre (${found.map(([p, n]) => `${n} …${p.slice(-4)}`).join(', ')}): pasá el teléfono.`);
+    }
+    [[phone, profile]] = found;
+  }
+  if (phone.length < 10) throw new WriteError('Teléfono inválido: pasá el número con código de país (598…).');
+  if (last8(phone) === last8(config.negocio)) throw new WriteError('Ese es el número del negocio.');
+  const ref = excludedRef(db);
+  if (input.deshacer) {
+    const stored = ((await ref.get()).data()?.phones || []) as string[];
+    const matches = stored.filter((entry) => last8(entry) === last8(phone));
+    if (!matches.length) {
+      const fixed = config.excluidos.some((entry) => last8(entry) === last8(phone));
+      throw new WriteError(fixed ? 'Ese chat está en whatsapp.json y en Netlify: se saca a mano de los dos.' : 'Ese chat no estaba excluido.');
+    }
+    await ref.set({
+      phones: FieldValue.arrayRemove(...matches),
+      ...Object.fromEntries(matches.map((entry) => [`detalle.${entry}`, FieldValue.delete()])),
+      updatedAt: now,
+    }, { merge: true });
+    return { vuelve_a_incluirse: phone, nota: 'Sus mensajes nuevos vuelven a llegar; los que se borraron no vuelven.' };
+  }
+  const fichas = clientsByPhone(clients, phone);
+  if (fichas.length && !input.aunque_sea_cliente) {
+    throw new WriteError(`Ese teléfono es de ${fichas.map((ficha) => `${ficha.nombre} (${ficha.direccion})`).join(', ')}: confirmalo con Jonathan y pasá aunque_sea_cliente=true.`);
+  }
+  await ref.set({
+    phones: FieldValue.arrayUnion(phone),
+    detalle: { [phone]: { nombre: profile || input.nombre || '', motivo: input.motivo || '', fecha: now } },
+    updatedAt: now,
+  }, { merge: true });
+  const stored = await db.collection(INBOX).where('phone', '==', phone).get();
+  for (let index = 0; index < stored.docs.length; index += 400) {
+    const batch = db.batch();
+    stored.docs.slice(index, index + 400).forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+  }
+  return { excluido: phone, nombre: profile || input.nombre || '', mensajes_borrados_de_la_bandeja: stored.size, fichas };
 };
 
 /** Baja con la clave los audios de esos mensajes y los transcribe con Whisper en el Mac. */

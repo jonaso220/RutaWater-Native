@@ -4,7 +4,7 @@ import type { Client } from '../../src/types';
 import { appendAudit } from './audit';
 import { transcribeAudios } from './audio';
 import { applyReplacements, openWhatsapp } from './whatsapp';
-import { downloadInboxMedia, forwardReceiptToAquapura, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
+import { downloadInboxMedia, excludeChat, forwardReceiptToAquapura, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
 import { askJonathan, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
 import { scheduledPass } from './vigilanteControl';
 import { saveContact } from './contacts';
@@ -40,7 +40,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - fusionar_duplicados junta dos fichas de la misma persona: queda la de agenda (o la más completa), se le suman los datos que solo tenía la otra y la otra se borra; deudas, transferencias y Parentesco pasan a la que queda. Primero sin aplicar (vista previa) y después con aplicar=true. deshacer_fusion la revierte con la copia que deja.
 - abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
 - transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
-- WhatsApp por la API (coexistencia, gratis): leer_whatsapp trae los mensajes de clientes sin atender con su conversación y sus fichas; transcribir_whatsapp transcribe sus audios; ver_archivo_whatsapp muestra una foto o comprobante; responder_whatsapp contesta dentro de las 24 h (hasta el tope del mes); marcar_whatsapp_atendido los da por resueltos y los marca leídos. Avisos y recordatorios NUNCA por la API: se cobran; van por la app en el Mac.
+- WhatsApp por la API (coexistencia, gratis): leer_whatsapp trae los mensajes de clientes sin atender con su conversación y sus fichas; transcribir_whatsapp transcribe sus audios; ver_archivo_whatsapp muestra una foto o comprobante; responder_whatsapp contesta dentro de las 24 h (hasta el tope del mes); marcar_whatsapp_atendido los da por resueltos y los marca leídos; excluir_chat deja afuera un chat que no es de clientes (un amigo, un familiar) cuando Jonathan lo pide. Avisos y recordatorios NUNCA por la API: se cobran; van por la app en el Mac.
 - guardar_contacto guarda o renombra al cliente en los Contactos de iCloud (iPhone y WhatsApp) como «Nombre - Dirección -» + link de Maps.
 - pasada_programada: las pasadas de 9 y 18 avisan «empieza» y «termina»; contestar y agendar lo hace el vigilante.
 - Dudas para Jonathan por Telegram: consultar_jonathan le manda la pregunta a su bot; leer_respuestas_jonathan trae lo que contestó (con la pregunta a la que responde); marcar_respuesta_aplicada las da por hechas; avisar_jonathan manda un aviso corto sin pregunta.
@@ -539,6 +539,20 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   }, handle(async ({ ids, marcar_leido }: { ids: string[]; marcar_leido?: boolean }) => markHandled(store.db, ids, marcar_leido ?? true)));
+
+  server.registerTool('excluir_chat', {
+    title: 'Excluir chat de WhatsApp',
+    description: 'Solo cuando Jonathan lo pide (un amigo, un familiar, alguien que no es cliente): suma el chat a los excluidos de la base, que leen el webhook y este servidor, así sus mensajes ya no llegan a la API ni a leer_whatsapp y nunca se le contesta. Borra de la bandeja de la API lo que ya se había guardado de ese chat; en WhatsApp el chat queda intacto (sin leer, para Jonathan). Por teléfono o por el nombre del perfil (mensajes de los últimos 14 días). Si el teléfono es de una ficha de RutaWater no lo hace salvo aunque_sea_cliente=true, después de confirmarlo con Jonathan. deshacer=true lo vuelve a incluir (lo borrado no vuelve).',
+    inputSchema: {
+      telefono: z.string().max(20).optional().describe('Con código de país (598…) o 09…'),
+      nombre: z.string().max(100).optional().describe('Nombre como lo dijo Jonathan; si no hay teléfono, se busca en el perfil de WhatsApp'),
+      motivo: z.string().max(200).optional().describe('Por qué, en pocas palabras («amigo de Jonathan»)'),
+      aunque_sea_cliente: z.boolean().optional(),
+      deshacer: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  }, handle(async (args: { telefono?: string; nombre?: string; motivo?: string; aunque_sea_cliente?: boolean; deshacer?: boolean }) =>
+    excludeChat(store.db, await allClients(), args)));
 
   server.registerTool('consultar_jonathan', {
     title: 'Consultar a Jonathan (Telegram)',

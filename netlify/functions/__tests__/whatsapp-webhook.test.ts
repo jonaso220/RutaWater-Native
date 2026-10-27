@@ -19,10 +19,11 @@ const inbound = (overrides: Record<string, unknown> = {}) => ({
   },
 });
 
-const makeHandler = (env: Record<string, string | undefined> = {}) => {
+const makeHandler = (env: Record<string, string | undefined> = {}, dbExcluded: string[] = []) => {
   const create = jest.fn(async () => undefined);
   const set = jest.fn(async () => undefined);
-  const doc = jest.fn(() => ({ create, set }));
+  const get = jest.fn(async () => ({ data: () => ({ phones: dbExcluded }) }));
+  const doc = jest.fn(() => ({ create, set, get }));
   const db = { collection: jest.fn(() => ({ doc })) } as unknown as Firestore;
   const handler = createWhatsappWebhookHandler({
     readEnvironment: (name) => ({ YCLOUD_WEBHOOK_SECRET: SECRET, WHATSAPP_EXCLUDED_PHONES: '099 111 222', ...env })[name],
@@ -88,6 +89,19 @@ describe('whatsapp-webhook', () => {
     expect(response.status).toBe(200);
     expect(create).not.toHaveBeenCalled();
     expect(doc).toHaveBeenCalledWith('59899111222');
+  });
+
+  test('los excluidos de la base tampoco se guardan; sin poder leerlos, YCloud reintenta', async () => {
+    const { handler, create, doc } = makeHandler({}, ['59894555666']);
+    const response = await handler(post(JSON.stringify(inbound({ from: '+59894555666', text: { body: 'nos juntamos el finde?' } }))));
+    expect(response.status).toBe(200);
+    expect(create).not.toHaveBeenCalled();
+    expect(doc).toHaveBeenCalledWith('59894555666');
+
+    const failing = makeHandler();
+    (failing.doc as jest.Mock).mockImplementationOnce(() => ({ get: async () => { throw new Error('unavailable'); } }));
+    expect((await failing.handler(post(JSON.stringify(inbound())))).status).toBe(500);
+    expect(failing.create).not.toHaveBeenCalled();
   });
 
   test('un evento repetido no da error', async () => {

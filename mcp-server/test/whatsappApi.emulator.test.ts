@@ -15,7 +15,7 @@ fs.writeFileSync(process.env.RUTAWATER_YCLOUD_KEY, 'test-key\n');
 // eslint-disable-next-line import/first
 import { getDb } from '../src/config';
 // eslint-disable-next-line import/first
-import { forwardReceiptToAquapura, markHandled, readInbox, sendReply } from '../src/whatsappApi';
+import { excludeChat, forwardReceiptToAquapura, markHandled, readInbox, sendReply } from '../src/whatsappApi';
 
 const emulator = process.env.FIRESTORE_EMULATOR_HOST;
 const describeWithEmulator = emulator ? describe : describe.skip;
@@ -101,6 +101,25 @@ describeWithEmulator('WhatsApp por la API', () => {
     expect(calls.find((c) => c.url.endsWith('/sendDirectly')).body).toEqual({
       from: '+59891667066', to: '+59892684859', type: 'document', document: { id: 'media1', filename: 'recibo.pdf' },
     });
+  });
+
+  test('excluir: por nombre del perfil, borra lo guardado y deja de aparecer; deshacer lo vuelve a incluir', async () => {
+    const rosa = [{ id: 'rosa', name: 'Rosa Jerez', address: 'Calle 26', freq: 'weekly', phone: '099 123 456', phones: [] }] as any;
+    await expect(excludeChat(db, rosa, { nombre: 'rosa' }, NOW)).rejects.toThrow(/Rosa Jerez \(Calle 26\).*aunque_sea_cliente/);
+    await expect(excludeChat(db, [], { nombre: 'nadie' }, NOW)).rejects.toThrow(/No hay mensajes/);
+
+    const result = await excludeChat(db, [], { nombre: 'ROSA', motivo: 'amiga de Jonathan' }, NOW);
+    expect(result).toMatchObject({ excluido: '59899123456', nombre: 'Rosa', mensajes_borrados_de_la_bandeja: 3, fichas: [] });
+    expect((await db.doc('whatsappConfig/excluidos').get()).data()).toMatchObject({
+      phones: ['59899123456'], detalle: { '59899123456': { nombre: 'Rosa', motivo: 'amiga de Jonathan' } },
+    });
+    const { chats } = await readInbox(db, [], NOW);
+    expect(chats.map((chat) => chat.telefono)).toEqual(['59898000000']);
+    await expect(sendReply(db, '59899123456', 'hola', NOW, okFetch())).rejects.toThrow(/excluido/);
+
+    await excludeChat(db, [], { telefono: '099123456', deshacer: true }, NOW);
+    expect((await db.doc('whatsappConfig/excluidos').get()).data()?.phones).toEqual([]);
+    await expect(excludeChat(db, [], { telefono: '099111222', deshacer: true }, NOW)).rejects.toThrow(/whatsapp.json/);
   });
 
   test('atendido: sale de la lista y marca leído el último de cada chat', async () => {

@@ -7,7 +7,8 @@ import { EnvironmentReader, getAdminFirestore } from './_shared/firebaseAdmin';
 // (coexistencia: el mismo número sigue en la app). Guarda en whatsappInbox los
 // mensajes que mandan los clientes y los que Jonathan manda desde la app, para
 // que el servidor MCP los lea sin abrir WhatsApp en la Mac. Los chats excluidos
-// (WHATSAPP_EXCLUDED_PHONES) y los grupos no se guardan. La colección no tiene
+// (WHATSAPP_EXCLUDED_PHONES más la lista de la base, que el vigilante amplía
+// con excluir_chat) y los grupos no se guardan. Las colecciones no tienen
 // reglas: solo se accede con la cuenta de servicio.
 
 export const INBOX = 'whatsappInbox';
@@ -15,6 +16,13 @@ export const INBOX = 'whatsappInbox';
 // se sabe si su ventana de 24 h está abierta (p. ej. para mandarle a Aquapura un
 // comprobante gratis).
 export const WINDOWS = 'whatsappWindows';
+// Lista de excluidos de la base (Jonathan, 27/10/2026: el vigilante la amplía
+// cuando él le dice que alguien es un amigo o un familiar), además de la variable.
+export const EXCLUDED_COLLECTION = 'whatsappConfig';
+export const EXCLUDED_DOC = 'excluidos';
+const MESSAGE_EVENTS = new Set([
+  'whatsapp.inbound_message.received', 'whatsapp.smb.message.created', 'whatsapp.smb.message.echoes',
+]);
 const TOLERANCE_SECONDS = 300;
 
 const digits = (value: unknown): string => String(value || '').replace(/\D/g, '');
@@ -120,9 +128,9 @@ export const excludedInbound = (event: Record<string, any>, excluded: Set<string
   return excluded.has(phone) || excluded.has(phone.slice(-8)) ? phone : null;
 };
 
-export const excludedPhones = (value: string | undefined): Set<string> => {
+export const excludedPhones = (value: string | undefined, fromDb: unknown[] = []): Set<string> => {
   const set = new Set<string>();
-  (value || '').split(',').map(digits).filter(Boolean).forEach((phone) => {
+  [...(value || '').split(','), ...fromDb].map(digits).filter(Boolean).forEach((phone) => {
     set.add(phone);
     set.add(phone.slice(-8));
   });
@@ -150,7 +158,19 @@ export const createWhatsappWebhookHandler = (dependencies: WebhookDependencies) 
   } catch {
     return new Response(null, { status: 400 });
   }
-  const excluded = excludedPhones(dependencies.readEnvironment('WHATSAPP_EXCLUDED_PHONES'));
+  let fromDb: unknown[] = [];
+  if (MESSAGE_EVENTS.has(String(event.type))) {
+    try {
+      const snap = await dependencies.getFirestore(dependencies.readEnvironment)
+        .collection(EXCLUDED_COLLECTION).doc(EXCLUDED_DOC).get();
+      fromDb = Array.isArray(snap.data()?.phones) ? snap.data()!.phones : [];
+    } catch (error) {
+      // Sin la lista no se sabe si es un chat excluido: YCloud reintenta.
+      console.error('whatsapp-webhook error:', error instanceof Error ? error.name : 'unknown');
+      return new Response(null, { status: 500 });
+    }
+  }
+  const excluded = excludedPhones(dependencies.readEnvironment('WHATSAPP_EXCLUDED_PHONES'), fromDb);
   const record = toRecord(event, excluded, now);
   const windowPhone = record ? null : excludedInbound(event, excluded);
   // Solo el tipo de evento y qué se hizo: nunca teléfonos ni contenido.

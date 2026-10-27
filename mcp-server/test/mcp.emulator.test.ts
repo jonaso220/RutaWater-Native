@@ -9,6 +9,7 @@ import { getDb } from '../src/config';
 import { ReadBudget, ReadLimitError, setReadBudget } from '../src/readBudget';
 import { loadAccount } from '../src/routes';
 import { mergeClients, undoMerge } from '../src/merge';
+import { loadDeliveryRecords } from '../src/deliveries';
 import { Store } from '../src/store';
 import {
   addDays, agendaFor, debtReport, debtTotalMessage, hasPendingTransfer, nextVisit, productCatalog, searchClients,
@@ -158,6 +159,8 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     const skipped = await markDone(db, account, 'rosa', tomorrow, true);
     expect(skipped.despues).toMatchObject({ entrega: false });
     expect((await db.doc(`deliveries/rosa_${tomorrow}`).get()).data()).toMatchObject({ delivered: false, undone: false });
+    const rows = await loadDeliveryRecords(db, account, { customerId: 'rosa' });
+    expect(rows).toEqual([expect.objectContaining({ fecha: tomorrow, cliente_id: 'rosa', entrega: false, productos: {}, fuente: 'assistant' })]);
   });
 
   test('visita atrasada: figura en hoy y Listo acepta la fecha de hoy', async () => {

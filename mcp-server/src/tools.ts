@@ -4,6 +4,7 @@ import type { Client } from '../../src/types';
 import { appendAudit } from './audit';
 import { transcribeAudios } from './audio';
 import { applyReplacements, openWhatsapp } from './whatsapp';
+import { appRecordsSince, loadDeliveryRecords, loadPhotoRows, mergeHistory, summarizeHistory } from './deliveries';
 import { downloadInboxMedia, excludeChat, forwardReceiptToAquapura, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
 import { askJonathan, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
 import { scheduledPass } from './vigilanteControl';
@@ -85,6 +86,39 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
   };
 
   const catalog = async () => productCatalog(await store.getSettings());
+
+  server.registerTool('historia_cliente', {
+    title: 'Historia del cliente',
+    description: 'Lo que compró un cliente: sus visitas (registro de entregas de cada Listo y, para fechas anteriores, la foto de la agenda), qué suele llevar, cada cuántos días, cuántas veces no necesitó y las últimas 10 visitas. Junta todas las fichas de la misma persona. Para entender un pedido («lo de siempre», «un bidón»), ver si cambió su consumo o antes de consultarle algo a Jonathan. Solo lectura.',
+    inputSchema: { cliente_id: z.string().min(1) },
+    annotations: { readOnlyHint: true },
+  }, handle(async ({ cliente_id }: { cliente_id: string }) => {
+    const { client, all } = await findClient(cliente_id);
+    const customerId = client.customerId || client.id;
+    const ids = new Set(all.filter((candidate) => (candidate.customerId || candidate.id) === customerId).map((candidate) => candidate.id));
+    const account = await store.getAccount();
+    const records = await loadDeliveryRecords(store.db, account, { customerId });
+    const appSince = await appRecordsSince(store.db, account);
+    const rows = mergeHistory(records, loadPhotoRows(await catalog(), { ids }), appSince || '');
+    return summarizeHistory(client, rows, todayKey());
+  }));
+
+  server.registerTool('entregas_del_periodo', {
+    title: 'Entregas del período',
+    description: 'Todas las visitas completadas entre dos fechas (aaaa-mm-dd), una por cliente y fecha, con productos y cantidades y si hubo entrega. origen «registro» es el Listo; «foto» es lo agendado según la foto de la agenda (solo para fechas anteriores al registro). Para el resumen mensual. Solo lectura.',
+    inputSchema: { desde: z.string(), hasta: z.string() },
+    annotations: { readOnlyHint: true },
+  }, handle(async ({ desde, hasta }: { desde: string; hasta: string }) => {
+    if (!isValidIsoDate(desde) || !isValidIsoDate(hasta)) throw new Error('Fechas inválidas: usá aaaa-mm-dd.');
+    const account = await store.getAccount();
+    const records = await loadDeliveryRecords(store.db, account, { desde, hasta });
+    const appSince = await appRecordsSince(store.db, account);
+    const rows = mergeHistory(records, loadPhotoRows(await catalog(), { desde, hasta }), appSince || '');
+    return {
+      desde, hasta, registro_de_la_app_desde: appSince,
+      productos: (await catalog()).map(({ id, nombre }) => ({ id, nombre })), visitas: rows,
+    };
+  }));
 
   server.registerTool('listar_repartos', {
     title: 'Listar repartos',

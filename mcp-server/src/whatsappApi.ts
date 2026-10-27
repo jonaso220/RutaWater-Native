@@ -207,6 +207,7 @@ export const sendReply = async (db: Firestore, phoneInput: string, body: string,
 };
 
 const normalizeName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+const nameWords = (value: string) => normalizeName(value).split(/[^a-zñ]+/).filter((word) => word.length >= 3);
 
 /** Teléfono con código de país: un celular uruguayo 09… pasa a 5989…. */
 const fullPhone = (value: string) => {
@@ -236,9 +237,14 @@ export const excludeChat = async (
     if (!wanted) throw new WriteError('Pasá el teléfono o el nombre del chat.');
     const excluded = await loadExcluded(db, config);
     const recent = (await db.collection(INBOX).where('sentAt', '>=', new Date(now.getTime() - NAME_SEARCH_MS)).get()).docs
-      .map(readDoc).filter((message) => message.direction === 'in' && !isExcluded(excluded, message.phone)
-        && normalizeName(message.name || '').includes(wanted));
-    const found = [...new Map(recent.map((message) => [message.phone, message.name])).entries()];
+      .map(readDoc).filter((message) => message.direction === 'in' && !isExcluded(excluded, message.phone));
+    // El perfil puede ser un apodo («Lucho_Arriola24» por «Luciano Arriola»): si
+    // el nombre entero no aparece, alcanza con una de sus palabras; si eso da más
+    // de un chat, se pide el teléfono.
+    const byName = (match: (name: string) => boolean) =>
+      [...new Map(recent.filter((message) => match(message.name || '')).map((message) => [message.phone, message.name])).entries()];
+    let found = byName((name) => normalizeName(name).includes(wanted));
+    if (!found.length) found = byName((name) => nameWords(name).some((word) => nameWords(wanted).includes(word)));
     if (!found.length) throw new WriteError(`No hay mensajes de «${input.nombre}» en los últimos 14 días: pasá el teléfono.`);
     if (found.length > 1) {
       throw new WriteError(`Hay ${found.length} chats con ese nombre (${found.map(([p, n]) => `${n} …${p.slice(-4)}`).join(', ')}): pasá el teléfono.`);

@@ -107,18 +107,23 @@ describeWithEmulator('WhatsApp por la API', () => {
     const rosa = [{ id: 'rosa', name: 'Rosa Jerez', address: 'Calle 26', freq: 'weekly', phone: '099 123 456', phones: [] }] as any;
     await expect(excludeChat(db, rosa, { nombre: 'rosa' }, NOW)).rejects.toThrow(/Rosa Jerez \(Calle 26\).*aunque_sea_cliente/);
     await expect(excludeChat(db, [], { nombre: 'nadie' }, NOW)).rejects.toThrow(/No hay mensajes/);
+    await db.doc('whatsappInbox/lucho').set(message('lucho', { phone: '59894007047', name: 'Lucho_Arriola24', text: 'el finde?' }));
+    await db.doc('whatsappInbox/otro').set(message('otro', { phone: '59894001111', name: 'Marta Arriola', text: 'hola' }));
+    await expect(excludeChat(db, [], { nombre: 'Luciano Arriola' }, NOW)).rejects.toThrow(/Hay 2 chats.*Lucho_Arriola24 …7047/);
+    await db.doc('whatsappInbox/otro').delete();
+    expect(await excludeChat(db, [], { nombre: 'Luciano Arriola' }, NOW)).toMatchObject({ excluido: '59894007047', nombre: 'Lucho_Arriola24' });
 
     const result = await excludeChat(db, [], { nombre: 'ROSA', motivo: 'amiga de Jonathan' }, NOW);
     expect(result).toMatchObject({ excluido: '59899123456', nombre: 'Rosa', mensajes_borrados_de_la_bandeja: 3, fichas: [] });
     expect((await db.doc('whatsappConfig/excluidos').get()).data()).toMatchObject({
-      phones: ['59899123456'], detalle: { '59899123456': { nombre: 'Rosa', motivo: 'amiga de Jonathan' } },
+      phones: ['59894007047', '59899123456'], detalle: { '59899123456': { nombre: 'Rosa', motivo: 'amiga de Jonathan' } },
     });
     const { chats } = await readInbox(db, [], NOW);
     expect(chats.map((chat) => chat.telefono)).toEqual(['59898000000']);
     await expect(sendReply(db, '59899123456', 'hola', NOW, okFetch())).rejects.toThrow(/excluido/);
 
     await excludeChat(db, [], { telefono: '099123456', deshacer: true }, NOW);
-    expect((await db.doc('whatsappConfig/excluidos').get()).data()?.phones).toEqual([]);
+    expect((await db.doc('whatsappConfig/excluidos').get()).data()?.phones).toEqual(['59894007047']);
     await expect(excludeChat(db, [], { telefono: '099111222', deshacer: true }, NOW)).rejects.toThrow(/whatsapp.json/);
   });
 

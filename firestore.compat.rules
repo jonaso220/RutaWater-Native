@@ -71,6 +71,12 @@ service cloud.firestore {
       allow create: if inScope(request.resource.data);
     }
 
+    match /deliveries/{id} {
+      allow read: if (resource == null && signedIn()) || inScope(resource.data);
+      allow update, delete: if inScope(resource.data);
+      allow create: if inScope(request.resource.data);
+    }
+
     match /daily_loads/{id} {
       allow read, write: if signedIn() && id.split('_')[0] == uid();
     }

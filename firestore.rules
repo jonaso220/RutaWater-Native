@@ -225,6 +225,27 @@ service cloud.firestore {
         && inScope(resource.data) && writableScope(resource.data);
     }
 
+    // ── Entregas: una por visita, escrita con el Listo (27/10/2026) ──────────
+    // Mismo alcance que deudas. Quien la crea queda como userId; otro miembro
+    // puede rehacerla o deshacerla sin cambiar el alcance.
+    match /deliveries/{id} {
+      // La transacción del Listo lee el registro antes de escribirlo: leer uno
+      // que todavía no existe no expone nada.
+      allow read: if (resource == null && accountCanRead()) || inScope(resource.data);
+      allow create: if accountCanWrite()
+        && request.resource.data.get('userId', null) == uid()
+        && validScopeKeyForWrite(request.resource.data)
+        && inScope(request.resource.data) && writableScope(request.resource.data);
+      allow update: if accountCanWrite()
+        && inScope(resource.data) && inScope(request.resource.data)
+        && writableScope(resource.data) && writableScope(request.resource.data)
+        && request.resource.data.get('userId', null) == resource.data.get('userId', null)
+        && request.resource.data.get('groupId', null) == resource.data.get('groupId', null)
+        && preservesOrBackfillsScopeKey(resource.data, request.resource.data);
+      allow delete: if accountCanWrite()
+        && inScope(resource.data) && writableScope(resource.data);
+    }
+
     // ── Carga diaria: docId "<uid>_<dia>", por usuario ──────────────────────
     match /daily_loads/{id} {
       allow read: if accountCanRead() && id.split('_')[0] == uid();

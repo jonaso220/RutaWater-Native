@@ -139,7 +139,7 @@ interface ClientItemProps {
   fontScale?: number;
   wideLayout?: boolean;
   selectedDay: string;
-  onMarkDone: (client: Client, forDay?: string) => void;
+  onMarkDone: (client: Client, forDay?: string, noDelivery?: boolean) => void;
   onEdit: (client: Client) => void;
   onEditProducts: (client: Client) => void;
   onEditNotes: (client: Client) => void;
@@ -178,6 +178,10 @@ const ClientItem = React.memo<ClientItemProps>(({
   onChangePosition,
 }) => {
   const handleMarkDone = useCallback(() => onMarkDone(client, selectedDay), [onMarkDone, client, selectedDay]);
+  const handleMarkNotNeeded = useCallback(
+    () => onMarkDone(client, selectedDay, true),
+    [onMarkDone, client, selectedDay],
+  );
   const handleEdit = useCallback(() => onEdit(client), [onEdit, client]);
   const handleEditProducts = useCallback(() => onEditProducts(client), [onEditProducts, client]);
   const handleEditNotes = useCallback(() => onEditNotes(client), [onEditNotes, client]);
@@ -201,6 +205,7 @@ const ClientItem = React.memo<ClientItemProps>(({
       hasPendingTransfer={hasPendingTransfer}
       hasRelationships={hasRelationships}
       onMarkDone={handleMarkDone}
+      onMarkNotNeeded={handleMarkNotNeeded}
       onEdit={handleEdit}
       onEditProducts={handleEditProducts}
       onEditNotes={handleEditNotes}
@@ -805,11 +810,11 @@ const HomeScreen = () => {
   }, [deferredDay, resetHeaderScrollTracking, setCollapsibleHeaderVisible, androidHeaderScrollY]);
 
   const handleMarkDone = useCallback(
-    (client: Client, forDay?: string) => {
+    (client: Client, forDay?: string, noDelivery = false) => {
       const day = forDay || selectedDayRef.current;
       // Capture before opening the confirmation: a server echo must never
       // change which occurrence this tap will complete.
-      const command = createVisitCommand(client, user?.uid || '', day);
+      const command = createVisitCommand(client, user?.uid || '', day, Date.now(), noDelivery);
       if (!command) return;
       const complete = () => {
         hapticLight();
@@ -1119,7 +1124,8 @@ const HomeScreen = () => {
 
   const stableHandlers = useMemo(
     () => ({
-      onMarkDone: (c: Client, day?: string) => handlersRef.current.handleMarkDone(c, day),
+      onMarkDone: (c: Client, day?: string, noDelivery?: boolean) =>
+        handlersRef.current.handleMarkDone(c, day, noDelivery),
       onEdit: (c: Client) => handlersRef.current.handleEditCb(c),
       onEditProducts: (c: Client) => handlersRef.current.handleEditProductsCb(c),
       onEditNotes: (c: Client) => handlersRef.current.handleEditNotesCb(c),

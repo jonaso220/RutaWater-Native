@@ -1,7 +1,8 @@
 import type { ValidatedBackup } from './backupRestore';
 import { dataScopeFields } from './dataScope';
+import { DELIVERIES_COLLECTION, deliveryDocId } from './deliveryRecords';
 
-export type RestoreCollection = 'clients' | 'debts' | 'transfers';
+export type RestoreCollection = 'clients' | 'debts' | 'transfers' | typeof DELIVERIES_COLLECTION;
 
 export interface CurrentRestoreRecord {
   id: string;
@@ -28,6 +29,7 @@ interface RestorePlanInput {
   currentClients: CurrentRestoreRecord[];
   currentDebts: CurrentRestoreRecord[];
   currentTransfers: CurrentRestoreRecord[];
+  currentDeliveries?: CurrentRestoreRecord[];
   now?: Date;
 }
 
@@ -87,6 +89,7 @@ export const buildBackupRestorePlan = ({
   currentClients,
   currentDebts,
   currentTransfers,
+  currentDeliveries = [],
   now = new Date(),
 }: RestorePlanInput): RestoreWriteOperation[] => {
   const scopeKey = scope.groupId || scope.userId;
@@ -221,6 +224,30 @@ export const buildBackupRestorePlan = ({
         customerId: restoredCustomerId,
         ...scopeForNewRecord(existing, scope),
         backupSourceId: id,
+      },
+    });
+  });
+
+  // The id is the client and the date, so a retry lands on the same record. A
+  // visit the live app already recorded wins over the backup copy.
+  const liveDeliveries = new Set(currentDeliveries.map((record) => record.id));
+  backup.deliveries.forEach((delivery) => {
+    const { clientId, customerId, ...deliveryData } = delivery;
+    const restoredClientId = resolveClientId(clientId);
+    const id = deliveryDocId(restoredClientId, delivery.occurrence);
+    if (liveDeliveries.has(id)) return;
+    liveDeliveries.add(id);
+    operations.push({
+      collection: DELIVERIES_COLLECTION,
+      id,
+      data: {
+        ...deliveryData,
+        clientId: restoredClientId,
+        customerId: resolveCustomerId(customerId || backupCustomerIdByClientId.get(clientId)) || restoredClientId,
+        ...dataScopeFields(scope.userId, scope.groupId),
+        source: 'backup',
+        createdAt: now,
+        updatedAt: now,
       },
     });
   });

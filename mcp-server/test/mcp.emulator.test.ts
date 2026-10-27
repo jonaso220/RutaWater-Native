@@ -138,17 +138,26 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     await expect(markDone(db, account, 'rosa', addDays(tomorrow, 1))).rejects.toThrow(tomorrow);
 
     const done = await markDone(db, account, 'rosa', tomorrow);
-    expect(done.despues).toEqual({ proxima_visita: addDays(tomorrow, 7), ficha_eliminada: false });
+    expect(done.despues).toEqual({ proxima_visita: addDays(tomorrow, 7), ficha_eliminada: false, entrega: true });
     const after = (await db.doc('clients/rosa').get()).data()!;
     expect(after.doneFor).toBe(tomorrow);
     expect(after.isStarred).toBe(false); // igual que el botón Listo
     expect(Object.values(after.visitReceipt.confirmations)).toEqual([UID]);
+
+    const record = (await db.doc(`deliveries/rosa_${tomorrow}`).get()).data()!;
+    expect(record).toMatchObject({ clientId: 'rosa', occurrence: tomorrow, delivered: true, source: 'assistant', undone: false });
 
     const undone = await undoDone(db, account, 'rosa');
     expect(undone.despues).toEqual({ proxima_visita: tomorrow });
     const restored = (await db.doc('clients/rosa').get()).data()!;
     expect(restored.isStarred).toBe(true);
     expect(nextVisit({ ...restored, id: 'rosa' } as any)).toBe(tomorrow);
+    expect((await db.doc(`deliveries/rosa_${tomorrow}`).get()).data()?.undone).toBe(true);
+
+    // «No necesita»: la visita se completa igual, sin entrega.
+    const skipped = await markDone(db, account, 'rosa', tomorrow, true);
+    expect(skipped.despues).toMatchObject({ entrega: false });
+    expect((await db.doc(`deliveries/rosa_${tomorrow}`).get()).data()).toMatchObject({ delivered: false, undone: false });
   });
 
   test('visita atrasada: figura en hoy y Listo acepta la fecha de hoy', async () => {
@@ -188,7 +197,7 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
 
     // El ciclo sigue cada 15 días desde la fecha adelantada.
     const done = await markDone(db, account, 'quincenal', tomorrow);
-    expect(done.despues).toEqual({ proxima_visita: addDays(tomorrow, 14), ficha_eliminada: false });
+    expect(done.despues).toEqual({ proxima_visita: addDays(tomorrow, 14), ficha_eliminada: false, entrega: true });
   });
 
   test('cambiar frecuencia: semanal a quincenal y mensual a semanal, manteniendo el día', async () => {

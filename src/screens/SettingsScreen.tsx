@@ -110,6 +110,8 @@ const SettingsScreen = () => {
     uid,
     email: userEmail,
     profileName: activeProfileName,
+    groupId: activeProfile?.scopeGroupId,
+    scopeReadVersion,
   });
   const { handleRestoreJSON, restoring } = useDataRestore({
     userId: uid,

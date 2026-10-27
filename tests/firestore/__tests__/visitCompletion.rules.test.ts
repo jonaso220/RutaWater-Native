@@ -17,7 +17,8 @@ describeWithEmulator.each(['firestore.compat.rules', 'firestore.rules'])('shared
   let owner: firebase.firestore.Firestore;
   let member: firebase.firestore.Firestore;
   const read = async (db = owner) => withDefaults('client', (await db.doc('clients/client').get()).data());
-  const drain = (db = owner) => commitVisitCommands(db as any, 'client', 'family', () => true);
+  const drain = (db = owner) =>
+    commitVisitCommands(db as any, 'client', 'family', () => true, db === member ? 'member' : 'owner');
   const next = (client: ReturnType<typeof withDefaults>) => toLocalDateString(getNextVisitDate(client)!);
 
   beforeAll(async () => {
@@ -42,7 +43,7 @@ describeWithEmulator.each(['firestore.compat.rules', 'firestore.rules'])('shared
         db.doc('clients/client').set({
           userId: 'owner', groupId: 'family', name: 'Synthetic test client',
           freq: 'biweekly', visitDay: day, visitDays: [day],
-          specificDate: toLocalDateString(today), isNote: false,
+          specificDate: toLocalDateString(today), isNote: false, products: { b20: 2 },
         }),
       ]);
     });
@@ -67,6 +68,39 @@ describeWithEmulator.each(['firestore.compat.rules', 'firestore.rules'])('shared
     await member.doc('clients/client').update({ visitCommands: union(createUndoCommand(b)) });
     await drain(member);
     expect(visitStateKey(await read())).toBe(visitStateKey(base));
+  });
+
+  test('Listo records the delivery; undo marks it and a member can redo it as not needed', async () => {
+    const base = await read();
+    const a = createVisitCommand(base, 'owner')!;
+    const id = `client_${a.occurrence}`;
+    await owner.doc('clients/client').update({ visitCommands: union(a) });
+    await drain();
+    expect((await member.doc(`deliveries/${id}`).get()).data()).toMatchObject({
+      userId: 'owner', groupId: 'family', scopeKey: 'scope:family', clientId: 'client',
+      occurrence: a.occurrence, delivered: true, products: { b20: 2 }, actorId: 'owner', source: 'app', undone: false,
+    });
+
+    await owner.doc('clients/client').update({ visitCommands: union(createUndoCommand(a)) });
+    await drain();
+    expect((await owner.doc(`deliveries/${id}`).get()).data()).toMatchObject({ undone: true, delivered: true });
+
+    const b = createVisitCommand(await read(member), 'member', undefined, Date.now(), true)!;
+    expect(b.occurrence).toBe(a.occurrence);
+    await member.doc('clients/client').update({ visitCommands: union(b) });
+    await drain(member);
+    expect((await owner.doc(`deliveries/${id}`).get()).data()).toMatchObject({
+      userId: 'owner', delivered: false, actorId: 'member', undone: false,
+    });
+
+    const stranger = env.authenticatedContext('stranger').firestore();
+    await expect(stranger.doc(`deliveries/${id}`).get()).rejects.toThrow();
+    // The transitional compat policy is as permissive as debts and transfers.
+    if (!rules.includes('compat')) {
+      await expect(member.doc('deliveries/forged').set({
+        userId: 'owner', groupId: 'family', scopeKey: 'scope:family', clientId: 'client',
+      })).rejects.toThrow();
+    }
   });
 
   test('offline intention remains harmless after another member reschedules', async () => {

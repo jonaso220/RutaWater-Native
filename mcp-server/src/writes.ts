@@ -5,6 +5,9 @@ import {
   buildClientIdentityIndex, getRelatedClientReference, getRelatedRecordStableClientId, getStableClientId,
 } from '../../src/utils/clientIdentity';
 import { dataScopeFields } from '../../src/utils/dataScope';
+import {
+  DELIVERIES_COLLECTION, DeliveryChange, deliveryChangeFor, deliveryDocument, mergeDeliveryChanges,
+} from '../../src/utils/deliveryRecords';
 import { getNextVisitDate, intervalWeeksForFreq, parseDate, toLocalDateString } from '../../src/utils/helpers';
 import { belongsToProfileScope } from '../../src/utils/profileScope';
 import { checkFullLoad, recordFullLoad } from './readBudget';
@@ -136,26 +139,39 @@ export const setStar = (
  * Así el resultado es idéntico a tocar el botón y se puede deshacer desde la app.
  */
 const applyCommand = async (
-  transaction: Transaction, loaded: Loaded, command: VisitCommand,
+  db: Firestore, transaction: Transaction, loaded: Loaded, command: VisitCommand, writerId: string,
 ): Promise<{ client: Client | null; outcome: VisitResult['outcome'] }> => {
   let client: Client | null = loaded.client;
   const pending = Array.isArray(client.visitCommands) ? client.visitCommands : [];
   const updates: Partial<Client> = {};
   const results: VisitResult[] = [...(client.visitResults || [])];
+  const changes: Array<DeliveryChange | null> = [];
   let outcome: VisitResult['outcome'] = 'stale';
   for (const current of [...pending, command]) {
     if (!client) break;
     const result = applyVisitCommand(client, current);
+    changes.push(deliveryChangeFor(client, current, result));
     Object.assign(updates, result.updates);
     if (current?.id && current?.actorId) results.push({ id: current.id, actorId: current.actorId, outcome: result.outcome });
     if (current === command) outcome = result.outcome;
     client = result.client;
   }
+  // Same delivery record as the app (deliveryRecords); reads before writes.
+  const deliveries = client ? await Promise.all(mergeDeliveryChanges(changes).map(async (change) => {
+    const ref = db.collection(DELIVERIES_COLLECTION).doc(change.id);
+    const stored = await transaction.get(ref);
+    return { change, ref, existing: stored.exists ? stored.data() : undefined };
+  })) : [];
   if (!client) {
     transaction.delete(loaded.ref);
   } else {
     transaction.update(loaded.ref, {
       ...updates, visitCommands: [], visitResults: results.slice(-20), updatedAt: new Date(),
+    });
+    const now = new Date();
+    deliveries.forEach(({ change, ref, existing }) => {
+      const data = deliveryDocument(change, loaded.client, writerId, existing, 'assistant', now);
+      if (data) transaction.set(ref, data, { merge: true });
     });
   }
   return { client, outcome };
@@ -172,7 +188,7 @@ export const projectPending = (client: Client): Client | null => {
 
 /** «Listo» sobre la visita de `date` (yyyy-mm-dd). Rechaza si esa no es la visita pendiente. */
 export const markDone = (
-  db: Firestore, account: Account, clientId: string, date: string,
+  db: Firestore, account: Account, clientId: string, date: string, noDelivery = false,
 ): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
   if (!isValidIsoDate(date)) throw new WriteError(`Fecha inválida: ${date}. Usá aaaa-mm-dd.`);
   const loaded = await loadForWrite(db, transaction, account, clientId);
@@ -185,7 +201,7 @@ export const markDone = (
   // getNextVisitDate calcula una fecha para cualquier día de semana que se le
   // pase: solo se prueban los días asignados a la ficha, nunca el de `date`.
   const candidates = (current.freq === 'once' ? [undefined] : clientDays(current))
-    .map((day) => createVisitCommand(current, account.uid, day))
+    .map((day) => createVisitCommand(current, account.uid, day, Date.now(), noDelivery))
     .filter((candidate): candidate is VisitCommand => !!candidate);
   const exact = candidates.find((candidate) => candidate.occurrence === date);
   const overdue = date === todayKey()
@@ -197,11 +213,13 @@ export const markDone = (
     const pending = [...new Set(candidates.map((candidate) => candidate.occurrence))].sort();
     throw new WriteError(`Esa fecha no coincide con una visita pendiente (${pending.join(', ') || 'ninguna'}). No se marcó Listo.`);
   }
-  const { client, outcome } = await applyCommand(transaction, loaded, command);
-  if (outcome !== 'applied') throw new WriteError(`La app no aplicó el Listo (resultado: ${outcome}).`);
+  const { client, outcome } = await applyCommand(db, transaction, loaded, command, account.uid);
+  // «confirmed» is the app's redo of a visit that was undone (the receipt is reactivated).
+  if (outcome !== 'applied' && outcome !== 'confirmed') throw new WriteError(`La app no aplicó el Listo (resultado: ${outcome}).`);
   return {
     cliente_id: loaded.client.id, nombre: loaded.client.name, reparto: loaded.route.name, cambiado: true,
-    antes: { visita: command.occurrence }, despues: { proxima_visita: client ? nextVisit(client) : null, ficha_eliminada: !client },
+    antes: { visita: command.occurrence },
+    despues: { proxima_visita: client ? nextVisit(client) : null, ficha_eliminada: !client, entrega: !noDelivery },
   };
 });
 
@@ -215,7 +233,7 @@ export const undoDone = (
   const command = undoForCompletedClient(current, account.uid);
   if (!command) throw new WriteError('No hay un Listo de esta cuenta para deshacer en esa ficha.');
   const before = nextVisit(current);
-  const { client, outcome } = await applyCommand(transaction, loaded, command);
+  const { client, outcome } = await applyCommand(db, transaction, loaded, command, account.uid);
   if (outcome !== 'undone') throw new WriteError(`No se pudo deshacer (resultado: ${outcome}).`);
   return {
     cliente_id: loaded.client.id, nombre: loaded.client.name, reparto: loaded.route.name, cambiado: true,

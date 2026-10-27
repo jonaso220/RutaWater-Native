@@ -18,9 +18,8 @@ import {
   RestoreCollection,
   RestoreWriteOperation,
 } from '../utils/backupRestorePlan';
-import { dataScopeQuery } from '../utils/dataScope';
-import { belongsToProfileScope } from '../utils/profileScope';
 import { createClientDocuments } from '../services/clientCreation';
+import { loadCurrentScopeRecords } from '../services/scopeRecords';
 
 interface UseDataRestoreArgs {
   userId: string;
@@ -63,27 +62,6 @@ const commitOperations = async (operations: RestoreWriteOperation[]) => {
   }
 };
 
-const loadCurrentScopeRecords = async (
-  collection: RestoreCollection,
-  userId: string,
-  groupId: string | undefined,
-  scopeReadVersion: number,
-): Promise<CurrentRestoreRecord[]> => {
-  const { field, value, additionalFilter } = dataScopeQuery(
-    userId,
-    groupId,
-    scopeReadVersion,
-  );
-  const baseQuery = db.collection(collection).where(field, '==', value);
-  const scopedQuery = additionalFilter
-    ? baseQuery.where(additionalFilter.field, '==', additionalFilter.value)
-    : baseQuery;
-  const snapshot = await scopedQuery.get();
-  return snapshot.docs
-    .filter((doc) => belongsToProfileScope(doc.data(), userId, groupId))
-    .map((doc) => ({ id: doc.id, ...doc.data() }) as CurrentRestoreRecord);
-};
-
 export const useDataRestore = ({
   userId,
   groupId,
@@ -102,10 +80,13 @@ export const useDataRestore = ({
       // after switching profiles. Read the authoritative scope immediately
       // before planning so an old cache can never redirect or overwrite a
       // record in the newly selected route. If any read fails, no write starts.
-      const [currentClients, currentDebts, currentTransfers] = await Promise.all([
+      const [currentClients, currentDebts, currentTransfers, currentDeliveries] = await Promise.all([
         loadCurrentScopeRecords('clients', userId, groupId, scopeReadVersion),
         loadCurrentScopeRecords('debts', userId, groupId, scopeReadVersion),
         loadCurrentScopeRecords('transfers', userId, groupId, scopeReadVersion),
+        backup.deliveries.length
+          ? loadCurrentScopeRecords('deliveries', userId, groupId, scopeReadVersion)
+          : Promise.resolve([]),
       ]);
       const operations = buildBackupRestorePlan({
         backup,
@@ -113,6 +94,7 @@ export const useDataRestore = ({
         currentClients,
         currentDebts,
         currentTransfers,
+        currentDeliveries,
       });
 
       await commitOperations(operations);

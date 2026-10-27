@@ -60,6 +60,8 @@ interface ClientCardProps {
   tomorrowVisitMessage?: string;
   isTomorrowVisit?: boolean;
   onMarkDone: () => void;
+  // Completes the visit like Listo, recorded as «no delivery».
+  onMarkNotNeeded?: () => void;
   onEdit: () => void;
   onEditProducts?: () => void;
   onEditNotes?: () => void;
@@ -82,6 +84,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   hasPendingTransfer,
   hasRelationships,
   onMarkDone,
+  onMarkNotNeeded,
   onEdit,
   onEditProducts,
   onEditNotes,
@@ -260,6 +263,23 @@ const ClientCard: React.FC<ClientCardProps> = ({
                 </View>
                 <Text style={styles.menuItemText}>{t('clientCard.manageTransfer')}</Text>
                 <Ionicons name="chevron-forward" size={s(18)} color={colors.textHint} />
+              </TouchableOpacity>
+            )}
+            {onMarkNotNeeded && !client.isNote && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => runMenuAction(onMarkNotNeeded)}
+                accessibilityRole="button"
+                accessibilityLabel={t('clientCard.markNotNeeded')}
+                accessibilityHint={t('clientCard.markNotNeededHint')}
+              >
+                <View style={styles.menuItemIcon}>
+                  <Ionicons name="checkmark-done-outline" size={s(20)} color={colors.textSecondary} />
+                </View>
+                <View style={styles.menuItemTextBlock}>
+                  <Text style={[styles.menuItemText, styles.menuItemTextStacked]}>{t('clientCard.markNotNeeded')}</Text>
+                  <Text style={styles.menuItemHint}>{t('clientCard.markNotNeededHint')}</Text>
+                </View>
               </TouchableOpacity>
             )}
             {onAlarm && (
@@ -1238,6 +1258,18 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.textPrimary,
       fontSize: s(15),
       fontWeight: '600',
+    },
+    menuItemTextBlock: {
+      flex: 1,
+      justifyContent: 'center',
+    },
+    menuItemTextStacked: {
+      flex: 0,
+    },
+    menuItemHint: {
+      color: colors.textSecondary,
+      fontSize: s(12),
+      marginTop: s(2),
     },
     // --- Wide-screen (Mac/iPad) horizontal layout ---
     // Wider card so a single full-width row uses the extra space; the action

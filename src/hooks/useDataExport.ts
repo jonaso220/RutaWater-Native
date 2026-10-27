@@ -13,11 +13,15 @@ import {
   getRelatedRecordStableClientId,
 } from '../utils/clientIdentity';
 import { getClientPhones } from '../utils/clientPhones';
+import { loadCurrentScopeRecords } from '../services/scopeRecords';
 
 interface ExportUser {
   uid: string;
   email: string;
   profileName?: string;
+  // Active route: the delivery history is read from the server at export time.
+  groupId?: string;
+  scopeReadVersion?: number;
 }
 
 const escapeCsv = (val: string | number | boolean | undefined | null): string => {
@@ -115,8 +119,11 @@ export const useDataExport = (user: ExportUser) => {
       }
 
       const identityIndex = buildClientIdentityIndex(clients);
+      const deliveries = await loadCurrentScopeRecords(
+        'deliveries', user.uid, user.groupId, user.scopeReadVersion ?? 0,
+      ) as Array<Record<string, any>>;
       const backup = {
-        schemaVersion: 6,
+        schemaVersion: 7,
         exportDate: new Date().toISOString().split('T')[0],
         exportedBy: user.email || user.uid,
         profileName: user.profileName || '',
@@ -161,6 +168,12 @@ export const useDataExport = (user: ExportUser) => {
           clientLat: t.clientLat || '', clientLng: t.clientLng || '',
           clientMapsLink: t.clientMapsLink || '',
           createdAt: parseDate(t.createdAt)?.toISOString() || '',
+        })),
+        deliveries: deliveries.map((d) => ({
+          clientId: d.clientId, customerId: d.customerId || d.clientId,
+          clientName: d.clientName || '', clientAddress: d.clientAddress || '',
+          occurrence: d.occurrence, completedAt: parseDate(d.completedAt)?.toISOString() || '',
+          delivered: d.delivered !== false, undone: d.undone === true, products: d.products || {},
         })),
       };
 

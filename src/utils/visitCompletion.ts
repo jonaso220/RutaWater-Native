@@ -16,6 +16,9 @@ export interface VisitCommand {
   at: number;
   targetId: string;
   deleteNote: boolean;
+  // «Visitado, no necesitó»: completes the visit like Listo, but the delivery
+  // record says nothing was delivered. Absent on commands from older versions.
+  noDelivery?: boolean;
 }
 
 type SavedFields = Record<string, string | number | boolean | null>;
@@ -53,7 +56,7 @@ export const scheduleChanged = (client: Client, updates: Partial<Client>): boole
   });
 
 export const createVisitCommand = (
-  client: Client, actorId: string, forDay?: string, at = Date.now(),
+  client: Client, actorId: string, forDay?: string, at = Date.now(), noDelivery = false,
 ): VisitCommand | null => {
   if (!actorId || client.freq === 'on_demand' || client.isCompleted) return null;
   const date = getNextVisitDate(client, forDay);
@@ -62,6 +65,7 @@ export const createVisitCommand = (
     id: newVisitId(), actorId, scopeKey: client.groupId || client.userId,
     kind: 'complete', occurrence: toLocalDateString(date),
     expected: visitStateKey(client), at, targetId: '', deleteNote: client.isNote && client.freq === 'once',
+    ...(noDelivery && !client.isNote ? { noDelivery: true } : {}),
   };
 };
 

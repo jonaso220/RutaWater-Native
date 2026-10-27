@@ -41,6 +41,7 @@ describeWithEmulator('account cleanup service against Firestore emulator', () =>
       'clients',
       'debts',
       'transfers',
+      'deliveries',
       'settings',
       'aiUsage',
       'premiumOverrides',
@@ -511,6 +512,9 @@ describeWithEmulator('account cleanup service against Firestore emulator', () =>
       db.doc('clients/family-private').set({ groupId: 'solo-family', userId: 'owner' }),
       db.doc('debts/profile-private').set({ groupId: 'solo-profile', userId: 'owner' }),
       db.doc('transfers/personal-private').set({ userId: 'owner', amount: 10 }),
+      db.doc('deliveries/family-private_2026-10-28').set({ groupId: 'solo-family', userId: 'owner' }),
+      db.doc('deliveries/personal-private_2026-10-28').set({ userId: 'owner', delivered: true }),
+      db.doc('deliveries/unrelated_2026-10-28').set({ groupId: 'other-scope', userId: 'other' }),
       db.doc('clients/unrelated').set({ groupId: 'other-scope', userId: 'other' }),
       db.doc('settings/solo-family').set({ catalog: ['family'] }),
       db.doc('settings/solo-profile').set({ catalog: ['profile'] }),
@@ -539,6 +543,8 @@ describeWithEmulator('account cleanup service against Firestore emulator', () =>
       'clients/family-private',
       'debts/profile-private',
       'transfers/personal-private',
+      'deliveries/family-private_2026-10-28',
+      'deliveries/personal-private_2026-10-28',
       'groups/solo-family',
       'groupCodes/SOLO23',
       'profiles/solo-profile',
@@ -553,6 +559,7 @@ describeWithEmulator('account cleanup service against Firestore emulator', () =>
     }
     expect((await db.doc('users/owner').get()).data()).toEqual({ accountState: 'deleted' });
     expect((await db.doc('clients/unrelated').get()).exists).toBe(true);
+    expect((await db.doc('deliveries/unrelated_2026-10-28').get()).exists).toBe(true);
   });
 
   test('persists deletion scopes monotonically until cleanup finishes', async () => {

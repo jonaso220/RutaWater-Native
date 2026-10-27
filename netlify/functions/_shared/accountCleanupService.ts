@@ -1100,6 +1100,10 @@ export const planAccountDeletion = async (
  * rechecked them, so customer data belonging to another member is never
  * removed. Descriptors are deleted last and retries are idempotent.
  */
+// Business data of an account. deliveries: one record per visit (Listo),
+// added 27/10/2026; it goes with the account like debts and transfers.
+const ACCOUNT_DATA_COLLECTIONS = ['clients', 'debts', 'transfers', 'deliveries'] as const;
+
 export const cleanupDeletedAccountDocuments = async (
   db: Firestore,
   uid: string,
@@ -1107,7 +1111,7 @@ export const cleanupDeletedAccountDocuments = async (
 ): Promise<void> => {
   // Private legacy records: userId is historical attribution on shared docs,
   // so only records without groupId belong to the deleted account itself.
-  for (const collectionName of ['clients', 'debts', 'transfers']) {
+  for (const collectionName of ACCOUNT_DATA_COLLECTIONS) {
     await deleteMatching(
       db,
       collectionName,
@@ -1122,7 +1126,7 @@ export const cleanupDeletedAccountDocuments = async (
     ...scopes.profileIds,
   ];
   for (const scopeId of soleScopeIds) {
-    for (const collectionName of ['clients', 'debts', 'transfers']) {
+    for (const collectionName of ACCOUNT_DATA_COLLECTIONS) {
       await deleteMatching(db, collectionName, 'groupId', scopeId);
     }
   }

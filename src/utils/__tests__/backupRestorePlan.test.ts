@@ -42,6 +42,28 @@ const applyMerged = (
 };
 
 describe('backup restore planning', () => {
+  test('restores the delivery history once, mapped to the restored client', () => {
+    const backup = validateBackup({
+      ...rawBackup(),
+      deliveries: [
+        { clientId: 'client-a', occurrence: '2026-10-21', delivered: true, products: { b20: 2 } },
+        { clientId: 'client-a', occurrence: '2026-10-28', delivered: false, products: {} },
+      ],
+    });
+    const scope = { userId: 'owner', groupId: 'family' };
+    const clientId = deterministicRestoreDocumentId('clients', 'family', 'client-a');
+    const operations = buildBackupRestorePlan({
+      backup, scope, currentClients: [], currentDebts: [], currentTransfers: [],
+      currentDeliveries: [{ id: `${clientId}_2026-10-28` }], now: new Date(0),
+    }).filter((operation) => operation.collection === 'deliveries');
+    expect(operations).toHaveLength(1);
+    expect(operations[0]).toMatchObject({
+      id: `${clientId}_2026-10-21`,
+      data: { clientId, occurrence: '2026-10-21', delivered: true, products: { b20: '2' },
+        userId: 'owner', groupId: 'family', scopeKey: 'scope:family', source: 'backup' },
+    });
+  });
+
   test('keeps another member attribution immutable on existing shared records', () => {
     const backup = validateBackup(rawBackup());
     const plan = buildBackupRestorePlan({

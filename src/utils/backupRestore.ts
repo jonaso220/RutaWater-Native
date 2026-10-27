@@ -63,6 +63,18 @@ export interface BackupTransferRecord {
   createdAt: Date | null;
 }
 
+export interface BackupDeliveryRecord {
+  clientId: string;
+  customerId?: string;
+  clientName: string;
+  clientAddress: string;
+  occurrence: string;
+  completedAt: Date | null;
+  delivered: boolean;
+  undone: boolean;
+  products: Record<string, string>;
+}
+
 export interface ValidatedBackup {
   schemaVersion: number;
   exportDate: string;
@@ -71,6 +83,7 @@ export interface ValidatedBackup {
   clients: BackupClientRecord[];
   debts: BackupDebtRecord[];
   transfers: BackupTransferRecord[];
+  deliveries: BackupDeliveryRecord[];
 }
 
 const VALID_DAYS = new Set(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']);
@@ -78,6 +91,8 @@ const VALID_FREQS = new Set(['weekly', 'biweekly', 'triweekly', 'monthly', 'once
 const VALID_RELATIONSHIPS = new Set<string>(RELATIONSHIP_TYPES);
 const MAX_CLIENTS = 10000;
 const MAX_RELATED_RECORDS = 20000;
+// About two years of a busy route (≈ 100 visits a day).
+const MAX_DELIVERIES = 100000;
 
 const isObject = (value: unknown): value is Record<string, any> =>
   !!value && typeof value === 'object' && !Array.isArray(value);
@@ -255,6 +270,24 @@ const sanitizeTransfer = (value: unknown, index: number): BackupTransferRecord =
   };
 };
 
+const sanitizeDelivery = (value: unknown, index: number): BackupDeliveryRecord => {
+  if (!isObject(value) || !validId(value.clientId)
+    || typeof value.occurrence !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.occurrence)) {
+    throw new Error(`INVALID_DELIVERY_${index}`);
+  }
+  return {
+    clientId: value.clientId,
+    ...(validId(value.customerId) ? { customerId: value.customerId } : {}),
+    clientName: sanitizeString(value.clientName, 100),
+    clientAddress: sanitizeString(value.clientAddress, 200),
+    occurrence: value.occurrence,
+    completedAt: parseDate(value.completedAt),
+    delivered: value.delivered !== false,
+    undone: value.undone === true,
+    products: sanitizeProducts(value.products),
+  };
+};
+
 const assertUniqueIds = (records: Array<{ id: string }>, type: string) => {
   const ids = new Set<string>();
   records.forEach((record) => {
@@ -268,10 +301,14 @@ export const validateBackup = (value: unknown): ValidatedBackup => {
   const rawClients = value.clients === undefined ? [] : value.clients;
   const rawDebts = value.debts === undefined ? [] : value.debts;
   const rawTransfers = value.transfers === undefined ? [] : value.transfers;
-  if (!Array.isArray(rawClients) || !Array.isArray(rawDebts) || !Array.isArray(rawTransfers)) {
+  // Since schema 7 (27/10/2026); older backups have no delivery history.
+  const rawDeliveries = value.deliveries === undefined ? [] : value.deliveries;
+  if (!Array.isArray(rawClients) || !Array.isArray(rawDebts) || !Array.isArray(rawTransfers)
+    || !Array.isArray(rawDeliveries)) {
     throw new Error('INVALID_BACKUP');
   }
-  if (rawClients.length > MAX_CLIENTS || rawDebts.length > MAX_RELATED_RECORDS || rawTransfers.length > MAX_RELATED_RECORDS) {
+  if (rawClients.length > MAX_CLIENTS || rawDebts.length > MAX_RELATED_RECORDS || rawTransfers.length > MAX_RELATED_RECORDS
+    || rawDeliveries.length > MAX_DELIVERIES) {
     throw new Error('BACKUP_TOO_LARGE');
   }
   if (rawClients.length === 0 && rawDebts.length === 0 && rawTransfers.length === 0) {
@@ -281,6 +318,7 @@ export const validateBackup = (value: unknown): ValidatedBackup => {
   const clients = rawClients.map(sanitizeClient);
   const debts = rawDebts.map(sanitizeDebt);
   const transfers = rawTransfers.map(sanitizeTransfer);
+  const deliveries = rawDeliveries.map(sanitizeDelivery);
   assertUniqueIds(clients, 'CLIENT');
   assertUniqueIds(debts, 'DEBT');
   assertUniqueIds(transfers, 'TRANSFER');
@@ -293,5 +331,6 @@ export const validateBackup = (value: unknown): ValidatedBackup => {
     clients,
     debts,
     transfers,
+    deliveries,
   };
 };

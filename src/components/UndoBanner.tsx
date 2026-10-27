@@ -36,7 +36,7 @@ const UndoBanner: React.FC<UndoBannerProps> = ({ queue, selectedDay, onUndo }) =
   return (
     <View style={styles.undoBanner}>
       <Text style={styles.undoBannerText} numberOfLines={1}>
-        {t('home.clientCompleted', { name: top.client.name })}{otherDay}{extra}
+        {t(top.command?.noDelivery ? 'home.clientNotNeeded' : 'home.clientCompleted', { name: top.client.name })}{otherDay}{extra}
       </Text>
       <TouchableOpacity onPress={onUndo} style={styles.undoButton}>
         <Text style={styles.undoButtonText}>{t('home.undo')}</Text>

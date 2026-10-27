@@ -282,11 +282,15 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('marcar_listo', {
     title: 'Marcar Listo',
-    description: 'Marca Listo la visita de esa fecha (igual que el botón Listo): la app calcula sola la próxima visita, que se devuelve. Falla si la fecha no es una visita pendiente.',
-    inputSchema: { cliente_id: z.string().min(1), fecha: z.string().describe('aaaa-mm-dd de la visita, «hoy» o «mañana»') },
+    description: 'Marca Listo la visita de esa fecha (igual que el botón Listo): la app calcula sola la próxima visita, que se devuelve. Falla si la fecha no es una visita pendiente. Queda registrada como entrega con los productos de la ficha; con sin_entrega=true (el cliente avisó que no necesita) queda como «Visitado, no necesitó».',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      fecha: z.string().describe('aaaa-mm-dd de la visita, «hoy» o «mañana»'),
+      sin_entrega: z.boolean().optional().describe('true si el cliente no necesita esta vez (no se entrega nada)'),
+    },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
-  }, write('marcar_listo', async ({ cliente_id, fecha }) => markDone(
-    store.db, await store.refreshAccount(), cliente_id, resolveDate(fecha),
+  }, write('marcar_listo', async ({ cliente_id, fecha, sin_entrega }) => markDone(
+    store.db, await store.refreshAccount(), cliente_id, resolveDate(fecha), sin_entrega === true,
   )));
 
   server.registerTool('deshacer_listo', {

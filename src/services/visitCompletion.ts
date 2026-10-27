@@ -45,7 +45,7 @@ export const flushVisitCommands = (clientId: string, scopeKey: string, userId: s
   if (existing) return existing;
   const task = (async () => {
     if (auth().currentUser?.uid !== userId) return;
-    await commitVisitCommands(db, clientId, scopeKey, () => auth().currentUser?.uid === userId);
+    await commitVisitCommands(db, clientId, scopeKey, () => auth().currentUser?.uid === userId, userId);
   })().catch((error) => {
     // The durable inbox stays intact on failure. The query listener retries on
     // snapshots, foregrounding and a bounded timer while there is pending work.

@@ -21,8 +21,9 @@ const env = (name: string): string => (process.env[name] || '').trim();
 
 // Cada carga trae unos 200 documentos: 250 cargas son unas 50.000 lecturas, el
 // límite gratis de Firestore por día (Jonathan lo subió de 60 el 20/10/2026, con
-// el plan Blaze; lo que la app lea de más se cobra por centavos).
-const DEFAULT_DAILY_LOADS = 250;
+// el plan Blaze; lo que la app lea de más se cobra por centavos). 600 desde el
+// 27/10/2026: cada pasada del vigilante hace ~4 cargas y 250 se gastaban a la tarde.
+const DEFAULT_DAILY_LOADS = 600;
 // Un proceso normal lee pocos miles por día; 10.000 en una hora es un bucle (22/10/2026).
 const DEFAULT_HOURLY_DOCS = 10000;
 

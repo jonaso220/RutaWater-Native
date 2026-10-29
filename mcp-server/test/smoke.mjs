@@ -70,8 +70,8 @@ const call = async (name, args = {}) => {
 
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
-  'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'avisar_jonathan', 'buscar_clientes', 'cambiar_fecha', 'cambiar_frecuencia',
-  'cambiar_posicion', 'clientes_sin_comprar', 'consultar_jonathan', 'crear_cliente', 'deshacer_fusion', 'deshacer_listo', 'entregas_del_periodo', 'enviar_comprobante_aquapura', 'excluir_chat', 'fijar_facturacion', 'fijar_productos', 'fusionar_duplicados', 'guardar_contacto', 'historia_cliente', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_respuesta_aplicada',
+  'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'avisar_jonathan', 'borrar_nota_del_dia', 'buscar_clientes', 'cambiar_fecha', 'cambiar_frecuencia',
+  'cambiar_posicion', 'clientes_sin_comprar', 'consultar_jonathan', 'crear_cliente', 'crear_nota_del_dia', 'deshacer_fusion', 'deshacer_listo', 'editar_nota_del_dia', 'entregas_del_periodo', 'enviar_comprobante_aquapura', 'excluir_chat', 'fijar_facturacion', 'fijar_productos', 'fusionar_duplicados', 'guardar_contacto', 'historia_cliente', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_respuesta_aplicada',
   'marcar_revisar_transferencia', 'marcar_whatsapp_atendido', 'pasada_programada', 'quitar_de_la_lista', 'registrar_pago', 'responder_whatsapp', 'sugerir_posicion', 'transcribir_audio', 'transcribir_whatsapp', 'ver_archivo_whatsapp', 'ver_cliente', 'ver_productos',
 ]);
 
@@ -150,12 +150,22 @@ await new Promise((resolve) => setTimeout(resolve, 200));
 const reordered = await call('agenda_del_dia', { fecha: 'mañana' });
 assert.deepEqual(reordered.repartos[0].clientes.map((c) => c.nombre), ['Héctor Murgo', 'Sulay Fernandez', 'Nilda Pérez']);
 
+const note = await call('crear_nota_del_dia', { fecha: 'mañana', texto: 'Llevar cambio' });
+assert.equal((await call('crear_nota_del_dia', { fecha: 'mañana', texto: 'Llevar cambio' })).cambiado, false);
+await new Promise((resolve) => setTimeout(resolve, 200));
+const withNote = await call('agenda_del_dia', { fecha: 'mañana' });
+const first = withNote.repartos[0].clientes[0];
+assert.deepEqual([first.id, first.es_nota, first.notas], [note.cliente_id, true, 'Llevar cambio']);
+assert.equal((await call('editar_nota_del_dia', { nota_id: note.cliente_id, texto: 'Llevar cambio de 1000' })).despues, 'Llevar cambio de 1000');
+assert.match((await client.callTool({ name: 'borrar_nota_del_dia', arguments: { nota_id: 'c1' } })).content[0].text, /no es una nota/);
+assert.equal((await call('borrar_nota_del_dia', { nota_id: note.cliente_id })).antes.texto, 'Llevar cambio de 1000');
+
 const audit = fs.readFileSync(auditPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line).tool);
 assert.deepEqual(audit, [
   'fijar_productos', 'marcar_favorito', 'actualizar_nota', 'fijar_facturacion', 'marcar_revisar_transferencia', 'registrar_pago', 'marcar_listo',
-  'agendar_una_vez', 'deshacer_listo', 'cambiar_posicion',
+  'agendar_una_vez', 'deshacer_listo', 'cambiar_posicion', 'crear_nota_del_dia', 'editar_nota_del_dia', 'borrar_nota_del_dia',
 ]);
 
 await client.close();
-console.log('smoke: OK (42 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
+console.log('smoke: OK (45 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
 process.exit(0);

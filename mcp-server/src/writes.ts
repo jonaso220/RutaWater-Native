@@ -1033,3 +1033,94 @@ export const createClient = async (
     };
   });
 };
+
+// Notas sueltas de la agenda (tarjetas «NOTA»), como Inicio → «Nota» en la app
+// (Jonathan, 29/10/2026: que el vigilante las cree para el día que le pida).
+const noteResult = (note: Client, route: Route) => ({
+  cliente_id: note.id, nombre: 'NOTA', reparto: route.name,
+});
+
+export const createDayNote = async (
+  db: Firestore, account: Account, route: Route, date: string, text: string,
+): Promise<ChangeResult> => {
+  if (!route.writable) throw new WriteError(`El reparto «${route.name}» no admite cambios ahora (cuenta o grupo inactivo).`);
+  if (!isValidIsoDate(date)) throw new WriteError('Fecha inválida: usá aaaa-mm-dd.');
+  if (date < todayKey()) throw new WriteError(`La fecha ${date} ya pasó.`);
+  const notes = text.trim();
+  if (!notes) throw new WriteError('Falta el texto de la nota.');
+  if (notes.length > 2000) throw new WriteError('La nota supera los 2000 caracteres.');
+  const day = DAY_NAMES[new Date(`${date}T12:00:00`).getDay()];
+  return db.runTransaction(async (transaction) => {
+    const all = (await routeClients(db, transaction, account, route)).map((entry) => entry.client);
+    // Igual que la app: primera del día, antes de todas las fichas de ese día.
+    const minOrder = all
+      .filter((client) => client.freq !== 'on_demand' && !client.isCompleted
+        && ((client.visitDays && client.visitDays.includes(day)) || client.visitDay === day))
+      .reduce((min, client) => {
+        const order = client.listOrders?.[day] ?? client.listOrder ?? 0;
+        return Math.min(min, order > 100000 ? 0 : order);
+      }, 0);
+    const duplicate = all.find((client) => client.isNote && client.specificDate === date && (client.notes || '').trim() === notes);
+    if (duplicate) {
+      return { ...noteResult(duplicate, route), cambiado: false, antes: null, despues: { fecha: date, texto: notes }, aviso: 'Ya había una nota igual ese día: no se creó otra.' };
+    }
+    const ref = db.collection('clients').doc();
+    transaction.create(ref, {
+      ...dataScopeFields(account.uid, route.groupId),
+      userId: account.uid,
+      isNote: true,
+      name: 'NOTA',
+      phone: '',
+      address: '',
+      notes,
+      freq: 'once',
+      specificDate: date,
+      visitDays: [day],
+      visitDay: day,
+      listOrder: minOrder - 1,
+      listOrders: { [day]: minOrder - 1 },
+      products: {},
+      isCompleted: false,
+      isStarred: false,
+      isPinned: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    return {
+      cliente_id: ref.id, nombre: 'NOTA', reparto: route.name, cambiado: true, antes: null,
+      despues: { fecha: date, dia: day, texto: notes },
+    };
+  });
+};
+
+const loadNote = async (db: Firestore, transaction: Transaction, account: Account, noteId: string) => {
+  const loaded = await loadForWrite(db, transaction, account, noteId);
+  if (!loaded.client.isNote) throw new WriteError(`${noteId} no es una nota de la agenda sino la ficha de ${loaded.client.name}: para su nota usá actualizar_nota.`);
+  return loaded;
+};
+
+export const updateDayNote = (
+  db: Firestore, account: Account, noteId: string, text: string,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const notes = text.trim();
+  if (!notes) throw new WriteError('Falta el texto de la nota (para sacarla, borrar_nota_del_dia).');
+  if (notes.length > 2000) throw new WriteError('La nota supera los 2000 caracteres.');
+  const { ref, client, route } = await loadNote(db, transaction, account, noteId);
+  const before = client.notes || '';
+  const changed = before !== notes;
+  if (changed) transaction.update(ref, { notes, updatedAt: new Date() });
+  return { ...noteResult(client, route), cambiado: changed, antes: before, despues: notes };
+});
+
+export const deleteDayNote = (
+  db: Firestore, account: Account, noteId: string,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const { ref, client, route } = await loadNote(db, transaction, account, noteId);
+  // La alarma es una notificación del teléfono: borrarla sin la app la dejaría sonando.
+  if (client.alarm) throw new WriteError('La nota tiene una alarma: borrala desde la app para que se cancele la alarma.');
+  transaction.delete(ref);
+  return {
+    ...noteResult(client, route), cambiado: true,
+    antes: { fecha: client.specificDate || nextVisit(client), texto: client.notes || '' }, despues: null,
+  };
+});

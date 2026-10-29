@@ -19,8 +19,8 @@ import {
   isValidIsoDate, nextVisit, productCatalog, searchClients, suggestPosition, todayKey, weekdayOf, whatsappTemplates,
 } from './views';
 import {
-  advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote,
-  setBilling, setProducts, setStar, undoDone, WriteError,
+  advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, createDayNote, deleteDayNote, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote,
+  setBilling, setProducts, setStar, undoDone, updateDayNote, WriteError,
 } from './writes';
 
 const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta configurada.
@@ -36,6 +36,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - cambiar_fecha pasa la próxima visita a otra fecha, antes o después (como la fecha de inicio de Editar cliente), y opcionalmente cambia la frecuencia en la misma llamada. Si la fecha cae otro día de semana, un cliente de un solo día o un pedido de una vez pasa a ese día (con ubicar=true, donde indica sugerir_posicion).
 - quitar_de_la_lista saca al cliente de la lista de ese día de semana (como «Quitar de la lista» en Inicio): con varios días le saca solo ese; si era el único, vuelve al Directorio. Un pedido de una vez de alguien que tiene otra ficha se borra en vez de dejar una copia en el Directorio.
 - registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: es propina salvo que el cliente pida dejarlo a favor (ahí, anotalo en la nota).
+- crear_nota_del_dia, editar_nota_del_dia y borrar_nota_del_dia manejan las notas sueltas de la agenda (tarjetas «NOTA»); la nota de un cliente es actualizar_nota.
 - fijar_facturacion guarda el RUT (12 dígitos), la razón social y el email de facturación de la ficha; la cédula nunca se guarda.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
@@ -351,6 +352,35 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     if (rut === undefined && razon_social === undefined && email === undefined) throw new WriteError('Pasá rut, razon_social o email.');
     return setBilling(store.db, await store.refreshAccount(), cliente_id, { rut, businessName: razon_social, email });
   }));
+
+  server.registerTool('crear_nota_del_dia', {
+    title: 'Crear nota del día',
+    description: 'Crea una nota suelta en la agenda de una fecha (tarjeta «NOTA», como Inicio → «Nota» en la app): queda primera en la lista de ese día y es de una sola vez. No es la nota de un cliente (esa es actualizar_nota). Si ya hay una nota con el mismo texto ese día no crea otra. agenda_del_dia la muestra con es_nota=true y su id.',
+    inputSchema: {
+      fecha: z.string().describe('aaaa-mm-dd, «hoy» o «mañana»'),
+      texto: z.string().min(1).max(2000),
+      reparto: z.string().optional().describe('Id o nombre; por defecto el reparto principal'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('crear_nota_del_dia', async ({ fecha, texto, reparto }) => {
+    const account = await store.refreshAccount();
+    const route = reparto ? findRoute(account, reparto) : (account.routes.find((candidate) => candidate.isPrimary) || account.routes[0]);
+    return createDayNote(store.db, account, route, resolveDate(fecha), texto);
+  }));
+
+  server.registerTool('editar_nota_del_dia', {
+    title: 'Editar nota del día',
+    description: 'Cambia el texto de una nota suelta de la agenda (id de agenda_del_dia con es_nota=true). Para pasarla a otra fecha, borrarla y crearla de nuevo.',
+    inputSchema: { nota_id: z.string().min(1), texto: z.string().min(1).max(2000) },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  }, write('editar_nota_del_dia', async ({ nota_id, texto }) => updateDayNote(store.db, await store.refreshAccount(), nota_id, texto)));
+
+  server.registerTool('borrar_nota_del_dia', {
+    title: 'Borrar nota del día',
+    description: 'Borra una nota suelta de la agenda (id de agenda_del_dia con es_nota=true), como la papelera de la tarjeta NOTA. Solo notas, nunca fichas de clientes. Si la nota tiene alarma no la borra: eso va desde la app. Sin deshacer: el resultado trae el texto por si hay que crearla de nuevo.',
+    inputSchema: { nota_id: z.string().min(1) },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+  }, write('borrar_nota_del_dia', async ({ nota_id }) => deleteDayNote(store.db, await store.refreshAccount(), nota_id)));
 
   server.registerTool('marcar_favorito', {
     title: 'Marcar favorito',

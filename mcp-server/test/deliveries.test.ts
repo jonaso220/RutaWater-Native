@@ -63,26 +63,27 @@ describe('clientes sin comprar', () => {
     productos: { b20: 1 }, origen: 'foto', ...extra,
   });
 
-  test('avisa a quien pasó más de un mes sin comprar, juntando sus fichas', () => {
+  test('lista a quien no compró en el mes calendario, juntando sus fichas', () => {
     const clients = [
       { id: 'ana', name: 'Ana', customerId: 'p-ana', next: '2026-12-01', freq: 'monthly' },
       { id: 'ana-vez', name: 'Ana', customerId: 'p-ana' },
-      { id: 'beto', name: 'Beto', next: '2026-11-25', freq: 'weekly' },
-      { id: 'caro', name: 'Caro', next: '2026-11-26', freq: 'weekly' },
+      { id: 'beto', name: 'Beto', next: '2026-12-02', freq: 'weekly' },
+      { id: 'caro', name: 'Caro', next: '2026-12-03', freq: 'weekly' },
+      { id: 'dani', name: 'Dani', next: '2026-12-03', freq: 'weekly', createdAt: new Date('2026-11-20T12:00:00') },
       { id: 'dir', name: 'Directorio' },
-      { id: 'nota', name: 'Nota', isNote: true, next: '2026-11-26' },
+      { id: 'ex', name: 'Ex cliente' },
+      { id: 'nota', name: 'Nota', isNote: true, next: '2026-12-03' },
     ] as any[];
     const rows = [
       row('2026-10-01', 'ana-vez', { productos: { b20: 2 } }),
-      row('2026-10-02', 'beto'), row('2026-11-20', 'beto'),
-      row('2026-10-03', 'caro', { entrega: false, productos: {} }),
+      row('2026-10-02', 'beto'), row('2026-11-30', 'beto'),
+      row('2026-11-03', 'caro', { entrega: false, productos: {} }), row('2026-11-10', 'caro', { entrega: false, productos: {} }),
+      row('2026-09-15', 'ex'),
     ];
-    const result = clientsWithoutPurchase(clients, rows, '2026-11-24', 30, next);
-    expect(result.map((client) => [client.cliente_id, client.dias_sin_comprar, client.ultima_compra])).toEqual([
-      ['ana', 54, '2026-10-01'], ['caro', 54, null],
+    const result = clientsWithoutPurchase(clients, rows, '2026-11-01', '2026-11-30', next);
+    expect(result.map((client) => [client.cliente_id, client.ultima_compra, client.no_necesito])).toEqual([
+      ['ex', '2026-09-15', 0], ['ana', '2026-10-01', 0], ['caro', null, 2],
     ]);
-    expect(result[0]).toMatchObject({ compro: { b20: 2 }, proxima_visita: '2026-12-01' });
-    expect(result[1]).toMatchObject({ sin_compras_desde: '2026-10-01' });
-    expect(clientsWithoutPurchase(clients, rows, '2026-10-20', 30, next)).toEqual([]);
+    expect(result[1]).toMatchObject({ compro: { b20: 2 }, proxima_visita: '2026-12-01' });
   });
 });

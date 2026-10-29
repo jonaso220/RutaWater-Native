@@ -127,23 +127,25 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('clientes_sin_comprar', {
     title: 'Clientes sin comprar',
-    description: 'Clientes que pasaron más de N días (por defecto 30) sin comprar: última compra y qué llevó, próxima visita y frecuencia. Junta las fichas de la misma persona; sin compras en la historia cuenta desde el primer día con datos, solo para los que siguen en la agenda. Para el aviso de quienes pasan un mes sin comprar. Solo lectura.',
-    inputSchema: { dias: z.number().int().min(7).max(180).optional() },
+    description: 'Clientes que no compraron en un mes calendario (del 1.º al último día; por defecto el mes anterior): última compra antes del mes y qué llevó, cuántas veces no necesitó en el mes, próxima visita y frecuencia. Junta las fichas de la misma persona; entran los que compraron antes y los que siguen en la agenda, no los dados de alta en el mes. datos_desde dice desde cuándo hay historia: si es después del 1.º, el mes está incompleto. Solo lectura.',
+    inputSchema: { mes: z.string().regex(/^\d{4}-\d{2}$/).optional().describe('aaaa-mm') },
     annotations: { readOnlyHint: true },
-  }, handle(async ({ dias }: { dias?: number }) => {
-    const days = dias ?? 30;
+  }, handle(async ({ mes }: { mes?: string }) => {
     const today = todayKey();
-    const desde = addDays(today, -Math.max(120, days * 3));
+    const month = mes || addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7);
+    const desde = `${month}-01`;
+    const hasta = addDays(addDays(`${month}-28`, 4).slice(0, 7) + '-01', -1);
+    const since = addDays(desde, -180);
     const account = await store.getAccount();
-    const records = await loadDeliveryRecords(store.db, account, { desde, hasta: today });
+    const records = await loadDeliveryRecords(store.db, account, { desde: since, hasta });
     const appSince = await appRecordsSince(store.db, account);
     const products = await catalog();
-    const rows = mergeHistory(records, loadPhotoRows(products, { desde, hasta: today }), appSince || '');
+    const rows = mergeHistory(records, loadPhotoRows(products, { desde: since, hasta }), appSince || '');
     const clients = (await Promise.all((await routesFor()).map((route) => store.getClients(route)))).flat();
     const names = new Map(products.map((product) => [product.id, product.nombre]));
     return {
-      dias: days, datos_desde: rows[0]?.fecha || null,
-      clientes: clientsWithoutPurchase(clients, rows, today, days, nextVisit).map((client) => ({
+      mes: month, desde, hasta, datos_desde: rows[0]?.fecha || null,
+      clientes: clientsWithoutPurchase(clients, rows, desde, hasta, nextVisit).map((client) => ({
         ...client, compro: Object.fromEntries(Object.entries(client.compro).map(([id, qty]) => [names.get(id) || id, qty])),
       })),
     };

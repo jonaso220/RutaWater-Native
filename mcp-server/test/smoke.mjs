@@ -71,7 +71,7 @@ const call = async (name, args = {}) => {
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
   'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'avisar_jonathan', 'buscar_clientes', 'cambiar_fecha', 'cambiar_frecuencia',
-  'cambiar_posicion', 'clientes_sin_comprar', 'consultar_jonathan', 'crear_cliente', 'deshacer_fusion', 'deshacer_listo', 'entregas_del_periodo', 'enviar_comprobante_aquapura', 'excluir_chat', 'fijar_productos', 'fusionar_duplicados', 'guardar_contacto', 'historia_cliente', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_respuesta_aplicada',
+  'cambiar_posicion', 'clientes_sin_comprar', 'consultar_jonathan', 'crear_cliente', 'deshacer_fusion', 'deshacer_listo', 'entregas_del_periodo', 'enviar_comprobante_aquapura', 'excluir_chat', 'fijar_facturacion', 'fijar_productos', 'fusionar_duplicados', 'guardar_contacto', 'historia_cliente', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_respuesta_aplicada',
   'marcar_revisar_transferencia', 'marcar_whatsapp_atendido', 'pasada_programada', 'quitar_de_la_lista', 'registrar_pago', 'responder_whatsapp', 'sugerir_posicion', 'transcribir_audio', 'transcribir_whatsapp', 'ver_archivo_whatsapp', 'ver_cliente', 'ver_productos',
 ]);
 
@@ -93,10 +93,12 @@ const products = await call('fijar_productos', { cliente_id: 'c1', productos: { 
 assert.deepEqual(products.despues, { b20: 3, soda: 6 });
 assert.equal((await call('marcar_favorito', { cliente_id: 'c1' })).cambiado, true);
 await call('actualizar_nota', { cliente_id: 'c1', nota: 'Pueden ser 2 o 3', nota_esperada: '' });
+await call('fijar_facturacion', { cliente_id: 'c1', rut: '211234560019', razon_social: 'Carnicería' });
 
 const detail = await call('ver_cliente', { cliente_id: 'c1' });
 assert.equal(detail.favorito, true);
 assert.equal(detail.notas, 'Pueden ser 2 o 3');
+assert.deepEqual([detail.rut, detail.razon_social], ['211234560019', 'Carnicería']);
 assert.deepEqual(detail.parentesco.map((p) => [p.nombre, p.tipo, p.whatsapp]), [['Sulay Fernandez', 'otro', '59899333444']]);
 assert.equal(detail.deuda_total, 500);
 assert.equal(detail.transferencia_pendiente, false);
@@ -150,10 +152,10 @@ assert.deepEqual(reordered.repartos[0].clientes.map((c) => c.nombre), ['Héctor 
 
 const audit = fs.readFileSync(auditPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line).tool);
 assert.deepEqual(audit, [
-  'fijar_productos', 'marcar_favorito', 'actualizar_nota', 'marcar_revisar_transferencia', 'registrar_pago', 'marcar_listo',
+  'fijar_productos', 'marcar_favorito', 'actualizar_nota', 'fijar_facturacion', 'marcar_revisar_transferencia', 'registrar_pago', 'marcar_listo',
   'agendar_una_vez', 'deshacer_listo', 'cambiar_posicion',
 ]);
 
 await client.close();
-console.log('smoke: OK (41 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
+console.log('smoke: OK (42 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
 process.exit(0);

@@ -1,6 +1,7 @@
 import type { DocumentReference, Firestore, QueryDocumentSnapshot, Transaction } from 'firebase-admin/firestore';
 import type { Client } from '../../src/types';
 import { withDefaults } from '../../src/utils/clientDefaults';
+import { billingInfoUpdates, isValidClientEmail, sanitizeClientBillingInfo } from '../../src/utils/clientBillingInfo';
 import {
   buildClientIdentityIndex, getRelatedClientReference, getRelatedRecordStableClientId, getStableClientId,
 } from '../../src/utils/clientIdentity';
@@ -120,6 +121,35 @@ export const setNote = (
   const changed = after !== before;
   if (changed) transaction.update(ref, { notes: after });
   return { cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed, antes: before, despues: after };
+});
+
+/**
+ * Datos de facturación de la ficha (RUT, razón social, email), como Editar
+ * cliente → Facturación (Jonathan, 29/10/2026: para pasarle a la empresa los
+ * datos de un comercio y que le hagan la boleta). Solo cambia lo que se pasa;
+ * texto vacío lo borra. El RUT uruguayo tiene 12 dígitos: un número más corto
+ * puede ser una cédula, que nunca se guarda.
+ */
+export const setBilling = (
+  db: Firestore, account: Account, clientId: string,
+  values: { rut?: string; businessName?: string; email?: string },
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const digits = (values.rut || '').replace(/\D/g, '');
+  if (values.rut?.trim() && digits.length !== 12) {
+    throw new WriteError(`El RUT tiene que tener 12 dígitos y «${values.rut.trim()}» tiene ${digits.length}. Si es una cédula, no se guarda.`);
+  }
+  if (values.email !== undefined && !isValidClientEmail(values.email)) throw new WriteError(`Email inválido: «${values.email}».`);
+  const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
+  const current = sanitizeClientBillingInfo(client);
+  const provided = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
+  const updates = billingInfoUpdates(client, { ...current, ...provided });
+  const changed = Object.keys(updates).length > 0;
+  if (changed) transaction.update(ref, { ...updates, updatedAt: new Date() });
+  const view = (billing: typeof current) => ({ rut: billing.rut, razon_social: billing.businessName, email: billing.email });
+  return {
+    cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed,
+    antes: view(current), despues: view({ ...current, ...updates }),
+  };
 });
 
 /** Fija la estrella (no es un interruptor: repetir la llamada no la apaga). */

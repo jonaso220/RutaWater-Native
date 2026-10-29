@@ -159,6 +159,10 @@ export const clientDetail = (client: Client, context: ClientContext) => ({
   direcciones: getClientAddresses(client).map((location) => ({
     tipo: location.type, direccion: location.address, mapa: location.mapsLink || '',
   })),
+  // Facturación (Editar cliente → Facturación); vacíos si no se cargaron.
+  rut: (client.rut || '').trim(),
+  razon_social: (client.businessName || '').trim(),
+  email: (client.email || '').trim(),
   fecha_especifica: client.specificDate || '',
   ultima_entrega: parseDate(client.lastDeliveredAt)?.toISOString() ?? null,
   parentesco: relatedClients(client, context.clients || []),

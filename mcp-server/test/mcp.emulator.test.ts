@@ -16,7 +16,7 @@ import {
   suggestPosition, todayKey, weekdayOf,
 } from '../src/views';
 import {
-  advanceVisit, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote, setProducts, setStar,
+  advanceVisit, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setBilling, setNote, setProducts, setStar,
   undoDone,
 } from '../src/writes';
 
@@ -117,6 +117,19 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     const result = await setNote(db, account, 'rosa', 'Pueden ser 7 u 8', 'Deja el dinero');
     expect(result.despues).toBe('Pueden ser 7 u 8');
     expect((await db.doc('clients/rosa').get()).data()?.notes).toBe('Pueden ser 7 u 8');
+  });
+
+  test('facturación: RUT de 12 dígitos, solo los campos que se pasan', async () => {
+    const account = await store.getAccount();
+    await expect(setBilling(db, account, 'rosa', { rut: '4.123.456-7' })).rejects.toThrow('cédula');
+    const result = await setBilling(db, account, 'rosa', { rut: '21 234567 0019', businessName: 'Carnicería Rosa' });
+    expect(result).toMatchObject({ cambiado: true, despues: { rut: '21 234567 0019', razon_social: 'Carnicería Rosa', email: '' } });
+    expect((await setBilling(db, account, 'rosa', { email: 'rosa@carniceria.uy' })).despues)
+      .toEqual({ rut: '21 234567 0019', razon_social: 'Carnicería Rosa', email: 'rosa@carniceria.uy' });
+    expect((await setBilling(db, account, 'rosa', { rut: '21 234567 0019' })).cambiado).toBe(false);
+    await expect(setBilling(db, account, 'rosa', { email: 'sin arroba' })).rejects.toThrow('Email');
+    const data = (await db.doc('clients/rosa').get()).data();
+    expect([data?.rut, data?.businessName, data?.email]).toEqual(['21 234567 0019', 'Carnicería Rosa', 'rosa@carniceria.uy']);
   });
 
   test('favorito se fija, no se alterna', async () => {

@@ -20,7 +20,7 @@ import {
 } from './views';
 import {
   advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote,
-  setProducts, setStar, undoDone, WriteError,
+  setBilling, setProducts, setStar, undoDone, WriteError,
 } from './writes';
 
 const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta configurada.
@@ -36,6 +36,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - cambiar_fecha pasa la próxima visita a otra fecha, antes o después (como la fecha de inicio de Editar cliente), y opcionalmente cambia la frecuencia en la misma llamada. Si la fecha cae otro día de semana, un cliente de un solo día o un pedido de una vez pasa a ese día (con ubicar=true, donde indica sugerir_posicion).
 - quitar_de_la_lista saca al cliente de la lista de ese día de semana (como «Quitar de la lista» en Inicio): con varios días le saca solo ese; si era el único, vuelve al Directorio. Un pedido de una vez de alguien que tiene otra ficha se borra en vez de dejar una copia en el Directorio.
 - registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: es propina salvo que el cliente pida dejarlo a favor (ahí, anotalo en la nota).
+- fijar_facturacion guarda el RUT (12 dígitos), la razón social y el email de facturación de la ficha; la cédula nunca se guarda.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
 - fusionar_duplicados junta dos fichas de la misma persona: queda la de agenda (o la más completa), se le suman los datos que solo tenía la otra y la otra se borra; deudas, transferencias y Parentesco pasan a la que queda. Primero sin aplicar (vista previa) y después con aplicar=true. deshacer_fusion la revierte con la copia que deja.
@@ -335,6 +336,21 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
   }, write('actualizar_nota', async ({ cliente_id, nota, nota_esperada }) => setNote(
     store.db, await store.refreshAccount(), cliente_id, nota, nota_esperada,
   )));
+
+  server.registerTool('fijar_facturacion', {
+    title: 'Fijar datos de facturación',
+    description: 'Guarda en la ficha el RUT, la razón social y/o el email de facturación (como Editar cliente → Facturación), para pasarle a la empresa los datos de un comercio y que le hagan la boleta. Solo cambia los campos que pasás; texto vacío borra ese campo. El RUT tiene que tener 12 dígitos (con o sin puntos y guiones, se guarda como lo escribió): un número más corto puede ser una cédula, que nunca se guarda. ver_cliente muestra lo guardado.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      rut: z.string().max(40).optional(),
+      razon_social: z.string().max(150).optional(),
+      email: z.string().max(150).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  }, write('fijar_facturacion', async ({ cliente_id, rut, razon_social, email }) => {
+    if (rut === undefined && razon_social === undefined && email === undefined) throw new WriteError('Pasá rut, razon_social o email.');
+    return setBilling(store.db, await store.refreshAccount(), cliente_id, { rut, businessName: razon_social, email });
+  }));
 
   server.registerTool('marcar_favorito', {
     title: 'Marcar favorito',

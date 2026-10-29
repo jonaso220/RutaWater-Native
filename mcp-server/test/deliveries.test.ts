@@ -6,7 +6,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rutawater-historial-'));
 process.env.RUTAWATER_HISTORIAL_DIR = dir;
 
 // eslint-disable-next-line import/first
-import { DeliveryRow, loadPhotoRows, mergeHistory, summarizeHistory } from '../src/deliveries';
+import { clientsWithoutPurchase, DeliveryRow, loadPhotoRows, mergeHistory, summarizeHistory } from '../src/deliveries';
 
 const catalog = [{ id: 'b20', nombre: '20L' }, { id: 'soda', nombre: 'Soda' }];
 const photo = (fecha: string, registros: Array<Record<string, unknown>>) =>
@@ -48,9 +48,41 @@ describe('historia de entregas', () => {
       visitas_registradas: 4, desde: '2026-10-07', ultima_entrega: '2026-10-28', no_necesito: 1,
       entregas_90_dias: 3, productos_90_dias: { b20: 6, soda: 6 },
       suele_llevar: { productos: { b20: 2 }, veces: 2, de: 3 }, dias_entre_entregas: 14,
+      dias_sin_comprar: 0, compras_por_mes: { '2026-10': 3 },
     });
     expect(summary.ultimas[0]).toEqual({ fecha: '2026-10-28', productos: { b20: 2 } });
     expect(summary.ultimas[1]).toEqual({ fecha: '2026-10-21', no_necesito: true });
     expect(summary.ultimas[3]).toMatchObject({ segun: expect.stringContaining('agenda') });
+  });
+});
+
+describe('clientes sin comprar', () => {
+  const next = (client: any) => client.next ?? null;
+  const row = (fecha: string, cliente_id: string, extra: Partial<DeliveryRow> = {}): DeliveryRow => ({
+    fecha, cliente_id, customer_id: cliente_id, nombre: cliente_id, direccion: '', entrega: true,
+    productos: { b20: 1 }, origen: 'foto', ...extra,
+  });
+
+  test('avisa a quien pasó más de un mes sin comprar, juntando sus fichas', () => {
+    const clients = [
+      { id: 'ana', name: 'Ana', customerId: 'p-ana', next: '2026-12-01', freq: 'monthly' },
+      { id: 'ana-vez', name: 'Ana', customerId: 'p-ana' },
+      { id: 'beto', name: 'Beto', next: '2026-11-25', freq: 'weekly' },
+      { id: 'caro', name: 'Caro', next: '2026-11-26', freq: 'weekly' },
+      { id: 'dir', name: 'Directorio' },
+      { id: 'nota', name: 'Nota', isNote: true, next: '2026-11-26' },
+    ] as any[];
+    const rows = [
+      row('2026-10-01', 'ana-vez', { productos: { b20: 2 } }),
+      row('2026-10-02', 'beto'), row('2026-11-20', 'beto'),
+      row('2026-10-03', 'caro', { entrega: false, productos: {} }),
+    ];
+    const result = clientsWithoutPurchase(clients, rows, '2026-11-24', 30, next);
+    expect(result.map((client) => [client.cliente_id, client.dias_sin_comprar, client.ultima_compra])).toEqual([
+      ['ana', 54, '2026-10-01'], ['caro', 54, null],
+    ]);
+    expect(result[0]).toMatchObject({ compro: { b20: 2 }, proxima_visita: '2026-12-01' });
+    expect(result[1]).toMatchObject({ sin_compras_desde: '2026-10-01' });
+    expect(clientsWithoutPurchase(clients, rows, '2026-10-20', 30, next)).toEqual([]);
   });
 });

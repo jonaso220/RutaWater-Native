@@ -4,7 +4,7 @@ import type { Client } from '../../src/types';
 import { appendAudit } from './audit';
 import { transcribeAudios } from './audio';
 import { applyReplacements, openWhatsapp } from './whatsapp';
-import { appRecordsSince, loadDeliveryRecords, loadPhotoRows, mergeHistory, summarizeHistory } from './deliveries';
+import { appRecordsSince, clientsWithoutPurchase, loadDeliveryRecords, loadPhotoRows, mergeHistory, summarizeHistory } from './deliveries';
 import { downloadInboxMedia, excludeChat, forwardReceiptToAquapura, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
 import { askJonathan, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
 import { scheduledPass } from './vigilanteControl';
@@ -16,7 +16,7 @@ import { findRoute, Route } from './routes';
 import type { Store } from './store';
 import {
   addDays, agendaFor, clientDetail, clientSummary, debtReport, debtsForClient, debtTotalMessage, hasPendingTransfer,
-  isValidIsoDate, productCatalog, searchClients, suggestPosition, todayKey, weekdayOf, whatsappTemplates,
+  isValidIsoDate, nextVisit, productCatalog, searchClients, suggestPosition, todayKey, weekdayOf, whatsappTemplates,
 } from './views';
 import {
   advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote,
@@ -89,7 +89,7 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('historia_cliente', {
     title: 'Historia del cliente',
-    description: 'Lo que compró un cliente: sus visitas (registro de entregas de cada Listo y, para fechas anteriores, la foto de la agenda), qué suele llevar, cada cuántos días, cuántas veces no necesitó y las últimas 10 visitas. Junta todas las fichas de la misma persona. Para entender un pedido («lo de siempre», «un bidón»), ver si cambió su consumo o antes de consultarle algo a Jonathan. Solo lectura.',
+    description: 'Lo que compró un cliente: sus visitas (registro de entregas de cada Listo y, para fechas anteriores, la foto de la agenda), qué suele llevar, cada cuántos días, cuántas veces compró cada mes, cuántos días lleva sin comprar, cuántas veces no necesitó y las últimas 10 visitas. Junta todas las fichas de la misma persona. Para entender un pedido («lo de siempre», «un bidón»), ver si cambió su consumo o antes de consultarle algo a Jonathan. Solo lectura.',
     inputSchema: { cliente_id: z.string().min(1) },
     annotations: { readOnlyHint: true },
   }, handle(async ({ cliente_id }: { cliente_id: string }) => {
@@ -113,10 +113,39 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     const account = await store.getAccount();
     const records = await loadDeliveryRecords(store.db, account, { desde, hasta });
     const appSince = await appRecordsSince(store.db, account);
-    const rows = mergeHistory(records, loadPhotoRows(await catalog(), { desde, hasta }), appSince || '');
+    const clients = (await Promise.all((await routesFor()).map((route) => store.getClients(route)))).flat();
+    const customerOf = new Map(clients.map((client) => [client.id, client.customerId || client.id]));
+    // Las fotos traen el id de la ficha: se pasan a la persona para juntar sus fichas.
+    const photos = loadPhotoRows(await catalog(), { desde, hasta })
+      .map((row) => ({ ...row, customer_id: customerOf.get(row.cliente_id) || row.customer_id }));
+    const rows = mergeHistory(records, photos, appSince || '');
     return {
       desde, hasta, registro_de_la_app_desde: appSince,
       productos: (await catalog()).map(({ id, nombre }) => ({ id, nombre })), visitas: rows,
+    };
+  }));
+
+  server.registerTool('clientes_sin_comprar', {
+    title: 'Clientes sin comprar',
+    description: 'Clientes que pasaron más de N días (por defecto 30) sin comprar: última compra y qué llevó, próxima visita y frecuencia. Junta las fichas de la misma persona; sin compras en la historia cuenta desde el primer día con datos, solo para los que siguen en la agenda. Para el aviso de quienes pasan un mes sin comprar. Solo lectura.',
+    inputSchema: { dias: z.number().int().min(7).max(180).optional() },
+    annotations: { readOnlyHint: true },
+  }, handle(async ({ dias }: { dias?: number }) => {
+    const days = dias ?? 30;
+    const today = todayKey();
+    const desde = addDays(today, -Math.max(120, days * 3));
+    const account = await store.getAccount();
+    const records = await loadDeliveryRecords(store.db, account, { desde, hasta: today });
+    const appSince = await appRecordsSince(store.db, account);
+    const products = await catalog();
+    const rows = mergeHistory(records, loadPhotoRows(products, { desde, hasta: today }), appSince || '');
+    const clients = (await Promise.all((await routesFor()).map((route) => store.getClients(route)))).flat();
+    const names = new Map(products.map((product) => [product.id, product.nombre]));
+    return {
+      dias: days, datos_desde: rows[0]?.fecha || null,
+      clientes: clientsWithoutPurchase(clients, rows, today, days, nextVisit).map((client) => ({
+        ...client, compro: Object.fromEntries(Object.entries(client.compro).map(([id, qty]) => [names.get(id) || id, qty])),
+      })),
     };
   }));
 

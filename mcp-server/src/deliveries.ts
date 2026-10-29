@@ -143,12 +143,18 @@ export const summarizeHistory = (client: Client, rows: DeliveryRow[], today: str
     usual.set(key, (usual.get(key) || 0) + 1);
   });
   const [usualKey, usualCount] = [...usual.entries()].sort((a, b) => b[1] - a[1])[0] || ['[]', 0];
+  // Cuántas veces compró cada mes (Jonathan, 29/10/2026: que no pase un mes sin comprar).
+  const perMonth: Record<string, number> = {};
+  delivered.forEach((row) => { perMonth[row.fecha.slice(0, 7)] = (perMonth[row.fecha.slice(0, 7)] || 0) + 1; });
+  const last = delivered[delivered.length - 1]?.fecha;
   return {
     cliente_id: client.id,
     nombre: client.name,
     visitas_registradas: rows.length,
     desde: rows[0]?.fecha || null,
-    ultima_entrega: delivered[delivered.length - 1]?.fecha || null,
+    ultima_entrega: last || null,
+    dias_sin_comprar: last ? Math.round((Date.parse(today) - Date.parse(last)) / DAY_MS) : null,
+    compras_por_mes: Object.fromEntries(Object.entries(perMonth).slice(-6)),
     no_necesito: rows.filter((row) => !row.entrega).length,
     entregas_90_dias: recent.length,
     productos_90_dias: totals,
@@ -160,4 +166,46 @@ export const summarizeHistory = (client: Client, rows: DeliveryRow[], today: str
       ...(row.origen === 'foto' ? { segun: 'agenda (no confirma que se entregó)' } : {}),
     })),
   };
+};
+
+/**
+ * Clientes que pasaron más de `days` días sin comprar (Jonathan, 29/10/2026:
+ * que no pase un mes sin que compren). Junta las fichas de la misma persona.
+ * Sin ninguna compra en la historia, cuenta desde el primer día con datos y
+ * solo si sigue en la agenda (una ficha de directorio que nunca compró no avisa).
+ */
+export const clientsWithoutPurchase = (
+  clients: Client[], rows: DeliveryRow[], today: string, days: number,
+  nextVisitOf: (client: Client) => string | null,
+) => {
+  const dataSince = rows.reduce((min, row) => (!min || row.fecha < min ? row.fecha : min), '');
+  if (!dataSince) return [];
+  // Las fotos traen el id de la ficha, no el de la persona.
+  const customerOf = new Map(clients.map((client) => [client.id, client.customerId || client.id]));
+  const lastByCustomer = new Map<string, DeliveryRow>();
+  rows.filter((row) => row.entrega && Object.keys(row.productos).length)
+    .forEach((row) => lastByCustomer.set(customerOf.get(row.cliente_id) || row.customer_id, row));
+  const people = new Map<string, Client[]>();
+  clients.filter((client) => !client.isNote && !client.isInactive).forEach((client) => {
+    const key = client.customerId || client.id;
+    people.set(key, [...(people.get(key) || []), client]);
+  });
+  const daysSince = (date: string) => Math.round((Date.parse(today) - Date.parse(date)) / DAY_MS);
+  const result = [];
+  for (const [customerId, fichas] of people) {
+    const last = lastByCustomer.get(customerId);
+    const visits = fichas.map((client) => ({ client, next: nextVisitOf(client) }));
+    const scheduled = visits.filter((visit) => visit.next).sort((a, b) => a.next!.localeCompare(b.next!));
+    if (!last && !scheduled.length) continue;
+    const idle = daysSince(last?.fecha || dataSince);
+    if (idle <= days) continue;
+    const main = scheduled[0]?.client || fichas.find((client) => client.id === last?.cliente_id) || fichas[0];
+    result.push({
+      cliente_id: main.id, customer_id: customerId, nombre: main.name, direccion: main.address || last?.direccion || '',
+      ultima_compra: last?.fecha || null, compro: last?.productos || {}, dias_sin_comprar: idle,
+      ...(last ? {} : { sin_compras_desde: dataSince }),
+      proxima_visita: scheduled[0]?.next || null, frecuencia: main.freq,
+    });
+  }
+  return result.sort((a, b) => b.dias_sin_comprar - a.dias_sin_comprar);
 };

@@ -157,13 +157,18 @@ const withNote = await call('agenda_del_dia', { fecha: 'mañana' });
 const first = withNote.repartos[0].clientes[0];
 assert.deepEqual([first.id, first.es_nota, first.notas], [note.cliente_id, true, 'Llevar cambio']);
 assert.equal((await call('editar_nota_del_dia', { nota_id: note.cliente_id, texto: 'Llevar cambio de 1000' })).despues, 'Llevar cambio de 1000');
+const noteLast = await call('cambiar_posicion', { cliente_id: note.cliente_id, fecha: 'mañana', posicion: 10000 });
+assert.deepEqual([noteLast.despues.posicion, noteLast.despues.siguiente], [4, null]);
+await new Promise((resolve) => setTimeout(resolve, 200));
+const noteAtEnd = (await call('agenda_del_dia', { fecha: 'mañana' })).repartos[0].clientes;
+assert.equal(noteAtEnd[noteAtEnd.length - 1].id, note.cliente_id);
 assert.match((await client.callTool({ name: 'borrar_nota_del_dia', arguments: { nota_id: 'c1' } })).content[0].text, /no es una nota/);
 assert.equal((await call('borrar_nota_del_dia', { nota_id: note.cliente_id })).antes.texto, 'Llevar cambio de 1000');
 
 const audit = fs.readFileSync(auditPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line).tool);
 assert.deepEqual(audit, [
   'fijar_productos', 'marcar_favorito', 'actualizar_nota', 'fijar_facturacion', 'marcar_revisar_transferencia', 'registrar_pago', 'marcar_listo',
-  'agendar_una_vez', 'deshacer_listo', 'cambiar_posicion', 'crear_nota_del_dia', 'editar_nota_del_dia', 'borrar_nota_del_dia',
+  'agendar_una_vez', 'deshacer_listo', 'cambiar_posicion', 'crear_nota_del_dia', 'editar_nota_del_dia', 'cambiar_posicion', 'borrar_nota_del_dia',
 ]);
 
 await client.close();

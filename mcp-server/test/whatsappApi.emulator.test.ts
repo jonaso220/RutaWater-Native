@@ -15,7 +15,7 @@ fs.writeFileSync(process.env.RUTAWATER_YCLOUD_KEY, 'test-key\n');
 // eslint-disable-next-line import/first
 import { getDb } from '../src/config';
 // eslint-disable-next-line import/first
-import { excludeChat, forwardReceiptToAquapura, markHandled, readInbox, sendReply } from '../src/whatsappApi';
+import { excludeChat, forwardReceiptToAquapura, markHandled, readInbox, sendMessage, sendReply } from '../src/whatsappApi';
 
 const emulator = process.env.FIRESTORE_EMULATOR_HOST;
 const describeWithEmulator = emulator ? describe : describe.skip;
@@ -76,6 +76,29 @@ describeWithEmulator('WhatsApp por la API', () => {
     const failing = jest.fn(async () => new Response(JSON.stringify({ error: { message: 'no' } }), { status: 400 })) as unknown as typeof fetch;
     await expect(sendReply(db, '59899123456', 'Hola', NOW, failing)).rejects.toThrow('no lo envió');
     expect((await db.doc('whatsappUsage/2026-10').get()).data()?.sent).toBe(0);
+  });
+
+  test('mensaje de Jonathan: texto común con la ventana abierta, plantilla en blanco si no', async () => {
+    const open = okFetch({ id: 'out1' });
+    const inside = await sendMessage(db, '099123456', 'Mañana pasamos a las 10', 'Rosa', NOW, open);
+    expect(inside).toMatchObject({ enviado: true, como: expect.stringContaining('texto común') });
+    expect(JSON.parse((open as jest.Mock).mock.calls[0][1].body)).toMatchObject({ type: 'text', text: { body: 'Mañana pasamos a las 10' } });
+
+    const closed = okFetch({ id: 'out2' });
+    const outside = await sendMessage(db, '59898000000', 'El lunes no pasamos.\nPasamos el martes', 'Ana', NOW, closed);
+    expect(outside.mensaje).toBe('Hola Ana, El lunes no pasamos. Pasamos el martes\n\n¡Saludos!');
+    expect(JSON.parse((closed as jest.Mock).mock.calls[0][1].body).template).toEqual({
+      name: 'mensaje_cliente', language: { code: 'es' },
+      components: [{ type: 'body', parameters: [{ type: 'text', text: 'Ana' }, { type: 'text', text: 'El lunes no pasamos. Pasamos el martes' }] }],
+    });
+    expect((await db.doc('whatsappInbox/out2').get()).data()).toMatchObject({ direction: 'out', type: 'template', handled: true });
+    await expect(sendMessage(db, '099111222', 'Hola', 'X', NOW, okFetch())).rejects.toThrow('excluido');
+  });
+
+  test('mensaje de Jonathan: plantilla sin aprobar no cuenta en el uso', async () => {
+    const rejected = jest.fn(async () => new Response(JSON.stringify({ error: { message: 'Template name does not exist' } }), { status: 400 })) as unknown as typeof fetch;
+    await expect(sendMessage(db, '59898000000', 'Hola', 'Ana', NOW, rejected)).rejects.toThrow('aprobada por Meta');
+    expect((await db.doc('whatsappUsage/2026-10').get()).data()?.sent ?? 0).toBe(0);
   });
 
   test('comprobante a Aquapura: solo el archivo con la ventana abierta, plantilla si no', async () => {

@@ -206,6 +206,73 @@ export const sendReply = async (db: Firestore, phoneInput: string, body: string,
   return { enviado: true, id, estado: result.status || 'accepted', telefono: phone, uso: await usage(db, now, config) };
 };
 
+/**
+ * Un mensaje que Jonathan pide mandarle a un cliente, aunque no sea respuesta
+ * (30/10/2026). Con la ventana de 24 h abierta va como texto común
+ * (sendReply). Fuera de ella Meta no deja mandar texto libre por la API, ni
+ * pagando: va con la plantilla en blanco «mensaje_cliente», que lleva el texto
+ * tal cual con un saludo, y se cobra.
+ */
+export const FREE_TEMPLATE = 'mensaje_cliente';
+export const FREE_TEMPLATE_BODY = 'Hola {{1}}, {{2}}\n\n¡Saludos!';
+
+export const sendMessage = async (
+  db: Firestore, phoneInput: string, body: string, greeting: string, now = new Date(), fetcher = fetch,
+) => {
+  const config = localConfig();
+  const phone = fullPhone(phoneInput);
+  if (phone.length < 10) throw new WriteError('Teléfono inválido: pasá el número con código de país (598…).');
+  if (!config.negocio) throw new WriteError(`Falta «negocio» en ${configFile()}.`);
+  if (isExcluded(await loadExcluded(db, config), phone)) throw new WriteError('Ese chat está excluido: no se le escribe.');
+  const text = body.trim();
+  if (!text) throw new WriteError('El mensaje está vacío.');
+  const inbound = (await db.collection(INBOX).where('phone', '==', phone).where('direction', '==', 'in').get()).docs.map(readDoc);
+  const lastIn = Math.max(0, ...inbound.map((message) => +message.sentAt));
+  // Diez minutos de margen: que la ventana no se cierre mientras sale.
+  if (lastIn && now.getTime() - lastIn < WINDOW_MS - 10 * 60e3) {
+    return { ...(await sendReply(db, phone, text, now, fetcher)), como: 'texto común (escribió en las últimas 24 h, gratis)' };
+  }
+  // Meta no acepta saltos de línea, tabulaciones ni más de 4 espacios seguidos dentro de una variable.
+  const param = text.replace(/\s*\n\s*/g, ' ').replace(/\s{4,}/g, '   ');
+  if (param.length > 900) throw new WriteError('Fuera de las 24 h el mensaje va en una plantilla: que tenga menos de 900 letras.');
+  const name = greeting.trim() || 'qué tal';
+  const release = await reserveSend(db, now, config);
+  let result: any;
+  try {
+    const response = await fetcher(`${API}/whatsapp/messages/sendDirectly`, {
+      method: 'POST',
+      headers: { 'X-API-Key': apiKey(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: `+${config.negocio}`, to: `+${phone}`, type: 'template',
+        template: {
+          name: FREE_TEMPLATE, language: { code: 'es' },
+          components: [{ type: 'body', parameters: [{ type: 'text', text: name.slice(0, 60) }, { type: 'text', text: param }] }],
+        },
+      }),
+    });
+    result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const reason = String(result?.error?.message || response.status);
+      throw new WriteError(/template/i.test(reason)
+        ? `YCloud no lo envió (${reason}): la plantilla «${FREE_TEMPLATE}» tiene que estar aprobada por Meta.`
+        : `YCloud no lo envió: ${reason}.`);
+    }
+  } catch (error) {
+    await release();
+    throw error;
+  }
+  const id = String(result.id || result.wamid || `api-${now.getTime()}`);
+  const rendered = FREE_TEMPLATE_BODY.replace('{{1}}', name).replace('{{2}}', param);
+  await db.collection(INBOX).doc(id).set({
+    direction: 'out', source: 'api', phone, name: '', business: config.negocio, wamid: String(result.wamid || ''),
+    replyTo: '', sentAt: now, receivedAt: now, handled: true, type: 'template', text: rendered, media: null,
+  });
+  return {
+    enviado: true, id, estado: result.status || 'accepted', telefono: phone, como: 'plantilla mensaje_cliente (fuera de las 24 h, se cobra)',
+    mensaje: rendered, uso: await usage(db, now, config),
+  };
+};
+
 const normalizeName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 const nameWords = (value: string) => normalizeName(value).split(/[^a-zñ]+/).filter((word) => word.length >= 3);
 

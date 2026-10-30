@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import type { Client } from '../../src/types';
+import type { Client, PaymentSchedule } from '../../src/types';
 import { getClientPhones } from '../../src/utils/clientPhones';
 import { normalizePhoneForComparison } from '../../src/utils/helpers';
 import { appendAudit } from './audit';
@@ -22,7 +22,8 @@ import {
 } from './views';
 import {
   advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, createDayNote, deleteDayNote, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote,
-  addPhone, changeAddress, changeName, setBilling, setProducts, setStar, undoDone, updateDayNote, WriteError,
+  addPhone, changeAddress, changeName, setBilling,
+  addDebt, addLocation, changeDays, fixDebt, RELATIONSHIPS, removePhone, scheduleRecurring, setInactive, setPaymentSchedule, setRelationship, setProducts, setStar, undoDone, updateDayNote, WriteError,
 } from './writes';
 
 const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta configurada.
@@ -43,6 +44,11 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - agregar_telefono suma un teléfono a la ficha (hasta 5, como Editar cliente → Teléfonos); con principal=true pasa a ser el de WhatsApp y llamadas. Los que ya tenía quedan.
 - cambiar_direccion cambia la dirección y/o el link de Maps de la ficha (como Editar cliente → Ubicación); las coordenadas salen del link y, si no se pueden sacar, no cambia nada; solo con el link arma la dirección con las calles del mapa.
 - cambiar_nombre cambia el nombre de la ficha (como Editar cliente → Nombre); las otras fichas de la misma persona no se tocan.
+- quitar_telefono saca un teléfono de la ficha; agregar_ubicacion suma otra ubicación guardada (casa, trabajo u otra), y con principal=true pasa a ser la de la tarjeta.
+- agendar_fijo vuelve a poner en agenda una ficha de directorio con días y frecuencia (como Directorio → Agendar); cambiar_dias cambia los días de un cliente que ya tiene agenda fija, sin tocar frecuencia, nota ni productos.
+- anotar_deuda suma una deuda (como Agregar deuda en la tarjeta) y corregir_deuda cambia el monto de una anotada; las dos piden la deuda actual para no duplicar.
+- fijar_parentesco vincula (o desvincula) dos fichas como en Parentesco; fijar_dias_de_pago guarda cuándo paga la deuda; marcar_inactivo es «Ya no es cliente» / Reactivar.
+- No se puede desde acá: borrar clientes, alarmas (viven en el teléfono) ni marcar transferencias revisadas.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
 - fusionar_duplicados junta dos fichas de la misma persona: queda la de agenda (o la más completa), se le suman los datos que solo tenía la otra y la otra se borra; deudas, transferencias y Parentesco pasan a la que queda. Primero sin aplicar (vista previa) y después con aplicar=true. deshacer_fusion la revierte con la copia que deja.
@@ -413,6 +419,146 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     const others = all.filter((client) => !client.isNote && client.id !== cliente_id && (client.customerId || client.id) === customer);
     return { ...result, otras_fichas: others.map((client) => ({ id: client.id, nombre: client.name, direccion: client.address })) };
   }));
+
+  server.registerTool('quitar_telefono', {
+    title: 'Quitar teléfono',
+    description: 'Saca un teléfono de la ficha, como Editar cliente → Teléfonos en la app. Si era el principal, pasa a serlo el primero que queda. Falla si la ficha no tiene ese número. Devuelve antes/después.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      telefono: z.string().min(1).max(40),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+  }, write('quitar_telefono', async ({ cliente_id, telefono }) => removePhone(
+    store.db, await store.refreshAccount(), cliente_id, telefono,
+  )));
+
+  server.registerTool('agregar_ubicacion', {
+    title: 'Agregar ubicación',
+    description: 'Suma otra ubicación guardada a la ficha (casa, trabajo u otra), como Editar cliente → Ubicación → agregar; hasta 10. Las que tenía quedan. Con principal=true pasa a ser la primera: la que muestra la tarjeta y ordena el recorrido (necesita link_maps). Con link saca las coordenadas antes de escribir; si no puede, no guarda nada. Para cambiar la ubicación que ya muestra la tarjeta, usá cambiar_direccion.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      tipo: z.string().describe('casa, trabajo u otra'),
+      direccion: z.string().min(1).max(200).describe('Texto como en las fichas, con mayúscula inicial'),
+      link_maps: z.string().max(2048).optional().describe('Link de Google Maps de un punto marcado'),
+      principal: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('agregar_ubicacion', async ({ cliente_id, tipo, direccion, link_maps, principal }) => addLocation(
+    store.db, await store.refreshAccount(), cliente_id, { type: tipo, address: direccion, mapsLink: link_maps, primary: !!principal },
+  )));
+
+  server.registerTool('agendar_fijo', {
+    title: 'Agendar fijo',
+    description: 'Vuelve a poner en agenda una ficha de directorio con días fijos y frecuencia, como Directorio → Agendar (semanal, quincenal, cada 3 semanas o mensual): la misma ficha va esos días, al final de cada lista (después se puede ubicar con sugerir_posicion + cambiar_posicion), con esos productos y sin estrella; conserva su nota y la reactiva si estaba inactiva. fecha_inicio opcional: la primera visita es el primero de esos días desde esa fecha. Rechaza clientes que ya tienen agenda fija (usar cambiar_dias o cambiar_frecuencia), pedidos de una vez (cambiar_fecha con frecuencia), si la persona ya tiene agenda fija en otra ficha, y fichas con alarma.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      dias: z.array(z.string()).min(1).max(7).describe('Días de semana, por ejemplo ["Martes"] o ["Lunes", "Jueves"]'),
+      frecuencia: z.string().describe('semanal, quincenal, cada 3 semanas o mensual'),
+      productos: z.record(z.string(), z.number().int().min(0).max(9999)).describe('{ id_producto: cantidad }, ids de ver_productos'),
+      fecha_inicio: z.string().optional().describe('aaaa-mm-dd, «hoy» o «mañana»'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  }, write('agendar_fijo', async ({ cliente_id, dias, frecuencia, productos, fecha_inicio }) => scheduleRecurring(
+    store.db, await store.refreshAccount(), await catalog(), cliente_id, dias, frecuencia, productos,
+    fecha_inicio ? resolveDate(fecha_inicio) : undefined,
+  )));
+
+  server.registerTool('cambiar_dias', {
+    title: 'Cambiar días de visita',
+    description: 'Cambia los días de visita de un cliente con agenda fija (sumar un día, sacar uno o pasarlo a otros), sin tocar la frecuencia, la nota, los productos ni la estrella. Los días que ya tenía conservan su lugar en la lista; los nuevos van al final (despues.posiciones; para ubicarlo, sugerir_posicion + cambiar_posicion). Rechaza fichas de directorio (agendar_fijo), pedidos de una vez (cambiar_fecha) y fichas con alarma. Devuelve días y próxima visita antes y después.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      dias: z.array(z.string()).min(1).max(7).describe('Todos los días que va a quedar, por ejemplo ["Martes", "Viernes"]'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('cambiar_dias', async ({ cliente_id, dias }) => changeDays(store.db, await store.refreshAccount(), cliente_id, dias)));
+
+  server.registerTool('anotar_deuda', {
+    title: 'Anotar deuda',
+    description: 'Anota una deuda nueva al cliente, como Agregar deuda en la tarjeta. deuda_esperada = deuda_total que leíste en ver_cliente (0 si no debe): si cambió, no se anota nada (evita anotarla dos veces). Devuelve las deudas antes y después.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      monto: z.number().positive().max(10_000_000).describe('En pesos'),
+      deuda_esperada: z.number().min(0).describe('deuda_total actual según ver_cliente'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  }, write('anotar_deuda', async ({ cliente_id, monto, deuda_esperada }) => {
+    const { all } = await findClient(cliente_id);
+    return addDebt(store.db, await store.refreshAccount(), cliente_id, monto, deuda_esperada, all);
+  }));
+
+  server.registerTool('corregir_deuda', {
+    title: 'Corregir deuda',
+    description: 'Cambia el monto de una deuda ya anotada, como Editar deuda en la app (para un monto mal anotado; un pago se registra con registrar_pago). La deuda se elige por su monto actual; si hay dos iguales, pasá la fecha (aaaa-mm-dd, la de ver_cliente). Devuelve las deudas antes y después.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      monto_actual: z.number().positive(),
+      monto_nuevo: z.number().positive().max(10_000_000),
+      fecha: z.string().optional().describe('aaaa-mm-dd de la deuda, si hay dos del mismo monto'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  }, write('corregir_deuda', async ({ cliente_id, monto_actual, monto_nuevo, fecha }) => {
+    const { all } = await findClient(cliente_id);
+    return fixDebt(store.db, await store.refreshAccount(), cliente_id, monto_actual, monto_nuevo, all, fecha);
+  }));
+
+  server.registerTool('fijar_parentesco', {
+    title: 'Fijar parentesco',
+    description: `Vincula dos fichas como en Parentesco de la tarjeta, en las dos: parentesco es lo que la otra ficha es para cliente_id (padre_madre = la otra es su padre o madre) y la otra recibe el inverso. Valores: ${Object.keys(RELATIONSHIPS).join(', ')}. mismo_hogar=true si viven juntos (por defecto false, como la app). Con quitar=true borra el vínculo de las dos. ver_cliente muestra el parentesco.`,
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      otro_id: z.string().min(1),
+      parentesco: z.string().optional(),
+      mismo_hogar: z.boolean().optional(),
+      quitar: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('fijar_parentesco', async ({ cliente_id, otro_id, parentesco, mismo_hogar, quitar }) => {
+    if (!quitar && !parentesco) throw new WriteError('Pasá parentesco, o quitar=true.');
+    return setRelationship(store.db, await store.refreshAccount(), cliente_id, otro_id, quitar ? null : parentesco!, !!mismo_hogar);
+  }));
+
+  server.registerTool('fijar_dias_de_pago', {
+    title: 'Fijar días de pago',
+    description: 'Guarda cuándo paga la deuda el cliente, como Deudas → días de pago: todos los meses entre desde_dia y hasta_dia (1 a 31, por ejemplo cobra del 1 al 5), o una vez entre desde_fecha y hasta_fecha. Con recordar (por defecto true) la app avisa en el teléfono de Jonathan esos días. quitar=true lo borra. ver_cliente lo muestra en dias_de_pago.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      desde_dia: z.number().int().min(1).max(31).optional(),
+      hasta_dia: z.number().int().min(1).max(31).optional(),
+      desde_fecha: z.string().optional().describe('aaaa-mm-dd'),
+      hasta_fecha: z.string().optional().describe('aaaa-mm-dd; si falta, solo ese día'),
+      recordar: z.boolean().optional(),
+      quitar: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('fijar_dias_de_pago', async ({ cliente_id, desde_dia, hasta_dia, desde_fecha, hasta_fecha, recordar, quitar }) => {
+    const remind = recordar !== false;
+    let schedule: PaymentSchedule | null = null;
+    if (!quitar) {
+      if (desde_dia !== undefined) {
+        schedule = { kind: 'monthly', fromDay: desde_dia, toDay: hasta_dia ?? desde_dia, remind };
+      } else if (desde_fecha) {
+        const from = resolveDate(desde_fecha);
+        const to = hasta_fecha ? resolveDate(hasta_fecha) : undefined;
+        schedule = { kind: 'date', from, ...(to && to !== from ? { to } : {}), remind };
+      } else {
+        throw new WriteError('Pasá desde_dia (todos los meses), desde_fecha, o quitar=true.');
+      }
+    }
+    return setPaymentSchedule(store.db, await store.refreshAccount(), cliente_id, schedule);
+  }));
+
+  server.registerTool('marcar_inactivo', {
+    title: 'Marcar inactivo',
+    description: '«Ya no es cliente» de Editar cliente: con inactivo=true la ficha sale de la agenda (pasa al directorio sin días) y queda en Inactivos, con su nota, productos y deudas. inactivo=false la reactiva: sigue en el directorio hasta agendarla (agendar_fijo o agendar_una_vez). Rechaza fichas con alarma.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      inactivo: z.boolean(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+  }, write('marcar_inactivo', async ({ cliente_id, inactivo }) => setInactive(
+    store.db, await store.refreshAccount(), cliente_id, inactivo,
+  )));
 
   server.registerTool('crear_nota_del_dia', {
     title: 'Crear nota del día',

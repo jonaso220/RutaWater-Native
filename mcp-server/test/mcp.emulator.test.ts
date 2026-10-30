@@ -16,6 +16,7 @@ import {
   suggestPosition, todayKey, weekdayOf,
 } from '../src/views';
 import {
+  addDebt, addLocation, changeDays, fixDebt, removePhone, scheduleRecurring, setInactive, setPaymentSchedule, setRelationship,
   addPhone, advanceVisit, changeAddress, changeName, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setBilling, setNote, setProducts, setStar,
   undoDone,
 } from '../src/writes';
@@ -191,6 +192,100 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
       async () => ({ direccion: 'Otra esq. Calle 9', dudas: ['esquinas: solo una esquina (Calle 9)'] }));
     expect(doubtful).toMatchObject({ cambiado: false, direccion_del_mapa: { sugerida: 'Otra esq. Calle 9' } });
     expect((await db.doc('clients/mario').get()).data()).toMatchObject({ address: 'Rambla M. 12 Sol. 4 esq. Calle 2 y Calle 3', lat: '-34.7' });
+  });
+
+  test('deudas: anota sin duplicar y corrige el monto', async () => {
+    const account = await store.getAccount();
+    const clients = await store.getClients(account.routes[0]);
+    const added = await addDebt(db, account, 'rosa', 200, 450, clients);
+    expect(added.despues).toMatchObject({ deuda_total: 650 });
+    await expect(addDebt(db, account, 'rosa', 200, 450, clients)).rejects.toThrow('no se anotó');
+    const created = (await db.collection('debts').where('amount', '==', 200).get()).docs[0].data();
+    expect(created).toMatchObject({ clientId: 'rosa', customerId: 'rosa', clientName: 'Rosa Jerez', groupId: FAMILY });
+
+    expect((await fixDebt(db, account, 'rosa', 200, 250, clients)).despues).toMatchObject({ deuda_total: 700 });
+    expect((await fixDebt(db, account, 'rosa', 250, 250, clients)).cambiado).toBe(false);
+    await expect(fixDebt(db, account, 'rosa', 999, 10, clients)).rejects.toThrow('No hay');
+    await addDebt(db, account, 'rosa', 150, 700, clients);
+    await expect(fixDebt(db, account, 'rosa', 150, 160, clients)).rejects.toThrow('la fecha');
+    expect((await fixDebt(db, account, 'rosa', 150, 160, clients, '2026-10-01')).despues).toMatchObject({ deuda_total: 860 });
+  });
+
+  test('agenda fija: una ficha de directorio vuelve con días y frecuencia; cambiar días conserva el resto', async () => {
+    const account = await store.getAccount();
+    const catalog = productCatalog(await store.getSettings());
+    await db.doc('clients/directorio').update({ notes: 'Portón verde', isStarred: true, isInactive: true });
+    await expect(changeDays(db, account, 'directorio', ['Lunes'])).rejects.toThrow('agendar_fijo');
+    await expect(scheduleRecurring(db, account, catalog, 'rosa', ['Lunes'], 'semanal', {})).rejects.toThrow('cambiar_dias');
+    await expect(scheduleRecurring(db, account, catalog, 'unavez', ['Lunes'], 'semanal', {})).rejects.toThrow('una vez');
+    await expect(scheduleRecurring(db, account, catalog, 'directorio', ['Lunez'], 'semanal', {})).rejects.toThrow('Día desconocido');
+
+    const fixed = await scheduleRecurring(db, account, catalog, 'directorio', ['jueves', 'lunes'], 'quincenal', { b20: 2 });
+    expect(fixed.despues).toMatchObject({ frecuencia: 'quincenal', dias: ['Lunes', 'Jueves'], productos: { b20: 2 } });
+    const data = (await db.doc('clients/directorio').get()).data();
+    expect(data).toMatchObject({
+      freq: 'biweekly', visitDay: 'Lunes', visitDays: ['Lunes', 'Jueves'], notes: 'Portón verde', isStarred: false, isInactive: false,
+    });
+    expect(Object.keys(data?.listOrders).sort()).toEqual(['Jueves', 'Lunes']);
+
+    const other = ['Lunes', 'Martes'].find((day) => day !== tomorrowDay)!;
+    const moved = await changeDays(db, account, 'rosa', [tomorrowDay, other]);
+    expect(moved.cambiado).toBe(true);
+    const rosa = (await db.doc('clients/rosa').get()).data();
+    expect(rosa?.listOrders[tomorrowDay]).toBe(2);
+    expect(typeof rosa?.listOrders[other]).toBe('number');
+    expect(rosa).toMatchObject({ freq: 'weekly', products: { b20: 2 }, notes: 'Deja el dinero' });
+    expect((await changeDays(db, account, 'rosa', [other, tomorrowDay])).cambiado).toBe(false);
+  });
+
+  test('parentesco en las dos fichas, días de pago e inactivo', async () => {
+    const account = await store.getAccount();
+    await expect(setRelationship(db, account, 'rosa', 'mario', 'vecino', false)).rejects.toThrow('desconocido');
+    expect((await setRelationship(db, account, 'rosa', 'mario', 'padre_madre', true)).cambiado).toBe(true);
+    const [rosa, mario] = await Promise.all(['rosa', 'mario'].map(async (id) => (await db.doc(`clients/${id}`).get()).data()));
+    expect([rosa?.relationships, rosa?.sameHousehold]).toEqual([{ mario: 'padre_madre' }, { mario: true }]);
+    expect([mario?.relationships, mario?.sameHousehold]).toEqual([{ rosa: 'hijo_a' }, { rosa: true }]);
+    expect((await setRelationship(db, account, 'rosa', 'mario', 'padre_madre', true)).cambiado).toBe(false);
+    await setRelationship(db, account, 'rosa', 'mario', null, false);
+    expect((await db.doc('clients/mario').get()).data()?.relationships).toEqual({});
+
+    const monthly = await setPaymentSchedule(db, account, 'rosa', { kind: 'monthly', fromDay: 1, toDay: 5, remind: true });
+    expect(monthly.despues).toEqual({ todos_los_meses: { desde_dia: 1, hasta_dia: 5 }, recordar: true });
+    expect((await db.doc('clients/rosa').get()).data()?.paymentSchedule).toEqual({ kind: 'monthly', fromDay: 1, toDay: 5, remind: true, remindBy: UID });
+    await expect(setPaymentSchedule(db, account, 'rosa', { kind: 'monthly', fromDay: 0, toDay: 5, remind: false })).rejects.toThrow('inválidos');
+    expect((await setPaymentSchedule(db, account, 'rosa', null)).despues).toBeNull();
+
+    const inactive = await setInactive(db, account, 'mario', true);
+    expect(inactive.despues).toMatchObject({ inactivo: true, dias: [] });
+    expect((await db.doc('clients/mario').get()).data()).toMatchObject({ isInactive: true, freq: 'on_demand', visitDay: 'Sin Asignar' });
+    expect((await setInactive(db, account, 'mario', true)).cambiado).toBe(false);
+    await setInactive(db, account, 'mario', false);
+    expect((await db.doc('clients/mario').get()).data()).toMatchObject({ isInactive: false, freq: 'on_demand' });
+  });
+
+  test('quitar teléfono y sumar otra ubicación', async () => {
+    const account = await store.getAccount();
+    await addPhone(db, account, 'rosa', '098 765 432', false);
+    await expect(removePhone(db, account, 'rosa', '091 000 000')).rejects.toThrow('no tiene');
+    const removed = await removePhone(db, account, 'rosa', '099123456');
+    expect(removed.despues).toEqual([{ numero: '098 765 432', principal: true }]);
+    expect((await db.doc('clients/rosa').get()).data()?.phone).toBe('098 765 432');
+
+    await expect(addLocation(db, account, 'rosa', { type: 'oficina', address: 'X', primary: false })).rejects.toThrow('Tipo');
+    const work = await addLocation(db, account, 'rosa', { type: 'Trabajo', address: 'Oficina 5', primary: false });
+    expect(work.despues).toEqual([
+      expect.objectContaining({ direccion: 'Calle 26 y 28', principal: true }),
+      expect.objectContaining({ tipo: 'trabajo', direccion: 'Oficina 5', principal: false }),
+    ]);
+    expect((await db.doc('clients/rosa').get()).data()?.address).toBe('Calle 26 y 28');
+    await expect(addLocation(db, account, 'rosa', { type: 'otra', address: 'Depósito', primary: true })).rejects.toThrow('link');
+    await addLocation(db, account, 'rosa', {
+      type: 'otra', address: 'Depósito', mapsLink: 'https://maps.google.com/?q=-34.81,-55.92', primary: true,
+    });
+    expect((await db.doc('clients/rosa').get()).data()).toMatchObject({ address: 'Depósito', lat: '-34.81', lng: '-55.92' });
+    expect((await addLocation(db, account, 'rosa', {
+      type: 'otra', address: 'Depósito', mapsLink: 'https://maps.google.com/?q=-34.81,-55.92', primary: true,
+    })).cambiado).toBe(false);
   });
 
   test('favorito se fija, no se alterna', async () => {

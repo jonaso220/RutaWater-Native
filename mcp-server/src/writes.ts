@@ -1,5 +1,7 @@
+import { FieldValue } from 'firebase-admin/firestore';
 import type { DocumentReference, Firestore, QueryDocumentSnapshot, Transaction } from 'firebase-admin/firestore';
-import type { Client } from '../../src/types';
+import type { Client, ClientAddress, PaymentSchedule } from '../../src/types';
+import { isValidPaymentSchedule } from '../../src/utils/paymentSchedule';
 import { withDefaults } from '../../src/utils/clientDefaults';
 import { billingInfoUpdates, isValidClientEmail, sanitizeClientBillingInfo } from '../../src/utils/clientBillingInfo';
 import {
@@ -1264,3 +1266,387 @@ export const deleteDayNote = (
     antes: { fecha: client.specificDate || nextVisit(client), texto: client.notes || '' }, despues: null,
   };
 });
+
+// ── Lo que faltaba de las tarjetas y la agenda (Jonathan, 30/10/2026) ──
+
+const WEEK = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const plain = (value: string) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+
+/** «lunes», «Miercoles»… → nombres de la app, sin repetir y en orden de semana. */
+const parseDays = (days: string[]): string[] => {
+  const parsed = days.map((day) => {
+    const found = WEEK.find((name) => plain(name) === plain(day));
+    if (!found) throw new WriteError(`Día desconocido: «${day}». Usá Lunes … Domingo.`);
+    return found;
+  });
+  if (!parsed.length) throw new WriteError('Pasá al menos un día.');
+  return WEEK.filter((name) => parsed.includes(name));
+};
+
+/** Al final de la lista de ese día, como scheduleFromDirectory (máximo + 1). */
+const endOfDay = (clients: Client[], day: string, selfId: string): number => {
+  const inDay = clients.filter((c) => c.id !== selfId && c.freq !== 'on_demand' && !c.isCompleted
+    && ((c.visitDays && c.visitDays.includes(day)) || c.visitDay === day));
+  return inDay.length ? Math.max(...inDay.map((c) => c.listOrders?.[day] ?? c.listOrder ?? 0)) + 1 : 0;
+};
+
+const positionsIn = (clients: Client[], client: Client, days: string[]) => Object.fromEntries(days.map((day) => [
+  day, dayList([...clients.filter((c) => c.id !== client.id), client], day).findIndex((c) => c.id === client.id) + 1,
+]));
+
+const guardSchedule = (loaded: Loaded, current: Client | null): Client => {
+  if (!current) throw new WriteError('La ficha ya no existe.');
+  if (current.isNote) throw new WriteError('Eso es una nota del día, no un cliente.');
+  if (current.alarm) throw new WriteError('La ficha tiene una alarma: cambiale la agenda desde la app.');
+  if (Array.isArray(loaded.client.visitCommands) && loaded.client.visitCommands.length) {
+    throw new WriteError('La ficha tiene un Listo pendiente de aplicar desde la app; reintentar en unos segundos.');
+  }
+  return current;
+};
+
+/**
+ * Directorio → Agendar con frecuencia (ScheduleModal + scheduleFromDirectory
+ * para una ficha de directorio): la misma ficha vuelve a la agenda esos días,
+ * al final de cada lista, con los productos dados y sin estrella. Diferencia
+ * con la app: conserva la nota de la ficha (el modal la vacía). Un cliente que
+ * ya tiene agenda fija se cambia con cambiar_dias / cambiar_frecuencia.
+ */
+export const scheduleRecurring = (
+  db: Firestore, account: Account, catalog: CatalogProduct[], clientId: string,
+  days: string[], frequency: string, products: Record<string, number>, startDate?: string,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const freq = FREQUENCIES[frequency.trim().toLowerCase()];
+  if (!freq) throw new WriteError(`Frecuencia desconocida: ${frequency}. Usá semanal, quincenal, cada 3 semanas o mensual.`);
+  const newDays = parseDays(days);
+  if (startDate !== undefined) {
+    if (!isValidIsoDate(startDate)) throw new WriteError(`Fecha inválida: ${startDate}. Usá aaaa-mm-dd.`);
+    if (startDate < todayKey()) throw new WriteError('La fecha de inicio ya pasó.');
+  }
+  validateProducts(catalog, products);
+  const loaded = await loadForWrite(db, transaction, account, clientId);
+  const current = guardSchedule(loaded, projectPending(loaded.client));
+  const wasInDirectory = current.freq === 'on_demand' || current.visitDay === 'Sin Asignar';
+  if (!wasInDirectory) {
+    throw new WriteError(current.freq === 'once'
+      ? 'Es un pedido de una vez: para volverlo fijo usá cambiar_fecha con frecuencia.'
+      : 'Ya tiene agenda fija: los días se cambian con cambiar_dias y la frecuencia con cambiar_frecuencia.');
+  }
+  const all = (await routeClients(db, transaction, account, loaded.route)).map((entry) => entry.client);
+  const stableId = getStableClientId(current);
+  const fixed = all.find((client) => client.id !== current.id && !client.isNote && getStableClientId(client) === stableId
+    && client.freq !== 'once' && client.freq !== 'on_demand' && client.visitDay !== 'Sin Asignar');
+  if (fixed) throw new WriteError(`Ya tiene agenda fija en otra ficha (${fixed.id}, ${clientDays(fixed).join(', ')}): cambiale los días ahí con cambiar_dias.`);
+
+  const cleanProducts: Record<string, number> = {};
+  Object.entries(products).forEach(([id, amount]) => { if (amount > 0) cleanProducts[id] = amount; });
+  const savedAddresses = getClientAddresses(current);
+  const listOrders: Record<string, number> = {};
+  newDays.forEach((day) => { listOrders[day] = endOfDay(all, day, current.id); });
+  const newData: Record<string, any> = {
+    customerId: current.customerId || current.id,
+    name: current.name,
+    phone: current.phone,
+    phones: getClientPhones(current),
+    addresses: savedAddresses,
+    ...locationFields(savedAddresses[0]),
+    freq,
+    updatedAt: new Date(),
+    notes: current.notes || '',
+    isPinned: false,
+    isCompleted: false,
+    isStarred: false,
+    isInactive: false,
+    alarm: '',
+    alarmDay: '',
+    alarmScheduledFor: null,
+    products: cleanProducts,
+    completedAt: null,
+    previousDeliveredAt: null,
+    lastVisited: null,
+    doneFor: '',
+    visitDays: newDays,
+    visitDay: newDays[0],
+    specificDate: startDate || '',
+    listOrders,
+    listOrder: listOrders[newDays[0]],
+  };
+  const lastDelivery = getLastVisitDate(current);
+  if (lastDelivery) newData.lastDeliveredAt = lastDelivery;
+  const update = toExistingClientUpdate(newData);
+  transaction.update(loaded.ref, update);
+  const after = { ...current, ...update } as Client;
+  return {
+    cliente_id: current.id, nombre: current.name, reparto: loaded.route.name, cambiado: true,
+    antes: { frecuencia: FREQ_LABELS[current.freq] || current.freq, dias: clientDays(current), productos: productMap(current) },
+    despues: {
+      frecuencia: FREQ_LABELS[freq] || freq, dias: newDays, proxima_visita: nextVisit(after), productos: cleanProducts,
+      posiciones: positionsIn(all, after, newDays),
+    },
+    ...(Object.keys(cleanProducts).length ? {} : { aviso: 'Quedó agendado sin productos: fijalos con fijar_productos.' }),
+  };
+});
+
+/**
+ * Cambia los días de visita de un cliente con agenda fija, sin tocar la
+ * frecuencia, la nota, los productos ni la estrella. Los días que quedan
+ * conservan su lugar en la lista; los nuevos van al final (para ubicarlo,
+ * sugerir_posicion + cambiar_posicion). En la app es Directorio → Agendar.
+ */
+export const changeDays = (
+  db: Firestore, account: Account, clientId: string, days: string[],
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const newDays = parseDays(days);
+  const loaded = await loadForWrite(db, transaction, account, clientId);
+  const current = guardSchedule(loaded, projectPending(loaded.client));
+  if (current.freq === 'on_demand' || current.visitDay === 'Sin Asignar') {
+    throw new WriteError('Está en el directorio: para darle días fijos usá agendar_fijo.');
+  }
+  if (current.freq === 'once') throw new WriteError('Es un pedido de una vez: para moverlo usá cambiar_fecha.');
+  const base = { cliente_id: current.id, nombre: current.name, reparto: loaded.route.name };
+  const oldDays = clientDays(current);
+  const before = { frecuencia: FREQ_LABELS[current.freq] || current.freq, dias: oldDays, proxima_visita: nextVisit(current) };
+  if (JSON.stringify(oldDays) === JSON.stringify(newDays)) return { ...base, cambiado: false, antes: before, despues: before };
+  const all = (await routeClients(db, transaction, account, loaded.route)).map((entry) => entry.client);
+  const orders: Record<string, number> = {};
+  newDays.forEach((day) => {
+    orders[day] = oldDays.includes(day)
+      ? (current.listOrders?.[day] ?? current.listOrder ?? 0)
+      : endOfDay(all, day, current.id);
+  });
+  const updates = {
+    visitDays: newDays, visitDay: newDays[0], listOrders: orders, listOrder: orders[newDays[0]], scheduleRevision: newVisitId(),
+  };
+  transaction.update(loaded.ref, { ...updates, updatedAt: new Date() });
+  const after = { ...current, ...updates } as Client;
+  return {
+    ...base, cambiado: true, antes: before,
+    despues: { frecuencia: before.frecuencia, dias: newDays, proxima_visita: nextVisit(after), posiciones: positionsIn(all, after, newDays) },
+  };
+});
+
+/**
+ * Anota una deuda nueva, como «Agregar deuda» en la tarjeta (useDebts.addDebt).
+ * `expectedTotal` es la deuda que se leyó antes: si cambió (un reintento, otro
+ * cambio), no se anota nada, para no duplicarla.
+ */
+export const addDebt = (
+  db: Firestore, account: Account, clientId: string, amount: number, expectedTotal: number, clients: Client[],
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000_000) throw new WriteError(`Monto inválido: ${amount}.`);
+  if (!Number.isFinite(expectedTotal) || expectedTotal < 0) throw new WriteError(`deuda_esperada inválida: ${expectedTotal}.`);
+  const { client, route } = await loadForWrite(db, transaction, account, clientId);
+  if (client.isNote) throw new WriteError('Las notas no tienen deudas.');
+  const docs = await relatedRecords(db, transaction, account, route, 'debts', client, clients);
+  const lines: DebtLine[] = docs.map((doc) => ({
+    ref: doc.ref, id: doc.id, amount: Number(doc.data().amount) || 0, date: parseDate(doc.data().createdAt),
+  })).filter((line) => line.amount > 0);
+  const before = describeDebts(lines);
+  if (Math.abs(before.deuda_total - expectedTotal) > CENT) {
+    throw new WriteError(`La deuda es ${before.deuda_total}, no ${expectedTotal}: no se anotó nada (¿ya estaba anotada?). Revisá con ver_cliente.`);
+  }
+  const now = new Date();
+  const ref = db.collection('debts').doc();
+  transaction.set(ref, {
+    ...dataScopeFields(account.uid, route.groupId),
+    ...getRelatedClientReference(client),
+    clientName: client.name,
+    clientAddress: client.address || '',
+    amount,
+    createdAt: now,
+  });
+  return {
+    cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: true,
+    antes: before, despues: describeDebts([...lines, { ref, id: ref.id, amount, date: now }]),
+  };
+});
+
+/**
+ * Corrige el monto de una deuda anotada, como «Editar deuda» (useDebts.editDebt).
+ * La deuda se elige por su monto actual (y la fecha si hay dos iguales).
+ */
+export const fixDebt = (
+  db: Firestore, account: Account, clientId: string, currentAmount: number, newAmount: number, clients: Client[], date?: string,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (!Number.isFinite(newAmount) || newAmount <= 0 || newAmount > 10_000_000) {
+    throw new WriteError(`Monto inválido: ${newAmount}. Para borrar una deuda pagada usá registrar_pago.`);
+  }
+  if (date !== undefined && !isValidIsoDate(date)) throw new WriteError(`Fecha inválida: ${date}. Usá aaaa-mm-dd.`);
+  const { client, route } = await loadForWrite(db, transaction, account, clientId);
+  const docs = await relatedRecords(db, transaction, account, route, 'debts', client, clients);
+  const lines: DebtLine[] = docs.map((doc) => ({
+    ref: doc.ref, id: doc.id, amount: Number(doc.data().amount) || 0, date: parseDate(doc.data().createdAt),
+  })).filter((line) => line.amount > 0);
+  const before = describeDebts(lines);
+  const matches = lines.filter((line) => Math.abs(line.amount - currentAmount) <= CENT
+    && (date === undefined || (line.date && toLocalDateString(line.date) === date)));
+  if (!matches.length) throw new WriteError(`No hay una deuda de ${currentAmount}${date ? ` del ${date}` : ''}: no se cambió nada.`);
+  if (matches.length > 1) throw new WriteError(`Hay ${matches.length} deudas de ${currentAmount}: pasá también la fecha.`);
+  const [line] = matches;
+  if (Math.abs(line.amount - newAmount) <= CENT) {
+    return { cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: false, antes: before, despues: before };
+  }
+  transaction.update(line.ref, { amount: newAmount });
+  return {
+    cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: true,
+    antes: before, despues: describeDebts(lines.map((entry) => (entry === line ? { ...entry, amount: newAmount } : entry))),
+  };
+});
+
+export const RELATIONSHIPS: Record<string, string> = {
+  conyuge: 'conyuge', padre_madre: 'hijo_a', hijo_a: 'padre_madre', hermano_a: 'hermano_a', suegro_a: 'yerno_nuera',
+  yerno_nuera: 'suegro_a', abuelo_a: 'nieto_a', nieto_a: 'abuelo_a', tio_a: 'sobrino_a', sobrino_a: 'tio_a',
+  primo_a: 'primo_a', cunado_a: 'cunado_a', otro: 'otro',
+};
+
+/**
+ * Parentesco entre dos fichas, en las dos (useClients.addRelationship /
+ * removeRelationship): `type` es el de la segunda ficha para la primera
+ * («padre_madre»: la otra es su padre o madre) y la otra recibe el inverso.
+ */
+export const setRelationship = (
+  db: Firestore, account: Account, clientId: string, otherId: string, type: string | null, sameHousehold: boolean,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (clientId === otherId) throw new WriteError('Son la misma ficha.');
+  if (type !== null && !RELATIONSHIPS[type]) throw new WriteError(`Parentesco desconocido: ${type}. Usá ${Object.keys(RELATIONSHIPS).join(', ')}.`);
+  const a = await loadForWrite(db, transaction, account, clientId);
+  const b = await loadForWrite(db, transaction, account, otherId);
+  if (a.client.isNote || b.client.isNote) throw new WriteError('Las notas no tienen parentesco.');
+  if (a.route.id !== b.route.id) throw new WriteError('Las dos fichas tienen que ser del mismo reparto.');
+  const view = (client: Client) => (client.relationships?.[otherId]
+    ? { con: b.client.name, parentesco: client.relationships[otherId], mismo_hogar: client.sameHousehold?.[otherId] !== false }
+    : null);
+  const before = view(a.client);
+  const base = { cliente_id: a.client.id, nombre: a.client.name, reparto: a.route.name };
+  if (type === null) {
+    if (!before && !b.client.relationships?.[clientId]) return { ...base, cambiado: false, antes: null, despues: null };
+    transaction.update(a.ref, { [`relationships.${otherId}`]: FieldValue.delete(), [`sameHousehold.${otherId}`]: FieldValue.delete() });
+    transaction.update(b.ref, { [`relationships.${clientId}`]: FieldValue.delete(), [`sameHousehold.${clientId}`]: FieldValue.delete() });
+    return { ...base, cambiado: true, antes: before, despues: null };
+  }
+  const inverse = RELATIONSHIPS[type];
+  const after = { con: b.client.name, parentesco: type, mismo_hogar: sameHousehold };
+  const same = before && before.parentesco === type && before.mismo_hogar === sameHousehold
+    && b.client.relationships?.[clientId] === inverse && b.client.sameHousehold?.[clientId] === sameHousehold
+    && a.client.sameHousehold?.[otherId] === sameHousehold;
+  if (same) return { ...base, cambiado: false, antes: before, despues: after };
+  transaction.update(a.ref, { [`relationships.${otherId}`]: type, [`sameHousehold.${otherId}`]: sameHousehold });
+  transaction.update(b.ref, { [`relationships.${clientId}`]: inverse, [`sameHousehold.${clientId}`]: sameHousehold });
+  return { ...base, cambiado: true, antes: before, despues: after };
+});
+
+/**
+ * Días de pago de la deuda (Deudas → días de pago, PaymentScheduleModal):
+ * todos los meses entre dos días, o entre dos fechas; null lo quita. Con
+ * recordar, la app avisa en el teléfono de Jonathan como si lo hubiera puesto él.
+ */
+export const setPaymentSchedule = (
+  db: Firestore, account: Account, clientId: string, schedule: PaymentSchedule | null,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (schedule && !isValidPaymentSchedule(schedule)) throw new WriteError('Días de pago inválidos: días del 1 al 31, o fechas aaaa-mm-dd con la segunda igual o después de la primera.');
+  const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
+  if (client.isNote) throw new WriteError('Las notas no tienen días de pago.');
+  const value = schedule?.remind ? { ...schedule, remindBy: account.uid } : schedule;
+  const view = (entry: PaymentSchedule | null | undefined) => (!entry || !isValidPaymentSchedule(entry) ? null
+    : entry.kind === 'monthly'
+      ? { todos_los_meses: { desde_dia: entry.fromDay, hasta_dia: entry.toDay }, recordar: entry.remind }
+      : { entre_fechas: { desde: entry.from, hasta: entry.to || entry.from }, recordar: entry.remind });
+  const before = view(client.paymentSchedule);
+  const changed = JSON.stringify(client.paymentSchedule ?? null) !== JSON.stringify(value ?? null);
+  if (changed) transaction.update(ref, { paymentSchedule: value, updatedAt: new Date() });
+  return { cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed, antes: before, despues: view(value) };
+});
+
+/**
+ * «Ya no es cliente» / Reactivar de Editar cliente (handleToggleInactive):
+ * inactivo lo pasa al directorio sin días; reactivar solo saca la marca (sigue
+ * en el directorio hasta que se lo agende).
+ */
+export const setInactive = (
+  db: Firestore, account: Account, clientId: string, inactive: boolean,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const loaded = await loadForWrite(db, transaction, account, clientId);
+  const { client, route } = loaded;
+  if (client.isNote) throw new WriteError('Eso es una nota del día, no un cliente.');
+  const before = { inactivo: !!client.isInactive, frecuencia: FREQ_LABELS[client.freq] || client.freq, dias: clientDays(client) };
+  const base = { cliente_id: client.id, nombre: client.name, reparto: route.name };
+  if (!!client.isInactive === inactive) return { ...base, cambiado: false, antes: before, despues: before };
+  if (inactive) {
+    if (client.alarm) throw new WriteError('La ficha tiene una alarma: quitala desde la app.');
+    if (Array.isArray(client.visitCommands) && client.visitCommands.length) {
+      throw new WriteError('La ficha tiene un Listo pendiente de aplicar desde la app; reintentar en unos segundos.');
+    }
+    transaction.update(loaded.ref, { isInactive: true, freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [], updatedAt: new Date() });
+    return { ...base, cambiado: true, antes: before, despues: { inactivo: true, frecuencia: FREQ_LABELS.on_demand, dias: [] } };
+  }
+  transaction.update(loaded.ref, { isInactive: false, updatedAt: new Date() });
+  return { ...base, cambiado: true, antes: before, despues: { ...before, inactivo: false } };
+});
+
+/** Saca un teléfono de la ficha (Editar cliente → Teléfonos); si era el principal, pasa a serlo el primero que queda. */
+export const removePhone = (
+  db: Firestore, account: Account, clientId: string, number: string,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const key = normalizePhoneForComparison(number);
+  if (!key) throw new WriteError(`Teléfono inválido: «${number}».`);
+  const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
+  if (client.isNote) throw new WriteError('Eso es una nota del día, no un cliente.');
+  const before = getClientPhones(client);
+  const view = (list: typeof before) => list.map((phone) => ({ numero: phone.number, principal: phone.isPrimary }));
+  const kept = before.filter((phone) => normalizePhoneForComparison(phone.number) !== key);
+  const base = { cliente_id: client.id, nombre: client.name, reparto: route.name };
+  if (kept.length === before.length) throw new WriteError(`La ficha no tiene el ${number} (tiene ${before.map((p) => p.number).join(', ') || 'ninguno'}).`);
+  const phones = sanitizeClientPhones(kept);
+  const principal = getPrimaryClientPhone(phones)?.number || '';
+  transaction.update(ref, { phones, phone: principal, updatedAt: new Date() });
+  return {
+    ...base, cambiado: true, antes: view(before), despues: view(phones),
+    ...(phones.length ? {} : { aviso: 'La ficha quedó sin teléfono: no va a tener WhatsApp ni avisos.' }),
+  };
+});
+
+const ADDRESS_TYPES: Record<string, ClientAddress['type']> = { casa: 'home', trabajo: 'work', otra: 'other' };
+const ADDRESS_LABELS: Record<ClientAddress['type'], string> = { home: 'casa', work: 'trabajo', other: 'otra' };
+
+/**
+ * Suma otra ubicación guardada a la ficha (Editar cliente → Ubicación →
+ * agregar), hasta 10. Con principal=true pasa a ser la primera: la que muestra
+ * la tarjeta y ordena el recorrido. Con link, las coordenadas salen de él antes
+ * de escribir; si no se pueden sacar no se guarda nada.
+ */
+export const addLocation = async (
+  db: Firestore, account: Account, clientId: string,
+  fields: { type: string; address: string; mapsLink?: string; primary: boolean },
+): Promise<ChangeResult> => {
+  const type = ADDRESS_TYPES[plain(fields.type)];
+  if (!type) throw new WriteError(`Tipo desconocido: ${fields.type}. Usá casa, trabajo u otra.`);
+  const address = fields.address.trim();
+  if (!address) throw new WriteError('Falta la dirección.');
+  const rawLink = fields.mapsLink?.trim();
+  const mapsLink = rawLink ? normalizeGoogleMapsLink(rawLink) : '';
+  if (rawLink && !mapsLink) throw new WriteError(`No es un link de Google Maps: «${rawLink}».`);
+  const point = mapsLink ? await resolveMapsCoordinates(mapsLink).catch(() => null) : null;
+  if (mapsLink && !point) throw new WriteError('No se pudieron sacar coordenadas del link: no se guardó nada. Pedí un link de un punto marcado en el mapa.');
+  if (fields.primary && !point) throw new WriteError('Para que sea la principal hace falta el link de Maps (ordena el recorrido).');
+  return db.runTransaction(async (transaction) => {
+    const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
+    if (client.isNote) throw new WriteError('Eso es una nota del día, no un cliente.');
+    const saved = getClientAddresses(client);
+    const view = (list: ClientAddress[]) => list.map((entry, index) => ({
+      tipo: ADDRESS_LABELS[entry.type] || entry.type, direccion: entry.address, link_maps: entry.mapsLink, principal: index === 0,
+    }));
+    const base = { cliente_id: client.id, nombre: client.name, reparto: route.name };
+    const existing = saved.find((entry) => plain(entry.address) === plain(address) && (!mapsLink || entry.mapsLink === mapsLink));
+    if (existing && (!fields.primary || saved[0] === existing)) return { ...base, cambiado: false, antes: view(saved), despues: view(saved) };
+    if (!existing && saved.length >= 10) throw new WriteError('La ficha ya tiene 10 ubicaciones guardadas.');
+    const entry: ClientAddress = existing || {
+      id: `address-${Date.now()}`, type, address, mapsLink,
+      lat: point ? formatCoordinate(point.lat) : '', lng: point ? formatCoordinate(point.lng) : '',
+    };
+    const rest = saved.filter((candidate) => candidate !== existing);
+    const addresses = sanitizeClientAddresses(fields.primary ? [entry, ...rest] : [...rest, entry]);
+    transaction.update(ref, {
+      addresses, ...(fields.primary ? locationFields(addresses[0]) : {}), updatedAt: new Date(),
+    });
+    return { ...base, cambiado: true, antes: view(saved), despues: view(addresses) };
+  });
+};

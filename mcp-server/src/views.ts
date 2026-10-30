@@ -166,6 +166,13 @@ export const clientDetail = (client: Client, context: ClientContext) => ({
   fecha_especifica: client.specificDate || '',
   ultima_entrega: parseDate(client.lastDeliveredAt)?.toISOString() ?? null,
   parentesco: relatedClients(client, context.clients || []),
+  inactivo: !!client.isInactive,
+  // Días de pago de la deuda (Deudas → días de pago); null si no tiene.
+  dias_de_pago: client.paymentSchedule?.kind === 'monthly'
+    ? { todos_los_meses: { desde_dia: client.paymentSchedule.fromDay, hasta_dia: client.paymentSchedule.toDay } }
+    : client.paymentSchedule?.kind === 'date'
+      ? { entre_fechas: { desde: client.paymentSchedule.from, hasta: client.paymentSchedule.to || client.paymentSchedule.from } }
+      : null,
   deudas: (context.debts || []).map((debt) => ({
     monto: Number(debt.amount) || 0,
     fecha: parseDate(debt.createdAt)?.toISOString() ?? null,

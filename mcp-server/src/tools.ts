@@ -41,7 +41,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - crear_nota_del_dia, editar_nota_del_dia y borrar_nota_del_dia manejan las notas sueltas de la agenda (tarjetas «NOTA»); la nota de un cliente es actualizar_nota.
 - fijar_facturacion guarda el RUT (12 dígitos), la razón social y el email de facturación de la ficha; la cédula nunca se guarda.
 - agregar_telefono suma un teléfono a la ficha (hasta 5, como Editar cliente → Teléfonos); con principal=true pasa a ser el de WhatsApp y llamadas. Los que ya tenía quedan.
-- cambiar_direccion cambia la dirección y/o el link de Maps de la ficha (como Editar cliente → Ubicación); las coordenadas salen del link y, si no se pueden sacar, no cambia nada.
+- cambiar_direccion cambia la dirección y/o el link de Maps de la ficha (como Editar cliente → Ubicación); las coordenadas salen del link y, si no se pueden sacar, no cambia nada; solo con el link arma la dirección con las calles del mapa.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
 - fusionar_duplicados junta dos fichas de la misma persona: queda la de agenda (o la más completa), se le suman los datos que solo tenía la otra y la otra se borra; deudas, transferencias y Parentesco pasan a la que queda. Primero sin aplicar (vista previa) y después con aplicar=true. deshacer_fusion la revierte con la copia que deja.
@@ -379,15 +379,16 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('cambiar_direccion', {
     title: 'Cambiar dirección',
-    description: 'Cambia la dirección y/o la ubicación de Google Maps de la ficha, como Editar cliente → Ubicación en la app. Cambia la ubicación que muestra la tarjeta; otras ubicaciones guardadas quedan. Con link_maps saca las coordenadas (las que ordenan el recorrido) antes de escribir: si el link nombra un lugar sin punto marcado o está roto, falla sin cambiar nada. Solo con direccion, el mapa y las coordenadas siguen siendo los anteriores (aviso). Devuelve antes/después y, en otras_fichas, las otras fichas de la misma persona (visitas de una vez, copias) con su dirección, que no se tocan.',
+    description: 'Cambia la dirección y/o la ubicación de Google Maps de la ficha, como Editar cliente → Ubicación en la app. Cambia la ubicación que muestra la tarjeta; otras ubicaciones guardadas quedan. Con link_maps saca las coordenadas (las que ordenan el recorrido) antes de escribir: si el link nombra un lugar sin punto marcado o está roto, falla sin cambiar nada. Solo con link_maps, la dirección se arma con las calles del mapa («Calle M. x Sol. y esq. A y B (descripción)»: manzana, solar y descripción salen de la dirección actual; con mudanza=true solo calle y esquinas); si ese armado tiene dudas no cambia nada y devuelve direccion_del_mapa (sugerida y dudas) para confirmarla y volver a llamar con direccion. Solo con direccion, el mapa y las coordenadas siguen siendo los anteriores (aviso). Devuelve antes/después y, en otras_fichas, las otras fichas de la misma persona (visitas de una vez, copias) con su dirección, que no se tocan.',
     inputSchema: {
       cliente_id: z.string().min(1),
       direccion: z.string().max(200).optional().describe('Texto como en las fichas, con mayúscula inicial'),
       link_maps: z.string().max(2048).optional().describe('Link de Google Maps de un punto marcado (maps.app.goo.gl/… o con coordenadas)'),
+      mudanza: z.boolean().optional().describe('Solo con link sin direccion: true si se mudó (la dirección se arma solo con calle y esquinas, sin manzana, solar ni descripción de la anterior)'),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, write('cambiar_direccion', async ({ cliente_id, direccion, link_maps }) => {
-    const result = await changeAddress(store.db, await store.refreshAccount(), cliente_id, { address: direccion, mapsLink: link_maps });
+  }, write('cambiar_direccion', async ({ cliente_id, direccion, link_maps, mudanza }) => {
+    const result = await changeAddress(store.db, await store.refreshAccount(), cliente_id, { address: direccion, mapsLink: link_maps, moved: mudanza });
     const all = await allClients();
     const self = all.find((client) => client.id === cliente_id);
     const customer = self?.customerId || cliente_id;

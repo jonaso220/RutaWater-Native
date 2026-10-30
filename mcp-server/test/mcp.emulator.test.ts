@@ -164,6 +164,21 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     const text = await changeAddress(db, account, 'mario', { address: 'Rambla M. 12 Sol. 4' });
     expect(text).toMatchObject({ cambiado: true, aviso: expect.stringContaining('mapa sigue'), despues: { coordenadas: { lat: '-34.81234' } } });
     expect((await changeAddress(db, account, 'mario', { address: 'Rambla M. 12 Sol. 4' })).cambiado).toBe(false);
+
+    // Solo con el link: la dirección sale del mapa (la actual aporta manzana y solar, salvo mudanza).
+    const bases: string[] = [];
+    const fromMap = async (_point: unknown, actual: string) => {
+      bases.push(actual);
+      return { direccion: 'Rambla M. 12 Sol. 4 esq. Calle 2 y Calle 3', dudas: [] };
+    };
+    const built = await changeAddress(db, account, 'mario', { mapsLink: 'https://maps.google.com/?q=-34.8,-55.9' }, fromMap);
+    expect(built).toMatchObject({ cambiado: true, despues: { direccion: 'Rambla M. 12 Sol. 4 esq. Calle 2 y Calle 3', coordenadas: { lat: '-34.8' } } });
+    await changeAddress(db, account, 'mario', { mapsLink: 'https://maps.google.com/?q=-34.7,-55.8', moved: true }, fromMap);
+    expect(bases).toEqual(['Rambla M. 12 Sol. 4', '']);
+    const doubtful = await changeAddress(db, account, 'mario', { mapsLink: 'https://maps.google.com/?q=-34.6,-55.7' },
+      async () => ({ direccion: 'Otra esq. Calle 9', dudas: ['esquinas: solo una esquina (Calle 9)'] }));
+    expect(doubtful).toMatchObject({ cambiado: false, direccion_del_mapa: { sugerida: 'Otra esq. Calle 9' } });
+    expect((await db.doc('clients/mario').get()).data()).toMatchObject({ address: 'Rambla M. 12 Sol. 4 esq. Calle 2 y Calle 3', lat: '-34.7' });
   });
 
   test('favorito se fija, no se alterna', async () => {

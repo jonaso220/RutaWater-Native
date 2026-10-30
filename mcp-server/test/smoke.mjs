@@ -96,7 +96,7 @@ await call('actualizar_nota', { cliente_id: 'c1', nota: 'Pueden ser 2 o 3', nota
 await call('fijar_facturacion', { cliente_id: 'c1', rut: '211234560019', razon_social: 'Carnicería' });
 const phone = await call('agregar_telefono', { cliente_id: 'c1', telefono: '099 333 444' });
 assert.deepEqual(phone.otras_fichas.map((c) => c.nombre), ['Sulay Fernandez']);
-const relocated = await call('cambiar_direccion', { cliente_id: 'c1', link_maps: 'https://maps.google.com/?q=-34.8,-55.9' });
+const relocated = await call('cambiar_direccion', { cliente_id: 'c1', direccion: 'Colonia 1234', link_maps: 'https://maps.google.com/?q=-34.8,-55.9' });
 assert.deepEqual(relocated.despues.coordenadas, { lat: '-34.8', lng: '-55.9' });
 
 const detail = await call('ver_cliente', { cliente_id: 'c1' });

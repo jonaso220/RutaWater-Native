@@ -31,7 +31,9 @@ import {
   suggestPosition, todayKey, weekdayOf,
 } from './views';
 import { moveItemToPosition, planPositionChange, readDayOrder } from '../../src/utils/clientOrder';
-import { formatCoordinate, resolveMapsCoordinates } from '../../src/utils/geo';
+import { Coordinates, formatCoordinate, resolveMapsCoordinates } from '../../src/utils/geo';
+import type { Propuesta } from '../scripts/direccionDesdeMapa';
+import { addressFromMap } from './streets';
 
 export class WriteError extends Error {}
 
@@ -191,11 +193,16 @@ export const addPhone = (
  * la tarjeta; las demás guardadas quedan). Las coordenadas salen del link antes
  * de escribir: si no se pueden sacar no escribe nada, para no dejar la ficha
  * fuera del orden del recorrido. Sin link nuevo conserva el mapa anterior.
+ * Solo con el link, la dirección se arma con las calles del mapa (calle y
+ * esquinas; manzana, solar y descripción de la actual, salvo en una mudanza);
+ * si el armado tiene dudas no escribe nada y devuelve la sugerencia.
  */
 export const changeAddress = async (
-  db: Firestore, account: Account, clientId: string, fields: { address?: string; mapsLink?: string },
+  db: Firestore, account: Account, clientId: string,
+  fields: { address?: string; mapsLink?: string; moved?: boolean },
+  buildAddress: (point: Coordinates, actual: string) => Promise<Propuesta> = addressFromMap,
 ): Promise<ChangeResult> => {
-  const address = fields.address?.trim();
+  let address = fields.address?.trim();
   if (fields.address !== undefined && !address) throw new WriteError('La dirección no puede quedar vacía.');
   const rawLink = fields.mapsLink?.trim();
   const mapsLink = rawLink ? normalizeGoogleMapsLink(rawLink) : undefined;
@@ -206,10 +213,27 @@ export const changeAddress = async (
   if (mapsLink && !point) {
     throw new WriteError('No se pudieron sacar coordenadas del link (nombra un lugar sin punto marcado o está roto): no se cambió nada. Pedí un link de un punto marcado en el mapa.');
   }
+  // Dirección armada con el mapa: se lee la actual antes, para manzana, solar y descripción.
+  let fromMap: (Propuesta & { base: string }) | null = null;
+  if (address === undefined && point) {
+    const snap = await db.collection('clients').doc(clientId).get();
+    const base = snap.exists ? String(snap.data()?.address || '').trim() : '';
+    fromMap = { ...(await buildAddress(point, fields.moved ? '' : base)), base };
+    if (!fromMap.dudas.length) address = fromMap.direccion;
+  }
 
   return db.runTransaction(async (transaction) => {
     const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
     if (client.isNote) throw new WriteError('Eso es una nota del día, no un cliente.');
+    if (fromMap && fromMap.base !== (client.address || '').trim()) throw new WriteError('La dirección cambió mientras se armaba: volvé a intentar.');
+    const armado = fromMap ? { direccion_del_mapa: { sugerida: fromMap.direccion, dudas: fromMap.dudas } } : {};
+    if (fromMap?.dudas.length) {
+      return {
+        cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: false,
+        antes: { direccion: client.address || '' }, despues: { direccion: client.address || '' }, ...armado,
+        aviso: 'La dirección armada con el mapa tiene dudas: no se cambió nada. Confirmala (o corregila) y pasá direccion junto con el link.',
+      };
+    }
     const saved = getClientAddresses(client);
     const active = Math.max(0, saved.findIndex((entry) => entry.address === (client.address || '').trim()
       && entry.mapsLink === normalizeGoogleMapsLink(client.mapsLink || '')));
@@ -233,7 +257,7 @@ export const changeAddress = async (
     if (changed) transaction.update(ref, { addresses, ...locationFields(next), updatedAt: new Date() });
     return {
       cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed,
-      antes: view(current), despues: view(next),
+      antes: view(current), despues: view(next), ...armado,
       ...(!mapsLink && current.mapsLink && address !== current.address
         ? { aviso: 'El mapa sigue siendo el anterior: si se mudó, pasá también el link nuevo.' } : {}),
     };

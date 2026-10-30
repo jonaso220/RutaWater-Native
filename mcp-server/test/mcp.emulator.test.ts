@@ -16,7 +16,7 @@ import {
   suggestPosition, todayKey, weekdayOf,
 } from '../src/views';
 import {
-  advanceVisit, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setBilling, setNote, setProducts, setStar,
+  addPhone, advanceVisit, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setBilling, setNote, setProducts, setStar,
   undoDone,
 } from '../src/writes';
 
@@ -130,6 +130,21 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     await expect(setBilling(db, account, 'rosa', { email: 'sin arroba' })).rejects.toThrow('Email');
     const data = (await db.doc('clients/rosa').get()).data();
     expect([data?.rut, data?.businessName, data?.email]).toEqual(['21 234567 0019', 'Carnicería Rosa', 'rosa@carniceria.uy']);
+  });
+
+  test('teléfono: se suma a los que tenía y puede pasar a principal', async () => {
+    const account = await store.getAccount();
+    await expect(addPhone(db, account, 'rosa', '12 34', false)).rejects.toThrow('inválido');
+    const added = await addPhone(db, account, 'rosa', '098 765 432', false);
+    expect(added).toMatchObject({ cambiado: true, despues: [
+      { numero: '099 123 456', principal: true }, { numero: '098 765 432', principal: false },
+    ] });
+    expect((await addPhone(db, account, 'rosa', '+598 98765432', false)).cambiado).toBe(false);
+    const primary = await addPhone(db, account, 'rosa', '098765432', true);
+    expect(primary.despues).toEqual([{ numero: '099 123 456', principal: false }, { numero: '098 765 432', principal: true }]);
+    const data = (await db.doc('clients/rosa').get()).data();
+    expect(data?.phone).toBe('098 765 432');
+    expect(data?.phones).toHaveLength(2);
   });
 
   test('favorito se fija, no se alterna', async () => {

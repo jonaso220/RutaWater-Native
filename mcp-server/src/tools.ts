@@ -1,6 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Client } from '../../src/types';
+import { getClientPhones } from '../../src/utils/clientPhones';
+import { normalizePhoneForComparison } from '../../src/utils/helpers';
 import { appendAudit } from './audit';
 import { transcribeAudios } from './audio';
 import { applyReplacements, openWhatsapp } from './whatsapp';
@@ -20,7 +22,7 @@ import {
 } from './views';
 import {
   advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, createDayNote, deleteDayNote, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote,
-  setBilling, setProducts, setStar, undoDone, updateDayNote, WriteError,
+  addPhone, setBilling, setProducts, setStar, undoDone, updateDayNote, WriteError,
 } from './writes';
 
 const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta configurada.
@@ -38,6 +40,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - registrar_pago salda deudas como Registrar pago / Editar deuda de la app (las más viejas primero; un pago parcial deja el saldo). Pasá deuda_esperada = deuda_total de ver_cliente: si cambió no registra nada. Lo pagado de más vuelve como «sobrante» y no se guarda: es propina salvo que el cliente pida dejarlo a favor (ahí, anotalo en la nota).
 - crear_nota_del_dia, editar_nota_del_dia y borrar_nota_del_dia manejan las notas sueltas de la agenda (tarjetas «NOTA»); la nota de un cliente es actualizar_nota.
 - fijar_facturacion guarda el RUT (12 dígitos), la razón social y el email de facturación de la ficha; la cédula nunca se guarda.
+- agregar_telefono suma un teléfono a la ficha (hasta 5, como Editar cliente → Teléfonos); con principal=true pasa a ser el de WhatsApp y llamadas. Los que ya tenía quedan.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
 - fusionar_duplicados junta dos fichas de la misma persona: queda la de agenda (o la más completa), se le suman los datos que solo tenía la otra y la otra se borra; deudas, transferencias y Parentesco pasan a la que queda. Primero sin aplicar (vista previa) y después con aplicar=true. deshacer_fusion la revierte con la copia que deja.
@@ -351,6 +354,26 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
   }, write('fijar_facturacion', async ({ cliente_id, rut, razon_social, email }) => {
     if (rut === undefined && razon_social === undefined && email === undefined) throw new WriteError('Pasá rut, razon_social o email.');
     return setBilling(store.db, await store.refreshAccount(), cliente_id, { rut, businessName: razon_social, email });
+  }));
+
+  server.registerTool('agregar_telefono', {
+    title: 'Agregar teléfono',
+    description: 'Suma un teléfono a la ficha del cliente, como Editar cliente → Teléfonos en la app (hasta 5). Los que ya tenía se conservan. Con principal=true el nuevo pasa a ser el principal (el de WhatsApp, llamadas y avisos); si no, queda como otro número. Si ya lo tenía no lo repite (con principal=true solo lo marca principal). Devuelve antes/después y, en otras_fichas, los clientes de otra persona que ya tienen ese número (puede ser un familiar: avisá a Jonathan si no cuadra). ver_cliente muestra los teléfonos.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      telefono: z.string().min(1).max(40).describe('Como lo guarda la app, por ejemplo 099309717'),
+      principal: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('agregar_telefono', async ({ cliente_id, telefono, principal }) => {
+    const result = await addPhone(store.db, await store.refreshAccount(), cliente_id, telefono, !!principal);
+    const key = normalizePhoneForComparison(telefono);
+    const all = await allClients();
+    const self = all.find((client) => client.id === cliente_id);
+    const customer = self?.customerId || cliente_id;
+    const others = all.filter((client) => !client.isNote && (client.customerId || client.id) !== customer
+      && getClientPhones(client).some((phone) => normalizePhoneForComparison(phone.number) === key));
+    return { ...result, otras_fichas: others.map((client) => ({ id: client.id, nombre: client.name, direccion: client.address })) };
   }));
 
   server.registerTool('crear_nota_del_dia', {

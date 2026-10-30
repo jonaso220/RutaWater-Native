@@ -70,7 +70,7 @@ const call = async (name, args = {}) => {
 
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
-  'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'avisar_jonathan', 'borrar_nota_del_dia', 'buscar_clientes', 'cambiar_fecha', 'cambiar_frecuencia',
+  'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'agregar_telefono', 'avisar_jonathan', 'borrar_nota_del_dia', 'buscar_clientes', 'cambiar_fecha', 'cambiar_frecuencia',
   'cambiar_posicion', 'clientes_sin_comprar', 'consultar_jonathan', 'crear_cliente', 'crear_nota_del_dia', 'deshacer_fusion', 'deshacer_listo', 'editar_nota_del_dia', 'entregas_del_periodo', 'enviar_comprobante_aquapura', 'excluir_chat', 'fijar_facturacion', 'fijar_productos', 'fusionar_duplicados', 'guardar_contacto', 'historia_cliente', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_respuesta_aplicada',
   'marcar_revisar_transferencia', 'marcar_whatsapp_atendido', 'pasada_programada', 'quitar_de_la_lista', 'registrar_pago', 'responder_whatsapp', 'sugerir_posicion', 'transcribir_audio', 'transcribir_whatsapp', 'ver_archivo_whatsapp', 'ver_cliente', 'ver_productos',
 ]);
@@ -94,11 +94,14 @@ assert.deepEqual(products.despues, { b20: 3, soda: 6 });
 assert.equal((await call('marcar_favorito', { cliente_id: 'c1' })).cambiado, true);
 await call('actualizar_nota', { cliente_id: 'c1', nota: 'Pueden ser 2 o 3', nota_esperada: '' });
 await call('fijar_facturacion', { cliente_id: 'c1', rut: '211234560019', razon_social: 'Carnicería' });
+const phone = await call('agregar_telefono', { cliente_id: 'c1', telefono: '099 333 444' });
+assert.deepEqual(phone.otras_fichas.map((c) => c.nombre), ['Sulay Fernandez']);
 
 const detail = await call('ver_cliente', { cliente_id: 'c1' });
 assert.equal(detail.favorito, true);
 assert.equal(detail.notas, 'Pueden ser 2 o 3');
 assert.deepEqual([detail.rut, detail.razon_social], ['211234560019', 'Carnicería']);
+assert.deepEqual(detail.telefonos, [{ numero: '099 111 222', principal: true }, { numero: '099 333 444', principal: false }]);
 assert.deepEqual(detail.parentesco.map((p) => [p.nombre, p.tipo, p.whatsapp]), [['Sulay Fernandez', 'otro', '59899333444']]);
 assert.equal(detail.deuda_total, 500);
 assert.equal(detail.transferencia_pendiente, false);
@@ -167,10 +170,10 @@ assert.equal((await call('borrar_nota_del_dia', { nota_id: note.cliente_id })).a
 
 const audit = fs.readFileSync(auditPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line).tool);
 assert.deepEqual(audit, [
-  'fijar_productos', 'marcar_favorito', 'actualizar_nota', 'fijar_facturacion', 'marcar_revisar_transferencia', 'registrar_pago', 'marcar_listo',
+  'fijar_productos', 'marcar_favorito', 'actualizar_nota', 'fijar_facturacion', 'agregar_telefono', 'marcar_revisar_transferencia', 'registrar_pago', 'marcar_listo',
   'agendar_una_vez', 'deshacer_listo', 'cambiar_posicion', 'crear_nota_del_dia', 'editar_nota_del_dia', 'cambiar_posicion', 'borrar_nota_del_dia',
 ]);
 
 await client.close();
-console.log('smoke: OK (45 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
+console.log('smoke: OK (46 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
 process.exit(0);

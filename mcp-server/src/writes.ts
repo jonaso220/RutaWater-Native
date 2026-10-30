@@ -9,7 +9,9 @@ import { dataScopeFields } from '../../src/utils/dataScope';
 import {
   DELIVERIES_COLLECTION, DeliveryChange, deliveryChangeFor, deliveryDocument, mergeDeliveryChanges,
 } from '../../src/utils/deliveryRecords';
-import { getNextVisitDate, intervalWeeksForFreq, parseDate, toLocalDateString } from '../../src/utils/helpers';
+import {
+  getNextVisitDate, intervalWeeksForFreq, normalizePhoneForComparison, parseDate, sanitizePhone, toLocalDateString,
+} from '../../src/utils/helpers';
 import { belongsToProfileScope } from '../../src/utils/profileScope';
 import { checkFullLoad, recordFullLoad } from './readBudget';
 import { loadLabel, scopeQueries } from './store';
@@ -18,7 +20,7 @@ import {
 } from '../../src/utils/visitCompletion';
 import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../../src/utils/recency';
 import { getClientAddresses, locationFields } from '../../src/utils/clientAddresses';
-import { getClientPhones } from '../../src/utils/clientPhones';
+import { getClientPhones, getPrimaryClientPhone, sanitizeClientPhones } from '../../src/utils/clientPhones';
 import { findExactClientMatch } from '../../src/utils/clientDuplicates';
 import { toExistingClientUpdate } from '../../src/utils/clientWriteData';
 import { sanitizeClientData } from '../../netlify/functions/_shared/clientCreationService';
@@ -149,6 +151,36 @@ export const setBilling = (
   return {
     cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed,
     antes: view(current), despues: view({ ...current, ...updates }),
+  };
+});
+
+/**
+ * Agrega un teléfono a la ficha, como Editar cliente → Teléfonos (Jonathan,
+ * 30/10/2026). Los que ya tenía se conservan; con `primary` el nuevo pasa a ser
+ * el principal (`phone`, el de WhatsApp y llamadas). Hasta 5, como la app.
+ */
+export const addPhone = (
+  db: Firestore, account: Account, clientId: string, value: string, primary: boolean,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const number = sanitizePhone(value).trim();
+  const key = normalizePhoneForComparison(number);
+  if (key.length < 8) throw new WriteError(`Teléfono inválido: «${value.trim()}».`);
+  const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
+  if (client.isNote) throw new WriteError('Eso es una nota del día, no un cliente.');
+  const before = getClientPhones(client);
+  const known = before.some((phone) => normalizePhoneForComparison(phone.number) === key);
+  if (!known && before.length >= 5) throw new WriteError('La ficha ya tiene 5 teléfonos, el máximo de la app.');
+  const phones = sanitizeClientPhones([
+    ...before.map((phone) => ({ ...phone, isPrimary: primary ? false : phone.isPrimary })),
+    ...(known ? [] : [{ id: `phone-${Date.now()}`, number, isPrimary: false }]),
+  ].map((phone) => (primary && normalizePhoneForComparison(phone.number) === key ? { ...phone, isPrimary: true } : phone)));
+  const principal = getPrimaryClientPhone(phones)?.number || '';
+  const view = (list: typeof phones) => list.map((phone) => ({ numero: phone.number, principal: phone.isPrimary }));
+  const changed = JSON.stringify(view(phones)) !== JSON.stringify(view(before)) || principal !== (client.phone || '').trim();
+  if (changed) transaction.update(ref, { phones, phone: principal, updatedAt: new Date() });
+  return {
+    cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed,
+    antes: view(before), despues: view(phones),
   };
 });
 

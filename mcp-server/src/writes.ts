@@ -19,7 +19,8 @@ import {
   applyVisitCommand, createVisitCommand, newVisitId, undoForCompletedClient, VisitCommand, VisitResult,
 } from '../../src/utils/visitCompletion';
 import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../../src/utils/recency';
-import { getClientAddresses, locationFields } from '../../src/utils/clientAddresses';
+import { getClientAddresses, locationFields, sanitizeClientAddresses } from '../../src/utils/clientAddresses';
+import { normalizeGoogleMapsLink } from '../../src/utils/googleMapsLink';
 import { getClientPhones, getPrimaryClientPhone, sanitizeClientPhones } from '../../src/utils/clientPhones';
 import { findExactClientMatch } from '../../src/utils/clientDuplicates';
 import { toExistingClientUpdate } from '../../src/utils/clientWriteData';
@@ -183,6 +184,61 @@ export const addPhone = (
     antes: view(before), despues: view(phones),
   };
 });
+
+/**
+ * Cambia la dirección y/o la ubicación de Maps de la ficha, como Editar cliente
+ * → Ubicación (Jonathan, 30/10/2026). Toca la ubicación activa (la que muestra
+ * la tarjeta; las demás guardadas quedan). Las coordenadas salen del link antes
+ * de escribir: si no se pueden sacar no escribe nada, para no dejar la ficha
+ * fuera del orden del recorrido. Sin link nuevo conserva el mapa anterior.
+ */
+export const changeAddress = async (
+  db: Firestore, account: Account, clientId: string, fields: { address?: string; mapsLink?: string },
+): Promise<ChangeResult> => {
+  const address = fields.address?.trim();
+  if (fields.address !== undefined && !address) throw new WriteError('La dirección no puede quedar vacía.');
+  const rawLink = fields.mapsLink?.trim();
+  const mapsLink = rawLink ? normalizeGoogleMapsLink(rawLink) : undefined;
+  if (rawLink && !mapsLink) throw new WriteError(`No es un link de Google Maps: «${rawLink}».`);
+  if (address === undefined && !mapsLink) throw new WriteError('Pasá direccion o link_maps.');
+  // Fuera de la transacción: sigue la redirección del link corto (puede tardar unos segundos).
+  const point = mapsLink ? await resolveMapsCoordinates(mapsLink).catch(() => null) : null;
+  if (mapsLink && !point) {
+    throw new WriteError('No se pudieron sacar coordenadas del link (nombra un lugar sin punto marcado o está roto): no se cambió nada. Pedí un link de un punto marcado en el mapa.');
+  }
+
+  return db.runTransaction(async (transaction) => {
+    const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
+    if (client.isNote) throw new WriteError('Eso es una nota del día, no un cliente.');
+    const saved = getClientAddresses(client);
+    const active = Math.max(0, saved.findIndex((entry) => entry.address === (client.address || '').trim()
+      && entry.mapsLink === normalizeGoogleMapsLink(client.mapsLink || '')));
+    const current = saved[active] || { id: 'primary', type: 'home' as const, address: '', mapsLink: '', lat: '', lng: '' };
+    const next = {
+      ...current,
+      address: address ?? current.address,
+      mapsLink: mapsLink ?? current.mapsLink,
+      lat: point ? formatCoordinate(point.lat) : current.lat,
+      lng: point ? formatCoordinate(point.lng) : current.lng,
+    };
+    const addresses = sanitizeClientAddresses(saved.length ? saved.map((entry, index) => (index === active ? next : entry)) : [next]);
+    const view = (entry: typeof current) => ({
+      direccion: entry.address, link_maps: entry.mapsLink, coordenadas: entry.lat && entry.lng ? { lat: entry.lat, lng: entry.lng } : null,
+    });
+    const stored = {
+      address: client.address || '', mapsLink: client.mapsLink || '', lat: String(client.lat || ''), lng: String(client.lng || ''),
+    };
+    const changed = JSON.stringify(addresses) !== JSON.stringify(saved)
+      || JSON.stringify(locationFields(next)) !== JSON.stringify(stored);
+    if (changed) transaction.update(ref, { addresses, ...locationFields(next), updatedAt: new Date() });
+    return {
+      cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed,
+      antes: view(current), despues: view(next),
+      ...(!mapsLink && current.mapsLink && address !== current.address
+        ? { aviso: 'El mapa sigue siendo el anterior: si se mudó, pasá también el link nuevo.' } : {}),
+    };
+  });
+};
 
 /** Fija la estrella (no es un interruptor: repetir la llamada no la apaga). */
 export const setStar = (

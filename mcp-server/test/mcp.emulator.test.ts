@@ -16,7 +16,7 @@ import {
   suggestPosition, todayKey, weekdayOf,
 } from '../src/views';
 import {
-  addPhone, advanceVisit, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setBilling, setNote, setProducts, setStar,
+  addPhone, advanceVisit, changeAddress, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setBilling, setNote, setProducts, setStar,
   undoDone,
 } from '../src/writes';
 
@@ -145,6 +145,25 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     const data = (await db.doc('clients/rosa').get()).data();
     expect(data?.phone).toBe('098 765 432');
     expect(data?.phones).toHaveLength(2);
+  });
+
+  test('dirección: cambia la ubicación de la tarjeta con las coordenadas del link', async () => {
+    const account = await store.getAccount();
+    await expect(changeAddress(db, account, 'rosa', {})).rejects.toThrow('Pasá direccion');
+    await expect(changeAddress(db, account, 'rosa', { mapsLink: 'https://example.com/x' })).rejects.toThrow('No es un link');
+    const moved = await changeAddress(db, account, 'mario', {
+      address: 'Rambla M. 12 Sol. 3', mapsLink: 'https://www.google.com/maps?q=-34.81234,-55.91234',
+    });
+    expect(moved).toMatchObject({ cambiado: true, antes: { direccion: 'Rambla', coordenadas: null }, despues: {
+      direccion: 'Rambla M. 12 Sol. 3', coordenadas: { lat: '-34.81234', lng: '-55.91234' },
+    } });
+    const data = (await db.doc('clients/mario').get()).data();
+    expect(data).toMatchObject({ address: 'Rambla M. 12 Sol. 3', lat: '-34.81234', lng: '-55.91234' });
+    expect(data?.addresses).toHaveLength(1);
+    expect(data?.addresses[0]).toMatchObject({ address: 'Rambla M. 12 Sol. 3', lat: '-34.81234' });
+    const text = await changeAddress(db, account, 'mario', { address: 'Rambla M. 12 Sol. 4' });
+    expect(text).toMatchObject({ cambiado: true, aviso: expect.stringContaining('mapa sigue'), despues: { coordenadas: { lat: '-34.81234' } } });
+    expect((await changeAddress(db, account, 'mario', { address: 'Rambla M. 12 Sol. 4' })).cambiado).toBe(false);
   });
 
   test('favorito se fija, no se alterna', async () => {

@@ -55,6 +55,7 @@ const transport = new StdioClientTransport({
   env: {
     ...process.env, RUTAWATER_UID: 'smoke', FIREBASE_PROJECT_ID: 'demo-rutawater', RUTAWATER_MCP_AUDIT: auditPath,
     RUTAWATER_MCP_CARGAS_DIR: path.join(path.dirname(auditPath), 'cargas'),
+    RUTAWATER_TAREAS: path.join(path.dirname(auditPath), 'tareas.json'),
   },
   stderr: 'inherit',
 });
@@ -71,8 +72,8 @@ const call = async (name, args = {}) => {
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
   'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_fijo', 'agendar_una_vez', 'agregar_telefono', 'agregar_ubicacion', 'anotar_deuda', 'avisar_jonathan', 'borrar_nota_del_dia', 'buscar_clientes', 'cambiar_dias', 'cambiar_direccion', 'cambiar_fecha', 'cambiar_frecuencia', 'cambiar_nombre',
-  'cambiar_posicion', 'clientes_sin_comprar', 'consultar_jonathan', 'corregir_deuda', 'crear_cliente', 'crear_nota_del_dia', 'deshacer_fusion', 'deshacer_listo', 'editar_nota_del_dia', 'entregas_del_periodo', 'enviar_comprobante_aquapura', 'excluir_chat', 'fijar_dias_de_pago', 'fijar_facturacion', 'fijar_parentesco', 'fijar_productos', 'fusionar_duplicados', 'guardar_contacto', 'historia_cliente', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_inactivo', 'marcar_listo', 'marcar_respuesta_aplicada',
-  'marcar_revisar_transferencia', 'marcar_whatsapp_atendido', 'pasada_programada', 'quitar_de_la_lista', 'quitar_telefono', 'registrar_pago', 'responder_whatsapp', 'sugerir_posicion', 'transcribir_audio', 'transcribir_whatsapp', 'ver_archivo_whatsapp', 'ver_cliente', 'ver_productos',
+  'cambiar_posicion', 'cerrar_tarea', 'clientes_sin_comprar', 'consultar_jonathan', 'corregir_deuda', 'crear_cliente', 'crear_nota_del_dia', 'deshacer_fusion', 'deshacer_listo', 'editar_nota_del_dia', 'entregas_del_periodo', 'enviar_comprobante_aquapura', 'excluir_chat', 'fijar_dias_de_pago', 'fijar_facturacion', 'fijar_parentesco', 'fijar_productos', 'fusionar_duplicados', 'guardar_contacto', 'historia_cliente', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_inactivo', 'marcar_listo', 'marcar_respuesta_aplicada',
+  'marcar_revisar_transferencia', 'marcar_whatsapp_atendido', 'pasada_programada', 'programar_tarea', 'quitar_de_la_lista', 'quitar_telefono', 'registrar_pago', 'responder_whatsapp', 'sugerir_posicion', 'transcribir_audio', 'transcribir_whatsapp', 'ver_archivo_whatsapp', 'ver_cliente', 'ver_productos', 'ver_tareas_programadas',
 ]);
 
 // abrir_whatsapp valida antes de abrir nada: estos casos fallan sin tocar WhatsApp.
@@ -99,6 +100,9 @@ assert.deepEqual(phone.otras_fichas.map((c) => c.nombre), ['Sulay Fernandez']);
 const relocated = await call('cambiar_direccion', { cliente_id: 'c1', direccion: 'Colonia 1234', link_maps: 'https://maps.google.com/?q=-34.8,-55.9' });
 assert.deepEqual(relocated.despues.coordenadas, { lat: '-34.8', lng: '-55.9' });
 assert.equal((await call('cambiar_nombre', { cliente_id: 'c1', nombre: ' Héctor  Murgo ' })).cambiado, false);
+const { tarea } = await call('programar_tarea', { fecha: 'mañana', hora: '06:00', que_hacer: 'Si Héctor (c1) no contestó, pasalo a la semana siguiente', cliente_ids: ['c1'] });
+assert.deepEqual((await call('ver_tareas_programadas', {})).map((t) => [t.id, t.respuestas_desde[0].contesto]), [[tarea.id, false]]);
+assert.equal((await call('cerrar_tarea', { id: tarea.id, estado: 'cancelada', resultado: 'prueba' })).estado, 'cancelada');
 const pays = await call('fijar_dias_de_pago', { cliente_id: 'c1', desde_fecha: 'mañana' });
 assert.deepEqual(pays.despues, { entre_fechas: { desde: tomorrow, hasta: tomorrow }, recordar: true });
 assert.match((await client.callTool({ name: 'fijar_parentesco', arguments: { cliente_id: 'c1', otro_id: 'c2' } })).content[0].text, /quitar=true/);
@@ -181,5 +185,5 @@ assert.deepEqual(audit, [
 ]);
 
 await client.close();
-console.log('smoke: OK (57 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
+console.log('smoke: OK (60 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
 process.exit(0);

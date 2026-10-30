@@ -10,6 +10,7 @@ import { appRecordsSince, clientsWithoutPurchase, loadDeliveryRecords, loadPhoto
 import { downloadInboxMedia, excludeChat, forwardReceiptToAquapura, markHandled, readInbox, sendReply, transcribeInboxAudios } from './whatsappApi';
 import { askJonathan, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
 import { scheduledPass } from './vigilanteControl';
+import { closeTask, listTasks, scheduleTask } from './tasks';
 import { saveContact } from './contacts';
 import { mergeClients, undoMerge } from './merge';
 import path from 'path';
@@ -48,6 +49,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - agendar_fijo vuelve a poner en agenda una ficha de directorio con días y frecuencia (como Directorio → Agendar); cambiar_dias cambia los días de un cliente que ya tiene agenda fija, sin tocar frecuencia, nota ni productos.
 - anotar_deuda suma una deuda (como Agregar deuda en la tarjeta) y corregir_deuda cambia el monto de una anotada; las dos piden la deuda actual para no duplicar.
 - fijar_parentesco vincula (o desvincula) dos fichas como en Parentesco; fijar_dias_de_pago guarda cuándo paga la deuda; marcar_inactivo es «Ya no es cliente» / Reactivar.
+- programar_tarea guarda algo para hacer a una hora (por ejemplo «mañana a las 06:00, si no contestó, pasalo a la semana que viene»); el vigilante arranca cuando vence, la hace con ver_tareas_programadas y la cierra con cerrar_tarea.
 - No se puede desde acá: borrar clientes, alarmas (viven en el teléfono) ni marcar transferencias revisadas.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
@@ -558,6 +560,47 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   }, write('marcar_inactivo', async ({ cliente_id, inactivo }) => setInactive(
     store.db, await store.refreshAccount(), cliente_id, inactivo,
+  )));
+
+  server.registerTool('programar_tarea', {
+    title: 'Programar tarea',
+    description: 'Guarda algo que Jonathan pide hacer a una hora (Uruguay), por ejemplo «mañana a las 06:00, si Fulano no contestó, pasalo a la semana que viene». A esa hora (con hasta 20 minutos de demora) el vigilante arranca aunque no haya mensajes, la ve en ver_tareas_programadas, la hace y la cierra con cerrar_tarea. que_hacer tiene que entenderse sola: quién (con su id), qué revisar y qué hacer en cada caso. Con cliente_ids, al vencer trae lo que esos clientes escribieron por WhatsApp desde que se programó (o desde «desde»), para saber si contestaron. No repite una tarea igual ya pendiente.',
+    inputSchema: {
+      fecha: z.string().describe('aaaa-mm-dd, «hoy» o «mañana»'),
+      hora: z.string().describe('HH:MM, hora de Uruguay'),
+      que_hacer: z.string().min(1).max(2000),
+      cliente_ids: z.array(z.string().min(1)).max(20).optional(),
+      desde: z.string().optional().describe('«aaaa-mm-dd HH:MM»: desde cuándo cuenta si contestó (por ejemplo la hora del aviso); por defecto, ahora'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, handle(async ({ fecha, hora, que_hacer, cliente_ids, desde }: {
+    fecha: string; hora: string; que_hacer: string; cliente_ids?: string[]; desde?: string;
+  }) => {
+    const clients = await Promise.all((cliente_ids || []).map(async (id) => (await findClient(id)).client));
+    return { tarea: scheduleTask(resolveDate(fecha), hora.trim(), que_hacer, clients, desde?.trim()) };
+  }));
+
+  server.registerTool('ver_tareas_programadas', {
+    title: 'Ver tareas programadas',
+    description: 'Las tareas pendientes de programar_tarea (con solo_vencidas=true, las que ya tocan). Cada una trae id, cuando, que hacer (instruccion), clientes y, si tiene clientes, respuestas_desde: por cliente si contestó y sus mensajes (los audios con su id, para transcribir_whatsapp). Solo lectura.',
+    inputSchema: { solo_vencidas: z.boolean().optional() },
+    annotations: { readOnlyHint: true },
+  }, handle(async ({ solo_vencidas }: { solo_vencidas?: boolean }) => {
+    const all = (await Promise.all((await routesFor()).map((route) => store.getClients(route)))).flat();
+    return listTasks(store.db, all, !!solo_vencidas);
+  }));
+
+  server.registerTool('cerrar_tarea', {
+    title: 'Cerrar tarea',
+    description: 'Cierra una tarea programada: «hecha» (con lo que se hizo, o que no hizo falta porque el cliente contestó), «cancelada» (Jonathan la canceló) o «fallida» (no se pudo; avisale a Jonathan). Una tarea cerrada no vuelve a despertar al vigilante.',
+    inputSchema: {
+      id: z.string().min(1),
+      estado: z.enum(['hecha', 'cancelada', 'fallida']),
+      resultado: z.string().min(1).max(1000),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, handle(async ({ id, estado, resultado }: { id: string; estado: 'hecha' | 'cancelada' | 'fallida'; resultado: string }) => (
+    closeTask(id, estado, resultado)
   )));
 
   server.registerTool('crear_nota_del_dia', {

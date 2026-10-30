@@ -11,6 +11,7 @@ import { loadAccount } from '../src/routes';
 import { mergeClients, undoMerge } from '../src/merge';
 import { loadDeliveryRecords } from '../src/deliveries';
 import { Store } from '../src/store';
+import { closeTask, listTasks, scheduleTask } from '../src/tasks';
 import {
   addDays, agendaFor, debtReport, debtTotalMessage, hasPendingTransfer, nextVisit, productCatalog, searchClients,
   suggestPosition, todayKey, weekdayOf,
@@ -286,6 +287,37 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     expect((await addLocation(db, account, 'rosa', {
       type: 'otra', address: 'Depósito', mapsLink: 'https://maps.google.com/?q=-34.81,-55.92', primary: true,
     })).cambiado).toBe(false);
+  });
+
+  test('tareas con hora: se guardan, traen si el cliente contestó y se cierran', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tareas-'));
+    process.env.RUTAWATER_TAREAS = path.join(dir, 'tareas.json');
+    try {
+      const account = await store.getAccount();
+      const clients = await store.getClients(account.routes[0]);
+      const rosa = clients.find((c) => c.id === 'rosa')!;
+      expect(() => scheduleTask(tomorrow, '6:00', 'x', [])).toThrow('Hora inválida');
+      expect(() => scheduleTask(todayKey(), '00:00', 'x', [])).toThrow('ya pasó');
+      const task = scheduleTask(tomorrow, '06:00', 'Si Rosa (rosa) no contestó, pasala a la semana siguiente con cambiar_fecha', [rosa]);
+      expect(scheduleTask(tomorrow, '06:00', task.instruccion, [rosa]).id).toBe(task.id);
+      expect(await listTasks(db, clients, true)).toEqual([]);
+
+      const at6 = new Date(`${tomorrow}T06:05:00-03:00`);
+      const [due] = await listTasks(db, clients, true, at6);
+      expect(due).toMatchObject({ id: task.id, cuando: `${tomorrow} 06:00`, vencida: true });
+      expect(due.respuestas_desde).toEqual([{ cliente_id: 'rosa', nombre: 'Rosa Jerez', contesto: false, mensajes: [] }]);
+
+      await db.doc('whatsappInbox/m1').set({ direction: 'in', phone: '59899123456', sentAt: new Date(), type: 'text', text: 'Sí, pasá', handled: true });
+      const [answered] = await listTasks(db, clients, true, at6);
+      expect(answered.respuestas_desde?.[0]).toMatchObject({ contesto: true, mensajes: [{ id: 'm1', texto: 'Sí, pasá' }] });
+
+      expect(closeTask(task.id, 'hecha', 'Contestó: quedó como estaba')).toMatchObject({ estado: 'hecha', cambiado: true });
+      expect(closeTask(task.id, 'hecha', 'otra vez').cambiado).toBe(false);
+      expect(await listTasks(db, clients, false, at6)).toEqual([]);
+    } finally {
+      delete process.env.RUTAWATER_TAREAS;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('favorito se fija, no se alterna', async () => {

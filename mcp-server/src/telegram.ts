@@ -72,6 +72,9 @@ const heartbeatFile = () => `${stateFile()}.escucha`;
 const listenerAlive = () => {
   try { return Date.now() - statSync(heartbeatFile()).mtimeMs < 120000; } catch { return false; }
 };
+/** Texto de un mensaje de Jonathan al bot (R…), o null si no existe o todavía es un audio sin transcribir. */
+export const answerText = (id: string): string | null => load().respuestas.find((answer) => answer.id === id)?.texto || null;
+
 export const touchHeartbeat = () => writeFileSync(heartbeatFile(), new Date().toISOString());
 const token = (): string => {
   if (!existsSync(tokenFile())) throw new WriteError(`Falta el token del bot de Telegram en ${tokenFile()}.`);

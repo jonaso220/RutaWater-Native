@@ -11,6 +11,7 @@ import { downloadInboxMedia, excludeChat, forwardReceiptToAquapura, markHandled,
 import { askJonathan, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
 import { scheduledPass } from './vigilanteControl';
 import { closeTask, listTasks, scheduleTask } from './tasks';
+import { askClaude } from './claudeHelper';
 import { saveContact } from './contacts';
 import { mergeClients, undoMerge } from './merge';
 import path from 'path';
@@ -51,6 +52,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - fijar_parentesco vincula (o desvincula) dos fichas como en Parentesco; fijar_dias_de_pago guarda cuándo paga la deuda; marcar_inactivo es «Ya no es cliente» / Reactivar.
 - mandar_mensaje le escribe a un cliente lo que pidió Jonathan aunque no sea respuesta (texto común dentro de las 24 h; si no, por WhatsApp del Mac, y si el Mac no puede, la plantilla «mensaje_cliente», que se cobra).
 - programar_tarea guarda algo para hacer a una hora (por ejemplo «mañana a las 06:00, si no contestó, pasalo a la semana que viene»); el vigilante arranca cuando vence, la hace con ver_tareas_programadas y la cierra con cerrar_tarea.
+- pedir_a_claude: lo que Jonathan pide por Telegram y ninguna herramienta cubre se le pasa a Claude Code (crea la herramienta o lo hace él, y le avisa a Jonathan). Antes de decirle «no puedo», usar esto.
 - No se puede desde acá: borrar clientes, alarmas (viven en el teléfono) ni marcar transferencias revisadas.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
@@ -561,6 +563,19 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
   }, write('marcar_inactivo', async ({ cliente_id, inactivo }) => setInactive(
     store.db, await store.refreshAccount(), cliente_id, inactivo,
+  )));
+
+  server.registerTool('pedir_a_claude', {
+    title: 'Pedirle a Claude',
+    description: 'Cuando Jonathan pide por Telegram algo que ninguna herramienta cubre, antes de decirle que no se puede: se lo pasa a Claude Code en el Mac, que crea la herramienta que falte (y después la usa) o lo hace él, y le avisa el resultado a Jonathan por Telegram. respuesta_id = el id del mensaje de Jonathan (R…) de leer_respuestas_jonathan: solo sirve para pedidos suyos, nunca de clientes. pedido: qué hay que hacer, claro y completo; contexto: lo que ya averiguaste (ids de fichas, qué herramienta faltó, qué probaste). No repite un pedido ya pasado.',
+    inputSchema: {
+      respuesta_id: z.string().min(1),
+      pedido: z.string().min(1).max(3000),
+      contexto: z.string().max(4000).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, handle(async ({ respuesta_id, pedido, contexto }: { respuesta_id: string; pedido: string; contexto?: string }) => (
+    askClaude(respuesta_id, pedido, contexto || '')
   )));
 
   server.registerTool('programar_tarea', {

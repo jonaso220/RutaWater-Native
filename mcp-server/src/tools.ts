@@ -49,7 +49,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - agendar_fijo vuelve a poner en agenda una ficha de directorio con días y frecuencia (como Directorio → Agendar); cambiar_dias cambia los días de un cliente que ya tiene agenda fija, sin tocar frecuencia, nota ni productos.
 - anotar_deuda suma una deuda (como Agregar deuda en la tarjeta) y corregir_deuda cambia el monto de una anotada; las dos piden la deuda actual para no duplicar.
 - fijar_parentesco vincula (o desvincula) dos fichas como en Parentesco; fijar_dias_de_pago guarda cuándo paga la deuda; marcar_inactivo es «Ya no es cliente» / Reactivar.
-- mandar_mensaje le escribe a un cliente lo que pidió Jonathan aunque no sea respuesta (texto común dentro de las 24 h; si no, la plantilla «mensaje_cliente», que se cobra).
+- mandar_mensaje le escribe a un cliente lo que pidió Jonathan aunque no sea respuesta (texto común dentro de las 24 h; si no, por WhatsApp del Mac, y si el Mac no puede, la plantilla «mensaje_cliente», que se cobra).
 - programar_tarea guarda algo para hacer a una hora (por ejemplo «mañana a las 06:00, si no contestó, pasalo a la semana que viene»); el vigilante arranca cuando vence, la hace con ver_tareas_programadas y la cierra con cerrar_tarea.
 - No se puede desde acá: borrar clientes, alarmas (viven en el teléfono) ni marcar transferencias revisadas.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
@@ -857,7 +857,7 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('mandar_mensaje', {
     title: 'Mandar mensaje a un cliente',
-    description: 'Le manda a un cliente el mensaje que Jonathan pidió, aunque no sea una respuesta (avisarle algo puntual), por la API desde el número del negocio. Si el cliente escribió en las últimas 24 h va como texto común, gratis; si no, WhatsApp no deja texto libre y va con la plantilla «mensaje_cliente» («Hola <nombre>, te escribo por el agua: <texto> Cualquier cosa, respondeme por acá. ¡Gracias!», en un solo párrafo), que se cobra. Usar solo cuando Jonathan lo pide: no sirve para los avisos ni los recordatorios del reparto (van por la app en el Mac). Nunca a un chat excluido. Devuelve cómo salió y el texto que recibió.',
+    description: 'Le manda a un cliente el mensaje que Jonathan pidió, aunque no sea una respuesta (avisarle algo puntual), por la API desde el número del negocio. Si el cliente escribió en las últimas 24 h va como texto común, gratis; si no, va por WhatsApp del Mac (gratis, tal cual; tarda hasta un minuto en confirmarse) y, si el Mac no puede (bloqueado, sin permiso), con la plantilla «mensaje_cliente» («Hola <nombre>, te escribo por el agua: <texto> Cualquier cosa, respondeme por acá. ¡Gracias!», en un solo párrafo), que se cobra. Usar solo cuando Jonathan lo pide: no sirve para los avisos ni los recordatorios del reparto (van por la app en el Mac). Nunca a un chat excluido. Devuelve cómo salió y el texto que recibió.',
     inputSchema: {
       cliente_id: z.string().min(1).optional().describe('Ficha: usa su teléfono principal y su nombre para el saludo'),
       telefono: z.string().min(8).max(40).optional().describe('Si no hay ficha: el número (09… o 598…)'),

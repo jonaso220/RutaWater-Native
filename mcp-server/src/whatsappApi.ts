@@ -5,6 +5,7 @@ import { FieldValue, type DocumentSnapshot, type Firestore } from 'firebase-admi
 import type { Client } from '../../src/types';
 import { getClientPhones } from '../../src/utils/clientPhones';
 import { runScript } from './audio';
+import { MacUnavailable, sendViaMac } from './macSend';
 import { WriteError } from './writes';
 
 // WhatsApp por la API de YCloud (coexistencia con la app; Jonathan, 23/10/2026).
@@ -210,14 +211,16 @@ export const sendReply = async (db: Firestore, phoneInput: string, body: string,
  * Un mensaje que Jonathan pide mandarle a un cliente, aunque no sea respuesta
  * (30/10/2026). Con la ventana de 24 h abierta va como texto común
  * (sendReply). Fuera de ella Meta no deja mandar texto libre por la API, ni
- * pagando: va con la plantilla en blanco «mensaje_cliente», que lleva el texto
- * tal cual con un saludo, y se cobra.
+ * pagando: va por WhatsApp del Mac (macSend, gratis y tal cual) y, si el Mac no
+ * puede, con la plantilla en blanco «mensaje_cliente», que lleva el texto con
+ * un saludo y se cobra.
  */
 export const FREE_TEMPLATE = 'mensaje_cliente';
 export const FREE_TEMPLATE_BODY = 'Hola {{1}}, te escribo por el agua: {{2}}\n\nCualquier cosa, respondeme por acá. ¡Gracias!';
 
 export const sendMessage = async (
   db: Firestore, phoneInput: string, body: string, greeting: string, now = new Date(), fetcher = fetch,
+  mac: (db: Firestore, phone: string, text: string) => Promise<{ id: string }> = sendViaMac,
 ) => {
   const config = localConfig();
   const phone = fullPhone(phoneInput);
@@ -231,6 +234,14 @@ export const sendMessage = async (
   // Diez minutos de margen: que la ventana no se cierre mientras sale.
   if (lastIn && now.getTime() - lastIn < WINDOW_MS - 10 * 60e3) {
     return { ...(await sendReply(db, phone, text, now, fetcher)), como: 'texto común (escribió en las últimas 24 h, gratis)' };
+  }
+  let macReason: string;
+  try {
+    const { id } = await mac(db, phone, text);
+    return { enviado: true, id, telefono: phone, como: 'WhatsApp del Mac (fuera de las 24 h, gratis)', mensaje: text };
+  } catch (error) {
+    if (!(error instanceof MacUnavailable)) throw error;
+    macReason = error.message;
   }
   // Meta no acepta saltos de línea, tabulaciones ni más de 4 espacios seguidos dentro de una variable.
   const param = text.replace(/\s*\n\s*/g, ' ').replace(/\s{4,}/g, '   ');
@@ -268,7 +279,7 @@ export const sendMessage = async (
     replyTo: '', sentAt: now, receivedAt: now, handled: true, type: 'template', text: rendered, media: null,
   });
   return {
-    enviado: true, id, estado: result.status || 'accepted', telefono: phone, como: 'plantilla mensaje_cliente (fuera de las 24 h, se cobra)',
+    enviado: true, id, estado: result.status || 'accepted', telefono: phone, como: `plantilla mensaje_cliente (fuera de las 24 h, se cobra; por el Mac no: ${macReason})`,
     mensaje: rendered, uso: await usage(db, now, config),
   };
 };

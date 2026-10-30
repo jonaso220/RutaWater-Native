@@ -16,6 +16,8 @@ fs.writeFileSync(process.env.RUTAWATER_YCLOUD_KEY, 'test-key\n');
 import { getDb } from '../src/config';
 // eslint-disable-next-line import/first
 import { excludeChat, forwardReceiptToAquapura, markHandled, readInbox, sendMessage, sendReply } from '../src/whatsappApi';
+// eslint-disable-next-line import/first
+import { MacUnavailable } from '../src/macSend';
 
 const emulator = process.env.FIRESTORE_EMULATOR_HOST;
 const describeWithEmulator = emulator ? describe : describe.skip;
@@ -78,26 +80,40 @@ describeWithEmulator('WhatsApp por la API', () => {
     expect((await db.doc('whatsappUsage/2026-10').get()).data()?.sent).toBe(0);
   });
 
+  const noMac = jest.fn(async () => { throw new MacUnavailable('la pantalla del Mac está bloqueada'); });
+
   test('mensaje de Jonathan: texto común con la ventana abierta, plantilla en blanco si no', async () => {
     const open = okFetch({ id: 'out1' });
-    const inside = await sendMessage(db, '099123456', 'Mañana pasamos a las 10', 'Rosa', NOW, open);
+    const inside = await sendMessage(db, '099123456', 'Mañana pasamos a las 10', 'Rosa', NOW, open, noMac);
+    expect(noMac).not.toHaveBeenCalled();
     expect(inside).toMatchObject({ enviado: true, como: expect.stringContaining('texto común') });
     expect(JSON.parse((open as jest.Mock).mock.calls[0][1].body)).toMatchObject({ type: 'text', text: { body: 'Mañana pasamos a las 10' } });
 
     const closed = okFetch({ id: 'out2' });
-    const outside = await sendMessage(db, '59898000000', 'El lunes no pasamos.\nPasamos el martes', 'Ana', NOW, closed);
+    const outside = await sendMessage(db, '59898000000', 'El lunes no pasamos.\nPasamos el martes', 'Ana', NOW, closed, noMac);
+    expect(outside.como).toContain('pantalla del Mac está bloqueada');
     expect(outside.mensaje).toBe('Hola Ana, te escribo por el agua: El lunes no pasamos. Pasamos el martes\n\nCualquier cosa, respondeme por acá. ¡Gracias!');
     expect(JSON.parse((closed as jest.Mock).mock.calls[0][1].body).template).toEqual({
       name: 'mensaje_cliente', language: { code: 'es' },
       components: [{ type: 'body', parameters: [{ type: 'text', text: 'Ana' }, { type: 'text', text: 'El lunes no pasamos. Pasamos el martes' }] }],
     });
     expect((await db.doc('whatsappInbox/out2').get()).data()).toMatchObject({ direction: 'out', type: 'template', handled: true });
-    await expect(sendMessage(db, '099111222', 'Hola', 'X', NOW, okFetch())).rejects.toThrow('excluido');
+    await expect(sendMessage(db, '099111222', 'Hola', 'X', NOW, okFetch(), noMac)).rejects.toThrow('excluido');
+  });
+
+  test('mensaje de Jonathan: fuera de las 24 h va por el Mac, gratis; si no se confirma, no usa la plantilla', async () => {
+    const api = okFetch();
+    const viaMac = await sendMessage(db, '59898000000', 'El lunes no pasamos.\nPasamos el martes', 'Ana', NOW, api, async () => ({ id: 'mac1' }));
+    expect(viaMac).toMatchObject({ id: 'mac1', como: expect.stringContaining('WhatsApp del Mac'), mensaje: 'El lunes no pasamos.\nPasamos el martes' });
+    expect(api).not.toHaveBeenCalled();
+    const unconfirmed = async () => { throw new Error('no apareció enviado'); };
+    await expect(sendMessage(db, '59898000000', 'Hola', 'Ana', NOW, api, unconfirmed)).rejects.toThrow('no apareció');
+    expect(api).not.toHaveBeenCalled();
   });
 
   test('mensaje de Jonathan: plantilla sin aprobar no cuenta en el uso', async () => {
     const rejected = jest.fn(async () => new Response(JSON.stringify({ error: { message: 'Template name does not exist' } }), { status: 400 })) as unknown as typeof fetch;
-    await expect(sendMessage(db, '59898000000', 'Hola', 'Ana', NOW, rejected)).rejects.toThrow('aprobada por Meta');
+    await expect(sendMessage(db, '59898000000', 'Hola', 'Ana', NOW, rejected, noMac)).rejects.toThrow('aprobada por Meta');
     expect((await db.doc('whatsappUsage/2026-10').get()).data()?.sent ?? 0).toBe(0);
   });
 

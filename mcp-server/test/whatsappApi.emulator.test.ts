@@ -86,7 +86,7 @@ describeWithEmulator('WhatsApp por la API', () => {
 
     const closed = okFetch({ id: 'out2' });
     const outside = await sendMessage(db, '59898000000', 'El lunes no pasamos.\nPasamos el martes', 'Ana', NOW, closed);
-    expect(outside.mensaje).toBe('Hola Ana, El lunes no pasamos. Pasamos el martes\n\n¡Saludos!');
+    expect(outside.mensaje).toBe('Hola Ana, te escribo por el agua: El lunes no pasamos. Pasamos el martes\n\nCualquier cosa, respondeme por acá. ¡Gracias!');
     expect(JSON.parse((closed as jest.Mock).mock.calls[0][1].body).template).toEqual({
       name: 'mensaje_cliente', language: { code: 'es' },
       components: [{ type: 'body', parameters: [{ type: 'text', text: 'Ana' }, { type: 'text', text: 'El lunes no pasamos. Pasamos el martes' }] }],

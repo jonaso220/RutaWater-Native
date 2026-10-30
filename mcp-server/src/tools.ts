@@ -857,12 +857,12 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('mandar_mensaje', {
     title: 'Mandar mensaje a un cliente',
-    description: 'Le manda a un cliente el mensaje que Jonathan pidió, aunque no sea una respuesta (avisarle algo puntual), por la API desde el número del negocio. Si el cliente escribió en las últimas 24 h va como texto común, gratis; si no, WhatsApp no deja texto libre y va con la plantilla «mensaje_cliente» («Hola <nombre>, <texto> ¡Saludos!», en un solo párrafo), que se cobra. Usar solo cuando Jonathan lo pide: no sirve para los avisos ni los recordatorios del reparto (van por la app en el Mac). Nunca a un chat excluido. Devuelve cómo salió y el texto que recibió.',
+    description: 'Le manda a un cliente el mensaje que Jonathan pidió, aunque no sea una respuesta (avisarle algo puntual), por la API desde el número del negocio. Si el cliente escribió en las últimas 24 h va como texto común, gratis; si no, WhatsApp no deja texto libre y va con la plantilla «mensaje_cliente» («Hola <nombre>, te escribo por el agua: <texto> Cualquier cosa, respondeme por acá. ¡Gracias!», en un solo párrafo), que se cobra. Usar solo cuando Jonathan lo pide: no sirve para los avisos ni los recordatorios del reparto (van por la app en el Mac). Nunca a un chat excluido. Devuelve cómo salió y el texto que recibió.',
     inputSchema: {
       cliente_id: z.string().min(1).optional().describe('Ficha: usa su teléfono principal y su nombre para el saludo'),
       telefono: z.string().min(8).max(40).optional().describe('Si no hay ficha: el número (09… o 598…)'),
       nombre: z.string().max(60).optional().describe('Nombre para el saludo; por defecto el de la ficha sin aclaraciones'),
-      texto: z.string().min(1).max(4000).describe('Lo que hay que decirle, en tono natural; empezá en minúscula, porque fuera de las 24 h va después de «Hola <nombre>,»'),
+      texto: z.string().min(1).max(4000).describe('Lo que hay que decirle, en tono natural; empezá en minúscula, porque fuera de las 24 h va después de «Hola <nombre>, te escribo por el agua:»'),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, handle(async ({ cliente_id, telefono, nombre, texto }: { cliente_id?: string; telefono?: string; nombre?: string; texto: string }) => {

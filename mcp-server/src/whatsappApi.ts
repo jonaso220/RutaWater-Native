@@ -214,7 +214,7 @@ export const sendReply = async (db: Firestore, phoneInput: string, body: string,
  * tal cual con un saludo, y se cobra.
  */
 export const FREE_TEMPLATE = 'mensaje_cliente';
-export const FREE_TEMPLATE_BODY = 'Hola {{1}}, {{2}}\n\n¡Saludos!';
+export const FREE_TEMPLATE_BODY = 'Hola {{1}}, te escribo por el agua: {{2}}\n\nCualquier cosa, respondeme por acá. ¡Gracias!';
 
 export const sendMessage = async (
   db: Firestore, phoneInput: string, body: string, greeting: string, now = new Date(), fetcher = fetch,

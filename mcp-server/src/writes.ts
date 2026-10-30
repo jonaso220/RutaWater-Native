@@ -264,6 +264,34 @@ export const changeAddress = async (
   });
 };
 
+/**
+ * Cambia el nombre de la ficha, como Editar cliente → Nombre (Jonathan,
+ * 30/10/2026). Solo esa ficha: las otras de la misma persona quedan como están.
+ * Como syncClientNameToRelatedRecords en la app, el nombre pasa también a las
+ * deudas y transferencias de esa ficha (clientName queda congelado al crearlas).
+ */
+export const changeName = (
+  db: Firestore, account: Account, clientId: string, name: string,
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  const next = name.trim().replace(/\s+/g, ' ');
+  if (!next) throw new WriteError('El nombre no puede quedar vacío.');
+  const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
+  if (client.isNote) throw new WriteError('Eso es una nota del día, no un cliente: usá editar_nota_del_dia.');
+  const related = (await Promise.all((['debts', 'transfers'] as const)
+    .map((collection) => fullScopeRead(db, transaction, account, route, collection))))
+    .flat().flatMap((snap) => snap.docs)
+    .filter((doc) => belongsToProfileScope(doc.data(), account.uid, route.groupId) && doc.data().clientId === client.id)
+    .filter((doc) => doc.data().clientName !== next);
+  const before = client.name || '';
+  const changed = next !== before.trim() || related.length > 0;
+  if (next !== before.trim()) transaction.update(ref, { name: next, updatedAt: new Date() });
+  related.forEach((doc) => transaction.update(doc.ref, { clientName: next }));
+  return {
+    cliente_id: client.id, nombre: next, reparto: route.name, cambiado: changed, antes: before, despues: next,
+    ...(related.length ? { deudas_y_transferencias_renombradas: related.length } : {}),
+  };
+});
+
 /** Fija la estrella (no es un interruptor: repetir la llamada no la apaga). */
 export const setStar = (
   db: Firestore, account: Account, clientId: string, value: boolean,

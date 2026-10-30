@@ -16,7 +16,7 @@ import {
   suggestPosition, todayKey, weekdayOf,
 } from '../src/views';
 import {
-  addPhone, advanceVisit, changeAddress, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setBilling, setNote, setProducts, setStar,
+  addPhone, advanceVisit, changeAddress, changeName, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setBilling, setNote, setProducts, setStar,
   undoDone,
 } from '../src/writes';
 
@@ -145,6 +145,18 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     const data = (await db.doc('clients/rosa').get()).data();
     expect(data?.phone).toBe('098 765 432');
     expect(data?.phones).toHaveLength(2);
+  });
+
+  test('nombre: cambia solo esa ficha, sin espacios de más', async () => {
+    const account = await store.getAccount();
+    await expect(changeName(db, account, 'rosa', '   ')).rejects.toThrow('vacío');
+    const renamed = await changeName(db, account, 'rosa', '  Rosa   Jerez - Carnicería ');
+    // d1 y d2 son de la ficha rosa: pasan al nombre nuevo, como en la app.
+    expect(renamed).toMatchObject({ cambiado: true, antes: 'Rosa Jerez', despues: 'Rosa Jerez - Carnicería', deudas_y_transferencias_renombradas: 2 });
+    expect((await db.doc('clients/rosa').get()).data()?.name).toBe('Rosa Jerez - Carnicería');
+    expect((await db.doc('debts/d2').get()).data()?.clientName).toBe('Rosa Jerez - Carnicería');
+    expect((await changeName(db, account, 'rosa', 'Rosa Jerez - Carnicería')).cambiado).toBe(false);
+    expect((await changeName(db, account, 'rosa', 'Rosa Jerez')).deudas_y_transferencias_renombradas).toBe(2);
   });
 
   test('dirección: cambia la ubicación de la tarjeta con las coordenadas del link', async () => {

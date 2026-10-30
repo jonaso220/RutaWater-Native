@@ -70,7 +70,7 @@ const call = async (name, args = {}) => {
 
 const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
-  'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'agregar_telefono', 'avisar_jonathan', 'borrar_nota_del_dia', 'buscar_clientes', 'cambiar_direccion', 'cambiar_fecha', 'cambiar_frecuencia',
+  'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_una_vez', 'agregar_telefono', 'avisar_jonathan', 'borrar_nota_del_dia', 'buscar_clientes', 'cambiar_direccion', 'cambiar_fecha', 'cambiar_frecuencia', 'cambiar_nombre',
   'cambiar_posicion', 'clientes_sin_comprar', 'consultar_jonathan', 'crear_cliente', 'crear_nota_del_dia', 'deshacer_fusion', 'deshacer_listo', 'editar_nota_del_dia', 'entregas_del_periodo', 'enviar_comprobante_aquapura', 'excluir_chat', 'fijar_facturacion', 'fijar_productos', 'fusionar_duplicados', 'guardar_contacto', 'historia_cliente', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'marcar_favorito', 'marcar_listo', 'marcar_respuesta_aplicada',
   'marcar_revisar_transferencia', 'marcar_whatsapp_atendido', 'pasada_programada', 'quitar_de_la_lista', 'registrar_pago', 'responder_whatsapp', 'sugerir_posicion', 'transcribir_audio', 'transcribir_whatsapp', 'ver_archivo_whatsapp', 'ver_cliente', 'ver_productos',
 ]);
@@ -98,6 +98,7 @@ const phone = await call('agregar_telefono', { cliente_id: 'c1', telefono: '099 
 assert.deepEqual(phone.otras_fichas.map((c) => c.nombre), ['Sulay Fernandez']);
 const relocated = await call('cambiar_direccion', { cliente_id: 'c1', direccion: 'Colonia 1234', link_maps: 'https://maps.google.com/?q=-34.8,-55.9' });
 assert.deepEqual(relocated.despues.coordenadas, { lat: '-34.8', lng: '-55.9' });
+assert.equal((await call('cambiar_nombre', { cliente_id: 'c1', nombre: ' Héctor  Murgo ' })).cambiado, false);
 
 const detail = await call('ver_cliente', { cliente_id: 'c1' });
 assert.equal(detail.favorito, true);
@@ -177,5 +178,5 @@ assert.deepEqual(audit, [
 ]);
 
 await client.close();
-console.log('smoke: OK (47 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
+console.log('smoke: OK (48 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
 process.exit(0);

@@ -22,7 +22,7 @@ import {
 } from './views';
 import {
   advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, createDayNote, deleteDayNote, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote,
-  addPhone, changeAddress, setBilling, setProducts, setStar, undoDone, updateDayNote, WriteError,
+  addPhone, changeAddress, changeName, setBilling, setProducts, setStar, undoDone, updateDayNote, WriteError,
 } from './writes';
 
 const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta configurada.
@@ -42,6 +42,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - fijar_facturacion guarda el RUT (12 dígitos), la razón social y el email de facturación de la ficha; la cédula nunca se guarda.
 - agregar_telefono suma un teléfono a la ficha (hasta 5, como Editar cliente → Teléfonos); con principal=true pasa a ser el de WhatsApp y llamadas. Los que ya tenía quedan.
 - cambiar_direccion cambia la dirección y/o el link de Maps de la ficha (como Editar cliente → Ubicación); las coordenadas salen del link y, si no se pueden sacar, no cambia nada; solo con el link arma la dirección con las calles del mapa.
+- cambiar_nombre cambia el nombre de la ficha (como Editar cliente → Nombre); las otras fichas de la misma persona no se tocan.
 - marcar_revisar_transferencia deja al cliente en la lista Transferencias (como Revisar en Deudas). Marcar una transferencia como revisada queda solo para la app.
 - crear_cliente crea una ficha nueva solo de directorio (como Directorio → «+»), sin productos ni visitas; si ya hay una ficha con ese teléfono no crea otra y la devuelve. Después se agenda con agendar_una_vez. Crear clientes solo cuando Jonathan lo pide.
 - fusionar_duplicados junta dos fichas de la misma persona: queda la de agenda (o la más completa), se le suman los datos que solo tenía la otra y la otra se borra; deudas, transferencias y Parentesco pasan a la que queda. Primero sin aplicar (vista previa) y después con aplicar=true. deshacer_fusion la revierte con la copia que deja.
@@ -389,6 +390,23 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
   }, write('cambiar_direccion', async ({ cliente_id, direccion, link_maps, mudanza }) => {
     const result = await changeAddress(store.db, await store.refreshAccount(), cliente_id, { address: direccion, mapsLink: link_maps, moved: mudanza });
+    const all = await allClients();
+    const self = all.find((client) => client.id === cliente_id);
+    const customer = self?.customerId || cliente_id;
+    const others = all.filter((client) => !client.isNote && client.id !== cliente_id && (client.customerId || client.id) === customer);
+    return { ...result, otras_fichas: others.map((client) => ({ id: client.id, nombre: client.name, direccion: client.address })) };
+  }));
+
+  server.registerTool('cambiar_nombre', {
+    title: 'Cambiar nombre',
+    description: 'Cambia el nombre de la ficha del cliente, como Editar cliente → Nombre en la app; como la app, el nombre nuevo pasa también a las deudas y transferencias de esa ficha. Solo esa ficha: devuelve en otras_fichas las demás de la misma persona (visitas de una vez, copias) con su nombre, que no se tocan. Devuelve antes/después.',
+    inputSchema: {
+      cliente_id: z.string().min(1),
+      nombre: z.string().min(1).max(120).describe('Como en las fichas, por ejemplo «Fernando - Local La Plazita»'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+  }, write('cambiar_nombre', async ({ cliente_id, nombre }) => {
+    const result = await changeName(store.db, await store.refreshAccount(), cliente_id, nombre);
     const all = await allClients();
     const self = all.find((client) => client.id === cliente_id);
     const customer = self?.customerId || cliente_id;

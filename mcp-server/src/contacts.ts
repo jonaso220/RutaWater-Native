@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { WriteError } from './writes';
 
 // Contactos del Mac (iCloud, los mismos del iPhone y de WhatsApp). Jonathan,
@@ -6,27 +9,53 @@ import { WriteError } from './writes';
 // Maps al final (en el apellido, como los que ya tenía), con mayúscula inicial.
 // Si ya hay un contacto con ese teléfono se le cambia el nombre; si no, se crea.
 
-const SCRIPT = `
-function run(argv) {
-  const [first, last, phone] = argv;
-  const key = (s) => String(s || '').replace(/\\D/g, '').slice(-8);
-  const C = Application('Contacts');
-  const ids = C.people.id();
-  const phones = C.people.phones.value();
-  const matches = ids.filter((id, i) => (phones[i] || []).some((p) => key(p) === key(phone)));
-  for (const id of matches) {
-    const person = C.people.byId(id);
-    person.firstName = first;
-    person.lastName = last;
+// Lo hace «RutaWater Contactos.app» (scripts/guardar-contacto.js), que tiene el
+// permiso de Contactos: en node se pierde con cada actualización de Homebrew.
+
+const dir = () => (process.env.RUTAWATER_CONTACTOS_DIR || '').trim() || join(homedir(), '.rutawater-mcp/guardar-contacto');
+const WAIT_MS = 60_000;
+const STALE_LOCK_MS = 2 * 60_000;
+
+const openApp = (app: string) => new Promise<void>((resolve, reject) => {
+  execFile('/usr/bin/open', ['-W', '-a', app], { timeout: WAIT_MS }, (error) => (error ? reject(error) : resolve()));
+});
+const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+/** Un contacto por vez: el vigilante y la app de Claude comparten el pedido y el resultado. */
+const lock = async (path: string) => {
+  const deadline = Date.now() + WAIT_MS;
+  for (;;) {
+    try {
+      mkdirSync(path);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      if (Date.now() - statSync(path).mtimeMs > STALE_LOCK_MS) rmSync(path, { recursive: true, force: true });
+      else if (Date.now() > deadline) throw new Error('hay otro contacto guardándose');
+      else await pause(500);
+    }
   }
-  if (!matches.length) {
-    const person = C.Person({ firstName: first, lastName: last });
-    C.people.push(person);
-    person.phones.push(C.Phone({ label: 'mobile', value: phone }));
+};
+
+/** Le pasa el pedido a la app y devuelve lo que dejó en resultado.json. */
+const askApp = async (request: { first: string; last: string; phone: string }, open: (app: string) => Promise<void>) => {
+  mkdirSync(dir(), { recursive: true });
+  const busy = join(dir(), 'ocupado');
+  await lock(busy);
+  try {
+    const app = join(dir(), 'RutaWater Contactos.app');
+    const resultFile = join(dir(), 'resultado.json');
+    rmSync(resultFile, { force: true });
+    writeFileSync(join(dir(), 'pedido.json'), JSON.stringify(request));
+    await open(app);
+    if (!existsSync(resultFile)) throw new Error('la app no dejó resultado');
+    const result = JSON.parse(readFileSync(resultFile, 'utf8'));
+    if (result.error) throw new Error(`${result.error}${result.numero ? ` (${result.numero})` : ''}`);
+    return result as { actualizados: number; creado: boolean };
+  } finally {
+    rmSync(busy, { recursive: true, force: true });
   }
-  C.save();
-  return JSON.stringify({ actualizados: matches.length, creado: !matches.length });
-}`;
+};
 
 const digits = (value: string) => value.replace(/\D/g, '');
 
@@ -45,17 +74,15 @@ export const contactName = (name: string, address: string, mapsLink: string) => 
   return { first: parts.join(' - ') + (link ? ' -' : ''), last: link };
 };
 
-export const saveContact = (input: { nombre: string; direccion?: string; link_maps?: string; telefono: string }) => {
+export const saveContact = async (
+  input: { nombre: string; direccion?: string; link_maps?: string; telefono: string }, open = openApp,
+) => {
   const phone = uyPhone(input.telefono);
   const { first, last } = contactName(input.nombre, input.direccion || '', input.link_maps || '');
   if (!input.nombre.trim()) throw new WriteError('Falta el nombre.');
-  return new Promise<unknown>((resolve, reject) => {
-    execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', SCRIPT, first, last, phone], { timeout: 30000 }, (error, stdout, stderr) => {
-      if (error) {
-        const detail = stderr.trim().split('\n').pop() || error.message;
-        return reject(new WriteError(`No se pudo guardar el contacto: ${detail}. Puede faltar el permiso de Contactos en el Mac (o quedó esperando que lo acepten): el cliente en RutaWater no se toca; anotarlo en state/contactos-pendientes.jsonl para guardarlo después.`));
-      }
-      resolve({ contacto: `${first} ${last}`.trim(), telefono: phone, ...JSON.parse(stdout.trim() || '{}') });
-    });
-  });
+  try {
+    return { contacto: `${first} ${last}`.trim(), telefono: phone, ...(await askApp({ first, last, phone }, open)) };
+  } catch (error) {
+    throw new WriteError(`No se pudo guardar el contacto: ${(error as Error).message}. Puede faltar el permiso de Contactos en el Mac (o quedó esperando que lo acepten): el cliente en RutaWater no se toca; anotarlo en state/contactos-pendientes.jsonl para guardarlo después.`);
+  }
 };

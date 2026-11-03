@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { answerText, askJonathan, downloadPhoto, markAnswersApplied, readAnswers } from '../src/telegram';
+import { answerText, askJonathan, downloadAttachment, markAnswersApplied, readAnswers } from '../src/telegram';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rutawater-tg-test-'));
 process.env.RUTAWATER_TELEGRAM_TOKEN = path.join(dir, 'token');
@@ -71,7 +71,7 @@ describe('dudas por Telegram', () => {
   });
 });
 
-describe('fotos de Jonathan', () => {
+describe('fotos y PDF de Jonathan', () => {
   beforeEach(() => fs.rmSync(process.env.RUTAWATER_TELEGRAM_STATE!, { force: true }));
 
   const withPhotos = (updates: any[]) => {
@@ -96,11 +96,11 @@ describe('fotos de Jonathan', () => {
       update_id: 2, message: { message_id: 2, chat, caption: 'añadime este evento', photo: [{ file_id: 'chica' }, { file_id: 'grande' }] },
     }]);
     const { respuestas } = await readAnswers(fetcher);
-    expect(respuestas).toEqual([expect.objectContaining({ id: 'R2', texto: 'añadime este evento', foto: true, tipo: 'instruccion' })]);
-    expect(respuestas[0]).not.toHaveProperty('foto_file_id');
-    const { data, mime } = await downloadPhoto('R2', fetcher);
+    expect(respuestas).toEqual([expect.objectContaining({ id: 'R2', texto: 'añadime este evento', archivo: 'foto', tipo: 'instruccion' })]);
+    expect(respuestas[0]).not.toHaveProperty('archivo_file_id');
+    const { data, mime } = await downloadAttachment('R2', fetcher);
     expect(mime).toBe('image/jpeg');
-    expect(data.toString()).toBe('imagen');
+    expect(data!.toString()).toBe('imagen');
     const getFile = (fetcher as jest.Mock).mock.calls.find(([url]) => url.endsWith('/getFile'));
     expect(JSON.parse(getFile[1].body).file_id).toBe('grande');
   });
@@ -117,20 +117,39 @@ describe('fotos de Jonathan', () => {
     await askJonathan({ pregunta: '¿12 o 20?' }, fetcher);
     updates.push({ update_id: 2, message: { message_id: 2, chat, photo: [{ file_id: 'a' }] } });
     const { respuestas, preguntas_sin_respuesta: open } = await readAnswers(fetcher);
-    expect(respuestas).toEqual([expect.objectContaining({ id: 'R2', texto: '', foto: true, tipo: 'instruccion' })]);
+    expect(respuestas).toEqual([expect.objectContaining({ id: 'R2', texto: '', archivo: 'foto', tipo: 'instruccion' })]);
     expect(open).toHaveLength(1);
-    expect(answerText('R2')).toBe('(foto sin texto)');
+    expect(answerText('R2')).toBe('(archivo sin texto)');
   });
 
   test('una imagen como archivo se recibe; un formato que no se puede mirar avisa', async () => {
     const fetcher = withPhotos([hello, {
       update_id: 2, message: { message_id: 2, chat, caption: 'mirá', document: { file_id: 'heic', mime_type: 'image/heic' } },
     }, {
-      update_id: 3, message: { message_id: 3, chat, caption: 'un pdf', document: { file_id: 'pdf', mime_type: 'application/pdf' } },
+      update_id: 3, message: { message_id: 3, chat, caption: 'una planilla', document: { file_id: 'xls', mime_type: 'application/vnd.ms-excel' } },
     }]);
     const { respuestas } = await readAnswers(fetcher);
     expect(respuestas.map((answer) => answer.id)).toEqual(['R2']);
-    await expect(downloadPhoto('R2', fetcher)).rejects.toThrow('formato');
-    await expect(downloadPhoto('R9', fetcher)).rejects.toThrow('no tiene una foto');
+    await expect(downloadAttachment('R2', fetcher)).rejects.toThrow('formato');
+    await expect(downloadAttachment('R9', fetcher)).rejects.toThrow('no tiene una foto ni un PDF');
+  });
+
+  test('un PDF se recibe (también sin el tipo declarado) y queda en el Mac para abrirlo', async () => {
+    const fetcher = withPhotos([hello, {
+      update_id: 2, message: { message_id: 2, chat, caption: 'añadime este evento', document: { file_id: 'p1', mime_type: 'application/pdf', file_name: '../../folleto.pdf' } },
+    }, {
+      update_id: 3, message: { message_id: 3, chat, document: { file_id: 'p2', mime_type: 'application/octet-stream', file_name: 'FOLLETO.PDF' } },
+    }]);
+    const { respuestas } = await readAnswers(fetcher);
+    expect(respuestas).toEqual([
+      expect.objectContaining({ id: 'R2', texto: 'añadime este evento', archivo: 'pdf' }),
+      expect.objectContaining({ id: 'R3', texto: '', archivo: 'pdf' }),
+    ]);
+    const { path: saved, mime, data } = await downloadAttachment('R2', fetcher);
+    expect(mime).toBe('application/pdf');
+    expect(data).toBeUndefined();
+    expect(path.basename(saved!)).toBe('R2.pdf');
+    expect(fs.readFileSync(saved!, 'utf8')).toBe('imagen');
+    fs.rmSync(path.dirname(saved!), { recursive: true, force: true });
   });
 });

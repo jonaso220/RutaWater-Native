@@ -24,8 +24,8 @@ interface Answer {
   id: string; fecha: string; texto: string; consulta_id: string | null; tipo?: 'respuesta' | 'respuesta_varias' | 'instruccion'; aplicada: boolean;
   /** Audio de Telegram todavía sin transcribir. */
   audio_file_id?: string; por_audio?: boolean; dudoso?: boolean;
-  /** Foto que mandó (se mira con ver_foto_jonathan); el texto es lo que escribió abajo. */
-  foto_file_id?: string;
+  /** Foto o PDF que mandó (se mira con ver_archivo_jonathan); el texto es lo que escribió abajo. */
+  archivo_file_id?: string; archivo_tipo?: 'foto' | 'pdf';
 }
 interface State { chat_id?: number; offset?: number; seq?: number; preguntas: Question[]; respuestas: Answer[] }
 
@@ -77,7 +77,7 @@ const listenerAlive = () => {
 /** Texto de un mensaje de Jonathan al bot (R…), o null si no existe o todavía es un audio sin transcribir. */
 export const answerText = (id: string): string | null => {
   const answer = load().respuestas.find((candidate) => candidate.id === id);
-  return answer?.texto || (answer?.foto_file_id ? '(foto sin texto)' : null);
+  return answer?.texto || (answer?.archivo_file_id ? '(archivo sin texto)' : null);
 };
 
 export const touchHeartbeat = () => writeFileSync(heartbeatFile(), new Date().toISOString());
@@ -111,6 +111,17 @@ const call = async (method: string, body: Record<string, unknown>, fetcher: type
   return data.result;
 };
 
+/** La foto o el PDF de un mensaje. Una foto trae varios tamaños (el último es el mayor) o llega como archivo de imagen. */
+const attachmentOf = (message: any): { file_id: string; kind: 'foto' | 'pdf' } | null => {
+  const photo = message.photo?.at(-1);
+  if (photo) return { file_id: photo.file_id, kind: 'foto' };
+  const document = message.document;
+  if (!document) return null;
+  if (String(document.mime_type || '').startsWith('image/')) return { file_id: document.file_id, kind: 'foto' };
+  const isPdf = document.mime_type === 'application/pdf' || /\.pdf$/i.test(String(document.file_name || ''));
+  return isPdf ? { file_id: document.file_id, kind: 'pdf' } : null;
+};
+
 /** Guarda en el estado los mensajes nuevos (los de update_id >= offset). */
 const applyUpdates = (state: State, updates: any[]) => {
   for (const update of updates) {
@@ -121,9 +132,8 @@ const applyUpdates = (state: State, updates: any[]) => {
     // El primer mensaje (el «hola») solo fija el chat.
     if (state.chat_id === undefined) { state.chat_id = message.chat.id; continue; }
     const voice = message.voice || message.audio;
-    // Una foto llega como foto (varios tamaños, el último es el mayor) o como archivo de imagen.
-    const photo = message.photo?.at(-1) || (String(message.document?.mime_type || '').startsWith('image/') ? message.document : null);
-    if (message.chat.id !== state.chat_id || (!message.text && !voice && !photo) || message.text === '/start') continue;
+    const attachment = attachmentOf(message);
+    if (message.chat.id !== state.chat_id || (!message.text && !voice && !attachment) || message.text === '/start') continue;
     const cited = state.preguntas.find((q) => q.message_id === message.reply_to_message?.message_id);
     if (voice) {
       // El audio se clasifica cuando se transcribe (al leer las respuestas), salvo que cite una duda.
@@ -134,12 +144,12 @@ const applyUpdates = (state: State, updates: any[]) => {
       });
       continue;
     }
-    if (photo) {
+    if (attachment) {
       const caption = String(message.caption || '').slice(0, 2000);
       // Sin texto no contesta ninguna duda abierta, salvo que la cite.
       const kind = caption ? classify(state, caption, cited) : { consulta_id: cited?.id || null, tipo: cited ? 'respuesta' as const : 'instruccion' as const };
       if (!caption && cited) cited.respondida = true;
-      state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto: caption, ...kind, aplicada: false, foto_file_id: photo.file_id });
+      state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto: caption, ...kind, aplicada: false, archivo_file_id: attachment.file_id, archivo_tipo: attachment.kind });
       continue;
     }
     const text = String(message.text).slice(0, 2000);
@@ -230,8 +240,8 @@ export const readAnswers = async (fetcher: typeof fetch = fetch) => {
   await transcribeVoices(await pullAnswers(fetcher), fetcher);
   const state = load();
   return {
-    respuestas: state.respuestas.filter((answer) => !answer.aplicada && (answer.texto || answer.foto_file_id)).map(({ audio_file_id: _pending, foto_file_id: photo, ...answer }) => ({
-      ...answer, ...(photo ? { foto: true } : {}), consulta: state.preguntas.find((q) => q.id === answer.consulta_id) || null,
+    respuestas: state.respuestas.filter((answer) => !answer.aplicada && (answer.texto || answer.archivo_file_id)).map(({ audio_file_id: _pending, archivo_file_id: _file, archivo_tipo: kind, ...answer }) => ({
+      ...answer, ...(kind ? { archivo: kind } : {}), consulta: state.preguntas.find((q) => q.id === answer.consulta_id) || null,
     })),
     // Con sus datos: una «respuesta_varias» se reparte entre estas por cliente.
     preguntas_sin_respuesta: state.preguntas.filter((q) => !q.respondida)
@@ -242,18 +252,23 @@ export const readAnswers = async (fetcher: typeof fetch = fetch) => {
 const IMAGE_TYPES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
 const MAX_IMAGE_BYTES = 5_000_000;
 
-/** Baja la foto de un mensaje de Jonathan (R…) para mirarla. */
-export const downloadPhoto = async (id: string, fetcher: typeof fetch = fetch) => {
-  const fileId = load().respuestas.find((answer) => answer.id === id)?.foto_file_id;
-  if (!fileId) throw new WriteError(`El mensaje ${id} no tiene una foto.`);
-  const file = await call('getFile', { file_id: fileId }, fetcher);
-  const mime = IMAGE_TYPES[String(file.file_path).split('.').pop()!.toLowerCase()];
+/** Baja la foto o el PDF de un mensaje de Jonathan (R…) para mirarlo: la foto como datos, el PDF a una carpeta temporal. */
+export const downloadAttachment = async (id: string, fetcher: typeof fetch = fetch) => {
+  const answer = load().respuestas.find((candidate) => candidate.id === id);
+  if (!answer?.archivo_file_id) throw new WriteError(`El mensaje ${id} no tiene una foto ni un PDF.`);
+  const file = await call('getFile', { file_id: answer.archivo_file_id }, fetcher);
+  const mime = answer.archivo_tipo === 'pdf' ? 'application/pdf' : IMAGE_TYPES[String(file.file_path).split('.').pop()!.toLowerCase()];
   if (!mime) throw new WriteError(`No puedo mirar ese formato de imagen (${file.file_path}): pedile que la mande como foto.`);
   const response = await fetcher(`${API}/file/bot${token()}/${file.file_path}`);
-  if (!response.ok) throw new WriteError(`Telegram no entregó la foto (${response.status}).`);
+  if (!response.ok) throw new WriteError(`Telegram no entregó el archivo (${response.status}).`);
   const data = Buffer.from(await response.arrayBuffer());
+  if (answer.archivo_tipo === 'pdf') {
+    const path = join(mkdtempSync(join(tmpdir(), 'rutawater-tg-pdf-')), `${id}.pdf`);
+    writeFileSync(path, data);
+    return { mime, path };
+  }
   if (data.length > MAX_IMAGE_BYTES) throw new WriteError('La imagen es demasiado grande: pedile que la mande como foto.');
-  return { data, mime };
+  return { mime, data };
 };
 
 /** Da por aplicadas esas respuestas y, si se indican, cierra esas dudas (las que contestó una «respuesta_varias»). */

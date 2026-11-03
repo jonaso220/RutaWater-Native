@@ -35,6 +35,7 @@ import {
 import { moveItemToPosition, planPositionChange, readDayOrder } from '../../src/utils/clientOrder';
 import { Coordinates, formatCoordinate, resolveMapsCoordinates } from '../../src/utils/geo';
 import type { Propuesta } from '../scripts/direccionDesdeMapa';
+import { MapsLinkRead, readMapsLink } from './mapsLink';
 import { addressFromMap } from './streets';
 
 export class WriteError extends Error {}
@@ -211,9 +212,11 @@ export const changeAddress = async (
   if (rawLink && !mapsLink) throw new WriteError(`No es un link de Google Maps: «${rawLink}».`);
   if (address === undefined && !mapsLink) throw new WriteError('Pasá direccion o link_maps.');
   // Fuera de la transacción: sigue la redirección del link corto (puede tardar unos segundos).
-  const point = mapsLink ? await resolveMapsCoordinates(mapsLink).catch(() => null) : null;
+  const read = mapsLink ? await readMapsLink(mapsLink) : null;
+  const point = read?.point || null;
   if (mapsLink && !point) {
-    throw new WriteError('No se pudieron sacar coordenadas del link (nombra un lugar sin punto marcado o está roto): no se cambió nada. Pedí un link de un punto marcado en el mapa.');
+    const dice = read?.place ? ` El link dice «${read.place}».` : '';
+    throw new WriteError(`No se pudieron sacar coordenadas del link (nombra un lugar sin punto marcado o está roto): no se cambió nada.${dice} Pedí un link de un punto marcado en el mapa.`);
   }
   // Dirección armada con el mapa: se lee la actual antes, para manzana, solar y descripción.
   let fromMap: (Propuesta & { base: string }) | null = null;
@@ -1097,6 +1100,8 @@ const phoneDigits = (value: string): string => (value || '').replace(/\D/g, '').
 export const createClient = async (
   db: Firestore, account: Account, route: Route,
   fields: { name: string; address: string; phone: string; mapsLink: string; notes: string },
+  readLink: (link: string) => Promise<MapsLinkRead> = readMapsLink,
+  buildAddress: (point: Coordinates, actual: string) => Promise<Propuesta> = addressFromMap,
 ): Promise<ChangeResult> => {
   if (!route.writable) throw new WriteError(`El reparto «${route.name}» no admite cambios ahora (cuenta o grupo inactivo).`);
   const name = fields.name.trim();
@@ -1105,7 +1110,17 @@ export const createClient = async (
   if (!name) throw new WriteError('Falta el nombre.');
   if (phone && phoneDigits(phone).length < 8) throw new WriteError(`Teléfono inválido: «${phone}».`);
   // Fuera de la transacción: sigue la redirección del link corto (puede tardar unos segundos).
-  const point = mapsLink ? await resolveMapsCoordinates(mapsLink).catch(() => null) : null;
+  const read = mapsLink ? await readLink(mapsLink) : null;
+  const point = read?.point || null;
+  // Solo con el link, la dirección sale del mapa; sin punto marcado, del texto del lugar.
+  let address = fields.address.trim();
+  let fromMap: Propuesta | null = null;
+  if (!address && point) {
+    fromMap = await buildAddress(point, '').catch(() => ({ direccion: '', dudas: ['no se pudieron leer las calles de esa zona'] } as Propuesta));
+    if (!fromMap.dudas.length) address = fromMap.direccion;
+  }
+  const addressFromLink = !address && !fromMap && read?.place ? read.place : '';
+  address = address || addressFromLink;
 
   return db.runTransaction(async (transaction) => {
     const all = (await routeClients(db, transaction, account, route)).map((entry) => entry.client);
@@ -1125,6 +1140,13 @@ export const createClient = async (
         aviso: 'Ya hay una ficha con ese nombre y teléfono, o con ese teléfono: no se creó otra. Usá su id (agendar_una_vez, etc.).',
       };
     }
+    if (fromMap?.dudas.length) {
+      return {
+        ...base, cambiado: false, antes: null, despues: null,
+        direccion_del_mapa: { sugerida: fromMap.direccion, dudas: fromMap.dudas },
+        aviso: 'La dirección armada con el mapa tiene dudas: no se creó la ficha. Confirmala (o corregila) y pasá direccion junto con el link.',
+      };
+    }
     const ref = db.collection('clients').doc();
     const lat = point ? formatCoordinate(point.lat) : '';
     const lng = point ? formatCoordinate(point.lng) : '';
@@ -1132,7 +1154,7 @@ export const createClient = async (
       ...dataScopeFields(account.uid, route.groupId),
       userId: account.uid,
       name,
-      address: fields.address.trim(),
+      address,
       phone,
       phones: phone ? [{ id: 'primary', number: phone, isPrimary: true }] : [],
       lat,
@@ -1170,7 +1192,8 @@ export const createClient = async (
         direccion: newData.address, telefono: phone, mapa: mapsLink, notas: newData.notes,
         frecuencia: 'sin agenda (directorio)',
         coordenadas: point ? { lat, lng } : null,
-        ...(mapsLink && !point ? { aviso: 'No se pudieron sacar coordenadas del link: la ficha queda sin ubicación para ordenar el recorrido.' } : {}),
+        ...(addressFromLink ? { direccion_del_link: true } : {}),
+        ...(mapsLink && !point ? { aviso: 'No se pudieron sacar coordenadas del link: la ficha queda sin ubicación para ordenar el recorrido. Pedí un link de un punto marcado o una ubicación.' } : {}),
       },
     };
   });

@@ -26,7 +26,7 @@ const fakeBot = () => {
   const message = (update_id: number, chatId: number, text: string, replyTo?: number) => pending.push({
     update_id, message: { message_id: 500 + update_id, chat: { id: chatId, type: 'private' }, text, ...(replyTo ? { reply_to_message: { message_id: replyTo } } : {}) },
   });
-  return { fetcher, sent, message };
+  return { fetcher, sent, message, pending };
 };
 
 describe('dudas por Telegram', () => {
@@ -68,6 +68,20 @@ describe('dudas por Telegram', () => {
     const closed = markAnswersApplied(many.respuestas.map((r) => r.id), many.preguntas_sin_respuesta.map((q) => q.id));
     expect(closed.dudas_cerradas).toHaveLength(2);
     expect((await readAnswers(bot.fetcher)).preguntas_sin_respuesta).toEqual([]);
+  });
+});
+
+describe('ubicación de Jonathan', () => {
+  beforeEach(() => fs.rmSync(process.env.RUTAWATER_TELEGRAM_STATE!, { force: true }));
+
+  test('llega como link con el punto y no contesta una duda abierta', async () => {
+    const bot = fakeBot();
+    bot.message(1, 77, 'hola');
+    await readAnswers(bot.fetcher);
+    await askJonathan({ pregunta: '¿12 o 20?' }, bot.fetcher);
+    bot.pending.push({ update_id: 2, message: { message_id: 502, chat: { id: 77, type: 'private' }, location: { latitude: -34.77, longitude: -55.83 } } });
+    const { respuestas } = await readAnswers(bot.fetcher) as any;
+    expect(respuestas).toEqual([expect.objectContaining({ texto: 'Ubicación: https://maps.google.com/?q=-34.77,-55.83', consulta_id: null, tipo: 'instruccion' })]);
   });
 });
 

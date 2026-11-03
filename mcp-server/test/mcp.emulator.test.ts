@@ -686,6 +686,31 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     expect(visit.despues).toMatchObject({ ficha: 'misma', fecha: tomorrow });
   });
 
+  test('crear cliente solo con el link: dirección del mapa, dudas sin crear y texto del lugar sin punto', async () => {
+    const account = await loadAccount(db, UID);
+    const primary = account.routes.find((route) => route.isPrimary)!;
+    const link = 'https://www.google.com/maps/place/x/@-34.7711,-55.8311,17z';
+    const pin = async () => ({ point: { lat: -34.7711, lng: -55.8311 }, place: '' });
+
+    const made = await createClient(db, account, primary, { name: 'Del Mapa', address: '', phone: '099111222', mapsLink: link, notes: '' }, pin,
+      async () => ({ direccion: 'Panamá esq. Roque Sáenz Peña', dudas: [] } as any));
+    expect(made.cambiado).toBe(true);
+    expect((await db.doc(`clients/${made.cliente_id}`).get()).data()).toMatchObject({ address: 'Panamá esq. Roque Sáenz Peña', lat: '-34.7711' });
+
+    const doubtful = await createClient(db, account, primary, { name: 'Con Dudas', address: '', phone: '099111333', mapsLink: link, notes: '' }, pin,
+      async () => ({ direccion: 'Calle Rara', dudas: ['esquina dudosa'] } as any));
+    expect(doubtful).toMatchObject({ cambiado: false, direccion_del_mapa: { sugerida: 'Calle Rara', dudas: ['esquina dudosa'] } });
+    expect(doubtful.cliente_id).toBe('');
+
+    const noPin = await createClient(db, account, primary, { name: 'Sin Punto', address: '', phone: '099111444', mapsLink: 'https://maps.app.goo.gl/abc', notes: '' },
+      async () => ({ point: null, place: 'Ituzaingó 3719, San Luis' }));
+    expect(noPin.despues).toMatchObject({ direccion: 'Ituzaingó 3719, San Luis', direccion_del_link: true, coordenadas: null });
+
+    const written = await createClient(db, account, primary, { name: 'Escrita', address: 'Colonia 1', phone: '099111555', mapsLink: link, notes: '' }, pin,
+      async () => { throw new Error('no debería armarla'); });
+    expect(written.despues).toMatchObject({ direccion: 'Colonia 1' });
+  });
+
   test('fusionar duplicados: queda la de agenda con los datos de la copia, mueve deuda y Parentesco, y se deshace', async () => {
     const batch = db.batch();
     // Copia de directorio = la ficha original del cliente (su id es el customerId de la de agenda).

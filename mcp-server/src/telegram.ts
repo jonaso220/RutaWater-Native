@@ -133,7 +133,7 @@ const applyUpdates = (state: State, updates: any[]) => {
     if (state.chat_id === undefined) { state.chat_id = message.chat.id; continue; }
     const voice = message.voice || message.audio;
     const attachment = attachmentOf(message);
-    if (message.chat.id !== state.chat_id || (!message.text && !voice && !attachment) || message.text === '/start') continue;
+    if (message.chat.id !== state.chat_id || (!message.text && !voice && !attachment && !message.location) || message.text === '/start') continue;
     const cited = state.preguntas.find((q) => q.message_id === message.reply_to_message?.message_id);
     if (voice) {
       // El audio se clasifica cuando se transcribe (al leer las respuestas), salvo que cite una duda.
@@ -150,6 +150,13 @@ const applyUpdates = (state: State, updates: any[]) => {
       const kind = caption ? classify(state, caption, cited) : { consulta_id: cited?.id || null, tipo: cited ? 'respuesta' as const : 'instruccion' as const };
       if (!caption && cited) cited.respondida = true;
       state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto: caption, ...kind, aplicada: false, archivo_file_id: attachment.file_id, archivo_tipo: attachment.kind });
+      continue;
+    }
+    if (message.location) {
+      // Una ubicación compartida llega como link con el punto; como un archivo sin texto, no contesta dudas salvo que cite una.
+      if (cited) cited.respondida = true;
+      const texto = `Ubicación: https://maps.google.com/?q=${message.location.latitude},${message.location.longitude}`;
+      state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto, consulta_id: cited?.id || null, tipo: cited ? 'respuesta' : 'instruccion', aplicada: false });
       continue;
     }
     const text = String(message.text).slice(0, 2000);

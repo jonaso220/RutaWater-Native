@@ -24,6 +24,8 @@ interface Answer {
   id: string; fecha: string; texto: string; consulta_id: string | null; tipo?: 'respuesta' | 'respuesta_varias' | 'instruccion'; aplicada: boolean;
   /** Audio de Telegram todavía sin transcribir. */
   audio_file_id?: string; por_audio?: boolean; dudoso?: boolean;
+  /** Foto que mandó (se mira con ver_foto_jonathan); el texto es lo que escribió abajo. */
+  foto_file_id?: string;
 }
 interface State { chat_id?: number; offset?: number; seq?: number; preguntas: Question[]; respuestas: Answer[] }
 
@@ -73,7 +75,10 @@ const listenerAlive = () => {
   try { return Date.now() - statSync(heartbeatFile()).mtimeMs < 120000; } catch { return false; }
 };
 /** Texto de un mensaje de Jonathan al bot (R…), o null si no existe o todavía es un audio sin transcribir. */
-export const answerText = (id: string): string | null => load().respuestas.find((answer) => answer.id === id)?.texto || null;
+export const answerText = (id: string): string | null => {
+  const answer = load().respuestas.find((candidate) => candidate.id === id);
+  return answer?.texto || (answer?.foto_file_id ? '(foto sin texto)' : null);
+};
 
 export const touchHeartbeat = () => writeFileSync(heartbeatFile(), new Date().toISOString());
 const token = (): string => {
@@ -116,7 +121,9 @@ const applyUpdates = (state: State, updates: any[]) => {
     // El primer mensaje (el «hola») solo fija el chat.
     if (state.chat_id === undefined) { state.chat_id = message.chat.id; continue; }
     const voice = message.voice || message.audio;
-    if (message.chat.id !== state.chat_id || (!message.text && !voice) || message.text === '/start') continue;
+    // Una foto llega como foto (varios tamaños, el último es el mayor) o como archivo de imagen.
+    const photo = message.photo?.at(-1) || (String(message.document?.mime_type || '').startsWith('image/') ? message.document : null);
+    if (message.chat.id !== state.chat_id || (!message.text && !voice && !photo) || message.text === '/start') continue;
     const cited = state.preguntas.find((q) => q.message_id === message.reply_to_message?.message_id);
     if (voice) {
       // El audio se clasifica cuando se transcribe (al leer las respuestas), salvo que cite una duda.
@@ -125,6 +132,14 @@ const applyUpdates = (state: State, updates: any[]) => {
         id: `R${message.message_id}`, fecha: uyNow(), texto: '', consulta_id: cited?.id || null,
         tipo: cited ? 'respuesta' : undefined, aplicada: false, audio_file_id: voice.file_id, por_audio: true,
       });
+      continue;
+    }
+    if (photo) {
+      const caption = String(message.caption || '').slice(0, 2000);
+      // Sin texto no contesta ninguna duda abierta, salvo que la cite.
+      const kind = caption ? classify(state, caption, cited) : { consulta_id: cited?.id || null, tipo: cited ? 'respuesta' as const : 'instruccion' as const };
+      if (!caption && cited) cited.respondida = true;
+      state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto: caption, ...kind, aplicada: false, foto_file_id: photo.file_id });
       continue;
     }
     const text = String(message.text).slice(0, 2000);
@@ -215,13 +230,30 @@ export const readAnswers = async (fetcher: typeof fetch = fetch) => {
   await transcribeVoices(await pullAnswers(fetcher), fetcher);
   const state = load();
   return {
-    respuestas: state.respuestas.filter((answer) => !answer.aplicada && answer.texto).map(({ audio_file_id: _pending, ...answer }) => ({
-      ...answer, consulta: state.preguntas.find((q) => q.id === answer.consulta_id) || null,
+    respuestas: state.respuestas.filter((answer) => !answer.aplicada && (answer.texto || answer.foto_file_id)).map(({ audio_file_id: _pending, foto_file_id: photo, ...answer }) => ({
+      ...answer, ...(photo ? { foto: true } : {}), consulta: state.preguntas.find((q) => q.id === answer.consulta_id) || null,
     })),
     // Con sus datos: una «respuesta_varias» se reparte entre estas por cliente.
     preguntas_sin_respuesta: state.preguntas.filter((q) => !q.respondida)
       .map(({ id, fecha, cliente, pregunta, mensaje_cliente, telefono, whatsapp_ids }) => ({ id, fecha, cliente, pregunta, mensaje_cliente, telefono, whatsapp_ids })),
   };
+};
+
+const IMAGE_TYPES: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
+const MAX_IMAGE_BYTES = 5_000_000;
+
+/** Baja la foto de un mensaje de Jonathan (R…) para mirarla. */
+export const downloadPhoto = async (id: string, fetcher: typeof fetch = fetch) => {
+  const fileId = load().respuestas.find((answer) => answer.id === id)?.foto_file_id;
+  if (!fileId) throw new WriteError(`El mensaje ${id} no tiene una foto.`);
+  const file = await call('getFile', { file_id: fileId }, fetcher);
+  const mime = IMAGE_TYPES[String(file.file_path).split('.').pop()!.toLowerCase()];
+  if (!mime) throw new WriteError(`No puedo mirar ese formato de imagen (${file.file_path}): pedile que la mande como foto.`);
+  const response = await fetcher(`${API}/file/bot${token()}/${file.file_path}`);
+  if (!response.ok) throw new WriteError(`Telegram no entregó la foto (${response.status}).`);
+  const data = Buffer.from(await response.arrayBuffer());
+  if (data.length > MAX_IMAGE_BYTES) throw new WriteError('La imagen es demasiado grande: pedile que la mande como foto.');
+  return { data, mime };
 };
 
 /** Da por aplicadas esas respuestas y, si se indican, cierra esas dudas (las que contestó una «respuesta_varias»). */

@@ -26,8 +26,12 @@ interface Answer {
   audio_file_id?: string; por_audio?: boolean; dudoso?: boolean;
   /** Foto o PDF que mandó (se mira con ver_archivo_jonathan); el texto es lo que escribió abajo. */
   archivo_file_id?: string; archivo_tipo?: 'foto' | 'pdf';
+  /** Texto del mensaje del bot que citó, cuando no es una duda (un aviso). */
+  responde_a?: string;
 }
-interface State { chat_id?: number; offset?: number; seq?: number; preguntas: Question[]; respuestas: Answer[] }
+/** Avisos que le mandó el bot: cada pasada arranca sin memoria y sin esto no sabe qué le dijo. */
+interface Sent { message_id: number; fecha: string; texto: string }
+interface State { chat_id?: number; offset?: number; seq?: number; preguntas: Question[]; respuestas: Answer[]; enviados?: Sent[] }
 
 const load = (): State => {
   const raw = existsSync(stateFile()) ? JSON.parse(readFileSync(stateFile(), 'utf8')) : {};
@@ -92,7 +96,8 @@ const INSTRUCTION = /^\s*(regla|orden|cambio|nuevo|nueva)\b/i;
  * varias, a ninguna en particular («respuesta_varias»: la pasada reparte por
  * cliente); «Regla: …», «Orden: …» o sin dudas abiertas, es una instrucción.
  */
-const classify = (state: State, text: string, cited?: Question) => {
+const classify = (state: State, text: string, cited?: Question, repliesToNotice = false) => {
+  if (repliesToNotice) return { consulta_id: null, tipo: 'instruccion' as const };
   if (cited) { cited.respondida = true; return { consulta_id: cited.id, tipo: 'respuesta' as const }; }
   const open = state.preguntas.filter((q) => !q.respondida);
   if (INSTRUCTION.test(text) || !open.length) return { consulta_id: null, tipo: 'instruccion' as const };
@@ -100,7 +105,8 @@ const classify = (state: State, text: string, cited?: Question) => {
   return { consulta_id: null, tipo: 'respuesta_varias' as const };
 };
 
-const uyNow = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
+const uyAt = (time: number) => new Date(time - 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ');
+const uyNow = () => uyAt(Date.now());
 
 const call = async (method: string, body: Record<string, unknown>, fetcher: typeof fetch) => {
   const response = await fetcher(`${API}/bot${token()}/${method}`, {
@@ -135,36 +141,40 @@ const applyUpdates = (state: State, updates: any[]) => {
     const attachment = attachmentOf(message);
     if (message.chat.id !== state.chat_id || (!message.text && !voice && !attachment && !message.location) || message.text === '/start') continue;
     const cited = state.preguntas.find((q) => q.message_id === message.reply_to_message?.message_id);
+    // Citó un aviso: no contesta ninguna duda abierta, habla de lo que decía ese aviso.
+    const notice = !cited && message.reply_to_message?.from?.is_bot ? String(message.reply_to_message.text || '').slice(0, 800) : '';
+    const replied = notice ? { responde_a: notice } : {};
     if (voice) {
       // El audio se clasifica cuando se transcribe (al leer las respuestas), salvo que cite una duda.
       if (cited) cited.respondida = true;
       state.respuestas.push({
         id: `R${message.message_id}`, fecha: uyNow(), texto: '', consulta_id: cited?.id || null,
-        tipo: cited ? 'respuesta' : undefined, aplicada: false, audio_file_id: voice.file_id, por_audio: true,
+        tipo: cited ? 'respuesta' : undefined, aplicada: false, audio_file_id: voice.file_id, por_audio: true, ...replied,
       });
       continue;
     }
     if (attachment) {
       const caption = String(message.caption || '').slice(0, 2000);
       // Sin texto no contesta ninguna duda abierta, salvo que la cite.
-      const kind = caption ? classify(state, caption, cited) : { consulta_id: cited?.id || null, tipo: cited ? 'respuesta' as const : 'instruccion' as const };
+      const kind = caption ? classify(state, caption, cited, !!notice) : { consulta_id: cited?.id || null, tipo: cited ? 'respuesta' as const : 'instruccion' as const };
       if (!caption && cited) cited.respondida = true;
-      state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto: caption, ...kind, aplicada: false, archivo_file_id: attachment.file_id, archivo_tipo: attachment.kind });
+      state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto: caption, ...kind, aplicada: false, archivo_file_id: attachment.file_id, archivo_tipo: attachment.kind, ...replied });
       continue;
     }
     if (message.location) {
       // Una ubicación compartida llega como link con el punto; como un archivo sin texto, no contesta dudas salvo que cite una.
       if (cited) cited.respondida = true;
       const texto = `Ubicación: https://maps.google.com/?q=${message.location.latitude},${message.location.longitude}`;
-      state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto, consulta_id: cited?.id || null, tipo: cited ? 'respuesta' : 'instruccion', aplicada: false });
+      state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto, consulta_id: cited?.id || null, tipo: cited ? 'respuesta' : 'instruccion', aplicada: false, ...replied });
       continue;
     }
     const text = String(message.text).slice(0, 2000);
-    state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto: text, ...classify(state, text, cited), aplicada: false });
+    state.respuestas.push({ id: `R${message.message_id}`, fecha: uyNow(), texto: text, ...classify(state, text, cited, !!notice), aplicada: false, ...replied });
   }
   // Solo lo de las últimas semanas: el archivo no crece sin fin.
   state.preguntas = state.preguntas.slice(-200);
   state.respuestas = state.respuestas.slice(-200);
+  state.enviados = (state.enviados || []).slice(-100);
 };
 
 /**
@@ -234,7 +244,7 @@ const transcribeVoices = async (state: State, fetcher: typeof fetch) => {
         stored.texto = String(result.texto || '').trim() || '(audio vacío)';
         stored.dudoso = !!result.dudoso;
         delete stored.audio_file_id;
-        if (!stored.tipo) Object.assign(stored, classify(fresh, stored.texto));
+        if (!stored.tipo) Object.assign(stored, classify(fresh, stored.texto, undefined, !!stored.responde_a));
       }
     });
   } finally {
@@ -242,17 +252,45 @@ const transcribeVoices = async (state: State, fetcher: typeof fetch) => {
   }
 };
 
-/** Respuestas de Jonathan sin aplicar, cada una con la pregunta que contesta. */
+const CHAT_HOURS = 12;
+const CHAT_MESSAGES = 20;
+
+/**
+ * Lo último que se dijeron, en orden, sin lo que falta aplicar (Jonathan,
+ * 4/11/2026: «es como que no tuviera memoria»). El orden sale del número de
+ * mensaje de Telegram, que crece en cada chat; la fecha solo llega al minuto.
+ */
+const recentChat = (state: State, pending: Answer[]) => {
+  const since = uyAt(Date.now() - CHAT_HOURS * 3600e3);
+  const open = new Set(pending.map((answer) => answer.id));
+  return [
+    ...state.preguntas.map((q) => ({
+      orden: q.message_id, de: 'bot', fecha: q.fecha, consulta_id: q.id, cliente: q.cliente, telefono: q.telefono, texto: q.pregunta.slice(0, 600),
+    })),
+    ...(state.enviados || []).map((sent) => ({ orden: sent.message_id, de: 'bot', fecha: sent.fecha, texto: sent.texto.slice(0, 600) })),
+    ...state.respuestas.filter((answer) => !open.has(answer.id) && answer.texto).map((answer) => ({
+      orden: Number(answer.id.slice(1)), de: 'jonathan', fecha: answer.fecha, id: answer.id, consulta_id: answer.consulta_id || undefined, texto: answer.texto.slice(0, 600),
+    })),
+  ].filter((entry) => entry.fecha >= since)
+    .sort((a, b) => a.orden - b.orden)
+    .slice(-CHAT_MESSAGES)
+    .map(({ orden: _order, ...entry }) => entry);
+};
+
+/** Respuestas de Jonathan sin aplicar, cada una con la pregunta que contesta y, si hay alguna, la charla reciente. */
 export const readAnswers = async (fetcher: typeof fetch = fetch) => {
   await transcribeVoices(await pullAnswers(fetcher), fetcher);
   const state = load();
+  const pending = state.respuestas.filter((answer) => !answer.aplicada && (answer.texto || answer.archivo_file_id));
   return {
-    respuestas: state.respuestas.filter((answer) => !answer.aplicada && (answer.texto || answer.archivo_file_id)).map(({ audio_file_id: _pending, archivo_file_id: _file, archivo_tipo: kind, ...answer }) => ({
+    respuestas: pending.map(({ audio_file_id: _pending, archivo_file_id: _file, archivo_tipo: kind, ...answer }) => ({
       ...answer, ...(kind ? { archivo: kind } : {}), consulta: state.preguntas.find((q) => q.id === answer.consulta_id) || null,
     })),
     // Con sus datos: una «respuesta_varias» se reparte entre estas por cliente.
     preguntas_sin_respuesta: state.preguntas.filter((q) => !q.respondida)
       .map(({ id, fecha, cliente, pregunta, mensaje_cliente, telefono, whatsapp_ids }) => ({ id, fecha, cliente, pregunta, mensaje_cliente, telefono, whatsapp_ids })),
+    // Solo cuando hay algo que interpretar: la mayoría de las pasadas no la necesita.
+    ...(pending.length ? { conversacion_reciente: recentChat(state, pending) } : {}),
   };
 };
 
@@ -295,6 +333,9 @@ export const markAnswersApplied = (ids: string[], questionIds: string[] = []) =>
 export const notifyJonathan = async (text: string, fetcher: typeof fetch = fetch) => {
   const state = await pullAnswers(fetcher);
   if (state.chat_id === undefined) throw new WriteError('El bot todavía no conoce el chat de Jonathan: tiene que mandarle «hola» al bot.');
-  await call('sendMessage', { chat_id: state.chat_id, text: text.slice(0, 3500) }, fetcher);
+  const sent = await call('sendMessage', { chat_id: state.chat_id, text: text.slice(0, 3500) }, fetcher);
+  withState((fresh) => {
+    fresh.enviados = [...(fresh.enviados || []), { message_id: sent.message_id, fecha: uyNow(), texto: text.slice(0, 1500) }].slice(-100);
+  });
   return { enviado: true };
 };

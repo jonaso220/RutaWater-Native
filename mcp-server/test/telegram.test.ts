@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { answerText, askJonathan, downloadAttachment, markAnswersApplied, readAnswers } from '../src/telegram';
+import { answerText, askJonathan, downloadAttachment, markAnswersApplied, notifyJonathan, readAnswers } from '../src/telegram';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rutawater-tg-test-'));
 process.env.RUTAWATER_TELEGRAM_TOKEN = path.join(dir, 'token');
@@ -26,7 +26,8 @@ const fakeBot = () => {
   const message = (update_id: number, chatId: number, text: string, replyTo?: number) => pending.push({
     update_id, message: { message_id: 500 + update_id, chat: { id: chatId, type: 'private' }, text, ...(replyTo ? { reply_to_message: { message_id: replyTo } } : {}) },
   });
-  return { fetcher, sent, message, pending };
+  // Telegram numera bot y persona en la misma cuenta del chat.
+  return { fetcher, sent, message, pending, next: () => { nextId += 1; return nextId; } };
 };
 
 describe('dudas por Telegram', () => {
@@ -68,6 +69,66 @@ describe('dudas por Telegram', () => {
     const closed = markAnswersApplied(many.respuestas.map((r) => r.id), many.preguntas_sin_respuesta.map((q) => q.id));
     expect(closed.dudas_cerradas).toHaveLength(2);
     expect((await readAnswers(bot.fetcher)).preguntas_sin_respuesta).toEqual([]);
+  });
+});
+
+describe('memoria de la charla', () => {
+  beforeEach(() => fs.rmSync(process.env.RUTAWATER_TELEGRAM_STATE!, { force: true }));
+
+  const chat = { id: 77, type: 'private' };
+  const say = (bot: ReturnType<typeof fakeBot>, id: number, message: any) => bot.pending.push({ update_id: id, message: { message_id: bot.next(), chat, ...message } });
+  const started = async () => {
+    const bot = fakeBot();
+    bot.message(1, 77, 'hola');
+    await readAnswers(bot.fetcher);
+    return bot;
+  };
+
+  test('la segunda parte de una respuesta ve la duda ya contestada y el aviso del bot', async () => {
+    const bot = await started();
+    const { consulta_id: duda } = await askJonathan({ pregunta: '¿Qué Lucía?', cliente: 'Lucia Grandre', telefono: '59899000000' }, bot.fetcher);
+    say(bot, 2, { text: 'Sigue con deuda' });
+    const first = await readAnswers(bot.fetcher);
+    expect(first.respuestas[0]).toMatchObject({ consulta_id: duda, tipo: 'respuesta' });
+    expect(first.conversacion_reciente).toEqual([expect.objectContaining({ de: 'bot', consulta_id: duda, cliente: 'Lucia Grandre', telefono: '59899000000' })]);
+    markAnswersApplied([first.respuestas[0].id]);
+    await notifyJonathan('Listo: Lucia Grandre sigue con deuda', bot.fetcher);
+
+    say(bot, 3, { text: 'y sumale lo de mañana' });
+    const second: any = await readAnswers(bot.fetcher);
+    expect(second.respuestas[0]).toMatchObject({ tipo: 'instruccion', consulta_id: null });
+    expect(second.conversacion_reciente.map((entry: any) => [entry.de, entry.texto])).toEqual([
+      ['bot', '¿Qué Lucía?'], ['jonathan', 'Sigue con deuda'], ['bot', 'Listo: Lucia Grandre sigue con deuda'],
+    ]);
+  });
+
+  test('sin mensajes para aplicar no trae la charla', async () => {
+    const bot = await started();
+    await notifyJonathan('Listo', bot.fetcher);
+    expect(await readAnswers(bot.fetcher)).not.toHaveProperty('conversacion_reciente');
+  });
+
+  test('deja afuera lo de hace más de 12 horas y se queda con los últimos 20', async () => {
+    const bot = await started();
+    for (let i = 0; i < 25; i += 1) await notifyJonathan(`aviso ${i}`, bot.fetcher);
+    say(bot, 2, { text: 'seguí' });
+    const recent: any = await readAnswers(bot.fetcher);
+    expect(recent.conversacion_reciente).toHaveLength(20);
+    expect(recent.conversacion_reciente[19].texto).toBe('aviso 24');
+
+    const state = JSON.parse(fs.readFileSync(process.env.RUTAWATER_TELEGRAM_STATE!, 'utf8'));
+    state.enviados.forEach((sent: any) => { sent.fecha = '2020-01-01 09:00'; });
+    fs.writeFileSync(process.env.RUTAWATER_TELEGRAM_STATE!, JSON.stringify(state));
+    expect(((await readAnswers(bot.fetcher)) as any).conversacion_reciente).toEqual([]);
+  });
+
+  test('citar un aviso no contesta la duda abierta y guarda qué decía', async () => {
+    const bot = await started();
+    const { consulta_id: duda } = await askJonathan({ pregunta: '¿12 o 20?', cliente: 'Noelia' }, bot.fetcher);
+    say(bot, 2, { text: 'cambiale eso', reply_to_message: { message_id: 50, from: { is_bot: true }, text: 'Listo: Pablo Fernandez quedó con nota' } });
+    const { respuestas, preguntas_sin_respuesta: open } = await readAnswers(bot.fetcher);
+    expect(respuestas[0]).toMatchObject({ tipo: 'instruccion', consulta_id: null, responde_a: 'Listo: Pablo Fernandez quedó con nota' });
+    expect(open.map((q: any) => q.id)).toEqual([duda]);
   });
 });
 

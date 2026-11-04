@@ -1,0 +1,49 @@
+diff --git a/node_modules/@react-native-firebase/app/ios/RNFBApp/RCTConvert+FIROptions.m b/node_modules/@react-native-firebase/app/ios/RNFBApp/RCTConvert+FIROptions.m
+index d301512..d7d868f 100644
+--- a/node_modules/@react-native-firebase/app/ios/RNFBApp/RCTConvert+FIROptions.m
++++ b/node_modules/@react-native-firebase/app/ios/RNFBApp/RCTConvert+FIROptions.m
+@@ -26,11 +26,8 @@ + (FIROptions *)convertRawOptions:(NSDictionary *)rawOptions {
+   firOptions.APIKey = [rawOptions valueForKey:@"apiKey"];
+   firOptions.projectID = [rawOptions valueForKey:@"projectId"];
+   firOptions.clientID = [rawOptions valueForKey:@"clientId"];
+-  firOptions.trackingID = [rawOptions valueForKey:@"gaTrackingId"];
+   firOptions.databaseURL = [rawOptions valueForKey:@"databaseURL"];
+   firOptions.storageBucket = [rawOptions valueForKey:@"storageBucket"];
+-  firOptions.androidClientID = [rawOptions valueForKey:@"androidClientId"];
+-  firOptions.deepLinkURLScheme = [rawOptions valueForKey:@"deepLinkURLScheme"];
+   firOptions.bundleID = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleIdentifier"];
+   return firOptions;
+ }
+diff --git a/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBAppModule.m b/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBAppModule.m
+index 4d2b1d6..98d3518 100644
+--- a/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBAppModule.m
++++ b/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBAppModule.m
+@@ -190,10 +190,6 @@ - (void)invalidate {
+     if (![[options valueForKey:@"storageBucket"] isEqual:[NSNull null]]) {
+       firOptions.storageBucket = [options valueForKey:@"storageBucket"];
+     }
+-    // kFirebaseOptionsDeepLinkURLScheme
+-    if (![[options valueForKey:@"deepLinkURLScheme"] isEqual:[NSNull null]]) {
+-      firOptions.deepLinkURLScheme = [options valueForKey:@"deepLinkURLScheme"];
+-    }
+     // kFirebaseOptionsIosBundleId
+     if (![[options valueForKey:@"iosBundleId"] isEqual:[NSNull null]]) {
+       firOptions.bundleID = [options valueForKey:@"iosBundleId"];
+diff --git a/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBSharedUtils.m b/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBSharedUtils.m
+index 7bf8246..2975d48 100644
+--- a/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBSharedUtils.m
++++ b/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBSharedUtils.m
+@@ -59,13 +59,10 @@ + (NSDictionary *)firAppToDictionary:(FIRApp *)firApp {
+   firAppOptions[@"appId"] = firOptions.googleAppID;
+   firAppOptions[@"projectId"] = firOptions.projectID;
+   firAppOptions[@"databaseURL"] = firOptions.databaseURL;
+-  firAppOptions[@"gaTrackingId"] = firOptions.trackingID;
+   firAppOptions[@"storageBucket"] = firOptions.storageBucket;
+   firAppOptions[@"messagingSenderId"] = firOptions.GCMSenderID;
+   // missing from android sdk - ios only:
+   firAppOptions[@"clientId"] = firOptions.clientID;
+-  firAppOptions[@"androidClientID"] = firOptions.androidClientID;
+-  firAppOptions[@"deepLinkUrlScheme"] = firOptions.deepLinkURLScheme;
+   // not in FIROptions API but in JS SDK and project config JSON
+   if ([RNFBAppModule getCustomDomain:name] != nil) {
+     firAppOptions[@"authDomain"] = [RNFBAppModule getCustomDomain:name];

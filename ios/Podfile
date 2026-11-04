@@ -5,6 +5,12 @@ require Pod::Executable.execute_command('node', ['-p',
       {paths: [process.argv[1]]},
     )', __dir__]).strip
 
+# Parche de seguridad de Firestore (4/11/2026, certificados de eMudhra): el SDK lleva los
+# certificados adentro y 11.x no tiene arreglo. React Native Firebase 21 traería 11.11.0;
+# 12.19.3 es la versión con el parche en la línea 12. Sacar al pasar a una versión de
+# React Native Firebase que ya la traiga (26.4.1 o más).
+$FirebaseSDKVersion = '12.19.3'
+
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 

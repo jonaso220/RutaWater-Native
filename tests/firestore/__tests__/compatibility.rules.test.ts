@@ -101,32 +101,81 @@ describeWithEmulator('1.48 to 1.49 compatibility Firestore rules', () => {
     await testEnvironment.cleanup();
   });
 
-  test('keeps the distributed group and profile queries available', async () => {
-    const legacyDb = testEnvironment.authenticatedContext('legacy').firestore();
+  test('an account cannot name a group or profile to reach its data (4/11/2026)', async () => {
+    const outsider = testEnvironment.authenticatedContext('outsider').firestore();
 
-    await assertSucceeds(
-      legacyDb.collection('groups').where('code', '==', 'FAMILY').limit(1).get(),
-    );
-    await assertSucceeds(
-      legacyDb.collection('profiles').where('memberUids', 'array-contains', 'legacy').get(),
-    );
-    await assertSucceeds(legacyDb.doc('profiles/route').update({
-      memberUids: ['owner'],
-      members: { owner: { role: 'admin' } },
+    await assertFails(outsider.collection('groups').get());
+    await assertFails(outsider.collection('groups').where('code', '==', 'FAMILY').limit(1).get());
+    await assertFails(outsider.doc('groups/family').get());
+    await assertFails(outsider.collection('profiles').get());
+    await assertFails(outsider.doc('profiles/route').get());
+
+    await assertFails(outsider.doc('users/outsider').update({ groupId: 'family' }));
+    await assertFails(outsider.doc('users/outsider').update({ groupId: 'family', role: 'admin' }));
+    await assertFails(outsider.doc('clients/family-client').get());
+    await assertFails(outsider.doc('settings/family').get());
+
+    await assertFails(outsider.doc('profiles/route').update({
+      memberUids: ['owner', 'legacy', 'outsider'],
+      members: { owner: { role: 'admin' }, legacy: { role: 'member' }, outsider: { role: 'member' } },
     }));
+    await assertFails(outsider.doc('clients/route-client').get());
+    await assertFails(outsider.doc('debts/route-debt').get());
+
+    const brandNew = testEnvironment.authenticatedContext('brand-new').firestore();
+    await assertFails(brandNew.doc('users/brand-new').set({ groupId: 'family' }));
+    await assertSucceeds(brandNew.doc('users/brand-new').set({ email: 'a@b.c', displayName: 'A' }, { merge: true }));
+    await assertFails(brandNew.doc('users/brand-new').set({ groupId: 'family' }, { merge: true }));
   });
 
-  test('keeps legacy group creation and self-membership updates available', async () => {
-    const legacyDb = testEnvironment.authenticatedContext('legacy').firestore();
+  test('an account cannot drop documents into another scope or another user', async () => {
+    const outsider = testEnvironment.authenticatedContext('outsider').firestore();
 
-    await assertSucceeds(legacyDb.doc('groups/new-family').set({
-      adminId: 'legacy',
-      code: 'NEWFAMILY',
-    }));
-    await assertSucceeds(legacyDb.doc('users/legacy').update({
-      groupId: 'new-family',
-      role: 'admin',
-    }));
+    for (const collection of ['clients', 'debts', 'transfers', 'deliveries']) {
+      await assertFails(outsider.doc(`${collection}/into-group`).set({ userId: 'outsider', groupId: 'family', name: 'x' }));
+      await assertFails(outsider.doc(`${collection}/into-route`).set({ userId: 'outsider', groupId: 'route', name: 'x' }));
+      await assertFails(outsider.doc(`${collection}/as-victim`).set({ userId: 'owner', groupId: null, name: 'x' }));
+    }
+    await assertSucceeds(outsider.doc('clients/mine').set({ userId: 'outsider', groupId: null, name: 'Mine' }));
+    await assertFails(outsider.doc('clients/mine').update({ groupId: 'family' }));
+    await assertFails(outsider.doc('clients/mine').update({ userId: 'owner' }));
+  });
+
+  test('keeps what the published app does with its own group and profiles', async () => {
+    const owner = testEnvironment.authenticatedContext('owner').firestore();
+    const member = testEnvironment.authenticatedContext('member').firestore();
+    const legacy = testEnvironment.authenticatedContext('legacy').firestore();
+
+    // Grupo propio: leerlo, reparar el rol, cargar y editar datos.
+    await assertSucceeds(member.doc('groups/family').get());
+    await assertSucceeds(owner.doc('groups/family').get());
+    await assertSucceeds(member.doc('users/member').update({ role: 'member' }));
+    await assertSucceeds(member.doc('users/member').set({ email: 'a@b.c' }, { merge: true }));
+    await assertSucceeds(member.doc('clients/family-client').get());
+    await assertSucceeds(owner.doc('clients/family-client').update({ name: 'Cambiado' }));
+    for (const collection of ['clients', 'debts', 'transfers', 'deliveries']) {
+      await assertSucceeds(member.doc(`${collection}/new-family`).set({ userId: 'member', groupId: 'family', name: 'x' }));
+      await assertSucceeds(owner.doc(`${collection}/new-family`).update({ name: 'y' }));
+      await assertSucceeds(owner.doc(`${collection}/new-personal`).set({ userId: 'owner', groupId: 'family', name: 'x' }));
+    }
+    await assertSucceeds(member.collection('clients').where('groupId', '==', 'family').get());
+    await assertSucceeds(owner.collection('users').where('groupId', '==', 'family').get());
+    await assertSucceeds(owner.doc('settings/family').set({ a: 1 }, { merge: true }));
+
+    // Perfil propio: leerlo, listar los míos, cargar datos, salir, y el dueño saca a un miembro.
+    await assertSucceeds(legacy.doc('profiles/route').get());
+    await assertSucceeds(legacy.collection('profiles').where('memberUids', 'array-contains', 'legacy').get());
+    await assertSucceeds(legacy.doc('clients/route-client').get());
+    await assertSucceeds(legacy.doc('clients/route-new').set({ userId: 'legacy', groupId: 'route', name: 'x' }));
+    await assertSucceeds(legacy.doc('profiles/route').update({ memberUids: ['owner'], members: { owner: { role: 'admin' } } }));
+    await assertFails(legacy.doc('profiles/route').get());
+    await assertSucceeds(owner.doc('profiles/route').update({ memberUids: ['owner'], members: { owner: { role: 'admin' } } }));
+
+    // Salir del grupo y el admin que saca a un miembro.
+    await assertSucceeds(owner.doc('users/member').update({ groupId: null, role: null }));
+    const leaver = testEnvironment.authenticatedContext('converter').firestore();
+    await assertSucceeds(leaver.doc('users/converter').update({ groupId: null, role: null }));
+    await assertFails(leaver.doc('users/converter').update({ groupId: 'convert' }));
   });
 
   test('uses the canonical group admin for deletion despite stale roles', async () => {

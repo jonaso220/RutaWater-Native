@@ -5,6 +5,8 @@ service cloud.firestore {
     // Transitional production policy for the 1.48 -> 1.49 rollout.
     // It keeps the published clients working while the 1.49 backend becomes
     // available, but closes the lifetime-Premium bypass immediately.
+    // 4/11/2026: closed self-service membership. No installation reports an
+    // incompatible build (appCompatibility) and the app joins through Functions.
     function signedIn() { return request.auth != null; }
     function uid() { return request.auth.uid; }
     function userExists() {
@@ -40,6 +42,21 @@ service cloud.firestore {
       );
     }
 
+    // Writing needs real membership of the target scope: inScope alone passes on
+    // data.userId, which let any account drop documents into someone else's group.
+    function canCreateIn(data) {
+      return signedIn() && data.userId == uid() && (
+        data.get('groupId', null) == null
+        || data.groupId == myGroupId()
+        || isProfileMember(data.groupId)
+      );
+    }
+    function canUpdateTo(before, after) {
+      return inScope(before) && inScope(after)
+        && after.get('userId', null) == before.get('userId', null)
+        && after.get('groupId', null) == before.get('groupId', null);
+    }
+
     // The canonical group descriptor is the source of truth. A stale cached
     // users.role can no longer grant deletion, and a real admin is not blocked
     // merely because that legacy field is missing or delayed.
@@ -57,24 +74,27 @@ service cloud.firestore {
 
     match /clients/{id} {
       allow read: if inScope(resource.data);
-      allow create: if inScope(request.resource.data);
-      allow update: if inScope(resource.data) && inScope(request.resource.data);
+      allow create: if canCreateIn(request.resource.data);
+      allow update: if canUpdateTo(resource.data, request.resource.data);
       allow delete: if canDeleteClient(resource.data);
     }
 
     match /debts/{id} {
-      allow read, update, delete: if inScope(resource.data);
-      allow create: if inScope(request.resource.data);
+      allow read, delete: if inScope(resource.data);
+      allow update: if canUpdateTo(resource.data, request.resource.data);
+      allow create: if canCreateIn(request.resource.data);
     }
     match /transfers/{id} {
-      allow read, update, delete: if inScope(resource.data);
-      allow create: if inScope(request.resource.data);
+      allow read, delete: if inScope(resource.data);
+      allow update: if canUpdateTo(resource.data, request.resource.data);
+      allow create: if canCreateIn(request.resource.data);
     }
 
     match /deliveries/{id} {
       allow read: if (resource == null && signedIn()) || inScope(resource.data);
-      allow update, delete: if inScope(resource.data);
-      allow create: if inScope(request.resource.data);
+      allow delete: if inScope(resource.data);
+      allow update: if canUpdateTo(resource.data, request.resource.data);
+      allow create: if canCreateIn(request.resource.data);
     }
 
     match /daily_loads/{id} {
@@ -113,9 +133,19 @@ service cloud.firestore {
       allow read: if signedIn() && (
         id == uid() || (myGroupId() != null && resource.data.groupId == myGroupId())
       );
-      allow create: if signedIn() && id == uid();
+      // Membership is granted only by the Admin-backed Functions: an account may
+      // leave its group, never name one. users.groupId is what opens a group's data.
+      allow create: if signedIn() && id == uid()
+        && request.resource.data.get('groupId', null) == null
+        && request.resource.data.get('role', null) == null;
       allow update: if signedIn() && (
-        id == uid() ||
+        (
+          id == uid()
+          && (
+            request.resource.data.get('groupId', null) == resource.data.get('groupId', null)
+            || request.resource.data.get('groupId', null) == null
+          )
+        ) ||
         (
           myGroupId() != null
           && isFamilyGroupAdmin(myGroupId())
@@ -131,10 +161,10 @@ service cloud.firestore {
       allow delete: if signedIn() && id == uid();
     }
 
-    // Temporary compatibility for group/profile flows in the distributed 1.48
-    // app. New 1.49 clients use authenticated Admin-backed Functions instead.
+    // Invitation codes resolve only in the authenticated Function: a client reads
+    // the group it already belongs to, and no account can list the others.
     match /groups/{id} {
-      allow read: if signedIn();
+      allow read: if signedIn() && (id == myGroupId() || resource.data.get('adminId', '') == uid());
       allow create: if signedIn() && request.resource.data.adminId == uid();
       allow update, delete: if signedIn() && resource.data.adminId == uid();
     }
@@ -163,7 +193,12 @@ service cloud.firestore {
     }
 
     match /profiles/{id} {
-      allow read: if signedIn();
+      // Membership is checked again here; joining is Admin-only (join-profile).
+      allow read: if signedIn() && (
+        (resource == null && isFamilyGroupAdmin(id))
+        || uid() in resource.data.get('memberUids', [])
+        || resource.data.get('ownerId', '') == uid()
+      );
       allow create: if signedIn() && (
         (
           request.resource.data.ownerId == uid()
@@ -242,24 +277,6 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'lifecycleState',
             'archivedAt',
-            'memberUids',
-            'members'
-          ])
-        ) ||
-        (
-          resource.data.ownerId != uid()
-          && resource.data.memberUids is list
-          && !(uid() in resource.data.memberUids)
-          && request.resource.data.memberUids is list
-          && uid() in request.resource.data.memberUids
-          && request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
-          && request.resource.data.memberUids.hasAll(resource.data.memberUids)
-          && request.resource.data.get('members', {}) is map
-          && request.resource.data.get('members', {}).diff(
-            resource.data.get('members', {})
-          ).affectedKeys().hasOnly([uid()])
-          && request.resource.data.get('members', {})[uid()].role == 'member'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'memberUids',
             'members'
           ])

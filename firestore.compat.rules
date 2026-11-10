@@ -7,6 +7,9 @@ service cloud.firestore {
     // available, but closes the lifetime-Premium bypass immediately.
     // 4/11/2026: closed self-service membership. No installation reports an
     // incompatible build (appCompatibility) and the app joins through Functions.
+    // 10/11/2026: closed client-side creation of groups and profiles too. Every
+    // supported build (iOS >= 55, Android >= 22) creates them through Functions,
+    // and an open create let any account claim another group's id as a profile.
     function signedIn() { return request.auth != null; }
     function uid() { return request.auth.uid; }
     function userExists() {
@@ -54,7 +57,10 @@ service cloud.firestore {
     function canUpdateTo(before, after) {
       return inScope(before) && inScope(after)
         && after.get('userId', null) == before.get('userId', null)
-        && after.get('groupId', null) == before.get('groupId', null);
+        && after.get('groupId', null) == before.get('groupId', null)
+        // A member must not turn a client into a note to delete it past the
+        // admin-only rule.
+        && after.get('isNote', false) == before.get('isNote', false);
     }
 
     // The canonical group descriptor is the source of truth. A stale cached
@@ -165,7 +171,9 @@ service cloud.firestore {
     // the group it already belongs to, and no account can list the others.
     match /groups/{id} {
       allow read: if signedIn() && (id == myGroupId() || resource.data.get('adminId', '') == uid());
-      allow create: if signedIn() && request.resource.data.adminId == uid();
+      // Creation and migration are server-owned (create-group). A client create
+      // let any account mint a group whose id is someone's uid or profile id.
+      allow create: if false;
       allow update, delete: if signedIn() && resource.data.adminId == uid();
     }
 
@@ -199,24 +207,9 @@ service cloud.firestore {
         || uid() in resource.data.get('memberUids', [])
         || resource.data.get('ownerId', '') == uid()
       );
+      // Normal creation is Admin-only (create-profile). The one client create is
+      // the atomic conversion of the caller's own family group into a profile.
       allow create: if signedIn() && (
-        (
-          request.resource.data.ownerId == uid()
-          && request.resource.data.memberUids is list
-          && request.resource.data.memberUids.size() == 1
-          && request.resource.data.memberUids[0] == uid()
-          && request.resource.data.members is map
-          && request.resource.data.members.keys().hasOnly([uid()])
-          && request.resource.data.members[uid()].role == 'admin'
-          && request.resource.data.keys().hasOnly([
-            'name',
-            'ownerId',
-            'code',
-            'memberUids',
-            'members',
-            'createdAt'
-          ])
-        ) ||
         (
           exists(/databases/$(database)/documents/groups/$(id))
           && get(/databases/$(database)/documents/groups/$(id)).data.adminId == uid()

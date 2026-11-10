@@ -283,4 +283,33 @@ describeWithEmulator('1.48 to 1.49 compatibility Firestore rules', () => {
       installations: { forged: { buildNumber: 9999 } },
     }));
   });
+
+  test('no account can mint a group or claim a group id as a profile (10/11/2026)', async () => {
+    const outsider = testEnvironment.authenticatedContext('outsider').firestore();
+    const ownProfile = {
+      name: 'Mine',
+      ownerId: 'outsider',
+      memberUids: ['outsider'],
+      members: { outsider: { role: 'admin' } },
+    };
+
+    // The id of someone else's family group, of a solo account and a fresh one.
+    await assertFails(outsider.doc('profiles/family').set(ownProfile));
+    await assertFails(outsider.doc('profiles/owner').set(ownProfile));
+    await assertFails(outsider.doc('profiles/brand-new-profile').set(ownProfile));
+    await assertFails(outsider.doc('clients/family-client').get());
+
+    await assertFails(outsider.doc('groups/owner').set({ adminId: 'outsider', code: 'TAKEN1' }));
+    await assertFails(outsider.doc('groups/route').set({ adminId: 'outsider', code: 'TAKEN2' }));
+    await assertFails(outsider.doc('groups/brand-new-group').set({ adminId: 'outsider', code: 'TAKEN3' }));
+  });
+
+  test('a member cannot turn a client into a note to delete it', async () => {
+    // groups/family names 'owner' as admin; 'member' only belongs to it.
+    const member = testEnvironment.authenticatedContext('member').firestore();
+
+    await assertFails(member.doc('clients/family-client').update({ isNote: true }));
+    await assertFails(member.doc('clients/family-client').delete());
+    await assertSucceeds(member.doc('clients/family-client').update({ name: 'Renamed' }));
+  });
 });

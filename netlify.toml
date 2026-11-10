@@ -1,4 +1,4 @@
-# Configuración del site de Netlify para el backend de IA de la app RutaWater.
+# Configuración del site de Netlify para el backend de la app RutaWater.
 # Este site es FUNCTIONS-ONLY: no sirve ningún sitio web, solo expone endpoints
 # en /.netlify/functions/* (con redirect amigable en /api/*).
 #
@@ -12,15 +12,15 @@
   command = "echo 'Functions-only site, no static build required'"
 
 [build.environment]
-  # El SDK actual de OpenAI requiere Node 20 o posterior. Node 22 es LTS y
-  # mantiene el runtime de la Function dentro de las versiones soportadas.
+  # Node 22 es LTS y mantiene el runtime de las Functions dentro de las
+  # versiones soportadas.
   NODE_VERSION = "22"
 
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-# /api/parse-order → /.netlify/functions/parse-order
+# /api/create-client → /.netlify/functions/create-client
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"

@@ -21,15 +21,14 @@ interface ClientsStore {
   deleteAllCompleted: (day: string) => Promise<void>;
   deleteFromDay: (clientId: string, day: string) => Promise<void>;
   // Devuelve false si el write falló. Por defecto no espera más que un
-  // instante al servidor (el cambio queda en la cola offline); la IA pasa
-  // waitForServer para no confirmar "Listo" cuando en realidad falló.
+  // instante al servidor (el cambio queda en la cola offline); waitForServer
+  // exige la confirmación del servidor.
   updateClient: (
     clientId: string,
     data: Partial<Client>,
     options?: { waitForServer?: boolean },
   ) => Promise<boolean>;
-  // Devuelve true si el write llegó a Firestore (la IA lo usa para no
-  // confirmar "Listo" cuando en realidad falló).
+  // Devuelve true si el write llegó a Firestore.
   scheduleFromDirectory: (
     client: Client,
     days: string[],
@@ -60,17 +59,6 @@ interface ClientsStore {
     billing?: ClientBillingInfo,
     freq?: RecurringFrequency,
   ) => Promise<void>;
-  aiCreateClient: (data: {
-    name: string;
-    phone: string;
-    address: string;
-    mapsLink: string;
-    notes: string;
-    products: Record<string, number>;
-    freq: Frequency;
-    visitDay: string;
-    specificDate: string;
-  }) => Promise<boolean>;
   changePosition: (clientId: string, newPos: number, day: string) => Promise<void>;
   deleteClient: (clientId: string) => Promise<void>;
   cloneClient: (client: Client) => Promise<void>;
@@ -105,7 +93,6 @@ export const useClientsStore = create<ClientsStore>()(() => ({
   addNote: async () => false,
   updateNote: async () => false,
   addClient: noop as any,
-  aiCreateClient: noop as any,
   changePosition: noop,
   deleteClient: noop,
   cloneClient: noop,

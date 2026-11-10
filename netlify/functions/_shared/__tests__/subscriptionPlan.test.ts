@@ -1,11 +1,9 @@
 const {
-  AiPlanUnavailableError,
+  PlanUnavailableError,
   fetchRevenueCatPlan,
-  getAiLimit,
-  getServerPeriod,
   planFromRevenueCatPayload,
-  resolveAiPlan,
-} = require('../aiQuota');
+  resolveSubscriptionPlan,
+} = require('../subscriptionPlan');
 
 const entitlementPayload = (product_identifier: string, expires_date: string | null, extra = {}) => ({
   subscriber: {
@@ -21,15 +19,8 @@ const response = (body: unknown, ok = true, status = 200) => ({
   json: jest.fn(async () => body),
 });
 
-describe('AI quota plan resolution', () => {
+describe('subscription plan resolution', () => {
   const now = Date.parse('2026-08-04T12:00:00Z');
-
-  test('uses server UTC month and fixed plan limits', () => {
-    expect(getServerPeriod(new Date('2026-09-01T00:30:00Z'))).toBe('2026-09');
-    expect(getAiLimit('free')).toBe(10);
-    expect(getAiLimit('monthly')).toBe(300);
-    expect(getAiLimit('annual')).toBe(500);
-  });
 
   test('recognizes active monthly, annual, lifetime, expiration, and grace period', () => {
     expect(planFromRevenueCatPayload(
@@ -86,7 +77,7 @@ describe('AI quota plan resolution', () => {
       readEnvironment: () => undefined,
       fetchImpl,
       nowMillis: now,
-    })).rejects.toBeInstanceOf(AiPlanUnavailableError);
+    })).rejects.toBeInstanceOf(PlanUnavailableError);
   });
 
   test('overrides each platform key independently and keeps the other default', async () => {
@@ -122,7 +113,7 @@ describe('AI quota plan resolution', () => {
       nowMillis: now,
       timeoutMs: 25,
     });
-    const rejection = expect(plan).rejects.toBeInstanceOf(AiPlanUnavailableError);
+    const rejection = expect(plan).rejects.toBeInstanceOf(PlanUnavailableError);
     await jest.advanceTimersByTimeAsync(25);
 
     await rejection;
@@ -141,7 +132,7 @@ describe('AI quota plan resolution', () => {
       })),
     };
 
-    await expect(resolveAiPlan({ db, uid: 'promo-user', fetchImpl, nowMillis: now }))
+    await expect(resolveSubscriptionPlan({ db, uid: 'promo-user', fetchImpl, nowMillis: now }))
       .resolves.toBe('annual');
     expect(fetchImpl).not.toHaveBeenCalled();
   });

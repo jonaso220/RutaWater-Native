@@ -12,7 +12,7 @@ import {
   createClientDocuments,
 } from './_shared/clientCreationService';
 
-const { AiPlanUnavailableError, resolveAiPlan } = require('./_shared/aiQuota');
+const { PlanUnavailableError, resolveSubscriptionPlan } = require('./_shared/subscriptionPlan');
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -134,8 +134,8 @@ export const createCreateClientHandler = (dependencies: CreateClientDependencies
         }
         return json(400, { status: 'error', code: error.code });
       }
-      const planUnavailable = error instanceof AiPlanUnavailableError
-        || (error instanceof Error && error.name === 'AiPlanUnavailableError');
+      const planUnavailable = error instanceof PlanUnavailableError
+        || (error instanceof Error && error.name === 'PlanUnavailableError');
       console.error(
         'create-client error:',
         error instanceof Error ? error.message : 'unknown',
@@ -151,7 +151,7 @@ export default createCreateClientHandler({
   readEnvironment: (name) => Netlify.env.get(name) || undefined,
   verifyToken: verifyFirebaseIdToken,
   getFirestore: getAdminFirestore,
-  resolvePlan: resolveAiPlan,
+  resolvePlan: resolveSubscriptionPlan,
   create: createClientDocuments,
 });
 

@@ -521,7 +521,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
   // que la UI avise en vez de asumir éxito. Por defecto no espera más que
   // CLIENT_WRITE_GRACE_MS al servidor: el cambio ya se ve en la lista y queda
   // en la cola offline de Firestore. `waitForServer` exige la confirmación
-  // del servidor (la IA la usa para no mostrar "Listo" en falso).
+  // del servidor antes de dar el cambio por hecho.
   const updateClient = useCallback(async (
     clientId: string,
     data: Partial<Client>,
@@ -652,7 +652,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         newData.visitDays = newDays;
         newData.visitDay = newDays[0];
         // '' (no null): la convención de "sin fecha" en todo el resto del
-        // código es cadena vacía (addClient, aiCreateClient, EditClientModal).
+        // código es cadena vacía (addClient, EditClientModal).
         newData.specificDate = newDate || '';
         if (newDate) {
           // Start fresh from the chosen date: a stale lastVisited/doneFor from
@@ -1126,141 +1126,6 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
     }
   }, [groupId, userId]);
 
-  // Crear cliente desde el resultado de IA (parseo de pedido en texto libre).
-  // A diferencia de addClient (que crea en directorio o en un día semanal),
-  // este maneja todas las frecuencias incluyendo 'once' con specificDate.
-  const aiCreateClient = useCallback(async (data: {
-    name: string;
-    phone: string;
-    address: string;
-    mapsLink: string;
-    notes: string;
-    products: Record<string, number>;
-    freq: Frequency;
-    visitDay: string;
-    specificDate: string;
-  }) => {
-    try {
-      const scope = dataScopeFields(userId, groupId);
-
-      const cleanProducts: Record<string, number> = {};
-      Object.entries(data.products).forEach(([key, val]) => {
-        if (val > 0) cleanProducts[key] = val;
-      });
-
-      const isOnceWithDate = data.freq === 'once' && !!data.specificDate;
-      const isOnDemand = data.freq === 'on_demand' || (!data.visitDay && !isOnceWithDate);
-
-      let visitDay = isOnDemand ? 'Sin Asignar' : data.visitDay;
-      let visitDays: string[] = isOnDemand ? [] : (data.visitDay ? [data.visitDay] : []);
-      let specificDate = '';
-
-      if (isOnceWithDate) {
-        const d = new Date(data.specificDate + 'T12:00:00');
-        const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-        visitDay = dayNames[d.getDay()];
-        visitDays = [visitDay];
-        specificDate = data.specificDate;
-      }
-
-      let listOrder = 0;
-      const listOrders: Record<string, number> = {};
-      if (!isOnDemand && visitDays.length > 0) {
-        visitDays.forEach((day) => {
-          const existingInDay = clientsRef.current.filter(
-            (c) =>
-              c.freq !== 'on_demand' &&
-              !c.isCompleted &&
-              ((c.visitDays && c.visitDays.includes(day)) || c.visitDay === day),
-          );
-          if (specificDate) {
-            const orders = existingInDay.map((c) => {
-              const order = c.listOrders?.[day] ?? c.listOrder ?? 0;
-              return order > 100000 ? 0 : order;
-            });
-            const minOrder = orders.length ? Math.min(...orders) : 0;
-            listOrders[day] = minOrder - 1;
-          } else {
-            const maxOrder =
-              existingInDay.length > 0
-                ? Math.max(
-                    ...existingInDay.map(
-                      (c) => c.listOrders?.[day] ?? c.listOrder ?? 0,
-                    ),
-                  )
-                : -1;
-            listOrders[day] = maxOrder + 1;
-          }
-        });
-        listOrder = listOrders[visitDays[0]] ?? 0;
-      }
-
-      const newClientData = {
-        ...scope,
-        userId,
-        name: data.name,
-        address: data.address,
-        phone: data.phone,
-        phones: data.phone.trim()
-          ? [{ id: 'primary', number: data.phone.trim(), isPrimary: true }]
-          : [],
-        notes: data.notes,
-        lat: '',
-        lng: '',
-        mapsLink: normalizeGoogleMapsLink(data.mapsLink),
-        freq: isOnDemand ? 'on_demand' : data.freq,
-        visitDay,
-        visitDays,
-        specificDate,
-        products: cleanProducts,
-        listOrder,
-        listOrders,
-        isCompleted: false,
-        isStarred: false,
-        isPinned: false,
-        isNote: false,
-        alarm: '',
-        alarmDay: '',
-        alarmScheduledFor: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const exactMatch = findExactClientMatch(
-        clientsRef.current,
-        data.name,
-        data.phone,
-      );
-      if (exactMatch?.freq === 'on_demand') {
-        // AI intake follows the same immutable-attribution contract as the UI.
-        const updates = toExistingClientUpdate(newClientData);
-        await db.collection('clients').doc(exactMatch.id).update(updates);
-        void fillClientCoordinates(exactMatch.id, updates);
-        return true;
-      }
-      if (exactMatch && isOnDemand) {
-        // A directory-only AI intake for an existing scheduled client is an
-        // update of its contact card, never a second on-demand document.
-        const contactUpdates: Record<string, any> = { updatedAt: new Date() };
-        if (data.address.trim()) contactUpdates.address = data.address;
-        if (data.phone.trim()) contactUpdates.phone = data.phone;
-        if (data.notes.trim()) contactUpdates.notes = data.notes;
-        const mapsLink = normalizeGoogleMapsLink(data.mapsLink);
-        if (mapsLink) contactUpdates.mapsLink = mapsLink;
-        await db.collection('clients').doc(exactMatch.id).update(contactUpdates);
-        void fillClientCoordinates(exactMatch.id, contactUpdates);
-        return true;
-      }
-
-      await createClientDocument(newClientData);
-      return true;
-    } catch (e) {
-      reportError(e, 'Error in aiCreateClient');
-      if (isClientLimitError(e)) throw e;
-      return false;
-    }
-  }, [groupId, userId]);
-
   // Get day clients from a specific source (para leer del ref sincrónico)
   const getDayClientsFromSource = useCallback((day: string, source: Client[]): Client[] => {
     if (!day) return [];
@@ -1625,7 +1490,6 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
     addNote,
     updateNote,
     addClient,
-    aiCreateClient,
     changePosition,
     deleteClient,
     cloneClient,

@@ -16,7 +16,7 @@ import {
   type CreatedProfileResult,
 } from './_shared/profileCreationService';
 
-const { AiPlanUnavailableError, resolveAiPlan } = require('./_shared/aiQuota');
+const { PlanUnavailableError, resolveSubscriptionPlan } = require('./_shared/subscriptionPlan');
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -131,8 +131,8 @@ export const createCreateProfileHandler = (dependencies: CreateProfileDependenci
       );
       return json(200, { status: 'ok', ...result });
     } catch (error) {
-      const planUnavailable = error instanceof AiPlanUnavailableError
-        || (error instanceof Error && error.name === 'AiPlanUnavailableError');
+      const planUnavailable = error instanceof PlanUnavailableError
+        || (error instanceof Error && error.name === 'PlanUnavailableError');
       console.error(
         'create-profile error:',
         error instanceof Error ? error.message : 'unknown',
@@ -149,7 +149,7 @@ export default createCreateProfileHandler({
   getAuth: getAdminAuth,
   getAuthUser: confirmJoinAuthUser,
   getFirestore: getAdminFirestore,
-  resolvePlan: resolveAiPlan,
+  resolvePlan: resolveSubscriptionPlan,
   create: (db, uid, name, requestId) => createProfileForOwner({
     db,
     uid,

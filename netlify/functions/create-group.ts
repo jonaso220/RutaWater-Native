@@ -14,7 +14,7 @@ import {
   GroupCreationResult,
 } from './_shared/groupCreationService';
 
-const { AiPlanUnavailableError, resolveAiPlan } = require('./_shared/aiQuota');
+const { PlanUnavailableError, resolveSubscriptionPlan } = require('./_shared/subscriptionPlan');
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -151,8 +151,8 @@ export const createCreateGroupHandler = (dependencies: CreateGroupHandlerDepende
         code: result.code,
       });
     } catch (error) {
-      const planUnavailable = error instanceof AiPlanUnavailableError
-        || (error instanceof Error && error.name === 'AiPlanUnavailableError');
+      const planUnavailable = error instanceof PlanUnavailableError
+        || (error instanceof Error && error.name === 'PlanUnavailableError');
       if (planUnavailable) {
         return json(503, { success: false, code: 'PLAN_UNAVAILABLE' });
       }
@@ -188,7 +188,7 @@ const productionHandler = createCreateGroupHandler({
   getAuth: getAdminAuth,
   getAuthUser: confirmCreateGroupAuthUser,
   getFirestore: getAdminFirestore,
-  resolvePlan: resolveAiPlan,
+  resolvePlan: resolveSubscriptionPlan,
   createGroup: createGroupWithFirestore,
 });
 

@@ -25,13 +25,12 @@ interface WelcomeModalProps {
 const SLIDES = [
   { key: 'days', icon: 'calendar-outline' },
   { key: 'done', icon: 'checkmark-circle-outline' },
-  { key: 'ai', icon: 'sparkles-outline' },
   { key: 'directory', icon: 'people-outline' },
 ] as const;
 
 /**
  * Bienvenida de la primera vez: explica cómo está organizada la app (días,
- * Listo/frecuencia, Pedido IA y Directorio) antes de que el usuario vea
+ * Listo/frecuencia y Directorio) antes de que el usuario vea
  * Inicio vacío.
  */
 const WelcomeModal: React.FC<WelcomeModalProps> = ({ visible, onClose, onAddFirstClient }) => {

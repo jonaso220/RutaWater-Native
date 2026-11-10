@@ -55,7 +55,6 @@ import TransfersSheet from '../components/TransfersSheet';
 import DebtsSheet from '../components/DebtsSheet';
 import AddClientModal from '../components/AddClientModal';
 import PromptModal from '../components/PromptModal';
-import SmartOrderModal from '../components/SmartOrderModal';
 import RelationshipsModal from '../components/RelationshipsModal';
 import ProfilesModal from '../components/ProfilesModal';
 import CalendarModal from '../components/CalendarModal';
@@ -301,7 +300,6 @@ const HomeScreen = () => {
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showTransfersSheet, setShowTransfersSheet] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
-  const [showSmartModal, setShowSmartModal] = useState(false);
   const [showDebtsSheet, setShowDebtsSheet] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const searchInputRef = useRef<DebouncedSearchInputHandle>(null);
@@ -971,11 +969,6 @@ const HomeScreen = () => {
     setTimeout(openAddClientFlow, WELCOME_DISMISS_DELAY_MS);
   }, [closeWelcome, openAddClientFlow]);
 
-  const openSmartOrder = useCallback(() => {
-    hapticSelection();
-    setShowSmartModal(true);
-  }, []);
-
   const openProductsSettings = useCallback(() => {
     navigation.navigate('Ajustes');
   }, [navigation]);
@@ -1043,7 +1036,6 @@ const HomeScreen = () => {
   const closeEditModal = useCallback(() => setEditingClient(null), []);
   const closeDebtModal = useCallback(() => setDebtClient(null), []);
   const closeAddClientModal = useCallback(() => setShowAddClientModal(false), []);
-  const closeSmartModal = useCallback(() => setShowSmartModal(false), []);
   const closeDebtsSheet = useCallback(() => setShowDebtsSheet(false), []);
   const closeTransfersSheet = useCallback(() => setShowTransfersSheet(false), []);
   const openClientFromTransfers = useCallback((client: Client) => {
@@ -1371,10 +1363,6 @@ const HomeScreen = () => {
       >
         <Ionicons name="person-add-outline" size={chromeSize(18)} color={colors.textWhite} />
         <Text style={styles.emptyPrimaryBtnText}>{t('home.gettingStartedAddClient')}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.emptySecondaryBtn} onPress={openSmartOrder} accessibilityRole="button">
-        <Ionicons name="sparkles-outline" size={chromeSize(17)} color={colors.primary} />
-        <Text style={styles.emptySecondaryBtnText}>{t('home.gettingStartedAiOrder')}</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.emptySecondaryBtn} onPress={openProductsSettings} accessibilityRole="button">
         <Ionicons name="water-outline" size={chromeSize(17)} color={colors.primary} />
@@ -1905,12 +1893,6 @@ const HomeScreen = () => {
         visible={showWelcome}
         onClose={closeWelcome}
         onAddFirstClient={handleWelcomeAddClient}
-      />
-
-      {/* Smart Order Modal (IA) */}
-      <SmartOrderModal
-        visible={showSmartModal}
-        onClose={closeSmartModal}
       />
 
       {/* Debts Sheet */}

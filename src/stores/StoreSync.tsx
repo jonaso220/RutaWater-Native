@@ -6,7 +6,6 @@ import { useTransfers } from '../hooks/useTransfers';
 import { useDailyLoads } from '../hooks/useDailyLoads';
 import { useSubscription } from '../hooks/useSubscription';
 import { usePromoCode } from '../hooks/usePromoCode';
-import { useAiUsage } from '../hooks/useAiUsage';
 import { useClientsAutoCleanup } from '../hooks/useClientsAutoCleanup';
 import { useProductCatalog } from '../hooks/useProductCatalog';
 import { useProfiles } from '../hooks/useProfiles';
@@ -35,7 +34,7 @@ import { buildClientStableIdIndex, ClientStableIdIndex } from '../utils/clientId
  *     de WhatsApp. Son configuración compartida entre todos los repartos, a
  *     propósito; además las reglas de Firestore solo autorizan uid/groupId
  *     como id de settings.
- *   - POR USUARIO (uid): daily_loads, aiUsage, premiumOverrides, suscripción.
+ *   - POR USUARIO (uid): daily_loads, premiumOverrides, suscripción.
  * Si se agrega una colección nueva, elegir un scope de esta tabla y
  * documentarlo acá.
  */
@@ -57,13 +56,6 @@ export const StoreSync: React.FC<{ children: React.ReactNode }> = ({ children })
 
   const isPremium = subscription.isPremium || promo.hasPromo;
   const subLoading = subscription.loading || promo.promoLoading;
-
-  // --- AI usage (parseo de pedidos con IA) ---
-  // Promo cuenta como plan anual (más generoso). Resto: lo que diga RevenueCat.
-  const aiPlan: 'free' | 'monthly' | 'annual' = promo.hasPromo
-    ? 'annual'
-    : (subscription.currentPlan as 'free' | 'monthly' | 'annual');
-  useAiUsage({ userId: user?.uid, plan: aiPlan });
 
   useEffect(() => {
     useSubscriptionStore.setState({

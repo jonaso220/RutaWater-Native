@@ -1,11 +1,3 @@
-const { FieldValue } = require('firebase-admin/firestore');
-
-const AI_PARSE_LIMITS = Object.freeze({
-  free: 10,
-  monthly: 300,
-  annual: 500,
-});
-
 const ENTITLEMENT_ID = 'premium';
 const PRODUCT_ID_MONTHLY = 'rw_premium_monthly';
 const PRODUCT_ID_ANNUAL = 'rw_premium_annual';
@@ -19,23 +11,12 @@ const DEFAULT_REVENUECAT_API_KEYS = Object.freeze({
 });
 const REVENUECAT_TIMEOUT_MS = 4000;
 
-class AiPlanUnavailableError extends Error {
+class PlanUnavailableError extends Error {
   constructor(message = 'No se pudo verificar el plan de RevenueCat.') {
     super(message);
-    this.name = 'AiPlanUnavailableError';
+    this.name = 'PlanUnavailableError';
   }
 }
-
-class AiAccountInactiveError extends Error {
-  constructor(message = 'La cuenta no está activa.') {
-    super(message);
-    this.name = 'AiAccountInactiveError';
-  }
-}
-
-const getAiLimit = (plan) => AI_PARSE_LIMITS[plan] || AI_PARSE_LIMITS.free;
-
-const getServerPeriod = (now = new Date()) => now.toISOString().slice(0, 7);
 
 const activeUntil = (entitlement) => {
   if (!entitlement || typeof entitlement !== 'object') return null;
@@ -64,7 +45,7 @@ const planFromRevenueCatPayload = (payload, nowMillis = Date.now()) => {
   if (productIdentifier === PRODUCT_ID_MONTHLY) return 'monthly';
 
   // Un entitlement Premium vigente nunca debe perder acceso por un producto
-  // nuevo o renombrado. Se le aplica el menor cupo Premium hasta reconocerlo.
+  // nuevo o renombrado. Se lo trata como el plan Premium mensual hasta reconocerlo.
   return 'monthly';
 };
 
@@ -130,7 +111,7 @@ const fetchRevenueCatPlan = async ({
   // Solo declarar Free cuando todas las apps respondieron. Si una plataforma
   // falla, no degradamos por error a una persona que podria ser suscriptora.
   if (plans.length === keys.length) return 'free';
-  throw new AiPlanUnavailableError();
+  throw new PlanUnavailableError();
 };
 
 const promoIsActive = (data, nowMillis) => {
@@ -142,18 +123,7 @@ const promoIsActive = (data, nowMillis) => {
   return Number.isFinite(expiresAt) && expiresAt > nowMillis;
 };
 
-const assertAiAccountActive = async ({ db, uid }) => {
-  const [user, deletionJob] = await Promise.all([
-    db.collection('users').doc(uid).get(),
-    db.collection('accountDeletionJobs').doc(uid).get(),
-  ]);
-  const accountState = user.data()?.accountState;
-  if (deletionJob.exists || (accountState !== undefined && accountState !== 'active')) {
-    throw new AiAccountInactiveError();
-  }
-};
-
-const resolveAiPlan = async ({
+const resolveSubscriptionPlan = async ({
   db,
   uid,
   readEnvironment,
@@ -166,57 +136,10 @@ const resolveAiPlan = async ({
   return fetchRevenueCatPlan({ uid, readEnvironment, fetchImpl, nowMillis });
 };
 
-const normalizedCount = (data, period) => {
-  if (data?.period !== period) return 0;
-  const value = data?.count;
-  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
-};
-
-const reserveAiUsage = async ({ db, uid, plan, now = new Date() }) => {
-  const period = getServerPeriod(now);
-  const limit = getAiLimit(plan);
-  const ref = db.collection('aiUsage').doc(uid);
-  const userRef = db.collection('users').doc(uid);
-  const deletionJobRef = db.collection('accountDeletionJobs').doc(uid);
-
-  return db.runTransaction(async (transaction) => {
-    const [user, deletionJob, snapshot] = await Promise.all([
-      transaction.get(userRef),
-      transaction.get(deletionJobRef),
-      transaction.get(ref),
-    ]);
-    const accountState = user.data()?.accountState;
-    if (deletionJob.exists || (accountState !== undefined && accountState !== 'active')) {
-      throw new AiAccountInactiveError();
-    }
-    const count = normalizedCount(snapshot.data(), period);
-    if (count >= limit) {
-      return { allowed: false, count, limit, period, plan };
-    }
-
-    const nextCount = count + 1;
-    transaction.set(ref, {
-      count: nextCount,
-      period,
-      limit,
-      plan,
-      lastUsedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    return { allowed: true, count: nextCount, limit, period, plan };
-  });
-};
-
 module.exports = {
-  AI_PARSE_LIMITS,
-  AiAccountInactiveError,
-  AiPlanUnavailableError,
+  PlanUnavailableError,
   REVENUECAT_TIMEOUT_MS,
-  assertAiAccountActive,
   fetchRevenueCatPlan,
-  getAiLimit,
-  getServerPeriod,
   planFromRevenueCatPayload,
-  reserveAiUsage,
-  resolveAiPlan,
+  resolveSubscriptionPlan,
 };

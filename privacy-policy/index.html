@@ -22,7 +22,7 @@
 <body>
   <div class="container">
     <h1>Política de Privacidad</h1>
-    <p class="date">Última actualización: 27 de octubre de 2026</p>
+    <p class="date">Última actualización: 10 de noviembre de 2026</p>
 
     <p>RutaWater ("RutaWater" o "la app") es una aplicación de gestión de repartos desarrollada por Jonathan Olivera bajo el nombre Coralux Studio. Esta política explica qué información trata la app, para qué la utiliza y qué opciones tienes.</p>
 
@@ -40,7 +40,6 @@
       <li><strong>Historial de visitas:</strong> cada vez que marcas una visita como completada («Listo» o «Visitado, no necesitó»), se guarda la fecha, el cliente, los productos y cantidades de su tarjeta en ese momento, si hubo entrega y quién la marcó. Sirve para consultar lo que se entregó a cada cliente y armar resúmenes de tu reparto. Si deshaces la visita, el registro queda marcado como deshecho.</li>
       <li><strong>Información financiera operativa:</strong> importes de deudas y registros de transferencias pendientes que ingresas para administrar el reparto. RutaWater no solicita datos bancarios, números de tarjeta ni calificaciones crediticias.</li>
       <li><strong>Suscripción y compras:</strong> producto adquirido, estado del plan, elegibilidad de prueba, fechas y datos de transacción o recibo necesarios para validar y restaurar Premium. El pago y los datos de tarjeta son procesados por Apple App Store o Google Play; RutaWater no recibe los datos completos de pago.</li>
-      <li><strong>Uso de Pedido IA:</strong> el texto que decides interpretar, la fecha actual y un resumen del directorio que puede abarcar todas las fichas visibles de la ruta actual e incluir identificador interno, nombre, dirección, agenda, productos y notas. Ese resumen no incluye teléfonos, enlaces de mapas ni deudas, salvo que aparezcan en el texto o en las notas que tú ingresaste. Para prevenir abuso, OpenAI recibe además un identificador seudónimo estable derivado del UID de la cuenta. También registramos, vinculado a tu cuenta, el número mensual de interpretaciones para aplicar el cupo correspondiente.</li>
       <li><strong>Ubicación del camión (opcional):</strong> cuando tocas «En camino» y autorizas el acceso a la ubicación, la app toma la posición precisa del dispositivo, su precisión, el rumbo y el recorrido mientras haya un link de seguimiento vigente (30 minutos desde cada aviso). No se usa la ubicación en ningún otro momento ni con la app cerrada. En Android se muestra una notificación mientras se comparte, con la opción «Dejar de compartir».</li>
       <li><strong>Diagnóstico y seguridad:</strong> datos de fallos y errores, modelo y sistema operativo del dispositivo, identificadores técnicos de instalación o servicio, versión de la app y metadatos de conexión como fecha, hora o dirección IP que los proveedores de infraestructura pueden procesar para operar y proteger el servicio.</li>
     </ul>
@@ -54,36 +53,30 @@
       <li>Compartir un reparto con las personas que tú o el administrador incorporen al grupo.</li>
       <li>Validar compras, habilitar Premium y restaurar suscripciones.</li>
       <li>Mostrar al cliente que avisaste con «En camino» dónde está el camión, durante 30 minutos, mediante un link privado.</li>
-      <li>Interpretar, a petición tuya, texto de pedidos mediante inteligencia artificial y controlar el cupo mensual.</li>
       <li>Prevenir abuso, mantener la seguridad y disponibilidad, diagnosticar fallos y atender consultas.</li>
     </ul>
 
-    <h2>4. Cómo funciona Pedido IA</h2>
-    <p>Pedido IA es opcional y solo se ejecuta cuando pulsas la acción para interpretar texto. La app envía la solicitud autenticada al backend de RutaWater alojado en Netlify. El backend la remite primero a la API comercial de OpenAI y, si ese servicio no está configurado o falla, puede utilizar la API comercial de Anthropic como respaldo.</p>
-    <p>La finalidad exclusiva es convertir el texto en una acción estructurada para la app. RutaWater no guarda el texto como historial de conversación en su base de datos. Las solicitudes de OpenAI se realizan con <code>store: false</code>; aun así, OpenAI puede conservar registros temporales de seguridad y prevención de abuso conforme a sus <a href="https://platform.openai.com/docs/models/default-usage-policies-by-endpoint" target="_blank" rel="noopener noreferrer">controles de datos</a>. Anthropic indica que las entradas y salidas de su API comercial se eliminan normalmente dentro de 30 días, con excepciones por seguridad, cumplimiento legal o acuerdos distintos, según su <a href="https://privacy.anthropic.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data" target="_blank" rel="noopener noreferrer">política de retención</a>.</p>
-    <p>Según las políticas vigentes de las APIs comerciales, OpenAI y Anthropic no usan estas entradas y salidas para entrenar sus modelos por defecto, salvo que el titular de la cuenta del servicio opte expresamente por compartirlas. Coralux Studio no activa voluntariamente ese uso. Para reducir la exposición de terceros, evita incluir información que no sea necesaria para interpretar el pedido.</p>
-
-    <h2>5. Con quién compartimos información</h2>
+    <h2>4. Con quién compartimos información</h2>
     <p>No vendemos ni alquilamos información personal. Utilizamos o comunicamos datos únicamente en estos casos:</p>
     <ul>
       <li><strong>Google Firebase:</strong> autenticación, bases de datos Firestore y Realtime Database, alojamiento de la página de seguimiento, sincronización y Crashlytics para diagnóstico de fallos. Consulta la <a href="https://firebase.google.com/support/privacy/" target="_blank" rel="noopener noreferrer">información de privacidad de Firebase</a>.</li>
       <li><strong>RevenueCat, Apple y Google Play:</strong> validación, historial y estado de compras y suscripciones. El UID de Firebase se utiliza como identificador de usuario de RevenueCat para mantener el beneficio Premium asociado a la cuenta. Consulta la <a href="https://www.revenuecat.com/privacy-policy" target="_blank" rel="noopener noreferrer">política de RevenueCat</a>.</li>
-      <li><strong>Netlify, OpenAI y Anthropic:</strong> infraestructura del backend e interpretación opcional de Pedido IA, en las condiciones descritas en la sección anterior.</li>
+      <li><strong>Netlify:</strong> infraestructura del backend que valida altas de clientes, repartos compartidos, códigos y la eliminación de cuentas.</li>
       <li><strong>Clientes avisados con «En camino»:</strong> quien recibe el link de seguimiento puede ver, sin iniciar sesión, la ubicación y el recorrido del camión hasta que el link vence. El link es aleatorio y no muestra datos del cliente ni del repartidor. La página carga los mapas desde OpenStreetMap, que recibe la dirección IP de quien la abre.</li>
       <li><strong>Miembros de un reparto compartido:</strong> las personas que forman parte del mismo reparto pueden acceder a su información operativa, incluidos clientes, pedidos, historial de visitas, deudas, transferencias y ajustes compartidos.</li>
       <li><strong>Aplicaciones que eliges abrir:</strong> al tocar WhatsApp, teléfono o Google Maps, la app transmite a ese servicio el número, mensaje, enlace o destino necesario. Ese tratamiento queda sujeto a la política del servicio externo.</li>
       <li><strong>Obligaciones legales y seguridad:</strong> cuando sea razonablemente necesario para cumplir una obligación legal, proteger derechos o investigar fraude o abuso.</li>
     </ul>
 
-    <h2>6. Conservación, almacenamiento y seguridad</h2>
-    <p>La información de cuenta y del reparto se conserva en Firebase mientras mantengas la cuenta o hasta que la elimines desde la app, salvo contenido compartido, registros mínimos de seguridad y datos que deban conservar los proveedores por obligaciones legales, contables o antifraude. La ubicación del seguimiento en vivo se borra cuando vence el link o cuando dejas de compartir; si la app se cierra antes, el registro queda inaccesible al vencer. Los diagnósticos, datos de compras y solicitudes de IA se conservan según los plazos de Firebase, Apple, Google, RevenueCat, OpenAI, Anthropic y Netlify.</p>
+    <h2>5. Conservación, almacenamiento y seguridad</h2>
+    <p>La información de cuenta y del reparto se conserva en Firebase mientras mantengas la cuenta o hasta que la elimines desde la app, salvo contenido compartido, registros mínimos de seguridad y datos que deban conservar los proveedores por obligaciones legales, contables o antifraude. La ubicación del seguimiento en vivo se borra cuando vence el link o cuando dejas de compartir; si la app se cierra antes, el registro queda inaccesible al vencer. Los diagnósticos y datos de compras se conservan según los plazos de Firebase, Apple, Google, RevenueCat y Netlify. La función «Pedido IA», que en versiones anteriores enviaba a OpenAI o Anthropic el texto que el usuario pedía interpretar, fue retirada en noviembre de 2026; esos proveedores pueden conservar registros de aquellas solicitudes durante sus propios plazos de retención (normalmente hasta 30 días).</p>
     <p>El historial de visitas de un cliente se conserva aunque lo elimines o lo quites de la lista, para que los resúmenes del período sigan completos; se elimina junto con la cuenta o el reparto al que pertenece. Si quieres borrar el historial de un cliente en particular, puedes pedirlo al correo de contacto.</p>
     <p>Los proveedores pueden procesar información en Estados Unidos y otros países donde operen. Aplicamos autenticación, conexiones cifradas, reglas de acceso en Firestore, separación por cuenta o reparto y validaciones del servidor. Ningún sistema es completamente infalible, por lo que también debes proteger el acceso a tu cuenta y dispositivo.</p>
 
-    <h2>7. Repartos compartidos</h2>
+    <h2>6. Repartos compartidos</h2>
     <p>Antes de incorporar información de clientes u otras personas, asegúrate de tener autorización para usarla con fines de gestión del reparto. Si compartes un reparto, sus miembros autorizados podrán ver y modificar los datos comunes. Al abandonar un reparto o eliminar tu cuenta, el contenido compartido puede permanecer disponible para los demás miembros porque forma parte de su operación común.</p>
 
-    <h2>8. Tus opciones y derechos</h2>
+    <h2>7. Tus opciones y derechos</h2>
     <ul>
       <li>Consultar y corregir la mayoría de los datos desde la propia app.</li>
       <li>Exportar información del reparto en CSV o crear un respaldo JSON.</li>
@@ -92,17 +85,17 @@
       <li>Solicitar acceso, corrección o eliminación adicional escribiendo al correo de contacto. Podemos pedirte que verifiques la titularidad de la cuenta.</li>
     </ul>
 
-    <h2>9. Eliminación de la cuenta</h2>
+    <h2>8. Eliminación de la cuenta</h2>
     <p>Puedes iniciar la eliminación desde <strong>Ajustes &gt; Eliminar cuenta</strong>. Se eliminan la cuenta de autenticación, los datos privados y los repartos que solo te pertenecen. Si un reparto tiene otros miembros, se conserva para ellos y puede transferirse su administración; se elimina de tu perfil la información personal de cuenta. RutaWater puede mantener un marcador técnico sin nombre ni correo que indique que la cuenta fue eliminada, necesario para impedir que una credencial en caché vuelva a acceder.</p>
     <p>La información de compra administrada por Apple, Google o RevenueCat puede conservarse conforme a obligaciones legales, contables, antifraude o a las políticas de esos proveedores. Para una solicitud adicional relacionada con esos registros, utiliza el correo de contacto indicado arriba.</p>
 
-    <h2>10. Menores de edad</h2>
+    <h2>9. Menores de edad</h2>
     <p>RutaWater no está dirigida a menores de 13 años y no busca recopilar intencionalmente información personal de menores.</p>
 
-    <h2>11. Cambios en esta política</h2>
+    <h2>10. Cambios en esta política</h2>
     <p>Podemos actualizar esta política cuando cambien las funciones, los proveedores o los requisitos aplicables. Publicaremos la nueva fecha en esta página y, cuando el cambio sea significativo, podremos comunicarlo dentro de la app.</p>
 
-    <h2>12. Contacto</h2>
+    <h2>11. Contacto</h2>
     <p>Para cualquier pregunta o solicitud sobre privacidad, escribe a <a href="mailto:jonaolivera23@gmail.com">jonaolivera23@gmail.com</a>.</p>
 
     <div class="footer">

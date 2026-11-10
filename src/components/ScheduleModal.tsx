@@ -194,6 +194,8 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({
     if (Platform.OS === 'android') {
       setShowStartPicker(false);
     }
+    // Android también llama acá al cancelar, con la fecha original.
+    if (event.type === 'dismissed') return;
     if (selectedDate) {
       setStartPickerDate(selectedDate);
       setStartDate(toLocalDateString(selectedDate));

@@ -8,6 +8,7 @@ import notifee, {
 } from '@notifee/react-native';
 import { Platform } from 'react-native';
 import { reportError } from '../lib/crashReporting';
+import { settleWriteWithinGrace } from '../utils/pendingWrite';
 import { resolveAlarmFireDate } from '../utils/scheduling';
 
 const ANDROID_CHANNEL_ID = 'visit-alarms';
@@ -267,6 +268,17 @@ export const restoreClientAlarmSnapshots = async (
  * the mutation fails, recreates every previous trigger from its snapshot so a
  * still-active Firestore alarm never remains silently disarmed.
  */
+// Firestore confirma una escritura recién cuando el servidor responde, o sea
+// nunca sin conexión. Esperarla con el candado de alarmas tomado dejaba colgado
+// el «Listo» siguiente de ese cliente; pasado este margen el cambio ya está en
+// la cola local y el candado se libera.
+const ALARM_WRITE_GRACE_MS = 1500;
+const settleAlarmWrite = <T>(write: Promise<T>): Promise<T | undefined> => settleWriteWithinGrace(
+  write,
+  ALARM_WRITE_GRACE_MS,
+  (error) => reportError(error, 'Queued alarm write failed later'),
+);
+
 export const cancelAlarmsThenMutate = async <T>(
   snapshotSource: ClientAlarmSnapshot[] | (() => ClientAlarmSnapshot[]),
   mutate: (snapshots: ClientAlarmSnapshot[]) => Promise<T>,
@@ -281,14 +293,14 @@ export const cancelAlarmsThenMutate = async <T>(
     const snapshots = typeof snapshotSource === 'function'
       ? snapshotSource()
       : snapshotSource;
-    if (snapshots.length === 0) return mutate(snapshots);
+    if (snapshots.length === 0) return settleAlarmWrite(mutate(snapshots)) as Promise<T>;
     try {
       // Wait for every native outcome in a deterministic order. If one fails,
       // no later cancellation is left racing a compensation restore.
       for (const snapshot of snapshots) {
         await cancelClientAlarm(snapshot.clientId);
       }
-      return await mutate(snapshots);
+      return await settleAlarmWrite(mutate(snapshots)) as T;
     } catch (error) {
       try {
         await restoreClientAlarmSnapshots(snapshots);
@@ -311,7 +323,7 @@ export const persistAlarmOrRollbackTrigger = async (
   restorePreviousTrigger?: () => Promise<unknown>,
 ): Promise<void> => {
   try {
-    await persistAlarm();
+    await settleAlarmWrite(persistAlarm());
   } catch (error) {
     try {
       await rollbackTrigger();

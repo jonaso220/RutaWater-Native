@@ -62,3 +62,22 @@ export const planClearCompleted = (completed: Client[], all: Client[]): ClearPla
   }
   return { actions, keeperDeliveries };
 };
+
+const BILLING_FIELDS = ['rut', 'businessName', 'email'] as const;
+
+/**
+ * Datos de la ficha que se borra que la ficha que queda no tiene. Un pedido
+ * extra copia solo nombre, teléfonos y direcciones, así que cuando la que se
+ * completa es la ficha original, su RUT, razón social, email y días de pago se
+ * perdían con ella.
+ */
+export const carryOverToKeeper = (deleted: Client, keeper: Client): Partial<Client> => {
+  const updates: Partial<Client> = {};
+  BILLING_FIELDS.forEach((field) => {
+    const value = deleted[field];
+    if (typeof value === 'string' && value.trim() && !keeper[field]?.trim()) updates[field] = value;
+  });
+  if (deleted.paymentSchedule && !keeper.paymentSchedule) updates.paymentSchedule = deleted.paymentSchedule;
+  return updates;
+};
+

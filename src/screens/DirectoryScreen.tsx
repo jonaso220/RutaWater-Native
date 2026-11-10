@@ -37,6 +37,7 @@ import { useLayout } from '../hooks/useLayout';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import { isClientLimitError } from '../services/clientCreation';
 import { useContentRail } from '../stores/contentRailStore';
+import { useScopedWhatsAppTemplates } from '../hooks/useScopedWhatsAppTemplates';
 
 const DirectoryScreen = () => {
   const { colors } = useTheme();
@@ -45,7 +46,8 @@ const DirectoryScreen = () => {
   const { fontScale, isWide } = useLayout();
   const styles = useMemo(() => getStyles(colors, fontScale, isWide), [colors, fontScale, isWide]);
   const navigation = useNavigation<any>();
-  const { isAdmin } = useAuthContext();
+  const { isAdmin, user, groupData } = useAuthContext();
+  const whatsAppTemplates = useScopedWhatsAppTemplates(user?.uid, groupData?.groupId);
   const activeProfile = useProfileStore((s) => s.activeProfile);
   // Quién puede editar/borrar clientes en el reparto activo: en Reparto 1 (primary)
   // manda el rol del grupo familiar; en un reparto nuevo, solo su dueño.
@@ -207,7 +209,15 @@ const DirectoryScreen = () => {
       t('home.limitMessage', { limit: FREE_CLIENT_LIMIT }),
       [
         { text: t('cancel'), style: 'cancel' },
-        { text: t('home.seePremium'), onPress: () => navigation.navigate('Paywall') },
+        {
+          text: t('home.seePremium'),
+          onPress: () => {
+            // iOS no presenta el Paywall sobre el modal de Agendar y lo deja sin
+            // poder reabrirse: cerrarlo antes y esperar a que termine de salir.
+            setScheduleClient(null);
+            setTimeout(() => navigation.navigate('Paywall'), 350);
+          },
+        },
       ],
     );
   }, [navigation, t]);
@@ -442,6 +452,8 @@ const DirectoryScreen = () => {
         onMarkPaid={markDebtPaid}
         onMarkAllPaid={markAllDebtsPaid}
         onEditDebt={editDebt}
+        debtTemplate={whatsAppTemplates?.whatsappDeuda}
+        reminderTemplate={whatsAppTemplates?.whatsappRecordatorio}
       />
 
       {/* Edit Client Modal (solo dueño/admin del reparto activo) */}

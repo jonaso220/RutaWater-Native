@@ -6,13 +6,14 @@ import { useDebtsStore } from '../stores/debtsStore';
 import { useTransfersStore } from '../stores/transfersStore';
 import { useProductCatalogStore } from '../stores/productCatalogStore';
 import { FREQUENCY_LABELS, Frequency } from '../constants/products';
-import { parseDate } from '../utils/helpers';
+import { parseDate, toLocalDateString } from '../utils/helpers';
 import { exportFile } from '../utils/exportFile';
 import {
   buildClientIdentityIndex,
   getRelatedRecordStableClientId,
 } from '../utils/clientIdentity';
 import { getClientPhones } from '../utils/clientPhones';
+import { isValidPaymentSchedule } from '../utils/paymentSchedule';
 import { loadCurrentScopeRecords } from '../services/scopeRecords';
 
 interface ExportUser {
@@ -94,7 +95,7 @@ export const useDataExport = (user: ExportUser) => {
       const bom = '﻿';
       const csvContent = bom + headers.map(escapeCsv).join(',') + '\n' + rows.join('\n');
 
-      const date = new Date().toISOString().split('T')[0];
+      const date = toLocalDateString(new Date());
       const result = await exportFile(
         csvContent,
         `RutaWater_Clientes_${date}.csv`,
@@ -123,8 +124,8 @@ export const useDataExport = (user: ExportUser) => {
         'deliveries', user.uid, user.groupId, user.scopeReadVersion ?? 0,
       ) as Array<Record<string, any>>;
       const backup = {
-        schemaVersion: 7,
-        exportDate: new Date().toISOString().split('T')[0],
+        schemaVersion: 8,
+        exportDate: toLocalDateString(new Date()),
         exportedBy: user.email || user.uid,
         profileName: user.profileName || '',
         clients: allClients.map((c) => ({
@@ -135,6 +136,7 @@ export const useDataExport = (user: ExportUser) => {
           visitDay: c.visitDay || '', visitDays: c.visitDays || [],
           specificDate: c.specificDate || '', notes: c.notes || '',
           rut: c.rut || '', businessName: c.businessName || '', email: c.email || '',
+          ...(isValidPaymentSchedule(c.paymentSchedule) ? { paymentSchedule: c.paymentSchedule } : {}),
           products: c.products || {}, isStarred: c.isStarred || false,
           isPinned: c.isPinned || false,
           alarm: c.alarm || '', alarmDay: c.alarmDay || '',
@@ -167,6 +169,8 @@ export const useDataExport = (user: ExportUser) => {
           clientAddress: t.clientAddress || '',
           clientLat: t.clientLat || '', clientLng: t.clientLng || '',
           clientMapsLink: t.clientMapsLink || '',
+          ...(typeof t.amount === 'number' && t.amount > 0 ? { amount: t.amount } : {}),
+          ...(t.account ? { account: t.account } : {}),
           createdAt: parseDate(t.createdAt)?.toISOString() || '',
         })),
         deliveries: deliveries.map((d) => ({
@@ -178,7 +182,7 @@ export const useDataExport = (user: ExportUser) => {
       };
 
       const jsonContent = JSON.stringify(backup, null, 2);
-      const date = new Date().toISOString().split('T')[0];
+      const date = toLocalDateString(new Date());
       const result = await exportFile(
         jsonContent,
         `RutaWater_Backup_${date}.json`,

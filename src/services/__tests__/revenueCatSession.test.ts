@@ -9,6 +9,7 @@ jest.mock('react-native-purchases', () => ({
     logIn: jest.fn(),
     logOut: jest.fn(async () => ({})),
     isAnonymous: jest.fn(async () => false),
+    getAppUserID: jest.fn(async () => '$RCAnonymousID:restored'),
     getCustomerInfo: jest.fn(),
   },
   LOG_LEVEL: { DEBUG: 'DEBUG', WARN: 'WARN' },
@@ -36,6 +37,7 @@ const mockPurchases = jest.requireMock('react-native-purchases').default as {
   logIn: jest.Mock;
   logOut: jest.Mock;
   isAnonymous: jest.Mock;
+  getAppUserID: jest.Mock;
   getCustomerInfo: jest.Mock;
 };
 
@@ -48,7 +50,21 @@ describe('RevenueCat session serialization', () => {
     mockPurchases.isConfigured.mockResolvedValue(false);
     mockPurchases.logOut.mockResolvedValue({} as any);
     mockPurchases.isAnonymous.mockResolvedValue(false);
+    mockPurchases.getAppUserID.mockResolvedValue('$RCAnonymousID:restored');
     mockPurchases.getCustomerInfo.mockResolvedValue(customerInfo('existing'));
+  });
+
+  test('a cold start that restores the same user needs no logOut/logIn round trip', async () => {
+    mockPurchases.getAppUserID.mockResolvedValue('user-a');
+    mockPurchases.logOut.mockRejectedValue(new Error('offline'));
+    mockPurchases.logIn.mockRejectedValue(new Error('offline'));
+
+    const session = await identifyRevenueCatUser('user-a');
+
+    expect(session?.customerInfo.originalAppUserId).toBe('existing');
+    expect(mockPurchases.logOut).not.toHaveBeenCalled();
+    expect(mockPurchases.logIn).not.toHaveBeenCalled();
+    expect(isRevenueCatSessionCurrent('user-a', session!.generation)).toBe(true);
   });
 
   test('a newer Firebase user invalidates a queued older identification', async () => {

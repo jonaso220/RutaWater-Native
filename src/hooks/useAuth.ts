@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { reportError } from '../lib/crashReporting';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
@@ -10,6 +10,7 @@ import { Group } from '../types';
 import { API_ENDPOINTS } from '../config/api';
 import { logoutRevenueCatSession } from '../services/revenueCatSession';
 import { cancelPaymentReminders, cancelScheduledAlarmsForOwner } from '../services/notifications';
+import { stopLiveTracking } from '../services/liveTracking';
 import { reportAppCompatibility } from '../services/appCompatibilityHeartbeat';
 import { planSessionRetry } from '../utils/sessionRetry';
 
@@ -50,6 +51,7 @@ export const useAuth = () => {
   const scopeReadVersion = Math.max(userScopeReadVersion, globalScopeReadVersion);
   const [groupRecoveryRetryNonce, setGroupRecoveryRetryNonce] = useState(0);
   const groupRecoveryRetryCountRef = useRef(0);
+  const appleAuthorizationCodeRef = useRef<string | null>(null);
   const groupRecoveryRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const authSessionUidRef = useRef<string | null>(null);
   // Re-evaluates the latest users/{uid} snapshot (group descriptor, role and
@@ -371,6 +373,9 @@ export const useAuth = () => {
     try {
       await GoogleSignin.hasPlayServices();
       const response = await GoogleSignin.signIn();
+      // Cerrar el selector de cuentas no es un error: la librería resuelve con
+      // type 'cancelled' en vez de rechazar.
+      if (response.type === 'cancelled') return;
       const idToken = response.data?.idToken;
       if (!idToken) throw new Error('No idToken received');
       const googleCredential = auth.GoogleAuthProvider.credential(idToken);
@@ -391,6 +396,9 @@ export const useAuth = () => {
 
       const { identityToken, nonce } = appleAuthRequestResponse;
       if (!identityToken) throw new Error('No identityToken received from Apple');
+      // Vale 5 minutos y un solo uso: sirve para revocar el acceso de Apple si
+      // la cuenta se elimina enseguida de este inicio de sesión.
+      appleAuthorizationCodeRef.current = appleAuthRequestResponse.authorizationCode || null;
 
       const appleCredential = auth.AppleAuthProvider.credential(identityToken, nonce);
       const userCredential = await auth().signInWithCredential(appleCredential);
@@ -419,6 +427,9 @@ export const useAuth = () => {
   const signOut = useCallback(async () => {
     try {
       const signingOutUserId = auth().currentUser?.uid;
+      // Con la sesión todavía abierta: después las reglas ya no dejan borrar
+      // los registros de seguimiento y el GPS quedaba prendido.
+      stopLiveTracking();
       // RevenueCat is process-wide. Detach the current Firebase UID before the
       // subscription hook unmounts so the next local account cannot inherit
       // CustomerInfo or introductory-offer eligibility from this session.
@@ -443,6 +454,20 @@ export const useAuth = () => {
     } catch (error) {
       reportError(error, 'Sign-Out Error');
     }
+  }, []);
+
+  const revokeAppleAccess = useCallback(async (currentUser: FirebaseAuthTypes.User) => {
+    if (Platform.OS !== 'ios') return;
+    if (!currentUser.providerData.some((provider) => provider.providerId === 'apple.com')) return;
+    let authorizationCode = appleAuthorizationCodeRef.current;
+    appleAuthorizationCodeRef.current = null;
+    if (!authorizationCode) {
+      const refreshed = await appleAuth.performRequest({
+        requestedOperation: appleAuth.Operation.REFRESH,
+      });
+      authorizationCode = refreshed.authorizationCode;
+    }
+    if (authorizationCode) await auth().revokeToken(authorizationCode);
   }, []);
 
   const deleteAccount = useCallback(async () => {
@@ -512,6 +537,11 @@ export const useAuth = () => {
       // deletion. The phone performs no destructive Firestore writes, so a
       // network/configuration failure cannot erase customer data first.
       await callAccountCleanup(true);
+      stopLiveTracking();
+      // Apple exige revocar su acceso al eliminar la cuenta. Es lo último que
+      // se hace con la sesión viva; si falla, la eliminación sigue igual.
+      await revokeAppleAccess(currentUser)
+        .catch((e) => reportError(e, 'Apple token revocation error'));
       await callAccountCleanup(false);
 
       // Admin deletion does not synchronously evict the SDK's cached token.
@@ -536,7 +566,7 @@ export const useAuth = () => {
       }
       throw error;
     }
-  }, []);
+  }, [revokeAppleAccess]);
 
   const isAdmin = !groupData || groupData.role === 'admin';
 

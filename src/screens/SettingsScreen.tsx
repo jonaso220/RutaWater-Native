@@ -36,7 +36,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { isDeveloperPromoRedemptionAvailable } from '../utils/promoAvailability';
-import { startEnCaminoLink } from '../services/liveTracking';
+import { isLiveTrackingActive, startEnCaminoLink, stopLiveTracking } from '../services/liveTracking';
 import { useContentRail } from '../stores/contentRailStore';
 
 const SettingsScreen = () => {
@@ -119,6 +119,17 @@ const SettingsScreen = () => {
     profileName: activeProfileName,
     scopeReadVersion,
   });
+
+  // iOS no tiene la notificación con «Dejar de compartir» de Android: este es
+  // el control para cortar un «En camino» tocado por error.
+  const handleStopTracking = () => {
+    const wasActive = isLiveTrackingActive();
+    stopLiveTracking();
+    Alert.alert(
+      t('settings.liveTrackingTitle'),
+      t(wasActive ? 'settings.liveTrackingStopped' : 'settings.liveTrackingNotActive'),
+    );
+  };
 
   // Mismo link de 30 minutos que «En camino», para probarlo con quien sea.
   const [sharingLink, setSharingLink] = useState(false);
@@ -458,6 +469,14 @@ const SettingsScreen = () => {
               <Ionicons name="share-social-outline" size={18} color={colors.primary} />
             )}
             <Text style={styles.exportBtnText}>{t('settings.liveTrackingShare')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleStopTracking}
+            style={[styles.exportBtn, { marginTop: 8 }]}
+            accessibilityRole="button"
+          >
+            <Ionicons name="stop-circle-outline" size={18} color={colors.primary} />
+            <Text style={styles.exportBtnText}>{t('settings.liveTrackingStop')}</Text>
           </TouchableOpacity>
           <Text style={styles.cardGroupHint}>{t('settings.liveTrackingHint')}</Text>
         </View>

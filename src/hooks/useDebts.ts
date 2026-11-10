@@ -5,6 +5,7 @@ import { Debt, Client } from '../types';
 import { shareInFlightOperation } from '../utils/inFlightOperation';
 import { useDebtsQuery } from './queries/useDebtsQuery';
 import { dataScopeFields } from '../utils/dataScope';
+import { settleWriteWithinGrace } from '../utils/pendingWrite';
 import {
   ClientStableIdIndex,
   getRelatedClientReference,
@@ -19,6 +20,12 @@ interface UseDebtsProps {
   identityIndex: ClientStableIdIndex;
   scopeReadVersion?: number;
 }
+
+// Sin conexión Firestore no confirma la escritura, pero ya la aplicó en la
+// lista y la dejó en cola: pasado este margen la pantalla deja de esperar.
+const DEBT_WRITE_GRACE_MS = 1500;
+const settleDebtWrite = <T>(write: Promise<T>, context: string): Promise<T | undefined> =>
+  settleWriteWithinGrace(write, DEBT_WRITE_GRACE_MS, (error) => reportError(error, context));
 
 export const useDebts = ({
   userId,
@@ -85,14 +92,14 @@ export const useDebts = ({
       return shareInFlightOperation(inFlightRef.current, key, async () => {
         try {
           const scope = dataScopeFields(userId, groupId);
-          await db.collection('debts').add({
+          await settleDebtWrite(db.collection('debts').add({
             ...scope,
             ...getRelatedClientReference(client),
             clientName: client.name,
             clientAddress: client.address || '',
             amount,
             createdAt: new Date(),
-          });
+          }), 'Error adding debt');
         } catch (e) {
           reportError(e, 'Error adding debt');
           throw e;
@@ -110,7 +117,7 @@ export const useDebts = ({
       const key = `paid-${debt.id}`;
       return shareInFlightOperation(inFlightRef.current, key, async () => {
         try {
-          await db.collection('debts').doc(debt.id).delete();
+          await settleDebtWrite(db.collection('debts').doc(debt.id).delete(), 'Error marking debt paid');
         } catch (e) {
           reportError(e, 'Error marking debt paid');
           throw e;
@@ -126,7 +133,7 @@ export const useDebts = ({
     const key = `edit-${debtId}`;
     return shareInFlightOperation(inFlightRef.current, key, async () => {
       try {
-        await db.collection('debts').doc(debtId).update({ amount: newAmount });
+        await settleDebtWrite(db.collection('debts').doc(debtId).update({ amount: newAmount }), 'Error editing debt');
       } catch (e) {
         reportError(e, 'Error editing debt');
         throw e;
@@ -143,7 +150,7 @@ export const useDebts = ({
         try {
           const batch = db.batch();
           debtIds.forEach((id) => batch.delete(db.collection('debts').doc(id)));
-          await batch.commit();
+          await settleDebtWrite(batch.commit(), 'Error marking all debts paid');
         } catch (e) {
           reportError(e, 'Error marking all debts paid');
           throw e;

@@ -182,6 +182,8 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     if (Platform.OS === 'android') {
       setShowDatePicker(false);
     }
+    // Android también llama acá al cancelar, con la fecha original.
+    if (event.type === 'dismissed') return;
     if (selectedDate) {
       setPickerDate(selectedDate);
       const yyyy = selectedDate.getFullYear();
@@ -207,6 +209,12 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     const hasNewDate = needsDate && startDate;
     if (freq !== 'once' && freq !== 'on_demand' && !hasDay && !hasNewDate) {
       Alert.alert(t('error'), t('editModal.errorNoDays'));
+      return;
+    }
+    // «Una vez» sin fecha quedaba guardado sin día ni fecha: no aparecía en
+    // ninguna lista y no avisaba.
+    if (freq === 'once' && !startDate && !client.specificDate) {
+      Alert.alert(t('error'), t('noteModal.dateRequired'));
       return;
     }
     if (!isValidClientEmail(billing.email)) {

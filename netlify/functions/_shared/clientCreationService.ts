@@ -56,6 +56,12 @@ const ALLOWED_FIELDS = new Set([
   'sameHousehold',
   'backupSourceId',
   'isInactive',
+  // Facturación y días de pago: sin estos campos el alta descartaba en
+  // silencio lo que el usuario cargó en el formulario, al clonar y al restaurar.
+  'rut',
+  'businessName',
+  'email',
+  'paymentSchedule',
 ]);
 
 export type ClientCreationPlan = 'free' | 'monthly' | 'annual';

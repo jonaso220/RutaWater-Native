@@ -1,6 +1,7 @@
-import { ClientAddress, ClientAddressType, ClientPhone, RELATIONSHIP_TYPES } from '../types';
+import { ClientAddress, ClientAddressType, ClientPhone, PaymentSchedule, RELATIONSHIP_TYPES } from '../types';
 import { parseDate, sanitizePhone, sanitizeProductQty, sanitizeString } from './helpers';
 import { sanitizeClientPhones } from './clientPhones';
+import { isValidPaymentSchedule } from './paymentSchedule';
 
 export interface BackupClientRecord {
   id: string;
@@ -14,6 +15,8 @@ export interface BackupClientRecord {
   rut: string;
   businessName: string;
   email: string;
+  // Ausente en respaldos anteriores al esquema 8 y en clientes sin días de pago.
+  paymentSchedule?: PaymentSchedule;
   lat: string;
   lng: string;
   mapsLink: string;
@@ -60,6 +63,9 @@ export interface BackupTransferRecord {
   clientLat: string;
   clientLng: string;
   clientMapsLink: string;
+  // Ausentes en respaldos anteriores al esquema 8.
+  amount?: number;
+  account?: string;
   createdAt: Date | null;
 }
 
@@ -172,6 +178,27 @@ const sanitizeSameHousehold = (value: unknown): Record<string, boolean> => {
   return result;
 };
 
+const sanitizePaymentSchedule = (value: unknown): PaymentSchedule | null => {
+  if (!isObject(value)) return null;
+  const reminder = {
+    remind: value.remind === true,
+    ...(typeof value.remindBy === 'string' && value.remindBy
+      ? { remindBy: sanitizeString(value.remindBy, 20) }
+      : {}),
+  };
+  const schedule = value.kind === 'monthly'
+    ? { kind: 'monthly' as const, fromDay: Number(value.fromDay), toDay: Number(value.toDay), ...reminder }
+    : value.kind === 'date' && typeof value.from === 'string'
+      ? {
+        kind: 'date' as const,
+        from: sanitizeString(value.from, 10),
+        ...(typeof value.to === 'string' && value.to ? { to: sanitizeString(value.to, 10) } : {}),
+        ...reminder,
+      }
+      : null;
+  return isValidPaymentSchedule(schedule) ? schedule : null;
+};
+
 const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
   if (!isObject(value) || !validId(value.id)) {
     throw new Error(`INVALID_CLIENT_${index}`);
@@ -193,6 +220,7 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
   // Legacy backups stored only the display time. Without the exact one-shot
   // instant there is no safe trigger to restore, so do not create a stale bell.
   const alarm = alarmScheduledFor ? sanitizeString(value.alarm, 10) : '';
+  const paymentSchedule = sanitizePaymentSchedule(value.paymentSchedule);
 
   return {
     id: value.id,
@@ -206,6 +234,7 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
     rut: sanitizeString(value.rut, 40),
     businessName: sanitizeString(value.businessName, 150),
     email: sanitizeString(value.email, 150),
+    ...(paymentSchedule ? { paymentSchedule } : {}),
     lat: sanitizeString(value.lat, 20),
     lng: sanitizeString(value.lng, 20),
     mapsLink: safeMapsLink(value.mapsLink),
@@ -257,6 +286,8 @@ const sanitizeTransfer = (value: unknown, index: number): BackupTransferRecord =
   if (!isObject(value) || !validId(value.id) || !validId(value.clientId)) {
     throw new Error(`INVALID_TRANSFER_${index}`);
   }
+  const transferAmount = finiteNumber(value.amount, 0);
+  const account = sanitizeString(value.account, 60);
   return {
     id: value.id,
     clientId: value.clientId,
@@ -266,6 +297,8 @@ const sanitizeTransfer = (value: unknown, index: number): BackupTransferRecord =
     clientLat: sanitizeString(value.clientLat, 20),
     clientLng: sanitizeString(value.clientLng, 20),
     clientMapsLink: safeMapsLink(value.clientMapsLink),
+    ...(transferAmount > 0 ? { amount: transferAmount } : {}),
+    ...(account ? { account } : {}),
     createdAt: parseDate(value.createdAt),
   };
 };

@@ -1065,11 +1065,12 @@ const HomeScreen = () => {
     const client = clients.find((c) => c.id === clientId);
     if (!client) return;
     if (!hasPendingTransfer(clientId)) {
-      addTransfer(client, getClientDebtTotal(client.id));
+      Promise.resolve(addTransfer(client, getClientDebtTotal(client.id)))
+        .catch(() => Alert.alert(t('error'), t('home.transferSaveError')));
     }
     setShowDebtsSheet(false);
     setShowTransfersSheet(true);
-  }, [clients, hasPendingTransfer, addTransfer, getClientDebtTotal]);
+  }, [clients, hasPendingTransfer, addTransfer, getClientDebtTotal, t]);
 
   // Stable handler wrappers — read from a ref so renderListItem
   // doesn't have to depend on individual handler identities. Without this,

@@ -25,3 +25,22 @@ export const awaitWriteWithinGrace = (
   const timer = setTimeout(() => finish('pending'), graceMs);
   write.then(() => finish('acknowledged'), () => finish('failed'));
 });
+
+/**
+ * Como awaitWriteWithinGrace, pero para quien solo necesita seguir: devuelve
+ * el resultado si la escritura se confirmó, relanza su error si falló dentro
+ * del margen, y si sigue en cola (sin conexión) devuelve undefined y deja que
+ * `onLateFailure` se entere de un rechazo posterior.
+ */
+export const settleWriteWithinGrace = async <T>(
+  write: Promise<T>,
+  graceMs: number,
+  onLateFailure?: (error: unknown) => void,
+): Promise<T | undefined> => {
+  const outcome = await awaitWriteWithinGrace(write, graceMs);
+  if (outcome === 'pending') {
+    write.catch((error) => onLateFailure?.(error));
+    return undefined;
+  }
+  return write;
+};

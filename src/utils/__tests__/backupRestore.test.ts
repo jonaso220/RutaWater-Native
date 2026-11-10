@@ -52,6 +52,27 @@ describe('backup validation', () => {
     expect(backup.schemaVersion).toBe(1);
   });
 
+  test('keeps payment days and transfer amounts, and drops malformed ones', () => {
+    const backup = validateBackup({
+      ...validBackup,
+      clients: [
+        { ...validBackup.clients[0], paymentSchedule: { kind: 'monthly', fromDay: 5, toDay: 10, remind: true } },
+        { ...validBackup.clients[0], id: 'client-2', paymentSchedule: { kind: 'monthly', fromDay: 0, toDay: 40 } },
+      ],
+      transfers: [
+        { id: 'transfer-1', clientId: 'client-1', amount: 1200, account: 'Prex' },
+        { id: 'transfer-2', clientId: 'client-1', amount: 'x' },
+      ],
+    });
+
+    expect(backup.clients[0].paymentSchedule).toEqual({ kind: 'monthly', fromDay: 5, toDay: 10, remind: true });
+    expect(backup.clients[1]).not.toHaveProperty('paymentSchedule');
+    expect(backup.clients[0]).not.toHaveProperty('paymentSchedule', undefined);
+    expect(backup.transfers[0]).toMatchObject({ amount: 1200, account: 'Prex' });
+    expect(backup.transfers[1]).not.toHaveProperty('amount');
+    expect(backup.transfers[1]).not.toHaveProperty('account');
+  });
+
   test('preserves additive customerId while accepting legacy related records without it', () => {
     const backup = validateBackup({
       ...validBackup,

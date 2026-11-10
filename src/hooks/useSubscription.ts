@@ -63,9 +63,10 @@ export const useSubscription = ({ userId }: { userId: string | undefined }): Sub
   useEffect(() => {
     let active = true;
     let customerInfoListener: CustomerInfoUpdateListener | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const init = async () => {
-      setLoading(true);
+    const init = async (attempt = 0) => {
+      if (attempt === 0) setLoading(true);
       if (!REVENUECAT_API_KEY || !userId) {
         sessionRef.current = null;
         setIsPremium(false);
@@ -91,6 +92,7 @@ export const useSubscription = ({ userId }: { userId: string | undefined }): Sub
         sessionRef.current = { userId, generation: session.generation };
         processCustomerInfo(session.customerInfo);
 
+        if (customerInfoListener) Purchases.removeCustomerInfoUpdateListener(customerInfoListener);
         customerInfoListener = (info) => {
           if (active && isRevenueCatSessionCurrent(userId, session.generation)) {
             processCustomerInfo(info);
@@ -122,7 +124,16 @@ export const useSubscription = ({ userId }: { userId: string | undefined }): Sub
           setIntroEligibility({});
         }
       } catch (error) {
-        if (active) console.warn('RevenueCat init error (non-fatal):', error);
+        if (active) {
+          console.warn('RevenueCat init error (non-fatal):', error);
+          // Sin señal al abrir, el plan y los precios quedaban sin cargar hasta
+          // reiniciar la app. Reintentar con espera creciente (5 s a 1 min).
+          const delay = Math.min(60000, 5000 * 2 ** attempt);
+          retryTimer = setTimeout(() => {
+            retryTimer = null;
+            if (active) void init(attempt + 1);
+          }, delay);
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -131,6 +142,7 @@ export const useSubscription = ({ userId }: { userId: string | undefined }): Sub
     void init();
     return () => {
       active = false;
+      if (retryTimer) clearTimeout(retryTimer);
       if (customerInfoListener) {
         Purchases.removeCustomerInfoUpdateListener(customerInfoListener);
       }

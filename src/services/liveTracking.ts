@@ -58,8 +58,17 @@ const requestPermission = async (): Promise<boolean> => {
   if (Platform.OS === 'android') {
     const permission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
     if (await PermissionsAndroid.check(permission)) return true;
-    return (await PermissionsAndroid.request(permission)) === PermissionsAndroid.RESULTS.GRANTED;
+    // Android 12+ espera que la ubicación precisa se pida junto con la aproximada.
+    const result = await PermissionsAndroid.requestMultiple([
+      permission,
+      PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+    ]);
+    return result[permission] === PermissionsAndroid.RESULTS.GRANTED;
   }
+  // Con el seguimiento ya andando el permiso está dado. Pedir otra posición acá
+  // apaga la vigilancia nativa de la librería (pausa y no la reanuda): el segundo
+  // «En camino» dejaba el camión congelado en la parada anterior.
+  if (watchId !== null) return true;
   Geolocation.setRNConfiguration({ skipPermissionRequests: false, authorizationLevel: 'whenInUse' });
   return new Promise((resolve) => Geolocation.getCurrentPosition(
     (position) => {
@@ -82,6 +91,9 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 
 const startAndroidService = async (): Promise<void> => {
   if (Platform.OS !== 'android') return;
+  // Android 13+: sin este permiso la notificación (y su botón «Dejar de
+  // compartir») queda oculta. Si lo niegan, el servicio arranca igual.
+  await notifee.requestPermission().catch(() => {});
   await notifee.createChannel({ id: CHANNEL_ID, name: i18n.t('liveTracking.channel'), importance: AndroidImportance.LOW });
   await notifee.displayNotification({
     id: NOTIFICATION_ID,
@@ -166,6 +178,9 @@ function pruneLinks(): boolean {
   if (!links.length) stopLiveTracking();
   return links.length > 0;
 }
+
+/** Si hay algún link de seguimiento vivo en este momento. */
+export const isLiveTrackingActive = (): boolean => liveLinks(links, Date.now()).length > 0;
 
 /** Corta todo: GPS, notificación de Android y los links que quedaban (el cliente ve «terminó»). */
 export function stopLiveTracking(): void {

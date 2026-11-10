@@ -82,6 +82,21 @@ export const identifyRevenueCatUser = async (
     await ensureConfigured();
     if (generation !== sessionGeneration || desiredUserId !== userId) return;
 
+    // Cold start: the SDK usually restores this same Firebase UID, because a
+    // sign-out always logs RevenueCat out first. Recognising it avoids a
+    // logOut()/logIn() round trip that needs the network and, offline, left a
+    // paying user without Premium for the whole session.
+    if (actualUserId === undefined) {
+      let restoredUserId: string | null = null;
+      try {
+        restoredUserId = await Purchases.getAppUserID();
+      } catch {
+        restoredUserId = null;
+      }
+      if (generation !== sessionGeneration || desiredUserId !== userId) return;
+      if (restoredUserId === userId) actualUserId = userId;
+    }
+
     let customerInfo: CustomerInfo;
     if (actualUserId === userId) {
       customerInfo = await Purchases.getCustomerInfo();

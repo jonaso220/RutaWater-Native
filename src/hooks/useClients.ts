@@ -12,7 +12,7 @@ import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
 import { alarmTargetsDay } from '../utils/alarmReconciliation';
 import { findExactClientMatch, planDuplicateClientCleanup } from '../utils/clientDuplicates';
 import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../utils/recency';
-import { planClearCompleted } from '../utils/clearCompleted';
+import { carryOverToKeeper, planClearCompleted } from '../utils/clearCompleted';
 import { ALL_DAYS, Frequency, RecurringFrequency } from '../constants/products';
 import {
   scheduleClientAlarm,
@@ -36,7 +36,7 @@ import { createClientDocument, isClientLimitError } from '../services/clientCrea
 import { fillClientCoordinates, touchesLocation } from '../services/clientCoordinates';
 import { getClientPhoneSearchText, getClientPhones } from '../utils/clientPhones';
 import { ClientBillingInfo, sanitizeClientBillingInfo } from '../utils/clientBillingInfo';
-import { awaitWriteWithinGrace } from '../utils/pendingWrite';
+import { awaitWriteWithinGrace, settleWriteWithinGrace } from '../utils/pendingWrite';
 
 interface UseClientsProps {
   userId: string;
@@ -106,6 +106,10 @@ const compareDayOrder = (day: string) => (a: Client, b: Client) => {
 // How long an edit waits for the server before trusting Firestore's offline
 // queue. Online acknowledgements (and rejections) normally arrive well within.
 const CLIENT_WRITE_GRACE_MS = 1500;
+// Para escrituras que la pantalla espera: sin conexión siguen en la cola local
+// y no deben dejar un modal en «guardando» hasta que vuelva la señal.
+const settleClientWrite = <T>(write: Promise<T>, context: string): Promise<T | undefined> =>
+  settleWriteWithinGrace(write, CLIENT_WRITE_GRACE_MS, (error) => reportError(error, context));
 
 export interface UpdateClientOptions {
   // Resolve only once the server acknowledged the write. Callers that confirm
@@ -335,22 +339,48 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
       const { actions, keeperDeliveries } = planClearCompleted(completed, clientsRef.current);
       const FieldValue = firestore.FieldValue;
       const loadedIds = new Set(clientsRef.current.map((candidate) => candidate.id));
+      const byId = new Map(clientsRef.current.map((candidate) => [candidate.id, candidate]));
       type Write = (batch: FirebaseFirestoreTypes.WriteBatch) => void;
       const writes: Array<{ ids: string[]; apply: Write }> = actions.map((action) => {
         const c = action.client;
         const ref = db.collection('clients').doc(c.id);
         if (action.kind === 'delete-note') return { ids: [c.id], apply: (batch) => { batch.delete(ref); } };
         if (action.kind === 'delete-extra') {
-          // Como deleteClient: los familiares que apuntaban a esta ficha dejan de hacerlo.
+          // La ficha que queda hereda lo que solo tenía esta: facturación, días
+          // de pago y parentescos. Los familiares pasan a apuntar a la que queda.
+          const keeper = byId.get(action.keeperId);
+          const keeperId = action.keeperId;
+          const keeperUpdates: Record<string, unknown> = keeper ? { ...carryOverToKeeper(c, keeper) } : {};
           const related = Object.keys(c.relationships || {}).filter((relatedId) => loadedIds.has(relatedId));
+          const relatedUpdates = related.map((relatedId) => {
+            const target = byId.get(relatedId);
+            const updates: Record<string, unknown> = {
+              [`relationships.${c.id}`]: FieldValue.delete(),
+              [`sameHousehold.${c.id}`]: FieldValue.delete(),
+            };
+            const inverseType = target?.relationships?.[c.id];
+            if (keeper && relatedId !== keeperId) {
+              if (inverseType && !target?.relationships?.[keeperId]) {
+                updates[`relationships.${keeperId}`] = inverseType;
+                updates[`sameHousehold.${keeperId}`] = target?.sameHousehold?.[c.id] !== false;
+              }
+              if (!keeper.relationships?.[relatedId]) {
+                keeperUpdates[`relationships.${relatedId}`] = c.relationships?.[relatedId];
+                keeperUpdates[`sameHousehold.${relatedId}`] = c.sameHousehold?.[relatedId] !== false;
+              }
+            }
+            return { relatedId, updates };
+          });
           return {
             ids: [c.id],
             apply: (batch) => {
               batch.delete(ref);
-              related.forEach((relatedId) => batch.update(db.collection('clients').doc(relatedId), {
-                [`relationships.${c.id}`]: FieldValue.delete(),
-                [`sameHousehold.${c.id}`]: FieldValue.delete(),
-              }));
+              relatedUpdates.forEach(({ relatedId, updates }) => {
+                batch.update(db.collection('clients').doc(relatedId), updates);
+              });
+              if (Object.keys(keeperUpdates).length > 0) {
+                batch.update(db.collection('clients').doc(keeperId), keeperUpdates);
+              }
             },
           };
         }
@@ -448,7 +478,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
             [clientId],
           );
         } else {
-          await db.collection('clients').doc(clientId).update(update);
+          await settleClientWrite(db.collection('clients').doc(clientId).update(update), 'Error removing day');
         }
       } else {
         // Last (or only) day — move to directory. Sale de la ruta: su alarma
@@ -916,7 +946,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         minOrder = Math.min(...orders);
       }
 
-      await db.collection('clients').add({
+      await settleClientWrite(db.collection('clients').add({
         ...scope,
         userId,
         isNote: true,
@@ -936,7 +966,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         isPinned: false,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      }), 'Error adding note');
       return true;
     } catch (e) {
       reportError(e, 'Error adding note');
@@ -1004,7 +1034,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         updates.doneFor = '';
       }
 
-      await db.collection('clients').doc(noteId).update(updates);
+      await settleClientWrite(db.collection('clients').doc(noteId).update(updates), 'Error updating note');
       return true;
     } catch (e) {
       reportError(e, 'Error updating note');
@@ -1099,7 +1129,22 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         // existing document id instead of creating another client document.
         // Its creator/scope remain unchanged when a teammate performs this.
         const updates = toExistingClientUpdate(newClientData);
-        await db.collection('clients').doc(exactMatch.id).update(updates);
+        // Lo que el formulario dejó vacío no pisa lo que la ficha ya tenía
+        // guardado: ubicación, notas, teléfonos extra y la estrella.
+        const sameLink = (mapsLink || '').trim() === (exactMatch.mapsLink || '').trim();
+        if (!mapsLink?.trim()) delete updates.mapsLink;
+        if (!mapsLink?.trim() || sameLink) {
+          delete updates.lat;
+          delete updates.lng;
+        }
+        if (!address.trim()) delete updates.address;
+        if (!notes.trim()) delete updates.notes;
+        // La coincidencia es por nombre y teléfono: el principal no cambió.
+        delete updates.phone;
+        delete updates.phones;
+        delete updates.isStarred;
+        delete updates.isPinned;
+        await settleClientWrite(db.collection('clients').doc(exactMatch.id).update(updates), 'Error adding client');
         void fillClientCoordinates(exactMatch.id, updates);
         return;
       }
@@ -1112,7 +1157,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         if (notes.trim()) contactUpdates.notes = notes;
         if (mapsLink?.trim()) contactUpdates.mapsLink = mapsLink;
         Object.assign(contactUpdates, billingInfo);
-        await db.collection('clients').doc(exactMatch.id).update(contactUpdates);
+        await settleClientWrite(db.collection('clients').doc(exactMatch.id).update(contactUpdates), 'Error adding client');
         void fillClientCoordinates(exactMatch.id, contactUpdates);
         return;
       }

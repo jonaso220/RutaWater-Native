@@ -17,7 +17,7 @@ import {
   suggestPosition, todayKey, weekdayOf,
 } from '../src/views';
 import {
-  addDebt, addLocation, changeDays, fixDebt, removePhone, scheduleRecurring, setInactive, setPaymentSchedule, setRelationship,
+  addDebt, addLocation, changeDays, fixDebt, moveDebts, removePhone, scheduleRecurring, setInactive, setPaymentSchedule, setRelationship,
   addPhone, advanceVisit, changeAddress, changeName, changeFrequency, changePosition, createClient, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setBilling, setNote, setProducts, setStar,
   undoDone,
 } from '../src/writes';
@@ -210,6 +210,23 @@ describeWithEmulator('RutaWater MCP contra el emulador', () => {
     await addDebt(db, account, 'rosa', 150, 700, clients);
     await expect(fixDebt(db, account, 'rosa', 150, 160, clients)).rejects.toThrow('la fecha');
     expect((await fixDebt(db, account, 'rosa', 150, 160, clients, '2026-10-01')).despues).toMatchObject({ deuda_total: 860 });
+  });
+
+  test('pasar deuda: las deudas pasan a otra ficha con sus fechas, sin cobrarlas', async () => {
+    const account = await store.getAccount();
+    const clients = await store.getClients(account.routes[0]);
+    await expect(moveDebts(db, account, 'rosa', 'mario', 999, clients)).rejects.toThrow('no se movió nada');
+    await expect(moveDebts(db, account, 'rosa', 'rosa', 450, clients)).rejects.toThrow('misma ficha');
+    await expect(moveDebts(db, account, 'rosa', 'costa', 450, clients)).rejects.toThrow('mismo reparto');
+    const moved = await moveDebts(db, account, 'rosa', 'mario', 450, clients);
+    expect(moved).toMatchObject({
+      cambiado: true, deudas_movidas: 2,
+      despues: { 'Rosa Jerez': { deuda_total: 0 }, Mario: { deuda_total: 450, deudas: [{ monto: 300, fecha: '2026-09-01' }, { monto: 150, fecha: '2026-10-01' }] } },
+    });
+    const d2 = (await db.doc('debts/d2').get()).data();
+    expect(d2).toMatchObject({ clientId: 'mario', customerId: 'mario', clientName: 'Mario', clientAddress: 'Rambla', amount: 150 });
+    expect(d2?.createdAt.toDate().toISOString()).toBe(new Date('2026-10-01T12:00:00').toISOString());
+    await expect(moveDebts(db, account, 'rosa', 'mario', 450, clients)).rejects.toThrow('no tiene deudas');
   });
 
   test('agenda fija: una ficha de directorio vuelve con días y frecuencia; cambiar días conserva el resto', async () => {

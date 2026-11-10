@@ -73,7 +73,7 @@ const tools = (await client.listTools()).tools.map((tool) => tool.name).sort();
 assert.deepEqual(tools, [
   'abrir_whatsapp', 'actualizar_nota', 'adelantar_visita', 'agenda_del_dia', 'agendar_fijo', 'agendar_una_vez', 'agregar_telefono', 'agregar_ubicacion', 'anotar_deuda', 'avisar_jonathan', 'borrar_nota_del_dia', 'buscar_clientes', 'cambiar_dias', 'cambiar_direccion', 'cambiar_fecha', 'cambiar_frecuencia', 'cambiar_nombre',
   'cambiar_posicion', 'cerrar_tarea', 'clientes_sin_comprar', 'consultar_jonathan', 'corregir_deuda', 'crear_cliente', 'crear_nota_del_dia', 'deshacer_fusion', 'deshacer_listo', 'editar_nota_del_dia', 'entregas_del_periodo', 'enviar_comprobante_aquapura', 'excluir_chat', 'fijar_dias_de_pago', 'fijar_facturacion', 'fijar_parentesco', 'fijar_productos', 'fusionar_duplicados', 'guardar_contacto', 'historia_cliente', 'leer_respuestas_jonathan', 'leer_whatsapp', 'listar_deudas', 'listar_repartos', 'mandar_mensaje', 'marcar_favorito', 'marcar_inactivo', 'marcar_listo', 'marcar_respuesta_aplicada',
-  'marcar_revisar_transferencia', 'marcar_whatsapp_atendido', 'pasada_programada', 'pedir_a_claude', 'programar_tarea', 'quitar_de_la_lista', 'quitar_telefono', 'registrar_pago', 'responder_whatsapp', 'revisar_correos', 'sugerir_posicion', 'transcribir_audio', 'transcribir_whatsapp', 'ver_archivo_jonathan', 'ver_archivo_whatsapp', 'ver_cliente', 'ver_link_maps', 'ver_productos', 'ver_tareas_programadas',
+  'marcar_revisar_transferencia', 'marcar_whatsapp_atendido', 'pasada_programada', 'pasar_deuda', 'pedir_a_claude', 'programar_tarea', 'quitar_de_la_lista', 'quitar_telefono', 'registrar_pago', 'responder_whatsapp', 'revisar_correos', 'sugerir_posicion', 'transcribir_audio', 'transcribir_whatsapp', 'ver_archivo_jonathan', 'ver_archivo_whatsapp', 'ver_cliente', 'ver_link_maps', 'ver_productos', 'ver_tareas_programadas',
 ]);
 
 // abrir_whatsapp valida antes de abrir nada: estos casos fallan sin tocar WhatsApp.
@@ -185,5 +185,5 @@ assert.deepEqual(audit, [
 ]);
 
 await client.close();
-console.log('smoke: OK (65 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
+console.log('smoke: OK (66 herramientas, lectura, escrituras, pagos, transferencias, visitas de una vez, posición en el recorrido y registro de auditoría)');
 process.exit(0);

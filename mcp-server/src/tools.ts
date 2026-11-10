@@ -27,7 +27,7 @@ import {
 import {
   advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, createDayNote, deleteDayNote, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote,
   addPhone, changeAddress, changeName, setBilling,
-  addDebt, addLocation, changeDays, fixDebt, RELATIONSHIPS, removePhone, scheduleRecurring, setInactive, setPaymentSchedule, setRelationship, setProducts, setStar, undoDone, updateDayNote, WriteError,
+  addDebt, addLocation, changeDays, fixDebt, moveDebts, RELATIONSHIPS, removePhone, scheduleRecurring, setInactive, setPaymentSchedule, setRelationship, setProducts, setStar, undoDone, updateDayNote, WriteError,
 } from './writes';
 
 const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta configurada.
@@ -51,6 +51,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - quitar_telefono saca un teléfono de la ficha; agregar_ubicacion suma otra ubicación guardada (casa, trabajo u otra), y con principal=true pasa a ser la de la tarjeta.
 - agendar_fijo vuelve a poner en agenda una ficha de directorio con días y frecuencia (como Directorio → Agendar); cambiar_dias cambia los días de un cliente que ya tiene agenda fija, sin tocar frecuencia, nota ni productos.
 - anotar_deuda suma una deuda (como Agregar deuda en la tarjeta) y corregir_deuda cambia el monto de una anotada; las dos piden la deuda actual para no duplicar.
+- pasar_deuda pasa todas las deudas de una ficha a otra (otra persona de la casa se hace cargo), con sus montos y fechas; no es un pago.
 - fijar_parentesco vincula (o desvincula) dos fichas como en Parentesco; fijar_dias_de_pago guarda cuándo paga la deuda; marcar_inactivo es «Ya no es cliente» / Reactivar.
 - mandar_mensaje le escribe a un cliente lo que pidió Jonathan aunque no sea respuesta (texto común dentro de las 24 h; si no, por WhatsApp del Mac, y si el Mac no puede, la plantilla «mensaje_cliente», que se cobra).
 - programar_tarea guarda algo para hacer a una hora (por ejemplo «mañana a las 06:00, si no contestó, pasalo a la semana que viene»); el vigilante arranca cuando vence, la hace con ver_tareas_programadas y la cierra con cerrar_tarea.
@@ -516,6 +517,20 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
   }, write('corregir_deuda', async ({ cliente_id, monto_actual, monto_nuevo, fecha }) => {
     const { all } = await findClient(cliente_id);
     return fixDebt(store.db, await store.refreshAccount(), cliente_id, monto_actual, monto_nuevo, all, fecha);
+  }));
+
+  server.registerTool('pasar_deuda', {
+    title: 'Pasar deuda',
+    description: 'Pasa todas las deudas de una ficha a otra del mismo reparto (por ejemplo, el esposo se hace cargo de lo que debía ella): cada deuda conserva su monto y su fecha. No es un pago: no se registra cobro. deuda_esperada = deuda_total de la ficha de origen según ver_cliente; si cambió, no se mueve nada. Devuelve las deudas de las dos fichas antes y después.',
+    inputSchema: {
+      de_cliente_id: z.string().min(1).describe('Ficha que tiene la deuda hoy'),
+      a_cliente_id: z.string().min(1).describe('Ficha que se hace cargo'),
+      deuda_esperada: z.number().positive().describe('deuda_total actual de la ficha de origen según ver_cliente'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  }, write('pasar_deuda', async ({ de_cliente_id, a_cliente_id, deuda_esperada }) => {
+    const { all } = await findClient(de_cliente_id);
+    return moveDebts(store.db, await store.refreshAccount(), de_cliente_id, a_cliente_id, deuda_esperada, all);
   }));
 
   server.registerTool('fijar_parentesco', {

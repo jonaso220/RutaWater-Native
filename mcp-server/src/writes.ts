@@ -1515,6 +1515,54 @@ export const fixDebt = (
   };
 });
 
+/**
+ * Pasa todas las deudas de una ficha a otra del mismo reparto (otra persona de
+ * la casa se hace cargo): cada deuda conserva su monto y su fecha y pasa a
+ * apuntar a la otra ficha, como hace la fusión con las deudas de la copia. No
+ * es un pago: no se borra ninguna. `expectedTotal` es la deuda de la ficha de
+ * origen que se leyó antes: si cambió, no se mueve nada.
+ */
+export const moveDebts = (
+  db: Firestore, account: Account, fromId: string, toId: string, expectedTotal: number, clients: Client[],
+): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
+  if (fromId === toId) throw new WriteError('Son la misma ficha.');
+  if (!Number.isFinite(expectedTotal) || expectedTotal <= 0) throw new WriteError(`deuda_esperada inválida: ${expectedTotal}.`);
+  const from = await loadForWrite(db, transaction, account, fromId);
+  const to = await loadForWrite(db, transaction, account, toId);
+  if (from.client.isNote || to.client.isNote) throw new WriteError('Las notas no tienen deudas.');
+  if (from.route.id !== to.route.id) throw new WriteError('Las dos fichas tienen que ser del mismo reparto.');
+  if (getStableClientId(from.client) === getStableClientId(to.client)) {
+    throw new WriteError('Las dos fichas son del mismo cliente: las deudas ya se ven en las dos.');
+  }
+  const linesOf = (docs: QueryDocumentSnapshot[]): DebtLine[] => docs.map((doc) => ({
+    ref: doc.ref, id: doc.id, amount: Number(doc.data().amount) || 0, date: parseDate(doc.data().createdAt),
+  })).filter((line) => line.amount > 0);
+  const identity = buildClientIdentityIndex(clients);
+  const docs = (await fullScopeRead(db, transaction, account, from.route, 'debts')).flatMap((snap) => snap.docs)
+    .filter((doc) => belongsToProfileScope(doc.data(), account.uid, from.route.groupId));
+  const of = (client: Client) => docs.filter((doc) => getRelatedRecordStableClientId(doc.data() as any, identity) === getStableClientId(client));
+  const fromLines = linesOf(of(from.client));
+  const toLines = linesOf(of(to.client));
+  const before = describeDebts(fromLines);
+  if (!fromLines.length) throw new WriteError(`«${from.client.name}» no tiene deudas: no se movió nada.`);
+  if (Math.abs(before.deuda_total - expectedTotal) > CENT) {
+    throw new WriteError(`La deuda de «${from.client.name}» es ${before.deuda_total}, no ${expectedTotal}: no se movió nada. Revisá con ver_cliente.`);
+  }
+  for (const line of fromLines) {
+    transaction.update(line.ref, {
+      ...getRelatedClientReference(to.client),
+      clientName: to.client.name,
+      clientAddress: to.client.address || '',
+    });
+  }
+  return {
+    cliente_id: to.client.id, nombre: to.client.name, reparto: to.route.name, cambiado: true,
+    antes: { [from.client.name]: before, [to.client.name]: describeDebts(toLines) },
+    despues: { [from.client.name]: describeDebts([]), [to.client.name]: describeDebts([...toLines, ...fromLines]) },
+    deudas_movidas: fromLines.length,
+  };
+});
+
 export const RELATIONSHIPS: Record<string, string> = {
   conyuge: 'conyuge', padre_madre: 'hijo_a', hijo_a: 'padre_madre', hermano_a: 'hermano_a', suegro_a: 'yerno_nuera',
   yerno_nuera: 'suegro_a', abuelo_a: 'nieto_a', nieto_a: 'abuelo_a', tio_a: 'sobrino_a', sobrino_a: 'tio_a',

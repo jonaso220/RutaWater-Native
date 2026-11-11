@@ -149,7 +149,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
         enCaminoMessage,
         tomorrowVisitMessage,
       );
-      // «En camino» suma un link para ver el camión en vivo 30 minutos.
+      // «En camino» suma un link para ver el camión en vivo 20 minutos.
       if (!isTomorrowVisit) {
         const url = await startEnCaminoLink();
         message = withTrackingLink(message, url, t('clientCard.trackingLinkLine', { url }));

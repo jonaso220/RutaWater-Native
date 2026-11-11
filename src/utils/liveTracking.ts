@@ -1,9 +1,9 @@
 // Seguimiento en vivo del camión: cada «En camino» crea un link propio en
 // Realtime Database (seguimiento/<token>) que el cliente mira en la webapp
-// (web/seguimiento) durante 30 minutos. El formato lo validan
+// (web/seguimiento) durante 20 minutos. El formato lo validan
 // database.rules.json; acá queda la parte sin efectos.
 
-export const TRACKING_LINK_MINUTES = 30;
+export const TRACKING_LINK_MINUTES = 20;
 export const TRACKING_BASE_URL = 'https://rutawater.web.app/s/';
 
 /** Lugar de la plantilla «En camino» donde va el link; si no está, se agrega al final. */
@@ -45,10 +45,19 @@ export const trackingUrl = (token: string): string => `${TRACKING_BASE_URL}${tok
 
 /**
  * Mensaje de «En camino» con el link: va donde diga {link}, o en una línea al
- * final. Sin link (permiso negado, sin sesión) el mensaje sale como siempre.
+ * final. Sin link (permiso negado, sin sesión) se saca el párrafo que lo
+ * anunciaba, para no mandar «seguinos desde este enlace:» sin enlace; si todo
+ * el mensaje es un solo párrafo, se saca solo el {link}.
  */
 export const withTrackingLink = (message: string, url: string | null, linkLine: string): string => {
-  if (!url) return message.split(TRACKING_LINK_PLACEHOLDER).join('').replace(/[ \t]+\n/g, '\n').trim();
+  if (!url) {
+    const paragraphs = message.split(/\n[ \t]*\n/);
+    const kept = paragraphs.filter((paragraph) => !paragraph.includes(TRACKING_LINK_PLACEHOLDER));
+    const text = kept.some((paragraph) => paragraph.trim())
+      ? kept.join('\n\n')
+      : message.split(TRACKING_LINK_PLACEHOLDER).join('');
+    return text.replace(/[ \t]+\n/g, '\n').trim();
+  }
   if (message.includes(TRACKING_LINK_PLACEHOLDER)) return message.split(TRACKING_LINK_PLACEHOLDER).join(url);
   return `${message.trim()}\n\n${linkLine}`;
 };

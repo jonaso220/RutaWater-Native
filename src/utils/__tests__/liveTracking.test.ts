@@ -1,7 +1,8 @@
 import {
   distanceMeters, liveLinks, newTrackingRecord, newTrackingToken, positionFields, shouldAddTrailPoint,
-  trackingUrl, withTrackingLink,
+  TRACKING_LINK_PLACEHOLDER, trackingUrl, withTrackingLink,
 } from '../liveTracking';
+import { DEFAULT_EN_CAMINO } from '../whatsAppTemplates';
 
 const TIMESTAMP = { '.sv': 'timestamp' };
 const NOW = Date.UTC(2026, 9, 17, 15, 0, 0);
@@ -24,6 +25,21 @@ test('el link va donde dice {link} o en una línea al final; sin link el mensaje
   expect(withTrackingLink('Buenas 🚚', null, 'no se usa')).toBe('Buenas 🚚');
 });
 
+test('el mensaje por defecto lleva el link, y sin link no deja el párrafo que lo anuncia', () => {
+  const url = 'https://rutawater.web.app/s/abc';
+  expect(DEFAULT_EN_CAMINO).toContain(TRACKING_LINK_PLACEHOLDER);
+  expect(withTrackingLink(DEFAULT_EN_CAMINO, url, 'no se usa')).toBe(
+    '🚚 ¡Hola! Estamos cerca de tu domicilio. ¡Prepárate para recibirnos!\n\n'
+    + `📍 Puedes seguir la ubicación del camión en tiempo real desde este enlace:\n${url}\n\n`
+    + '¡Gracias por elegirnos!',
+  );
+  expect(withTrackingLink(DEFAULT_EN_CAMINO, null, 'no se usa')).toBe(
+    '🚚 ¡Hola! Estamos cerca de tu domicilio. ¡Prepárate para recibirnos!\n\n¡Gracias por elegirnos!',
+  );
+  // Un mensaje que es solo el párrafo del link no queda vacío.
+  expect(withTrackingLink('Seguinos acá: {link}', null, 'no se usa')).toBe('Seguinos acá:');
+});
+
 test('posición en el formato de las reglas: redondeo y rumbo/precisión solo si son válidos', () => {
   expect(positionFields(fix())).toEqual({ lat: -34.903218, lng: -56.181045, precision: 8, rumbo: 81 });
   expect(positionFields(fix({ rumbo: -1, precision: undefined }))).toEqual(expect.objectContaining({ rumbo: null, precision: null }));
@@ -31,13 +47,13 @@ test('posición en el formato de las reglas: redondeo y rumbo/precisión solo si
 });
 
 test('un link nuevo sale en camino con una posición reciente, si no queda preparado', () => {
-  expect(newTrackingRecord('uid', '2026-10-17', NOW + 1800000, fix(), NOW, TIMESTAMP)).toEqual({
-    ownerUid: 'uid', dia: '2026-10-17', vence: NOW + 1800000, actualizado: TIMESTAMP,
+  expect(newTrackingRecord('uid', '2026-10-17', NOW + 1200000, fix(), NOW, TIMESTAMP)).toEqual({
+    ownerUid: 'uid', dia: '2026-10-17', vence: NOW + 1200000, actualizado: TIMESTAMP,
     estado: 'en_camino', lat: -34.903218, lng: -56.181045, precision: 8, rumbo: 81,
   });
-  const stale = newTrackingRecord('uid', '2026-10-17', NOW + 1800000, fix({ at: NOW - 3 * 60000 }), NOW, TIMESTAMP);
-  expect(stale).toEqual({ ownerUid: 'uid', dia: '2026-10-17', vence: NOW + 1800000, actualizado: TIMESTAMP, estado: 'preparado' });
-  expect(newTrackingRecord('uid', '2026-10-17', NOW + 1800000, fix({ rumbo: undefined }), NOW, TIMESTAMP))
+  const stale = newTrackingRecord('uid', '2026-10-17', NOW + 1200000, fix({ at: NOW - 3 * 60000 }), NOW, TIMESTAMP);
+  expect(stale).toEqual({ ownerUid: 'uid', dia: '2026-10-17', vence: NOW + 1200000, actualizado: TIMESTAMP, estado: 'preparado' });
+  expect(newTrackingRecord('uid', '2026-10-17', NOW + 1200000, fix({ rumbo: undefined }), NOW, TIMESTAMP))
     .not.toHaveProperty('rumbo');
 });
 

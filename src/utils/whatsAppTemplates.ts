@@ -1,4 +1,9 @@
-export const DEFAULT_EN_CAMINO = 'Buenas 🚚. ¡Estamos cerca! Eres el/la siguiente en la lista de entrega.';
+// {link} es donde va el link de seguimiento en vivo (ver withTrackingLink). El
+// mensaje por defecto ya lo trae: una cuenta nueva manda el link sin tener que
+// descubrir que existe.
+export const DEFAULT_EN_CAMINO = '🚚 ¡Hola! Estamos cerca de tu domicilio. ¡Prepárate para recibirnos!\n\n'
+  + '📍 Puedes seguir la ubicación del camión en tiempo real desde este enlace:\n{link}\n\n'
+  + '¡Gracias por elegirnos!';
 export const DEFAULT_TOMORROW_VISIT = 'Buenas 👋 Te escribo para recordarte que mañana andaremos por tu casa 🚛💧\n\nEn caso de que ya sepas lo que vas a necesitar, te agradezco que me lo digas así lo pongo en la agenda 📝✅\n\n¡Saludos! 😃';
 
 export const resolveClientCardWhatsAppMessage = (

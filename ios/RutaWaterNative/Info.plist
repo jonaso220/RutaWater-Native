@@ -48,7 +48,7 @@
 		<string>comgooglemaps</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>RutaWater comparte la ubicación del camión con el cliente al que le avisás «En camino», durante 30 minutos.</string>
+	<string>RutaWater comparte la ubicación del camión con el cliente al que le avisás «En camino», durante 20 minutos.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

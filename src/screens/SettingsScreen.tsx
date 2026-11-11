@@ -131,7 +131,7 @@ const SettingsScreen = () => {
     );
   };
 
-  // Mismo link de 30 minutos que «En camino», para probarlo con quien sea.
+  // Mismo link de 20 minutos que «En camino», para probarlo con quien sea.
   const [sharingLink, setSharingLink] = useState(false);
   const handleShareTrackingLink = async () => {
     setSharingLink(true);
@@ -450,7 +450,7 @@ const SettingsScreen = () => {
         </View>
       </View>
 
-      {/* Ubicación en vivo: el mismo link de 30 minutos que «En camino», para compartirlo con cualquiera */}
+      {/* Ubicación en vivo: el mismo link de 20 minutos que «En camino», para compartirlo con cualquiera */}
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="navigate" size={20} color={colors.textMuted} />

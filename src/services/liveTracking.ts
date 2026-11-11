@@ -203,7 +203,7 @@ export function stopLiveTracking(): void {
 }
 
 /**
- * «En camino»: crea un link de 30 minutos y empieza (o sigue) mandando la
+ * «En camino»: crea un link de 20 minutos y empieza (o sigue) mandando la
  * ubicación a todos los links vivos. Devuelve la URL, o null si no hay
  * permiso de ubicación o sesión: el mensaje sale igual, sin link.
  */

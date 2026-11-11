@@ -1,6 +1,6 @@
 // Simula un aviso «En camino» contra el emulador de Realtime Database para
 // probar la página: preparado → en camino por 18 de Julio → (opcional) terminado.
-// El link vence a los 30 minutos, como el que manda la app.
+// El link vence a los 20 minutos, como el que manda la app.
 //
 //   node web/seguimiento/dev/simular-camion.mjs [token] [--terminar]
 //
@@ -36,7 +36,7 @@ const bearing = ([lat1, lng1], [lat2, lng2]) => {
 };
 
 const base = {
-  ownerUid: 'simulador', dia: new Date().toLocaleDateString('en-CA'), vence: Date.now() + 30 * 60000,
+  ownerUid: 'simulador', dia: new Date().toLocaleDateString('en-CA'), vence: Date.now() + 20 * 60000,
   actualizado: now, titulo: 'RutaWater',
 };
 console.log(`Abrí: http://localhost:5050/s/${token}`);

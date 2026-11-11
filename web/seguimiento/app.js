@@ -112,7 +112,7 @@
   };
 
   var render = function () {
-    // Cada link dura lo que fija la app (30 minutos desde «En camino»).
+    // Cada link dura lo que fija la app (20 minutos desde «En camino»).
     if (data && typeof data.vence === 'number' && data.vence <= Date.now() && status !== 'inactive') {
       status = 'inactive';
       disconnect();

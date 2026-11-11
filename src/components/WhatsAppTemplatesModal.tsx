@@ -24,6 +24,7 @@ import {
   DEFAULT_RECORDATORIO,
 } from '../hooks/useWhatsAppTemplates';
 import { DEFAULT_EN_CAMINO, DEFAULT_TOMORROW_VISIT } from '../utils/whatsAppTemplates';
+import { TRACKING_LINK_PLACEHOLDER } from '../utils/liveTracking';
 
 interface WhatsAppTemplatesModalProps {
   visible: boolean;
@@ -139,15 +140,32 @@ const WhatsAppTemplatesModal: React.FC<WhatsAppTemplatesModalProps> = ({
 
             <Text style={styles.templateLabel}>{t('settings.enCaminoLabel')}</Text>
             <TextInput
-              style={styles.templateInput}
+              style={[styles.templateInput, styles.templateInputTall]}
               value={waEnCamino}
               onChangeText={setWaEnCamino}
               placeholder={DEFAULT_EN_CAMINO}
               placeholderTextColor={colors.textDisabled}
+              accessibilityLabel={t('settings.enCaminoLabel')}
               multiline
-              numberOfLines={3}
+              numberOfLines={7}
               editable={!saving}
             />
+            <Text style={styles.templateHint}>
+              {t('settings.enCaminoLinkHint', { placeholder: TRACKING_LINK_PLACEHOLDER })}
+            </Text>
+            {waEnCamino.trim() !== '' && !waEnCamino.includes(TRACKING_LINK_PLACEHOLDER) ? (
+              <TouchableOpacity
+                style={styles.insertLinkBtn}
+                onPress={() => setWaEnCamino(`${waEnCamino.trimEnd()}\n${TRACKING_LINK_PLACEHOLDER}`)}
+                disabled={saving}
+                accessibilityRole="button"
+              >
+                <Ionicons name="navigate-outline" size={Math.round(14 * fontScale)} color={colors.primary} />
+                <Text style={styles.insertLinkBtnText}>
+                  {t('settings.enCaminoInsertLink', { placeholder: TRACKING_LINK_PLACEHOLDER })}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
 
             <View style={styles.templateDivider} />
 
@@ -307,10 +325,30 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
       textAlignVertical: 'top',
       minHeight: s(60),
     },
+    templateInputTall: {
+      minHeight: s(196),
+    },
     templateHint: {
       fontSize: s(12),
       color: colors.textHint,
       marginTop: s(4),
+    },
+    insertLinkBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: s(6),
+      marginTop: s(8),
+      paddingVertical: s(6),
+      paddingHorizontal: s(10),
+      borderRadius: s(8),
+      borderWidth: 1,
+      borderColor: colors.primary,
+    },
+    insertLinkBtnText: {
+      fontSize: s(13),
+      fontWeight: '600',
+      color: colors.primary,
     },
     templateActions: {
       flexDirection: 'row',

@@ -7,7 +7,7 @@ import firebase from 'firebase/compat/app';
 import 'firebase/compat/database';
 
 // Seguimiento en vivo del camión (Realtime Database): cada «En camino» crea un
-// link que la webapp lee sin cuenta hasta que vence (30 min); solo el
+// link que la webapp lee sin cuenta hasta que vence (20 min); solo el
 // repartidor dueño escribe.
 const emulator = process.env.FIREBASE_DATABASE_EMULATOR_HOST;
 const describeWithEmulator = emulator ? describe : describe.skip;
@@ -23,7 +23,7 @@ describeWithEmulator('reglas de seguimiento en vivo', () => {
   let visitor: firebase.database.Database;
 
   const base = (extra: Record<string, unknown> = {}) => ({
-    ownerUid: 'owner', estado: 'preparado', dia: '2026-10-17', vence: Date.now() + 30 * MINUTE, actualizado: now, ...extra,
+    ownerUid: 'owner', estado: 'preparado', dia: '2026-10-17', vence: Date.now() + 20 * MINUTE, actualizado: now, ...extra,
   });
   const onRoute = (extra: Record<string, unknown> = {}) => base({
     estado: 'en_camino', lat: -34.9, lng: -56.16, precision: 12, rumbo: 90, ...extra,

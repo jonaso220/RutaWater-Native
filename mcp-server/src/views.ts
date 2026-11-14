@@ -109,7 +109,7 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
   tio_a: 'tío/a', sobrino_a: 'sobrino/a', primo_a: 'primo/a', cunado_a: 'cuñado/a', otro: 'otro',
 };
 
-const whatsappOf = (client: Client): string => {
+export const whatsappOf = (client: Client): string => {
   const primary = getPrimaryClientPhone(getClientPhones(client));
   return primary ? normalizePhone(primary.number) : '';
 };

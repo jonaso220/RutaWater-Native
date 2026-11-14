@@ -9,7 +9,7 @@ import { applyReplacements, openWhatsapp } from './whatsapp';
 import { appRecordsSince, clientsWithoutPurchase, loadDeliveryRecords, loadPhotoRows, mergeHistory, summarizeHistory } from './deliveries';
 import { describeMapsLink } from './mapsLink';
 import { readAcrobatLink } from './acrobatLink';
-import { downloadInboxMedia, excludeChat, forwardReceiptToAquapura, markHandled, readInbox, sendMessage, sendReply, transcribeInboxAudios } from './whatsappApi';
+import { downloadInboxMedia, excludeChat, forwardReceiptToAquapura, markHandled, readChat, readInbox, sendMessage, sendReply, transcribeInboxAudios } from './whatsappApi';
 import { readEmails } from './emailReader';
 import { askJonathan, downloadAttachment, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
 import { scheduledPass } from './vigilanteControl';
@@ -23,7 +23,7 @@ import { findRoute, Route } from './routes';
 import type { Store } from './store';
 import {
   addDays, agendaFor, clientDetail, clientSummary, debtReport, debtsForClient, debtTotalMessage, hasPendingTransfer,
-  isValidIsoDate, nextVisit, productCatalog, searchClients, suggestPosition, todayKey, weekdayOf, whatsappTemplates,
+  isValidIsoDate, nextVisit, productCatalog, searchClients, suggestPosition, todayKey, weekdayOf, whatsappOf, whatsappTemplates,
 } from './views';
 import {
   advanceVisit, ChangeResult, changeFrequency, changePosition, createClient, createDayNote, deleteDayNote, markDone, markTransferForReview, registerPayment, removeFromList, rescheduleClient, scheduleOnce, setNote,
@@ -63,7 +63,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - fusionar_duplicados junta dos fichas de la misma persona: queda la de agenda (o la más completa), se le suman los datos que solo tenía la otra y la otra se borra; deudas, transferencias y Parentesco pasan a la que queda. Primero sin aplicar (vista previa) y después con aplicar=true. deshacer_fusion la revierte con la copia que deja.
 - abrir_whatsapp abre en el Mac el chat de un número con un borrador (como Avisar o el ícono de WhatsApp de la tarjeta); con plantilla="aviso_manana" usa el aviso de Ajustes. Solo deja el borrador: enviar y verificar sigue en WhatsApp.
 - transcribir_audio transcribe en el Mac los últimos audios de WhatsApp guardados en Descargas (sirve aunque los comandos corran en una VM sin acceso a Descargas).
-- WhatsApp por la API (coexistencia, gratis): leer_whatsapp trae los mensajes de clientes sin atender con su conversación y sus fichas; transcribir_whatsapp transcribe sus audios; ver_archivo_whatsapp muestra una foto o comprobante; responder_whatsapp contesta dentro de las 24 h (hasta el tope del mes); marcar_whatsapp_atendido los da por resueltos y los marca leídos; excluir_chat deja afuera un chat que no es de clientes (un amigo, un familiar) cuando Jonathan lo pide. Avisos y recordatorios NUNCA por la API: se cobran; van por la app en el Mac.
+- WhatsApp por la API (coexistencia, gratis): leer_whatsapp trae los mensajes de clientes sin atender con su conversación y sus fichas; leer_chat_whatsapp trae un chat aunque no tenga pendientes; transcribir_whatsapp transcribe sus audios; ver_archivo_whatsapp muestra una foto o comprobante; responder_whatsapp contesta dentro de las 24 h (hasta el tope del mes); marcar_whatsapp_atendido los da por resueltos y los marca leídos; excluir_chat deja afuera un chat que no es de clientes (un amigo, un familiar) cuando Jonathan lo pide. Avisos y recordatorios NUNCA por la API: se cobran; van por la app en el Mac.
 - ver_link_maps dice qué hay en un link de Google Maps (coordenadas, dirección armada con el mapa, texto del lugar) sin escribir nada.
 - ver_link_acrobat abre un link de Adobe Acrobat (acrobat.adobe.com) que mandó un cliente, por ejemplo un comprobante, y lo muestra como imagen; el PDF queda como ruta en el Mac.
 - guardar_contacto guarda o renombra al cliente en los Contactos de iCloud (iPhone y WhatsApp) como «Nombre - Dirección -» + link de Maps.
@@ -306,6 +306,22 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
     inputSchema: {},
     annotations: { readOnlyHint: true },
   }, handle(async () => readInbox(store.db, await allClients())));
+
+  server.registerTool('leer_chat_whatsapp', {
+    title: 'Leer un chat de WhatsApp (API)',
+    description: 'Un chat de la bandeja de la API aunque no tenga nada pendiente, por ficha o por teléfono: mensajes de los últimos días (por defecto 14; hasta 50) con atendido sí/no, sin_atender, ultimo_del_cliente, ultimo_nuestro y responder_hasta. Sirve cuando Jonathan ve un mensaje que leer_whatsapp no trae: si no figura acá, no llegó a la API. Con cliente_id mira el teléfono principal de la ficha. Nunca un chat excluido. Solo lectura: no marca nada como leído.',
+    inputSchema: {
+      cliente_id: z.string().min(1).optional().describe('Ficha: usa su teléfono de WhatsApp'),
+      telefono: z.string().min(8).max(40).optional().describe('Si no hay ficha: el número (09… o 598…)'),
+      dias: z.number().int().min(1).max(60).optional(),
+    },
+    annotations: { readOnlyHint: true },
+  }, handle(async ({ cliente_id, telefono, dias }: { cliente_id?: string; telefono?: string; dias?: number }) => {
+    const client = cliente_id ? (await findClient(cliente_id)).client : undefined;
+    const phone = telefono || (client ? whatsappOf(client) : '');
+    if (!phone) throw new WriteError(cliente_id ? 'La ficha no tiene teléfono.' : 'Pasá cliente_id o telefono.');
+    return readChat(store.db, await allClients(), phone, dias ?? 14);
+  }));
 
   server.registerTool('ver_archivo_whatsapp', {
     title: 'Ver archivo de WhatsApp',

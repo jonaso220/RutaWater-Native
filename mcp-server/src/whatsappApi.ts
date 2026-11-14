@@ -31,6 +31,7 @@ const NAME_SEARCH_MS = 14 * 24 * 3600e3;
 const DEFAULT_MONTHLY_LIMIT = 3600;
 const WINDOW_MS = 24 * 3600e3;
 const CONTEXT_MS = 48 * 3600e3;
+const CHAT_LIMIT = 50;
 const UY_OFFSET_MS = 3 * 3600e3;
 
 const digits = (value: unknown): string => String(value || '').replace(/\D/g, '');
@@ -129,6 +130,35 @@ export const readInbox = async (db: Firestore, clients: Client[], now = new Date
     };
   }).sort((a, b) => a.pendientes[0].hora.localeCompare(b.pendientes[0].hora));
   return { chats, uso: await usage(db, now, config) };
+};
+
+/**
+ * Un chat entero de la bandeja, aunque no tenga nada pendiente (Jonathan,
+ * 4/11/2026: ve mensajes sin leer en el teléfono que leer_whatsapp no trae).
+ * Dice qué llegó a la API, si ya se atendió y lo último de cada lado; lo que no
+ * está acá no llegó a la API. Solo lectura: no marca nada como leído.
+ */
+export const readChat = async (db: Firestore, clients: Client[], phoneInput: string, days: number, now = new Date()) => {
+  const phone = fullPhone(phoneInput);
+  if (phone.length < 10) throw new WriteError('Teléfono inválido: pasá el número con código de país (598…).');
+  if (isExcluded(await loadExcluded(db, localConfig()), phone)) throw new WriteError('Ese chat está excluido: no se lee.');
+  const since = now.getTime() - days * 24 * 3600e3;
+  const all = (await db.collection(INBOX).where('phone', '==', phone).get()).docs.map(readDoc)
+    .sort((a, b) => +a.sentAt - +b.sentAt);
+  const inbound = all.filter((message) => message.direction === 'in');
+  const hour = (message?: InboxDoc) => (message ? uyIso(message.sentAt).slice(0, 16).replace('T', ' ') : null);
+  const lastIn = inbound[inbound.length - 1];
+  return {
+    telefono: phone,
+    fichas: clientsByPhone(clients, phone),
+    dias: days,
+    mensajes: all.filter((message) => +message.sentAt >= since).slice(-CHAT_LIMIT)
+      .map((message) => ({ ...describe(message), atendido: Boolean(message.handled) })),
+    sin_atender: inbound.filter((message) => !message.handled).length,
+    ultimo_del_cliente: hour(lastIn),
+    ultimo_nuestro: hour(all.filter((message) => message.direction === 'out').pop()),
+    responder_hasta: lastIn ? uyIso(new Date(+lastIn.sentAt + WINDOW_MS)).slice(0, 16).replace('T', ' ') : null,
+  };
 };
 
 /** Marca atendidos esos mensajes y, por chat, el último como leído en WhatsApp (gratis; azul también en la app). */

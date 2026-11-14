@@ -15,7 +15,7 @@ fs.writeFileSync(process.env.RUTAWATER_YCLOUD_KEY, 'test-key\n');
 // eslint-disable-next-line import/first
 import { getDb } from '../src/config';
 // eslint-disable-next-line import/first
-import { excludeChat, forwardReceiptToAquapura, markHandled, readInbox, sendMessage, sendReply } from '../src/whatsappApi';
+import { excludeChat, forwardReceiptToAquapura, markHandled, readChat, readInbox, sendMessage, sendReply } from '../src/whatsappApi';
 // eslint-disable-next-line import/first
 import { MacUnavailable } from '../src/macSend';
 
@@ -57,6 +57,23 @@ describeWithEmulator('WhatsApp por la API', () => {
     expect(rosa.conversacion.map((entry) => entry.de)).toEqual(['nosotros (app)', 'cliente', 'cliente']);
     expect(rosa.responder_hasta).toBe('2026-10-24 11:50');
     expect(uso).toEqual({ mes: '2026-10', respuestas_api: 0, tope: 2, quedan: 2 });
+  });
+
+  test('leer un chat: trae lo ya atendido, respeta los días, no marca nada y nunca un excluido', async () => {
+    await db.doc('whatsappInbox/m1').update({ handled: true });
+    await db.doc('whatsappInbox/antiguo').set(message('antiguo', { text: 'Del mes pasado', handled: true, sentAt: minutesAgo(40 * 24 * 60) }));
+    const clients = [{ id: 'rosa', name: 'Rosa Jerez', address: 'Calle 26', freq: 'weekly', phone: '099 123 456', phones: [] }] as any;
+    const chat = await readChat(db, clients, '099123456', 14, NOW);
+    expect(chat.telefono).toBe('59899123456');
+    expect(chat.fichas.map((ficha) => ficha.id)).toEqual(['rosa']);
+    expect(chat.mensajes.map((entry) => [entry.texto, entry.atendido])).toEqual([
+      ['Mañana pasamos', true], ['Hola', true], ['Mañana 2 de 20', false],
+    ]);
+    expect(chat).toMatchObject({ sin_atender: 1, ultimo_del_cliente: '2026-10-23 11:50', ultimo_nuestro: '2026-10-23 02:00', responder_hasta: '2026-10-24 11:50' });
+    expect((await db.doc('whatsappInbox/m2').get()).data()).toMatchObject({ handled: false });
+    const empty = await readChat(db, [], '59897000000', 14, NOW);
+    expect(empty).toMatchObject({ mensajes: [], sin_atender: 0, ultimo_del_cliente: null, responder_hasta: null });
+    await expect(readChat(db, [], '099111222', 14, NOW)).rejects.toThrow(/excluido/);
   });
 
   test('responder: dentro de las 24 h, cuenta el uso y corta en el tope', async () => {

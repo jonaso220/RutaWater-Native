@@ -11,7 +11,8 @@ SLIDES = [dict(
     accent=('#1463FF', '#7FB0FF'), layout='top' | 'bottom' | 'duo',
     shots=dict(iphone=['iphone_home'], ipad=['ipad_home'], android=['android_home']),
 )]
-Kinds: iphone (1320x2868), ipad (2064x2752), android (1440x2560 canvas, any raw size).
+Kinds: iphone (1320x2868), ipad (2064x2752), android (1440x2560 canvas, any raw size),
+tablet (Android tablet for Google Play, 1440x2560 canvas, raw around 1600x2560).
 """
 import os
 import struct
@@ -20,8 +21,9 @@ import sys
 
 CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 HERE = os.path.dirname(os.path.abspath(__file__))
+PROFILE = os.path.join(os.environ.get('TMPDIR', '/tmp'), 'storekit-chrome-profile')
 
-CANVAS = {'iphone': (1320, 2868), 'ipad': (2064, 2752), 'android': (1440, 2560)}
+CANVAS = {'iphone': (1320, 2868), 'ipad': (2064, 2752), 'android': (1440, 2560), 'tablet': (1440, 2560)}
 
 # Sizes per kind: margins, type, where the copy starts, device widths per layout.
 SPEC = {
@@ -31,6 +33,8 @@ SPEC = {
                  copy_top=140, gap=100, top_w=1720, bottom_w=1720, bottom_y=1980, duo_w=1280),
     'android': dict(mx=100, cell=120, efont=38, hfont=132, pfont=52, bicon=132, bfont=84, bmb=60,
                     copy_top=130, gap=100, top_w=960, bottom_w=960, bottom_y=1800, duo_w=760),
+    'tablet': dict(mx=100, cell=120, efont=38, hfont=124, pfont=50, bicon=120, bfont=78, bmb=50,
+                   copy_top=120, gap=90, top_w=1200, bottom_w=1200, bottom_y=1800, duo_w=820),
 }
 
 
@@ -90,6 +94,8 @@ def device(kind, raw_dir, img, width, rotate=0, z=1, pos=None):
         bezel, radius = round(width * 0.021), round(width * 0.135)
     elif kind == 'ipad':
         bezel, radius = round(width * 0.027), round(width * 0.046)
+    elif kind == 'tablet':
+        bezel, radius = round(width * 0.026), round(width * 0.05)
     else:
         bezel, radius = round(width * 0.02), round(width * 0.085)
     sw = width - 2 * bezel
@@ -117,6 +123,10 @@ def device(kind, raw_dir, img, width, rotate=0, z=1, pos=None):
         extra = (f'<div style="position:absolute;left:{(sw - hole) // 2}px;top:{round(sw * 0.016)}px;'
                  f'width:{hole}px;height:{hole}px;border-radius:50%;background:#000"></div>')
         for y, h in ((0.2, 0.05), (0.29, 0.105)):
+            buttons += (f'<div class="btn" style="right:-{bw + 5}px;top:{round(height * y)}px;'
+                        f'width:{bw}px;height:{round(height * h)}px"></div>')
+    elif kind == 'tablet':
+        for y, h in ((0.07, 0.03), (0.115, 0.06)):
             buttons += (f'<div class="btn" style="right:-{bw + 5}px;top:{round(height * y)}px;'
                         f'width:{bw}px;height:{round(height * h)}px"></div>')
     screen = (f'<div class="screen" style="border-radius:{radius - bezel}px">'
@@ -197,7 +207,7 @@ def sheet(brand, kind, files):
     out = os.path.join(brand['root'], f'vista-{kind}.png')
     with open(page, 'w') as f:
         f.write(html)
-    chrome_shot(page, out, cols * (w + 14) + 14, rows * (h + 14) + 14, os.path.join(HERE, 'chrome-profile'))
+    chrome_shot(page, out, cols * (w + 14) + 14, rows * (h + 14) + 14, PROFILE)
     return out
 
 
@@ -226,7 +236,7 @@ def main(brand, slides, argv=None):
             png = os.path.join(root, 'mk', f'{kind}_{n:02d}_{spec["name"]}.png')
             with open(page, 'w') as f:
                 f.write(slide_html(brand, kind, spec, first=n == 1))
-            chrome_shot(page, png, W, H, os.path.join(HERE, 'chrome-profile'))
+            chrome_shot(page, png, W, H, PROFILE)
             subprocess.run(['sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '92', png, '--out', jpg],
                            check=True, capture_output=True)
             os.remove(png)

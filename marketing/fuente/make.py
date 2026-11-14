@@ -12,7 +12,7 @@ BRAND = dict(name='RutaWater',
              dark=False, root=ROOT, base1='#FFFFFF', base2='#DCE9FB', text='#0F172A', sub='#475569',
              dark_base1='#17233D', dark_base2='#090E1A', dark_sub='#B7C3DA')
 
-def shots(name, kinds='iphone ipad android'):
+def shots(name, kinds='iphone ipad android tablet'):
     return {k: [f'{k}_{name}'] for k in kinds.split()}
 
 SLIDES = [

@@ -9,7 +9,7 @@ import { applyReplacements, openWhatsapp } from './whatsapp';
 import { appRecordsSince, clientsWithoutPurchase, loadDeliveryRecords, loadPhotoRows, mergeHistory, summarizeHistory } from './deliveries';
 import { describeMapsLink } from './mapsLink';
 import { readAcrobatLink } from './acrobatLink';
-import { downloadInboxMedia, excludeChat, forwardReceiptToAquapura, markHandled, readChat, readInbox, sendMessage, sendReply, transcribeInboxAudios } from './whatsappApi';
+import { downloadInboxMedia, excludeChat, forwardReceiptToAquapura, markHandled, NOTICE_BATCH, readChat, readInbox, sendMessage, sendNotices, sendReply, transcribeInboxAudios } from './whatsappApi';
 import { readEmails } from './emailReader';
 import { askJonathan, downloadAttachment, markAnswersApplied, notifyJonathan, readAnswers } from './telegram';
 import { scheduledPass } from './vigilanteControl';
@@ -55,6 +55,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - pasar_deuda pasa todas las deudas de una ficha a otra (otra persona de la casa se hace cargo), con sus montos y fechas; no es un pago.
 - fijar_parentesco vincula (o desvincula) dos fichas como en Parentesco; fijar_dias_de_pago guarda cuándo paga la deuda; marcar_inactivo es «Ya no es cliente» / Reactivar.
 - mandar_mensaje le escribe a un cliente lo que pidió Jonathan aunque no sea respuesta (texto común dentro de las 24 h; si no, por WhatsApp del Mac, y si el Mac no puede, la plantilla «mensaje_cliente», que se cobra).
+- mandar_avisos manda los avisos de las 9 y los recordatorios de las 18 desde WhatsApp del Mac sin control de pantalla, hasta 8 por llamada; verifica cada envío y no repite el que ya salió hoy.
 - programar_tarea guarda algo para hacer a una hora (por ejemplo «mañana a las 06:00, si no contestó, pasalo a la semana que viene»); el vigilante arranca cuando vence, la hace con ver_tareas_programadas y la cierra con cerrar_tarea.
 - pedir_a_claude: lo que Jonathan pide por Telegram y ninguna herramienta cubre se le pasa a Claude Code (crea la herramienta o lo hace él, y le avisa a Jonathan). Antes de decirle «no puedo», usar esto.
 - No se puede desde acá: borrar clientes, alarmas (viven en el teléfono) ni marcar transferencias revisadas.
@@ -935,7 +936,7 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('mandar_mensaje', {
     title: 'Mandar mensaje a un cliente',
-    description: 'Le manda a un cliente el mensaje que Jonathan pidió, aunque no sea una respuesta (avisarle algo puntual), por la API desde el número del negocio. Si el cliente escribió en las últimas 24 h va como texto común, gratis; si no, va por WhatsApp del Mac (gratis, tal cual; tarda hasta un minuto en confirmarse) y, si el Mac no puede (bloqueado, sin permiso), con la plantilla «mensaje_cliente» («Hola <nombre>, te escribo por el agua: <texto> Cualquier cosa, respondeme por acá. ¡Gracias!», en un solo párrafo), que se cobra. Usar solo cuando Jonathan lo pide: no sirve para los avisos ni los recordatorios del reparto (van por la app en el Mac). Nunca a un chat excluido. Devuelve cómo salió y el texto que recibió.',
+    description: 'Le manda a un cliente el mensaje que Jonathan pidió, aunque no sea una respuesta (avisarle algo puntual), por la API desde el número del negocio. Si el cliente escribió en las últimas 24 h va como texto común, gratis; si no, va por WhatsApp del Mac (gratis, tal cual; tarda hasta un minuto en confirmarse) y, si el Mac no puede (bloqueado, sin permiso), con la plantilla «mensaje_cliente» («Hola <nombre>, te escribo por el agua: <texto> Cualquier cosa, respondeme por acá. ¡Gracias!», en un solo párrafo), que se cobra. Usar solo cuando Jonathan lo pide: no sirve para los avisos ni los recordatorios del reparto (eso es mandar_avisos). Nunca a un chat excluido. Devuelve cómo salió y el texto que recibió.',
     inputSchema: {
       cliente_id: z.string().min(1).optional().describe('Ficha: usa su teléfono principal y su nombre para el saludo'),
       telefono: z.string().min(8).max(40).optional().describe('Si no hay ficha: el número (09… o 598…)'),
@@ -953,6 +954,40 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
       tool: 'mandar_mensaje', args: { cliente_id, telefono: result.telefono }, cliente: client?.name || result.telefono, reparto: '', antes: null,
       despues: { id: result.id, como: result.como },
     });
+    return result;
+  }));
+
+  server.registerTool('mandar_avisos', {
+    title: 'Mandar avisos o recordatorios del reparto (WhatsApp del Mac)',
+    description: `Manda los avisos de las 9 y los recordatorios de las 18 desde WhatsApp del Mac, sin control de pantalla: por cada mensaje abre el chat con el borrador, aprieta Enviar solo si el borrador es exactamente el texto y confirma que salió a ese número (gratis; unos 10 s cada uno). Hasta ${NOTICE_BATCH} por llamada, en el orden dado. Cada mensaje lleva telefono (campo whatsapp de la ficha o el destinatario que corresponda) y plantilla="aviso_manana" (el aviso de mañana de Ajustes) o texto; reemplazar aplica cambios «viejo=>nuevo» (p. ej. «por tu casa=>por el local»). Por mensaje devuelve estado: «enviado» (verificado), «ya_enviado» (hoy ya salió ese mismo texto a ese número: no lo repite, así que una llamada que se cortó se puede repetir igual), «escribio» (con frenar_si_escribio_desde: el cliente escribió desde esa hora, no se le mandó y vuelven sus últimos mensajes; reemplaza mirar el chat antes de apretar Enviar: para el recordatorio de las 18 pasá la hora de su aviso; para el aviso de las 9, ayer a las 00:00), «no_enviado» (no salió nada: motivo), «incierto» (se apretó Enviar y no apareció: no reintentar sin mirar el chat; con reintentar=true se manda de nuevo), «excluido», «invalido» o «sin_intentar» (cortó el lote antes: ver «seguir»). Corta el lote si el Mac no puede (pantalla bloqueada, sin permiso), si un envío queda incierto o a los 60 s; lo que falta se manda en otra llamada. Solo para los avisos y recordatorios de las pasadas programadas o los que Jonathan pida: no contesta mensajes de clientes (eso es responder_whatsapp).`,
+    inputSchema: {
+      mensajes: z.array(z.object({
+        telefono: z.string().min(8).max(40).describe('Campo whatsapp de la ficha (con código de país)'),
+        cliente: z.string().max(120).optional().describe('Nombre de la ficha, para el resultado y el registro'),
+        plantilla: z.enum(['aviso_manana']).optional().describe('Usar el aviso de mañana de Ajustes'),
+        texto: z.string().max(4000).optional().describe('Mensaje propio (p. ej. el recordatorio de las 18)'),
+        reemplazar: z.array(z.string()).max(5).optional().describe('Cambios «texto viejo=>texto nuevo» sobre el mensaje'),
+        reintentar: z.boolean().optional().describe('Solo para un «incierto» que ya se comprobó que no salió'),
+        frenar_si_escribio_desde: z.string().max(30).optional().describe('«aaaa-mm-dd hh:mm» en hora de Uruguay: si el cliente escribió desde entonces, no se le manda'),
+      })).min(1).max(NOTICE_BATCH),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  }, handle(async ({ mensajes }: { mensajes: Array<{ telefono: string; cliente?: string; plantilla?: 'aviso_manana'; texto?: string; reemplazar?: string[]; reintentar?: boolean; frenar_si_escribio_desde?: string }> }) => {
+    // Todo el lote se valida antes de mandar el primero.
+    const template = mensajes.some((item) => item.plantilla) ? whatsappTemplates(await store.getSettings()).aviso_manana : '';
+    const items = mensajes.map((item, index) => {
+      if (item.plantilla && item.texto) throw new Error(`Mensaje ${index + 1}: pasá plantilla o texto, no los dos.`);
+      const base = item.plantilla ? template : item.texto;
+      if (!base) throw new Error(`Mensaje ${index + 1}: falta plantilla o texto.`);
+      const since = (item.frenar_si_escribio_desde || '').trim();
+      const frenarDesde = since ? new Date(/^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(since) ? `${since.replace(' ', 'T')}:00-03:00` : since) : undefined;
+      if (frenarDesde && Number.isNaN(frenarDesde.getTime())) throw new Error(`Mensaje ${index + 1}: frenar_si_escribio_desde tiene que ser «aaaa-mm-dd hh:mm».`);
+      return { telefono: item.telefono, cliente: item.cliente, reintentar: item.reintentar, frenarDesde, texto: item.reemplazar?.length ? applyReplacements(base, item.reemplazar) : base };
+    });
+    const result = await sendNotices(store.db, items);
+    for (const sent of result.resultados.filter((entry) => entry.estado === 'enviado')) {
+      appendAudit(config.auditPath, { tool: 'mandar_avisos', args: { telefono: sent.telefono }, cliente: sent.cliente || sent.telefono, reparto: '', antes: null, despues: { id: sent.id } });
+    }
     return result;
   }));
 

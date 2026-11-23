@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FieldValue, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore';
@@ -311,6 +312,133 @@ export const sendMessage = async (
   return {
     enviado: true, id, estado: result.status || 'accepted', telefono: phone, como: `plantilla mensaje_cliente (fuera de las 24 h, se cobra; por el Mac no: ${macReason})`,
     mensaje: rendered, uso: await usage(db, now, config),
+  };
+};
+
+/**
+ * Avisos y recordatorios del reparto por WhatsApp del Mac, sin control de
+ * pantalla (Jonathan, 23/11/2026). Las pasadas de las 9 y las 18 dependían del
+ * permiso de pantalla de la tarea de la nube; esto usa lo mismo que
+ * mandar_mensaje fuera de las 24 h (macSend): abre el chat con el borrador,
+ * aprieta Enviar solo si el borrador es exactamente el texto y confirma que
+ * salió a ese número en whatsappInbox. Nunca usa la API ni plantillas pagas.
+ *
+ * - No manda dos veces: si hoy ya salió ese mismo texto a ese número, devuelve
+ *   «ya_enviado». Sirve para repetir una llamada que se cortó.
+ * - «incierto» (se apretó Enviar y no apareció como enviado): queda anotado y no
+ *   se reintenta solo; corta el lote para no seguir mandando a ciegas.
+ * - Si el Mac no puede (pantalla bloqueada, sin permiso), no salió nada y corta
+ *   el lote: lo que falta vuelve «sin_intentar».
+ * - frenarDesde: si el cliente escribió desde esa hora, no manda y devuelve
+ *   «escribio» con sus últimos mensajes (lo que antes se veía en la pantalla
+ *   antes de apretar Enviar: ya respondió el aviso, ya hizo el pedido).
+ * - Empieza envíos nuevos solo durante budgetMs, para que la llamada no se
+ *   pase del tiempo de espera de quien la hizo.
+ */
+export const NOTICE_BATCH = 8;
+const NOTICE_BUDGET_MS = 60_000;
+const uncertainFile = () => join(env('RUTAWATER_ENVIAR_DIR', join(home, '.rutawater-mcp/enviar-whatsapp')), 'inciertos.json');
+const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
+
+export interface NoticeInput { telefono: string; texto: string; cliente?: string; reintentar?: boolean; frenarDesde?: Date }
+type NoticeState = 'enviado' | 'ya_enviado' | 'escribio' | 'no_enviado' | 'incierto' | 'excluido' | 'invalido' | 'sin_intentar';
+export interface NoticeResult {
+  telefono: string; cliente?: string; estado: NoticeState; id?: string; hora?: string; motivo?: string;
+  mensajes_del_cliente?: Array<{ hora: string; tipo: string; texto: string }>;
+}
+
+export const sendNotices = async (
+  db: Firestore, items: NoticeInput[], now = new Date(),
+  mac: (db: Firestore, phone: string, text: string) => Promise<{ id: string }> = sendViaMac,
+  budgetMs = NOTICE_BUDGET_MS, retryPauseMs = 3_000,
+) => {
+  const excluded = await loadExcluded(db, localConfig());
+  const started = Date.now();
+  const day = uyIso(now).slice(0, 10);
+  const dayStart = new Date(`${day}T00:00:00-03:00`).getTime();
+  const hour = (date: Date) => uyIso(date).slice(11, 16);
+  // Envíos sin confirmar de hoy: { "<teléfono>|<huella del texto>": hora }.
+  const saved = existsSync(uncertainFile()) ? JSON.parse(readFileSync(uncertainFile(), 'utf8')) : {};
+  const uncertain: Record<string, string> = saved.dia === day ? saved.envios || {} : {};
+  const saveUncertain = () => {
+    mkdirSync(join(uncertainFile(), '..'), { recursive: true });
+    writeFileSync(uncertainFile(), JSON.stringify({ dia: day, envios: uncertain }));
+  };
+  const results: NoticeResult[] = [];
+  let stop = '';
+  let macFailures = 0;
+  for (const item of items) {
+    const phone = fullPhone(item.telefono);
+    const text = String(item.texto || '').trim();
+    const base = { telefono: phone, ...(item.cliente ? { cliente: item.cliente } : {}) };
+    if (phone.length < 10 || !text) {
+      results.push({ ...base, estado: 'invalido', motivo: text ? 'Teléfono inválido: pasá el número con código de país (598…).' : 'El mensaje está vacío.' });
+      continue;
+    }
+    if (isExcluded(excluded, phone)) { results.push({ ...base, estado: 'excluido', motivo: 'Ese chat está excluido: no se le escribe.' }); continue; }
+    if (!stop && Date.now() - started > budgetMs) stop = 'se acabó el tiempo de esta llamada';
+    if (stop) { results.push({ ...base, estado: 'sin_intentar', motivo: stop }); continue; }
+    const key = `${phone}|${createHash('sha1').update(text).digest('hex').slice(0, 16)}`;
+    const chat = (await db.collection(INBOX).where('phone', '==', phone).get()).docs.map(readDoc).sort((a, b) => +a.sentAt - +b.sentAt);
+    const already = chat.find((message) => message.direction === 'out' && +message.sentAt >= dayStart && String(message.text || '').trim() === text);
+    if (already) {
+      if (uncertain[key]) { delete uncertain[key]; saveUncertain(); }
+      results.push({ ...base, estado: 'ya_enviado', id: already.id, hora: hour(already.sentAt) });
+      continue;
+    }
+    const wrote = item.frenarDesde ? chat.filter((message) => message.direction === 'in' && +message.sentAt >= +item.frenarDesde!) : [];
+    if (wrote.length) {
+      results.push({
+        ...base, estado: 'escribio', motivo: `Escribió desde las ${uyIso(item.frenarDesde!).slice(0, 16).replace('T', ' ')}: no se le mandó.`,
+        mensajes_del_cliente: wrote.slice(-3).map((message) => ({ hora: uyIso(message.sentAt).slice(0, 16).replace('T', ' '), tipo: message.type, texto: String(message.text || '').slice(0, 200) })),
+      });
+      continue;
+    }
+    if (uncertain[key] && !item.reintentar) {
+      results.push({ ...base, estado: 'incierto', motivo: `Se apretó Enviar a las ${uncertain[key]} y todavía no figura como enviado. No se reintenta solo: mirá el chat o consultale a Jonathan y, solo si no salió, repetilo con reintentar=true.` });
+      continue;
+    }
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const { id } = await mac(db, phone, text);
+        if (uncertain[key]) { delete uncertain[key]; saveUncertain(); }
+        macFailures = 0;
+        results.push({ ...base, estado: 'enviado', id });
+      } catch (error) {
+        if (error instanceof MacUnavailable) {
+          // No se apretó Enviar: no salió nada. El chat a veces tarda en cambiar
+          // y el borrador todavía no está: un segundo intento alcanza.
+          const draft = /borrador no coincide/.test(error.message);
+          if (draft && attempt === 0) { await wait(retryPauseMs); continue; }
+          macFailures += 1;
+          results.push({ ...base, estado: 'no_enviado', motivo: draft
+            ? `${error.message}. No salió nada: el chat tiene otro borrador (borralo en WhatsApp o pasáselo a Jonathan).`
+            : `${error.message}. No salió nada.` });
+          if (!draft || macFailures >= 2) stop = `el Mac no pudo mandar (${error.message})`;
+        } else if (error instanceof WriteError) {
+          uncertain[key] = hour(new Date());
+          saveUncertain();
+          results.push({ ...base, estado: 'incierto', motivo: `${error.message}` });
+          stop = 'un envío quedó sin confirmar';
+        } else {
+          throw error;
+        }
+      }
+      break;
+    }
+  }
+  const count = (state: NoticeState) => results.filter((result) => result.estado === state).length;
+  const pending = Object.keys(uncertain).length;
+  return {
+    resultados: results,
+    resumen: {
+      enviados: count('enviado'), ya_enviados: count('ya_enviado'), escribieron: count('escribio'), no_enviados: count('no_enviado'), inciertos: count('incierto'),
+      excluidos: count('excluido'), invalidos: count('invalido'), sin_intentar: count('sin_intentar'),
+    },
+    seguir: stop
+      ? `Corté el lote: ${stop}. ${stop.startsWith('se acabó') ? 'Volvé a llamar con los «sin_intentar».' : 'Resolvé eso antes de mandar los «sin_intentar» (si es la pantalla bloqueada o un permiso, avisale a Jonathan).'}`
+      : 'Lote completo.',
+    ...(pending >= 2 ? { alerta: `Hoy hay ${pending} envíos sin confirmar: puede que no esté llegando el registro de lo que sale. Pará y avisale a Jonathan.` } : {}),
   };
 };
 

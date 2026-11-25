@@ -36,6 +36,7 @@ const INSTRUCTIONS = `Acceso directo a RutaWater (reparto de agua) de la cuenta 
 - Las fechas son aaaa-mm-dd en hora de Uruguay; agenda_del_dia también acepta «hoy» y «mañana».
 - Buscá al cliente con buscar_clientes y usá su id en las demás herramientas.
 - Las escrituras devuelven antes/después confirmado por el servidor; si «cambiado» es false ya estaba así.
+- Un cliente con varios días de visita es una tarjeta por día: cada una con su orden, su dirección, sus productos y su estrella. agenda_del_dia ya devuelve los productos, el favorito y la dirección de ese día; ver_cliente los lista en productos_por_dia, favorito_por_dia y direccion_por_dia. Para cambiar solo un día, fijar_productos y marcar_favorito aceptan dia.
 - marcar_favorito fija la estrella (no la alterna). marcar_listo usa la misma lógica que el botón Listo y se puede deshacer desde la app.
 - adelantar_visita trae la próxima visita de un cliente con frecuencia a una fecha más cercana del mismo día (como cambiar la fecha de inicio en Editar cliente).
 - agendar_una_vez agenda una visita de una vez con sus productos (como Directorio → Agendar → Una vez): una ficha de directorio pasa a ser esa visita; a un cliente que ya está en agenda se le agrega otra ficha sin tocar la suya. La ficha de la visita queda sin nota ni estrella, como en la app. Si ya tiene visita ese día no agrega otra. Queda primera del día, salvo con ubicar=true: entonces va donde indica sugerir_posicion.
@@ -253,7 +254,9 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
       const debts = await store.getDebts(route);
       const agenda = agendaFor(clients, date).map(({ client, occurrence, overdue, position }) => ({
         posicion: position,
-        ...clientSummary(client, { route, catalog: products, debts: debtsForClient(clients, debts, client) }),
+        ...clientSummary(client, {
+          route, catalog: products, debts: debtsForClient(clients, debts, client), day: weekdayOf(occurrence),
+        }),
         // Dónde se entrega ese día (casa, trabajo…): la elegida en la tarjeta para ese día de semana.
         direccion_del_dia: getClientLocationForDay(client, weekdayOf(occurrence)).address,
         fecha_visita: occurrence,
@@ -376,15 +379,16 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('fijar_productos', {
     title: 'Fijar productos',
-    description: 'Cambia cantidades de productos de la ficha (lo que hay que llevar). Solo toca los productos indicados; 0 lo quita. Con reemplazar_todo=true la ficha queda exactamente con esos productos.',
+    description: 'Cambia cantidades de productos de la ficha (lo que hay que llevar). Solo toca los productos indicados; 0 lo quita. Con reemplazar_todo=true la ficha queda exactamente con esos productos. Un cliente con varios días de visita puede llevar cosas distintas cada día: con dia se cambian solo los de la tarjeta de ese día (los de cada día están en productos_por_dia de ver_cliente y en agenda_del_dia); sin dia se cambian los de la ficha, y si ya lleva productos distintos según el día pide el día.',
     inputSchema: {
       cliente_id: z.string().min(1),
       productos: z.record(z.string(), z.number().int().min(0).max(9999)).describe('{ id_producto: cantidad }, ids de ver_productos'),
       reemplazar_todo: z.boolean().optional(),
+      dia: z.string().optional().describe('Día de visita cuya tarjeta se cambia (Lunes … Domingo), para clientes con varios días'),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, write('fijar_productos', async ({ cliente_id, productos, reemplazar_todo }) => setProducts(
-    store.db, await store.refreshAccount(), await catalog(), cliente_id, productos, !!reemplazar_todo,
+  }, write('fijar_productos', async ({ cliente_id, productos, reemplazar_todo, dia }) => setProducts(
+    store.db, await store.refreshAccount(), await catalog(), cliente_id, productos, !!reemplazar_todo, dia,
   )));
 
   server.registerTool('actualizar_nota', {
@@ -717,11 +721,14 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
 
   server.registerTool('marcar_favorito', {
     title: 'Marcar favorito',
-    description: 'Fija la estrella de favorito (true por defecto). Si ya estaba así no cambia nada.',
-    inputSchema: { cliente_id: z.string().min(1), favorito: z.boolean().optional() },
+    description: 'Fija la estrella de favorito (true por defecto). Si ya estaba así no cambia nada. Un cliente con varios días de visita tiene una estrella por día: con dia se fija solo la de la tarjeta de ese día; sin dia, la de todos sus días.',
+    inputSchema: {
+      cliente_id: z.string().min(1), favorito: z.boolean().optional(),
+      dia: z.string().optional().describe('Día de visita cuya tarjeta se marca (Lunes … Domingo), para clientes con varios días'),
+    },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-  }, write('marcar_favorito', async ({ cliente_id, favorito }) => setStar(
-    store.db, await store.refreshAccount(), cliente_id, favorito ?? true,
+  }, write('marcar_favorito', async ({ cliente_id, favorito, dia }) => setStar(
+    store.db, await store.refreshAccount(), cliente_id, favorito ?? true, dia,
   )));
 
   server.registerTool('marcar_listo', {

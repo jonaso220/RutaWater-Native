@@ -1,7 +1,10 @@
 import type { Product } from '../constants/products';
+import type { Client } from '../types';
+import { getClientProductsForDay } from './clientDays';
 
 export interface ProductQuantitiesSource {
   products?: Record<string, string | number> | null;
+  productsByDay?: Record<string, Record<string, string | number>> | null;
 }
 
 const positiveQuantity = (value: string | number | undefined): number => {
@@ -17,6 +20,8 @@ const positiveQuantity = (value: string | number | undefined): number => {
 export const calculateProductTotals = (
   clients: readonly ProductQuantitiesSource[],
   products: readonly Pick<Product, 'id'>[],
+  // Día de la lista: un cliente con varios días lleva lo de la tarjeta de ese día.
+  day?: string,
 ): Record<string, number> => {
   const totals: Record<string, number> = {};
   products.forEach((product) => {
@@ -24,7 +29,7 @@ export const calculateProductTotals = (
   });
 
   clients.forEach((client) => {
-    Object.entries(client.products || {}).forEach(([productId, value]) => {
+    Object.entries(getClientProductsForDay(client as Partial<Client>, day)).forEach(([productId, value]) => {
       const quantity = positiveQuantity(value);
       if (quantity > 0) totals[productId] = (totals[productId] || 0) + quantity;
     });

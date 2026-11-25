@@ -578,6 +578,7 @@ export default {
     openMaps: 'Abrir Maps',
     changeDayAddress: 'Mudar endereço de {{day}}',
     dayAddressTitle: 'Endereço de {{day}}',
+    productsAllDaysHint: 'Com vários dias de visita, os produtos de cada dia são alterados no cartão desse dia. O que você mudar aqui vale para todos os dias.',
     dayAddressHelp: 'Vale para todas as visitas de {{day}}. Os outros dias não mudam.',
     dayAddressSaveError: 'Não foi possível salvar o endereço desse dia.',
     onceLabel: 'Uma vez',

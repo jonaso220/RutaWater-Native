@@ -69,6 +69,7 @@ import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { getClientPhoneSearchText } from '../utils/clientPhones';
 import { getClientAddressSearchText, sanitizeAddressByDay } from '../utils/clientAddresses';
+import { getClientProductsForDay, isClientStarredOnDay } from '../utils/clientDays';
 import { useContentRail } from '../stores/contentRailStore';
 
 type ListItem =
@@ -145,7 +146,7 @@ interface ClientItemProps {
   onEditNotes: (client: Client) => void;
   onDelete: (client: Client) => void;
   onDebt: (client: Client) => void;
-  onToggleStar: (client: Client) => void;
+  onToggleStar: (client: Client, day: string) => void;
   onTransfer: (client: Client) => void;
   onAlarm: (client: Client) => void;
   onRelationships: (client: Client) => void;
@@ -189,7 +190,7 @@ const ClientItem = React.memo<ClientItemProps>(({
   const handleEditNotes = useCallback(() => onEditNotes(client), [onEditNotes, client]);
   const handleDelete = useCallback(() => onDelete(client), [onDelete, client]);
   const handleDebt = useCallback(() => onDebt(client), [onDebt, client]);
-  const handleToggleStar = useCallback(() => onToggleStar(client), [onToggleStar, client]);
+  const handleToggleStar = useCallback(() => onToggleStar(client, selectedDay), [onToggleStar, client, selectedDay]);
   const handleTransfer = useCallback(() => onTransfer(client), [onTransfer, client]);
   const handleAlarm = useCallback(() => onAlarm(client), [onAlarm, client]);
   const handleRelationships = useCallback(() => onRelationships(client), [onRelationships, client]);
@@ -703,7 +704,7 @@ const HomeScreen = () => {
       filtered = filtered.filter((c) => {
         // Type filters: AND (must pass all)
         const passesType = typeFilters.every((f) => {
-          if (f === 'once_starred') return c.freq === 'once' || c.isStarred;
+          if (f === 'once_starred') return c.freq === 'once' || isClientStarredOnDay(c, deferredDay);
           if (f === 'con_deuda') return getClientDebtTotal(c.id) > 0;
           return true;
         });
@@ -711,7 +712,7 @@ const HomeScreen = () => {
         const passesFreq = freqFilters.length === 0 || freqFilters.includes(`freq_${c.freq}`);
         // Product filters: OR (must have at least one)
         const passesProduct = productFilters.length === 0 || productFilters.some((f) => {
-          const qty = parseInt(String(c.products?.[f] || 0), 10);
+          const qty = parseInt(String(getClientProductsForDay(c, deferredDay)[f] || 0), 10);
           return qty > 0;
         });
         return passesType && passesFreq && passesProduct;
@@ -719,7 +720,7 @@ const HomeScreen = () => {
     }
 
     return filtered;
-  }, [allVisibleClients, debouncedSearchTerm, activeFilters, getClientDebtTotal]);
+  }, [allVisibleClients, debouncedSearchTerm, activeFilters, getClientDebtTotal, deferredDay]);
 
   // Group clients by next visit date for section headers
   const clientSections = useMemo(() => {
@@ -871,9 +872,9 @@ const HomeScreen = () => {
   );
 
   const handleToggleStar = useCallback(
-    (client: Client) => {
+    (client: Client, day: string) => {
       hapticSelection();
-      toggleStar(client.id, client.isStarred);
+      toggleStar(client.id, isClientStarredOnDay(client, day), day);
     },
     [toggleStar],
   );
@@ -1145,7 +1146,7 @@ const HomeScreen = () => {
       onEditNotes: (c: Client) => handlersRef.current.handleEditNotesCb(c),
       onDelete: (c: Client) => handlersRef.current.handleDelete(c),
       onDebt: (c: Client) => handlersRef.current.handleDebtCb(c),
-      onToggleStar: (c: Client) => handlersRef.current.handleToggleStar(c),
+      onToggleStar: (c: Client, day: string) => handlersRef.current.handleToggleStar(c, day),
       onTransfer: (c: Client) => handlersRef.current.handleTransfer(c),
       onAlarm: (c: Client) => handlersRef.current.handleAlarm(c),
       onRelationships: (c: Client) => handlersRef.current.handleRelationshipsCb(c),
@@ -1493,6 +1494,7 @@ const HomeScreen = () => {
           {/* Product counter — only nearest date */}
           <ProductCounter
             clients={nearestDateClients}
+            day={deferredDay}
             whenLabel={clientSections[0]?.shortLabel ?? ''}
             fontScale={fontScale}
             compact={isPhoneLandscape}
@@ -1860,6 +1862,7 @@ const HomeScreen = () => {
       <ClientProductsModal
         visible={!!productsClient}
         client={productsClient}
+        day={deferredDay}
         onSave={updateClient}
         onClose={closeProductsModal}
       />

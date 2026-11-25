@@ -12,6 +12,7 @@ import {
 } from '../../src/utils/clientIdentity';
 import { DEFAULT_EN_CAMINO, DEFAULT_TOMORROW_VISIT } from '../../src/utils/whatsAppTemplates';
 import { cheapestInsertion, clientCoordinates, Coordinates } from '../../src/utils/geo';
+import { getClientProductsForDay, isClientStarredOnDay } from '../../src/utils/clientDays';
 import type { Route } from './routes';
 import type { Settings } from './store';
 
@@ -41,8 +42,8 @@ export const quantity = (value: unknown): number => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 };
 
-export const describeProducts = (client: Client, catalog: CatalogProduct[]) =>
-  Object.entries(client.products || {})
+export const describeProducts = (client: Client, catalog: CatalogProduct[], day?: string) =>
+  Object.entries(getClientProductsForDay(client, day))
     .map(([id, value]) => ({ id, nombre: catalog.find((product) => product.id === id)?.nombre ?? id, cantidad: quantity(value) }))
     .filter((product) => product.cantidad > 0);
 
@@ -103,6 +104,8 @@ export interface ClientContext {
   debts?: Debt[];
   // Fichas del mismo reparto, para resolver Parentesco.
   clients?: Client[];
+  // Día de semana de la visita (agenda): con varios días, cada uno tiene sus productos y su estrella.
+  day?: string;
 }
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
@@ -143,11 +146,11 @@ export const clientSummary = (client: Client, context: ClientContext) => {
     dias: client.freq === 'once' ? [] : clientDays(client),
     proxima_visita: nextVisit(client),
     una_vez: client.freq === 'once',
-    favorito: !!client.isStarred,
+    favorito: isClientStarredOnDay(client, context.day),
     completado: !!client.isCompleted,
     inactivo: !!client.isInactive,
     es_nota: !!client.isNote,
-    productos: describeProducts(client, context.catalog),
+    productos: describeProducts(client, context.catalog, context.day),
     notas: client.notes || '',
     ...(context.debts ? { deuda_total: debtTotal(context.debts) } : {}),
   };
@@ -161,6 +164,13 @@ export const clientDetail = (client: Client, context: ClientContext) => ({
   direcciones: getClientAddresses(client).map((location) => ({
     tipo: location.type, direccion: location.address, mapa: location.mapsLink || '',
   })),
+  // Con varios días de visita, cada día es una tarjeta con sus productos y su estrella
+  // (`productos` y `favorito` de arriba son los de la ficha, que usa el día sin valor propio).
+  ...(clientDays(client).length > 1 && client.freq !== 'once' ? {
+    productos_por_dia: Object.fromEntries(clientDays(client)
+      .map((day) => [day, describeProducts(client, context.catalog, day)])),
+    favorito_por_dia: Object.fromEntries(clientDays(client).map((day) => [day, isClientStarredOnDay(client, day)])),
+  } : {}),
   // Ubicación elegida en la tarjeta para cada día de visita (los demás días usan la principal).
   direccion_por_dia: Object.fromEntries(Object.keys(sanitizeAddressByDay(client.addressByDay))
     .map((day) => [day, getClientLocationForDay(client, day).address])),

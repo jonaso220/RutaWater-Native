@@ -62,6 +62,11 @@ const ALLOWED_FIELDS = new Set([
   'businessName',
   'email',
   'paymentSchedule',
+  // Lo propio de cada día de visita (dirección, productos, estrella): sin
+  // estos campos, restaurar un respaldo los perdía en las fichas nuevas.
+  'addressByDay',
+  'productsByDay',
+  'starredByDay',
 ]);
 
 export type ClientCreationPlan = 'free' | 'monthly' | 'annual';

@@ -36,6 +36,7 @@ import { dataScopeFields, dataScopeQuery } from '../utils/dataScope';
 import { getRelatedClientReference } from '../utils/clientIdentity';
 import { createClientDocument, isClientLimitError } from '../services/clientCreation';
 import { fillClientCoordinates, touchesLocation } from '../services/clientCoordinates';
+import { clientVisitDays, dayFieldsAfterDaysChange, starUpdateForDay } from '../utils/clientDays';
 import { getClientPhoneSearchText, getClientPhones } from '../utils/clientPhones';
 import { ClientBillingInfo, sanitizeClientBillingInfo } from '../utils/clientBillingInfo';
 import { awaitWriteWithinGrace, settleWriteWithinGrace } from '../utils/pendingWrite';
@@ -467,6 +468,9 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
           scheduleRevision: newVisitId(),
           visitDays: remainingDays,
           visitDay: remainingDays[0],
+          // Lo propio del día que se quita se va con él; si queda un solo
+          // día, sus productos y su estrella pasan a ser los de la ficha.
+          ...(client ? dayFieldsAfterDaysChange(client, clientVisitDays(client), clientVisitDays({ visitDays: remainingDays })) : {}),
         };
         if (client && alarmTargetsDay(client, day)) {
           update.alarm = '';
@@ -614,8 +618,11 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         addresses: savedAddresses,
         ...scheduledLocationFields,
         // La ubicación elegida al agendar vale para todos sus días: una
-        // elección por día de una agenda anterior no debe pisarla.
+        // elección por día de una agenda anterior no debe pisarla. Lo mismo
+        // los productos y la estrella: valen los que se eligen al agendar.
         addressByDay: {},
+        productsByDay: {},
+        starredByDay: {},
         ...scope,
         userId,
         freq: newFreq,
@@ -825,10 +832,15 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
   }, [groupId, userId]);
 
   // Toggle star on a client (optimistic update)
-  const toggleStar = useCallback(async (clientId: string, currentValue: boolean) => {
+  // `day` es la lista desde la que se tocó: con varios días de visita, la
+  // estrella es de la tarjeta de ese día y no de las otras.
+  const toggleStar = useCallback(async (clientId: string, currentValue: boolean, day?: string) => {
     const newVal = !currentValue;
     try {
-      await db.collection('clients').doc(clientId).update({ isStarred: newVal });
+      const client = clientsRef.current.find((candidate) => candidate.id === clientId);
+      await db.collection('clients').doc(clientId).update(
+        client ? starUpdateForDay(client, day, newVal) : { isStarred: newVal },
+      );
     } catch (e) {
       reportError(e, 'Error toggling star');
     }
@@ -1149,6 +1161,10 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         delete updates.phones;
         delete updates.isStarred;
         delete updates.isPinned;
+        // Agenda nueva: lo propio de cada día de una agenda anterior no debe tapar lo recién cargado.
+        updates.addressByDay = {};
+        updates.productsByDay = {};
+        updates.starredByDay = {};
         await settleClientWrite(db.collection('clients').doc(exactMatch.id).update(updates), 'Error adding client');
         void fillClientCoordinates(exactMatch.id, updates);
         return;

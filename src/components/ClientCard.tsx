@@ -25,6 +25,7 @@ import {
   getClientAddresses,
   getClientLocationForDay,
 } from '../utils/clientAddresses';
+import { getClientProductsForDay, isClientStarredOnDay } from '../utils/clientDays';
 import { startEnCaminoLink } from '../services/liveTracking';
 import { withTrackingLink } from '../utils/liveTracking';
 import { useContentRail } from '../stores/contentRailStore';
@@ -148,20 +149,22 @@ const ClientCard: React.FC<ClientCardProps> = ({
   };
   const relationshipCount = Object.keys(client.relationships || {}).length;
 
+  // Con varios días de visita, cada tarjeta lleva sus productos y su estrella.
+  const dayProducts = useMemo(() => getClientProductsForDay(client, visitDay), [client, visitDay]);
+  const starred = isClientStarredOnDay(client, visitDay);
   const productList = React.useMemo(() => {
-    if (!client.products) return [] as { id: string; qty: number; emoji: string; short: string }[];
-    return Object.keys(client.products)
-      .filter((k) => parseInt(String(client.products[k] || 0), 10) > 0)
+    return Object.keys(dayProducts)
+      .filter((k) => parseInt(String(dayProducts[k] || 0), 10) > 0)
       .map((k) => {
         const p = allProducts.find((prod) => prod.id === k);
         return {
           id: k,
-          qty: parseInt(String(client.products[k]), 10),
+          qty: parseInt(String(dayProducts[k]), 10),
           emoji: p?.emoji || '📦',
           short: p?.short || k,
         };
       });
-  }, [client.products, allProducts]);
+  }, [dayProducts, allProducts]);
 
   const handleOrderTap = () => {
     if (!onChangePosition) return;
@@ -533,7 +536,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
         styles.card,
         wideLayout && [styles.cardWide, contentRail.rail],
         (client.freq === 'once') && styles.cardOnce,
-        client.isStarred && styles.cardStarred,
+        starred && styles.cardStarred,
       ]}
     >
       {positionPromptMounted && (
@@ -584,14 +587,14 @@ const ClientCard: React.FC<ClientCardProps> = ({
           {onToggleStar && (
             <TouchableOpacity
               onPress={onToggleStar}
-              style={[styles.headerIconButton, client.isStarred && styles.headerIconButtonStarred]}
+              style={[styles.headerIconButton, starred && styles.headerIconButtonStarred]}
               accessibilityRole="button"
-              accessibilityLabel={client.isStarred ? t('clientCard.removeFavorite') : t('clientCard.addFavorite')}
+              accessibilityLabel={starred ? t('clientCard.removeFavorite') : t('clientCard.addFavorite')}
             >
               <Ionicons
-                name={client.isStarred ? 'star' : 'star-outline'}
+                name={starred ? 'star' : 'star-outline'}
                 size={s(20)}
-                color={client.isStarred ? colors.warningAmber : colors.textMuted}
+                color={starred ? colors.warningAmber : colors.textMuted}
               />
             </TouchableOpacity>
           )}

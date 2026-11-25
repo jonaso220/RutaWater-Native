@@ -133,6 +133,8 @@ export const useDataExport = (user: ExportUser) => {
           name: c.name, phone: c.phone || '', phones: getClientPhones(c), address: c.address || '',
           addresses: c.addresses || [],
           ...(c.addressByDay && Object.keys(c.addressByDay).length ? { addressByDay: c.addressByDay } : {}),
+          ...(c.productsByDay && Object.keys(c.productsByDay).length ? { productsByDay: c.productsByDay } : {}),
+          ...(c.starredByDay && Object.keys(c.starredByDay).length ? { starredByDay: c.starredByDay } : {}),
           lat: c.lat || '', lng: c.lng || '', freq: c.freq || '',
           visitDay: c.visitDay || '', visitDays: c.visitDays || [],
           specificDate: c.specificDate || '', notes: c.notes || '',

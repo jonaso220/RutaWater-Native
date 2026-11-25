@@ -2,6 +2,7 @@ import { ClientAddress, ClientAddressType, ClientPhone, PaymentSchedule, RELATIO
 import { parseDate, sanitizePhone, sanitizeProductQty, sanitizeString } from './helpers';
 import { sanitizeClientPhones } from './clientPhones';
 import { sanitizeAddressByDay } from './clientAddresses';
+import { sanitizeProductsByDay, sanitizeStarredByDay } from './clientDays';
 import { isValidPaymentSchedule } from './paymentSchedule';
 
 export interface BackupClientRecord {
@@ -13,6 +14,8 @@ export interface BackupClientRecord {
   address: string;
   addresses: ClientAddress[];
   addressByDay?: Record<string, string>;
+  productsByDay?: Record<string, Record<string, string | number>>;
+  starredByDay?: Record<string, boolean>;
   notes: string;
   rut: string;
   businessName: string;
@@ -234,6 +237,10 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
     addresses: sanitizeAddresses(value.addresses),
     ...(Object.keys(sanitizeAddressByDay(value.addressByDay)).length
       ? { addressByDay: sanitizeAddressByDay(value.addressByDay) } : {}),
+    ...(Object.keys(sanitizeProductsByDay(value.productsByDay)).length
+      ? { productsByDay: sanitizeProductsByDay(value.productsByDay) } : {}),
+    ...(Object.keys(sanitizeStarredByDay(value.starredByDay)).length
+      ? { starredByDay: sanitizeStarredByDay(value.starredByDay) } : {}),
     notes: sanitizeString(value.notes, 500),
     rut: sanitizeString(value.rut, 40),
     businessName: sanitizeString(value.businessName, 150),

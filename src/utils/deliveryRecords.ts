@@ -1,5 +1,6 @@
 import type { Client } from '../types';
 import { getClientLocationForDay, weekdayOfDateKey } from './clientAddresses';
+import { getClientProductsForDay } from './clientDays';
 import { dataScopeFields } from './dataScope';
 import type { VisitCommand, VisitTransition } from './visitCompletion';
 
@@ -48,7 +49,8 @@ export const deliveryChangeFor = (
       id: deliveryDocId(client.id, command.occurrence),
       occurrence: command.occurrence,
       delivered: command.noDelivery !== true,
-      products: { ...(client.products || {}) },
+      // Lo que lleva la tarjeta de ese día (con varios días, cada uno lo suyo).
+      products: { ...getClientProductsForDay(client, weekdayOfDateKey(command.occurrence)) },
       actorId: command.actorId,
       at: command.at,
     };

@@ -39,7 +39,7 @@ interface ClientsStore {
     mode?: 'add' | 'replace',
     selectedAddress?: ClientAddress,
   ) => Promise<boolean>;
-  toggleStar: (clientId: string, currentValue: boolean) => Promise<void>;
+  toggleStar: (clientId: string, currentValue: boolean, day?: string) => Promise<void>;
   saveAlarm: (clientId: string, time: string, targetDay?: string) => Promise<Date | null>;
   addNote: (notesText: string, date: string, freq?: Exclude<Frequency, 'on_demand'>) => Promise<boolean>;
   updateNote: (

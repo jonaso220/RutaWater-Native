@@ -49,6 +49,12 @@ import {
   weekdayOfDateKey,
 } from '../utils/clientAddresses';
 import {
+  dayFieldsAfterDaysChange,
+  getClientProductsForDay,
+  hasSeparateDays,
+  sanitizeProductsByDay,
+} from '../utils/clientDays';
+import {
   getClientPhones,
   getEditableClientPhones,
   getPrimaryClientPhone,
@@ -171,7 +177,8 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       // Una ficha agendada en una ubicación que no es la principal (p. ej. el
       // trabajo) la conserva en sus días: guardar la ficha deja la principal
       // arriba, y sin esto la tarjeta cambiaba de dirección sin avisar.
-      const byDay = sanitizeAddressByDay(client.addressByDay);
+      // Sin días de visita (Directorio) no vale lo elegido en una agenda anterior.
+      const byDay = visitDaysOf(client).length ? sanitizeAddressByDay(client.addressByDay) : {};
       const savedLocations = getClientAddresses(client);
       const shown = getClientLocationForDay(client);
       if (savedLocations.length > 1 && shown.addressId && shown.addressId !== savedLocations[0].id) {
@@ -249,6 +256,12 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       const pickedDay = weekdayOfDateKey(`${yyyy}-${mm}-${dd}`);
       if (pickedDay && visitDays.length <= 1) {
         if (daysBeforeDateRef.current === null) daysBeforeDateRef.current = visitDays;
+        // El día que se mueve conserva la ubicación que tenía elegida.
+        const movedFrom = visitDays[0];
+        if (movedFrom && movedFrom !== pickedDay) {
+          setDayAddresses((current) => (current[movedFrom] && !current[pickedDay]
+            ? { ...current, [pickedDay]: current[movedFrom] } : current));
+        }
         setVisitDays([pickedDay]);
       }
     }
@@ -437,10 +450,33 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       data.listOrders = orders;
       data.listOrder = orders[visitDays[0]];
     }
+    // Lo propio de cada día (productos, estrella, ubicación) sigue a su día:
+    // un día que se mueve se lo lleva y uno que se quita lo pierde.
+    const nextDays = data.visitDays ? ALL_DAYS.filter((day) => data.visitDays!.includes(day)) : previousDays;
+    // En el Directorio los productos del formulario son los de la ficha: si
+    // se cambian ahí, valen para todos sus días y nada los pisa.
+    const formProductsChanged = !hideOrderDetails
+      && JSON.stringify(Object.entries(data.products || {}).sort())
+        !== JSON.stringify(Object.entries(getClientProductsForDay(client))
+          .map(([id, qty]) => [id, parseInt(String(qty || 0), 10) || 0] as [string, number])
+          .filter(([, qty]) => qty > 0).sort());
+    if (data.visitDays) {
+      const { addressByDay: _addresses, ...dayFields } = dayFieldsAfterDaysChange(client, previousDays, nextDays);
+      if (formProductsChanged) delete dayFields.products;
+      Object.assign(data, dayFields);
+    }
+    if (formProductsChanged && Object.keys(sanitizeProductsByDay(client.productsByDay)).length > 0) {
+      data.productsByDay = {};
+    }
     // Ubicación de cada día: solo días que quedan y ubicaciones que siguen en la ficha.
     if (showClientInfo) {
-      const keptDays = editsDays ? visitDays : (data.visitDays ?? previousDays);
-      const nextByDay = pruneAddressByDay(dayAddresses, keptDays, savedAddresses);
+      // Un único día que cambia de día conserva la ubicación que tenía elegida.
+      const chosen = { ...dayAddresses };
+      if (previousDays.length === 1 && nextDays.length === 1 && previousDays[0] !== nextDays[0]
+        && chosen[previousDays[0]] && !chosen[nextDays[0]]) {
+        chosen[nextDays[0]] = chosen[previousDays[0]];
+      }
+      const nextByDay = pruneAddressByDay(chosen, nextDays, savedAddresses);
       const currentByDay = sanitizeAddressByDay(client.addressByDay);
       const changed = Object.keys(nextByDay).length !== Object.keys(currentByDay).length
         || Object.entries(nextByDay).some(([day, id]) => currentByDay[day] !== id);
@@ -616,7 +652,11 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     try {
       const data: Partial<Client> = client.isInactive
         ? { isInactive: false }
-        : { isInactive: true, freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [] };
+        : {
+          isInactive: true, freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [],
+          // Lo propio de cada día no debe volver si después se lo agenda de nuevo.
+          ...dayFieldsAfterDaysChange(client, visitDaysOf(client), []),
+        };
       const saved = await onSave(client.id, data);
       if (!saved) {
         Alert.alert(t('error'), t('editModal.saveError'));
@@ -703,6 +743,9 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
               <>
                 {/* Products */}
                 <Text style={[styles.sectionTitle, { marginTop: 20 }]}>{t('editModal.products')}</Text>
+                {hasSeparateDays(client) && (
+                  <Text style={styles.dayAddressText}>{t('editModal.productsAllDaysHint')}</Text>
+                )}
                 {catalogProducts.map((p) => (
                   <View key={p.id} style={styles.productRow}>
                     <ProductLabel

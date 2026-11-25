@@ -14,11 +14,13 @@ interface ProductCounterProps {
   clients: Client[];
   /** Fecha de esos clientes ("hoy", "mañana", "mié 30"): la barra suma la primera fecha de la lista. */
   whenLabel: string;
+  /** Día de la lista: con varios días de visita, cada uno suma lo de su tarjeta. */
+  day?: string;
   fontScale?: number;
   compact?: boolean;
 }
 
-const ProductCounter: React.FC<ProductCounterProps> = ({ clients, whenLabel, fontScale = 1, compact = false }) => {
+const ProductCounter: React.FC<ProductCounterProps> = ({ clients, whenLabel, day, fontScale = 1, compact = false }) => {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const contentRail = useContentRail();
@@ -29,8 +31,8 @@ const ProductCounter: React.FC<ProductCounterProps> = ({ clients, whenLabel, fon
   const products = useAllProducts();
 
   const totals = React.useMemo(
-    () => calculateProductTotals(clients, products),
-    [clients, products],
+    () => calculateProductTotals(clients, products, day),
+    [clients, products, day],
   );
   const displayProductIds = React.useMemo(() => {
     const knownIds = new Set(products.map((product) => product.id));

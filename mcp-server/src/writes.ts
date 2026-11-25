@@ -21,9 +21,11 @@ import {
   applyVisitCommand, createVisitCommand, newVisitId, undoForCompletedClient, VisitCommand, VisitResult,
 } from '../../src/utils/visitCompletion';
 import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../../src/utils/recency';
+import { getClientAddresses, locationFields, sanitizeClientAddresses } from '../../src/utils/clientAddresses';
 import {
-  getClientAddresses, locationFields, pruneAddressByDay, sanitizeClientAddresses,
-} from '../../src/utils/clientAddresses';
+  dayFieldsAfterDaysChange, getClientProductsForDay, isClientStarredOnDay, productsUpdateForDay,
+  sanitizeProductsByDay, starUpdateForDay,
+} from '../../src/utils/clientDays';
 import { normalizeGoogleMapsLink } from '../../src/utils/googleMapsLink';
 import { getClientPhones, getPrimaryClientPhone, sanitizeClientPhones } from '../../src/utils/clientPhones';
 import { findExactClientMatch } from '../../src/utils/clientDuplicates';
@@ -61,13 +63,24 @@ const loadForWrite = async (
   return { ref, client, route };
 };
 
-const productMap = (client: Client): Record<string, number> => {
+const productMap = (client: Client, day?: string): Record<string, number> => {
   const map: Record<string, number> = {};
-  Object.entries(client.products || {}).forEach(([id, value]) => {
+  Object.entries(getClientProductsForDay(client, day)).forEach(([id, value]) => {
     const amount = quantity(value);
     if (amount > 0) map[id] = amount;
   });
   return map;
+};
+
+/** Día de visita al que apunta el cambio; falla si el cliente no va ese día. */
+const visitDayOf = (client: Client, day?: string): string | undefined => {
+  if (!day) return undefined;
+  const found = WEEK.find((name) => plain(name) === plain(day));
+  if (!found) throw new WriteError(`Día desconocido: «${day}». Usá Lunes … Domingo.`);
+  if (!clientDays(client).includes(found)) {
+    throw new WriteError(`${client.name} no va los ${found} (va ${clientDays(client).join(', ') || 'sin día'}).`);
+  }
+  return found;
 };
 
 export interface ChangeResult {
@@ -99,19 +112,27 @@ const validateProducts = (catalog: CatalogProduct[], changes: Record<string, num
  */
 export const setProducts = (
   db: Firestore, account: Account, catalog: CatalogProduct[],
-  clientId: string, changes: Record<string, number>, replaceAll: boolean,
+  clientId: string, changes: Record<string, number>, replaceAll: boolean, day?: string,
 ): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
   validateProducts(catalog, changes);
   const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
-  const before = productMap(client);
+  const target = visitDayOf(client, day);
+  const ownDays = Object.keys(sanitizeProductsByDay(client.productsByDay)).filter((name) => clientDays(client).includes(name));
+  if (!target && clientDays(client).length > 1 && ownDays.length) {
+    throw new WriteError(`${client.name} lleva productos distintos según el día (${clientDays(client).join(', ')}): pasá dia para decir cuál cambiar.`);
+  }
+  const before = productMap(client, target);
   const after: Record<string, number> = replaceAll ? {} : { ...before };
   Object.entries(changes).forEach(([id, amount]) => {
     if (amount > 0) after[id] = amount;
     else delete after[id];
   });
   const changed = JSON.stringify(Object.entries(before).sort()) !== JSON.stringify(Object.entries(after).sort());
-  if (changed) transaction.update(ref, { products: after });
-  return { cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed, antes: before, despues: after };
+  if (changed) transaction.update(ref, productsUpdateForDay(client, target, after));
+  return {
+    cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed, antes: before, despues: after,
+    ...(target && clientDays(client).length > 1 ? { dia: target } : {}),
+  };
 });
 
 /**
@@ -301,13 +322,23 @@ export const changeName = (
 
 /** Fija la estrella (no es un interruptor: repetir la llamada no la apaga). */
 export const setStar = (
-  db: Firestore, account: Account, clientId: string, value: boolean,
+  db: Firestore, account: Account, clientId: string, value: boolean, day?: string,
 ): Promise<ChangeResult> => db.runTransaction(async (transaction) => {
   const { ref, client, route } = await loadForWrite(db, transaction, account, clientId);
-  const before = !!client.isStarred;
-  const changed = before !== value;
-  if (changed) transaction.update(ref, { isStarred: value });
-  return { cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed, antes: before, despues: value };
+  const target = visitDayOf(client, day);
+  const days = clientDays(client);
+  // Sin día, un cliente con varios días queda con esa estrella en todos.
+  const before = target || days.length < 2 ? isClientStarredOnDay(client, target) : days.every((name) => isClientStarredOnDay(client, name));
+  const changed = target || days.length < 2 ? before !== value : days.some((name) => isClientStarredOnDay(client, name) !== value);
+  if (changed) {
+    transaction.update(ref, target || days.length < 2
+      ? starUpdateForDay(client, target, value)
+      : { isStarred: value, starredByDay: {} });
+  }
+  return {
+    cliente_id: client.id, nombre: client.name, reparto: route.name, cambiado: changed, antes: before, despues: value,
+    ...(target && days.length > 1 ? { dia: target } : {}),
+  };
 });
 
 /**
@@ -611,8 +642,10 @@ export const scheduleOnce = (
     phones: getClientPhones(clientData),
     addresses: savedAddresses,
     ...locationFields(savedAddresses[0]),
-    // Agenda nueva: una elección de dirección por día de una agenda anterior no debe pisarla.
+    // Agenda nueva: lo elegido por día en una agenda anterior (dirección, productos, estrella) no debe pisarla.
     addressByDay: {},
+    productsByDay: {},
+    starredByDay: {},
     ...dataScopeFields(account.uid, route.groupId),
     userId: account.uid,
     freq: 'once',
@@ -859,6 +892,8 @@ export const rescheduleClient = (
   if (moves) {
     updates.visitDay = newDay;
     updates.visitDays = [newDay];
+    // El día que se mueve se lleva su dirección, sus productos y su estrella.
+    Object.assign(updates, dayFieldsAfterDaysChange(current, days, [newDay]));
     const orders: Record<string, number> = { ...(current.listOrders || {}) };
     if (oldDay) delete orders[oldDay];
     if (newFreq === 'once') {
@@ -934,7 +969,11 @@ export const removeFromList = (
 
   if (days.length > 1) {
     const remaining = days.filter((candidate) => candidate !== day);
-    const updates = { scheduleRevision: newVisitId(), visitDays: remaining, visitDay: remaining[0] };
+    const updates = {
+      scheduleRevision: newVisitId(), visitDays: remaining, visitDay: remaining[0],
+      // Lo propio del día que se quita se va con él; si queda un solo día, sus productos y estrella pasan a la ficha.
+      ...dayFieldsAfterDaysChange(current, days, remaining),
+    };
     transaction.update(loaded.ref, updates);
     const after = { ...current, ...updates } as Client;
     return { ...base, cambiado: true, antes: before, despues: { frecuencia: before.frecuencia, dias: remaining, proxima_visita: nextVisit(after) } };
@@ -1376,8 +1415,10 @@ export const scheduleRecurring = (
     phones: getClientPhones(current),
     addresses: savedAddresses,
     ...locationFields(savedAddresses[0]),
-    // Agenda nueva: una elección de dirección por día de una agenda anterior no debe pisarla.
+    // Agenda nueva: lo elegido por día en una agenda anterior (dirección, productos, estrella) no debe pisarla.
     addressByDay: {},
+    productsByDay: {},
+    starredByDay: {},
     freq,
     updatedAt: new Date(),
     notes: current.notes || '',
@@ -1445,10 +1486,8 @@ export const changeDays = (
   const updates: Record<string, unknown> = {
     visitDays: newDays, visitDay: newDays[0], listOrders: orders, listOrder: orders[newDays[0]], scheduleRevision: newVisitId(),
   };
-  // La dirección elegida para un día que se deja de visitar no debe volver si ese día se suma de nuevo.
-  if (current.addressByDay && Object.keys(current.addressByDay).length) {
-    updates.addressByDay = pruneAddressByDay(current.addressByDay, newDays, getClientAddresses(current));
-  }
+  // Lo propio de cada día sigue a su día: uno que se mueve se lo lleva y uno que se quita lo pierde.
+  Object.assign(updates, dayFieldsAfterDaysChange(current, oldDays, newDays));
   transaction.update(loaded.ref, { ...updates, updatedAt: new Date() });
   const after = { ...current, ...updates } as Client;
   return {
@@ -1656,7 +1695,11 @@ export const setInactive = (
     if (Array.isArray(client.visitCommands) && client.visitCommands.length) {
       throw new WriteError('La ficha tiene un Listo pendiente de aplicar desde la app; reintentar en unos segundos.');
     }
-    transaction.update(loaded.ref, { isInactive: true, freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [], updatedAt: new Date() });
+    transaction.update(loaded.ref, {
+      isInactive: true, freq: 'on_demand', visitDay: 'Sin Asignar', visitDays: [], updatedAt: new Date(),
+      // Lo propio de cada día no debe volver si después se lo agenda de nuevo.
+      ...dayFieldsAfterDaysChange(loaded.client, clientDays(loaded.client), []),
+    });
     return { ...base, cambiado: true, antes: before, despues: { inactivo: true, frecuencia: FREQ_LABELS.on_demand, dias: [] } };
   }
   transaction.update(loaded.ref, { isInactive: false, updatedAt: new Date() });

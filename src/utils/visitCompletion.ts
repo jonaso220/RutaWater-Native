@@ -2,6 +2,8 @@ import type { Client } from '../types';
 import { getNextVisitDate, parseDate, toLocalDateString, visitStateKey } from './helpers';
 import { getLastVisitDate } from './recency';
 import { isValidCalendarDate } from './scheduling';
+import { weekdayOfDateKey } from './clientAddresses';
+import { hasSeparateDays, isClientStarredOnDay, sanitizeStarredByDay, starFieldsAfterVisit } from './clientDays';
 
 // Commands contain JSON values only, so Firestore can persist/replay them offline.
 // Never queue an unconditional lastVisited update: its eventual arrival could
@@ -94,23 +96,44 @@ export const undoForCompletedClient = (client: Client, actorId: string): VisitCo
   };
 };
 
-const saveFields = (client: Client): SavedFields => Object.fromEntries(savedKeys.map((key) => {
-  const value = client[key];
-  return [key, dateFields.has(key) ? parseDate(value as any)?.getTime() ?? null
-    : value ?? (key === 'isCompleted' || key === 'isStarred' ? false
-      : key === 'alarmScheduledFor' ? null : '')];
-})) as SavedFields;
+// `dayStarred` is not a client field: with several visit days it remembers the
+// star of the card being completed, so undo gives it back to that day only.
+const saveFields = (client: Client, occurrence?: string): SavedFields => {
+  const saved = Object.fromEntries(savedKeys.map((key) => {
+    const value = client[key];
+    return [key, dateFields.has(key) ? parseDate(value as any)?.getTime() ?? null
+      : value ?? (key === 'isCompleted' || key === 'isStarred' ? false
+        : key === 'alarmScheduledFor' ? null : '')];
+  })) as SavedFields;
+  if (occurrence && hasSeparateDays(client)) {
+    saved.dayStarred = isClientStarredOnDay(client, weekdayOfDateKey(occurrence));
+  }
+  return saved;
+};
 
-const restoreFields = (saved: SavedFields): Partial<Client> => Object.fromEntries(
-  Object.entries(saved).map(([key, value]) => [key,
-    dateFields.has(key) && typeof value === 'number' ? new Date(value) : value]),
-) as Partial<Client>;
+const restoreFields = (saved: SavedFields, client: Client, occurrence: string): Partial<Client> => {
+  const { dayStarred, ...fields } = saved;
+  const updates = Object.fromEntries(
+    Object.entries(fields).map(([key, value]) => [key,
+      dateFields.has(key) && typeof value === 'number' ? new Date(value) : value]),
+  ) as Partial<Client>;
+  const day = weekdayOfDateKey(occurrence);
+  if (typeof dayStarred === 'boolean' && day) {
+    // The other days keep their own star: with a per-day star the shared one
+    // must not come back over them.
+    delete updates.isStarred;
+    const current = sanitizeStarredByDay(client.starredByDay);
+    // Do not erase a star added to that day after completion.
+    if (dayStarred && !current[day]) updates.starredByDay = { ...current, [day]: true };
+  }
+  return updates;
+};
 
 const completedFields = (client: Client, command: VisitCommand): Partial<Client> => {
   const deliveredAt = new Date(Math.max(command.at, getLastVisitDate(client)?.getTime() || 0));
   const updates: Partial<Client> = {
     lastDeliveredAt: deliveredAt as any, alarm: '', alarmDay: '',
-    alarmScheduledFor: null, isStarred: false,
+    alarmScheduledFor: null, ...starFieldsAfterVisit(client, command.occurrence),
   };
   if (client.freq === 'once') {
     updates.isCompleted = true;
@@ -159,7 +182,7 @@ export const applyVisitCommand = (client: Client, command: VisitCommand): VisitT
       if (key !== command.expected || !command.targetId) return unchanged();
       return finish({ visitReceipt: {
         occurrence: command.occurrence, expected: key, after: key,
-        before: saveFields(client), confirmations: {}, cancelled: [command.targetId],
+        before: saveFields(client, command.occurrence), confirmations: {}, cancelled: [command.targetId],
       } }, 'undone');
     }
     if (receipt.expected !== command.expected || receipt.occurrence !== command.occurrence) return unchanged();
@@ -177,7 +200,7 @@ export const applyVisitCommand = (client: Client, command: VisitCommand): VisitT
     if (Object.keys(confirmations).length) {
       return finish({ visitReceipt: nextReceipt }, 'kept');
     }
-    const updates = restoreFields(receipt.before);
+    const updates = restoreFields(receipt.before, client, receipt.occurrence);
     // Do not erase an alarm/star added after completion. Expired one-shots
     // must not be resurrected on this or another household member's device.
     if (client.alarm) {
@@ -202,7 +225,7 @@ export const applyVisitCommand = (client: Client, command: VisitCommand): VisitT
     const reactivating = Object.keys(receipt.confirmations).length === 0;
     const updates = reactivating ? completedFields(client, command) : {};
     const nextReceipt = { ...receipt, confirmations,
-      before: reactivating ? saveFields(client) : receipt.before,
+      before: reactivating ? saveFields(client, command.occurrence) : receipt.before,
       after: visitStateKey({ ...client, ...updates }) };
     return finish({ ...updates, visitReceipt: nextReceipt }, 'confirmed');
   }
@@ -213,7 +236,7 @@ export const applyVisitCommand = (client: Client, command: VisitCommand): VisitT
   const completed = { ...client, ...updates };
   const nextReceipt: VisitReceipt = {
     occurrence: command.occurrence, expected: key, after: visitStateKey(completed),
-    before: saveFields(client),
+    before: saveFields(client, command.occurrence),
     confirmations: { [command.id]: command.actorId }, cancelled: [],
   };
   return finish({ ...updates, visitReceipt: nextReceipt }, 'applied');

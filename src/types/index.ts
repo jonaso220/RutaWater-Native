@@ -44,6 +44,11 @@ export interface Client {
   // clientes que reciben en lugares distintos según el día. Un día sin entrada
   // usa la ubicación efectiva de arriba.
   addressByDay?: Record<string, string>;
+  // Con varios días de visita, cada día es una tarjeta con sus propios
+  // productos y su propia estrella (día → valor). Un día sin entrada usa
+  // `products` / `isStarred`, que es lo único que conocen versiones anteriores.
+  productsByDay?: Record<string, Record<string, string | number>>;
+  starredByDay?: Record<string, boolean>;
   notes: string;
   // Datos de facturación opcionales (Uruguay: RUT + razón social). Ausentes
   // en documentos anteriores a esta ficha.

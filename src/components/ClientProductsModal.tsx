@@ -16,12 +16,17 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { useLayout } from '../hooks/useLayout';
 import { getModalWidth } from '../utils/helpers';
+import { getClientProductsForDay, hasSeparateDays, productsUpdateForDay } from '../utils/clientDays';
+import { getDayLabel } from '../constants/products';
 import ModalOverlay from './ModalOverlay';
 import { ProductLabel } from './ProductIcon';
 
 interface ClientProductsModalProps {
   visible: boolean;
   client: Client | null;
+  // Día de la tarjeta desde la que se abrió: con varios días de visita se
+  // editan solo los productos de ese día.
+  day?: string;
   onSave: (clientId: string, data: Partial<Client>) => Promise<boolean>;
   onClose: () => void;
 }
@@ -29,6 +34,7 @@ interface ClientProductsModalProps {
 const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
   visible,
   client,
+  day,
   onSave,
   onClose,
 }) => {
@@ -48,7 +54,7 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
   useEffect(() => {
     if (!visible || !client) return;
     const nextProducts: Record<string, number> = {};
-    Object.entries(client.products || {}).forEach(([id, quantity]) => {
+    Object.entries(getClientProductsForDay(client, day)).forEach(([id, quantity]) => {
       nextProducts[id] = parseInt(String(quantity || 0), 10) || 0;
     });
     productsCatalog.forEach((product) => {
@@ -57,7 +63,7 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
     setProducts(nextProducts);
     setSaving(false);
     savingRef.current = false;
-  }, [client?.id, productsCatalog, visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [client?.id, day, productsCatalog, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!client) return null;
 
@@ -78,7 +84,7 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
     });
     let saved = false;
     try {
-      saved = await onSave(client.id, { products: cleanProducts });
+      saved = await onSave(client.id, productsUpdateForDay(client, day, cleanProducts) as Partial<Client>);
     } catch {
       saved = false;
     } finally {
@@ -102,7 +108,10 @@ const ClientProductsModal: React.FC<ClientProductsModalProps> = ({
         <View style={styles.modal}>
           <View style={styles.header}>
             <View style={styles.headerCopy}>
-              <Text style={styles.eyebrow}>{t('editModal.products')}</Text>
+              <Text style={styles.eyebrow}>
+                {t('editModal.products')}
+                {day && hasSeparateDays(client) ? ` · ${getDayLabel(day)}` : ''}
+              </Text>
               <Text style={styles.title} numberOfLines={1}>{client.name}</Text>
             </View>
             <TouchableOpacity

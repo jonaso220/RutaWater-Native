@@ -576,6 +576,10 @@ export default {
     call: 'Call',
     whatsapp: 'Open WhatsApp',
     openMaps: 'Open Maps',
+    changeDayAddress: 'Change {{day}} address',
+    dayAddressTitle: '{{day}} address',
+    dayAddressHelp: 'Applies to every {{day}} visit. Other days stay the same.',
+    dayAddressSaveError: 'Could not save the address for that day.',
     onceLabel: 'One time',
     onceWithDate: 'One time: {{date}}',
   },
@@ -625,7 +629,7 @@ export default {
     mapsPlaceholder: 'Google Maps URL',
     add: 'Add another address',
     remove: 'Remove address',
-    help: 'The first address is the primary one. You can choose any address when scheduling a visit.',
+    help: 'The first address is the primary one. From the card you can choose which one to use on each visit day.',
   },
 
   clientPhones: {
@@ -700,6 +704,8 @@ export default {
     saveError: 'Could not save changes.',
     errorSunday: 'Cannot schedule on Sunday',
     errorNoDays: 'This client has no assigned days. Use the Directory to schedule with specific days.',
+    errorPickDay: 'Choose at least one visit day.',
+    dayAddressTitle: 'Address for each day',
     editClientData: 'Edit client info',
     editFrequency: 'Edit frequency',
     noDate: 'No date',

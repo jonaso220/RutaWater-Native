@@ -81,3 +81,90 @@ export const locationFields = (location?: ClientAddress | null) => ({
   lat: location?.lat || '',
   lng: location?.lng || '',
 });
+
+const WEEKDAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const VALID_WEEKDAYS = new Set(WEEKDAYS);
+
+/** Día de semana (como lo guardan las fichas) de una fecha aaaa-mm-dd. */
+export const weekdayOfDateKey = (dateKey: unknown): string => {
+  const match = typeof dateKey === 'string' ? /^(\d{4})-(\d{2})-(\d{2})/.exec(dateKey) : null;
+  if (!match) return '';
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? '' : WEEKDAYS[date.getDay()];
+};
+
+/** Deja solo días de semana válidos con un id de ubicación. */
+export const sanitizeAddressByDay = (value: unknown): Record<string, string> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const clean: Record<string, string> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([day, id]) => {
+    const addressId = cleanText(id, 100);
+    if (VALID_WEEKDAYS.has(day) && addressId) clean[day] = addressId;
+  });
+  return clean;
+};
+
+export interface ClientDayLocation {
+  // Id de la ubicación guardada que se usa ese día; null si la ubicación
+  // efectiva de la ficha no coincide con ninguna de la lista.
+  addressId: string | null;
+  type: ClientAddressType | null;
+  address: string;
+  mapsLink: string;
+  lat: string;
+  lng: string;
+}
+
+/**
+ * Ubicación de la visita de `day`: la elegida para ese día en la tarjeta o,
+ * si no se eligió ninguna (o se borró de la ficha), la ubicación efectiva de
+ * la ficha (`address/mapsLink/lat/lng`), como hasta ahora.
+ */
+export const getClientLocationForDay = (
+  client: Partial<Client>, day?: string | null,
+): ClientDayLocation => {
+  const saved = getClientAddresses(client);
+  const chosenId = day ? sanitizeAddressByDay(client.addressByDay)[day] : '';
+  const chosen = chosenId ? saved.find((location) => location.id === chosenId) : undefined;
+  if (chosen) return { addressId: chosen.id, type: chosen.type, ...locationFields(chosen) };
+
+  const address = cleanText(client.address, 200);
+  const mapsLink = cleanMapsLink(client.mapsLink);
+  const current = saved.find((location) => location.address === address && location.mapsLink === mapsLink)
+    || (saved.length === 1 ? saved[0] : undefined);
+  return {
+    addressId: current?.id ?? null,
+    type: current?.type ?? null,
+    address,
+    mapsLink,
+    lat: cleanText(client.lat, 20),
+    lng: cleanText(client.lng, 20),
+  };
+};
+
+/** La misma ficha con la ubicación de `day` en los campos de arriba (solo para leer). */
+export const clientAtDayLocation = <T extends Partial<Client>>(client: T, day?: string | null): T => {
+  const location = getClientLocationForDay(client, day);
+  if (
+    location.address === (client.address || '') && location.mapsLink === (client.mapsLink || '')
+    && location.lat === (client.lat || '') && location.lng === (client.lng || '')
+  ) return client;
+  return {
+    ...client, address: location.address, mapsLink: location.mapsLink, lat: location.lat, lng: location.lng,
+  };
+};
+
+/**
+ * Elecciones de dirección por día que siguen valiendo: solo días en los que
+ * el cliente se visita y ubicaciones que siguen guardadas en la ficha.
+ */
+export const pruneAddressByDay = (
+  value: unknown, days: string[], addresses: ClientAddress[],
+): Record<string, string> => {
+  const ids = new Set(addresses.map((location) => location.id));
+  const clean: Record<string, string> = {};
+  Object.entries(sanitizeAddressByDay(value)).forEach(([day, id]) => {
+    if (days.includes(day) && ids.has(id)) clean[day] = id;
+  });
+  return clean;
+};

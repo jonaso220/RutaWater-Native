@@ -21,7 +21,9 @@ import {
   applyVisitCommand, createVisitCommand, newVisitId, undoForCompletedClient, VisitCommand, VisitResult,
 } from '../../src/utils/visitCompletion';
 import { getDirectoryDeliveryHistoryUpdate, getLastVisitDate } from '../../src/utils/recency';
-import { getClientAddresses, locationFields, sanitizeClientAddresses } from '../../src/utils/clientAddresses';
+import {
+  getClientAddresses, locationFields, pruneAddressByDay, sanitizeClientAddresses,
+} from '../../src/utils/clientAddresses';
 import { normalizeGoogleMapsLink } from '../../src/utils/googleMapsLink';
 import { getClientPhones, getPrimaryClientPhone, sanitizeClientPhones } from '../../src/utils/clientPhones';
 import { findExactClientMatch } from '../../src/utils/clientDuplicates';
@@ -609,6 +611,8 @@ export const scheduleOnce = (
     phones: getClientPhones(clientData),
     addresses: savedAddresses,
     ...locationFields(savedAddresses[0]),
+    // Agenda nueva: una elección de dirección por día de una agenda anterior no debe pisarla.
+    addressByDay: {},
     ...dataScopeFields(account.uid, route.groupId),
     userId: account.uid,
     freq: 'once',
@@ -1372,6 +1376,8 @@ export const scheduleRecurring = (
     phones: getClientPhones(current),
     addresses: savedAddresses,
     ...locationFields(savedAddresses[0]),
+    // Agenda nueva: una elección de dirección por día de una agenda anterior no debe pisarla.
+    addressByDay: {},
     freq,
     updatedAt: new Date(),
     notes: current.notes || '',
@@ -1436,9 +1442,13 @@ export const changeDays = (
       ? (current.listOrders?.[day] ?? current.listOrder ?? 0)
       : endOfDay(all, day, current.id);
   });
-  const updates = {
+  const updates: Record<string, unknown> = {
     visitDays: newDays, visitDay: newDays[0], listOrders: orders, listOrder: orders[newDays[0]], scheduleRevision: newVisitId(),
   };
+  // La dirección elegida para un día que se deja de visitar no debe volver si ese día se suma de nuevo.
+  if (current.addressByDay && Object.keys(current.addressByDay).length) {
+    updates.addressByDay = pruneAddressByDay(current.addressByDay, newDays, getClientAddresses(current));
+  }
   transaction.update(loaded.ref, { ...updates, updatedAt: new Date() });
   const after = { ...current, ...updates } as Client;
   return {

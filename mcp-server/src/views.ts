@@ -3,7 +3,9 @@ import es from '../../src/i18n/locales/es';
 import {
   fuzzyMatch, getDayIndex, getNextVisitDate, matchScore, normalizePhone, parseDate, toLocalDateString,
 } from '../../src/utils/helpers';
-import { getClientAddressSearchText, getClientAddresses } from '../../src/utils/clientAddresses';
+import {
+  getClientAddressSearchText, getClientAddresses, getClientLocationForDay, sanitizeAddressByDay,
+} from '../../src/utils/clientAddresses';
 import { getClientPhoneSearchText, getClientPhones, getPrimaryClientPhone } from '../../src/utils/clientPhones';
 import {
   buildClientIdentityIndex, getRelatedRecordStableClientId, getStableClientId, resolveClientForStableId,
@@ -159,6 +161,9 @@ export const clientDetail = (client: Client, context: ClientContext) => ({
   direcciones: getClientAddresses(client).map((location) => ({
     tipo: location.type, direccion: location.address, mapa: location.mapsLink || '',
   })),
+  // Ubicación elegida en la tarjeta para cada día de visita (los demás días usan la principal).
+  direccion_por_dia: Object.fromEntries(Object.keys(sanitizeAddressByDay(client.addressByDay))
+    .map((day) => [day, getClientLocationForDay(client, day).address])),
   // Facturación (Editar cliente → Facturación); vacíos si no se cargaron.
   rut: (client.rut || '').trim(),
   razon_social: (client.businessName || '').trim(),
@@ -322,6 +327,17 @@ export interface PositionSuggestion {
 }
 
 /**
+ * Punto de entrega de la ficha ese día de semana. Si para ese día se eligió
+ * una ubicación, valen solo sus coordenadas: sin ellas no se usa el punto de
+ * otra ubicación de la ficha (la sugerencia saldría en el lugar equivocado).
+ */
+const dayCoordinates = (client: Client, day: string): Coordinates | null => {
+  const chosenId = sanitizeAddressByDay(client.addressByDay)[day];
+  const chosen = chosenId ? getClientAddresses(client).find((location) => location.id === chosenId) : undefined;
+  return chosen ? clientCoordinates({ lat: chosen.lat || '', lng: chosen.lng || '' }) : clientCoordinates(client);
+};
+
+/**
  * Dónde entra `target` en el recorrido de `isoDate`: entre las dos paradas
  * consecutivas (en el orden del día) donde menos desvío agrega en línea
  * recta, d(A,P) + d(P,B) − d(A,B), o en un extremo. Las paradas son las
@@ -345,14 +361,14 @@ export const suggestPosition = (
     .map((entry) => entry.client.id));
   const stops = list.filter((client) => visiting.has(client.id) && !client.isNote);
   const located = stops
-    .map((client) => ({ client, point: clientCoordinates(client) }))
+    .map((client) => ({ client, point: dayCoordinates(client, day) }))
     .filter((stop): stop is { client: Client; point: Coordinates } => !!stop.point);
-  const missing = stops.filter((client) => !clientCoordinates(client)).map((client) => routeLabel(client, list));
+  const missing = stops.filter((client) => !dayCoordinates(client, day)).map((client) => routeLabel(client, list));
   const empty: PositionSuggestion = {
     posicion: null, anterior: null, siguiente: null, desvio_metros: null,
     paradas: stops.length, completa: !missing.length, sin_coordenadas: missing,
   };
-  const point = clientCoordinates(target);
+  const point = dayCoordinates(target, day);
   if (!point) {
     return { ...empty, motivo: `${target.name || 'El cliente'} no tiene coordenadas (falta resolver el link de Maps de su ubicación).` };
   }

@@ -22,7 +22,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import auth from '@react-native-firebase/auth';
 import { Client, ClientAddress, ClientPhone } from '../types';
 import { useProducts } from '../stores/productCatalogStore';
-import { FREQUENCIES, Frequency, getFreqLabel } from '../constants/products';
+import { ALL_DAYS, FREQUENCIES, Frequency, getDayLabel, getFreqLabel } from '../constants/products';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -39,9 +39,14 @@ import {
 } from '../services/notifications';
 import { getLastVisitDate } from '../utils/recency';
 import {
+  getClientAddresses,
+  getClientLocationForDay,
   getEditableClientAddresses,
   locationFields,
+  pruneAddressByDay,
+  sanitizeAddressByDay,
   sanitizeClientAddresses,
+  weekdayOfDateKey,
 } from '../utils/clientAddresses';
 import {
   getClientPhones,
@@ -76,6 +81,19 @@ interface EditClientModalProps {
   hideOrderDetails?: boolean;
 }
 
+const PERIODIC_FREQUENCIES: Frequency[] = ['weekly', 'biweekly', 'triweekly', 'monthly'];
+
+// Días de visita que la ficha tiene hoy (los anteriores a visitDays guardan uno solo).
+const visitDaysOf = (client: Client): string[] => {
+  const days = client.visitDays && client.visitDays.length > 0
+    ? client.visitDays
+    : (client.visitDay && client.visitDay !== 'Sin Asignar' ? [client.visitDay] : []);
+  return ALL_DAYS.filter((day) => days.includes(day));
+};
+
+const sameDays = (a: string[], b: string[]): boolean =>
+  a.length === b.length && a.every((day) => b.includes(day));
+
 const EditClientModal: React.FC<EditClientModalProps> = ({
   visible,
   client,
@@ -109,6 +127,12 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   const [notes, setNotes] = useState('');
   const [freq, setFreq] = useState<Frequency>('weekly');
   const [startDate, setStartDate] = useState<string>('');
+  // Días de visita de una frecuencia fija y ubicación elegida para cada uno.
+  const [visitDays, setVisitDays] = useState<string[]>([]);
+  const [dayAddresses, setDayAddresses] = useState<Record<string, string>>({});
+  // Días que había antes de que la fecha de inicio moviera el día de visita,
+  // para devolverlos si se quita esa fecha.
+  const daysBeforeDateRef = useRef<string[] | null>(null);
   const [pickerDate, setPickerDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -142,6 +166,20 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       setNotes(client.notes || '');
       setFreq(client.freq || 'weekly');
       setStartDate(client.specificDate || '');
+      setVisitDays(visitDaysOf(client));
+      daysBeforeDateRef.current = null;
+      // Una ficha agendada en una ubicación que no es la principal (p. ej. el
+      // trabajo) la conserva en sus días: guardar la ficha deja la principal
+      // arriba, y sin esto la tarjeta cambiaba de dirección sin avisar.
+      const byDay = sanitizeAddressByDay(client.addressByDay);
+      const savedLocations = getClientAddresses(client);
+      const shown = getClientLocationForDay(client);
+      if (savedLocations.length > 1 && shown.addressId && shown.addressId !== savedLocations[0].id) {
+        visitDaysOf(client).forEach((day) => {
+          if (!byDay[day]) byDay[day] = shown.addressId as string;
+        });
+      }
+      setDayAddresses(byDay);
       // When opened from Inicio, point the calendar at the occurrence
       // represented by that card instead of at today. Keep the Directory flow
       // unchanged. This is deliberately separate from startDate: merely
@@ -177,6 +215,22 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
   if (!client) return null;
 
   const needsDate = freq === 'once' || freq === 'weekly' || freq === 'biweekly' || freq === 'triweekly' || freq === 'monthly';
+  const isPeriodic = PERIODIC_FREQUENCIES.includes(freq);
+  // Los días se eligen acá solo con la ficha completa (frecuencia a la vista).
+  const editsDays = showClientInfo && isPeriodic;
+  const savedAddresses = sanitizeClientAddresses(addresses);
+  // Días a los que se les puede elegir ubicación: los de la frecuencia o, en un
+  // pedido de una vez, el de su fecha.
+  const onceDay = freq === 'once' ? weekdayOfDateKey(startDate || client.specificDate) : '';
+  const addressDays = editsDays ? visitDays : (showClientInfo && onceDay ? [onceDay] : []);
+  const asksDayAddress = savedAddresses.length > 1 && addressDays.length > 0;
+
+  const toggleVisitDay = (day: string) => {
+    daysBeforeDateRef.current = null;
+    setVisitDays((current) => (current.includes(day)
+      ? current.filter((entry) => entry !== day)
+      : ALL_DAYS.filter((entry) => entry === day || current.includes(entry))));
+  };
 
   const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
@@ -190,6 +244,13 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       const mm = String(selectedDate.getMonth() + 1).padStart(2, '0');
       const dd = String(selectedDate.getDate()).padStart(2, '0');
       setStartDate(`${yyyy}-${mm}-${dd}`);
+      // Con un solo día (o ninguno), la fecha de inicio define el día de
+      // visita, como siempre. Con varios días es solo desde cuándo arranca.
+      const pickedDay = weekdayOfDateKey(`${yyyy}-${mm}-${dd}`);
+      if (pickedDay && visitDays.length <= 1) {
+        if (daysBeforeDateRef.current === null) daysBeforeDateRef.current = visitDays;
+        setVisitDays([pickedDay]);
+      }
     }
   };
 
@@ -207,7 +268,11 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     // Allow saving if client has visitDay OR visitDays OR user selected a new date
     const hasDay = (client.visitDays && client.visitDays.length > 0) || (client.visitDay && client.visitDay !== 'Sin Asignar');
     const hasNewDate = needsDate && startDate;
-    if (freq !== 'once' && freq !== 'on_demand' && !hasDay && !hasNewDate) {
+    if (editsDays && visitDays.length === 0) {
+      Alert.alert(t('error'), t('editModal.errorPickDay'));
+      return;
+    }
+    if (freq !== 'once' && freq !== 'on_demand' && !hasDay && !hasNewDate && !editsDays) {
       Alert.alert(t('error'), t('editModal.errorNoDays'));
       return;
     }
@@ -348,6 +413,39 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     } else if (!needsDate) {
       data.specificDate = '';
     }
+    // Los días elegidos en la ficha mandan sobre los que deja la fecha de
+    // inicio. Los que ya tenía conservan su lugar en la lista; los nuevos van
+    // al final de la de ese día (como al agendar desde el Directorio).
+    const previousDays = visitDaysOf(client);
+    if (editsDays && !sameDays(data.visitDays ?? previousDays, visitDays)) {
+      const orders: Record<string, number> = {};
+      visitDays.forEach((day) => {
+        if (previousDays.includes(day)) {
+          orders[day] = client.listOrders?.[day] ?? client.listOrder ?? 0;
+          return;
+        }
+        const others = (allClients || []).filter((c) => c.id !== client.id
+          && c.freq !== 'on_demand'
+          && !c.isCompleted
+          && ((c.visitDays && c.visitDays.includes(day)) || c.visitDay === day));
+        orders[day] = others.length > 0
+          ? Math.max(...others.map((c) => c.listOrders?.[day] ?? c.listOrder ?? 0)) + 1
+          : 0;
+      });
+      data.visitDays = visitDays;
+      data.visitDay = visitDays[0];
+      data.listOrders = orders;
+      data.listOrder = orders[visitDays[0]];
+    }
+    // Ubicación de cada día: solo días que quedan y ubicaciones que siguen en la ficha.
+    if (showClientInfo) {
+      const keptDays = editsDays ? visitDays : (data.visitDays ?? previousDays);
+      const nextByDay = pruneAddressByDay(dayAddresses, keptDays, savedAddresses);
+      const currentByDay = sanitizeAddressByDay(client.addressByDay);
+      const changed = Object.keys(nextByDay).length !== Object.keys(currentByDay).length
+        || Object.entries(nextByDay).some(([day, id]) => currentByDay[day] !== id);
+      if (changed) data.addressByDay = nextByDay;
+    }
     // Only persist client info fields if the user actually changed them.
     // Avoids overwriting `undefined` legacy fields with empty strings on
     // unrelated edits (e.g. just bumping product quantities from the list).
@@ -386,9 +484,13 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
     Object.assign(data, billingInfoUpdates(client, billing));
     const savedDay = (data as any).visitDay as string | undefined;
     const savedDate = (data as any).specificDate as string | undefined;
-    const dayMoved = savedDay !== undefined && savedDay !== client.visitDay;
+    // La alarma queda en su día mientras ese día se siga visitando (sumar otro
+    // día no la mueve); si su día dejó de visitarse, pasa al primero que queda.
+    const alarmDayKept = !!client.alarmDay && !!data.visitDays && data.visitDays.includes(client.alarmDay);
+    const alarmDayDropped = !!client.alarmDay && !!data.visitDays && !data.visitDays.includes(client.alarmDay);
+    const dayMoved = savedDay !== undefined && savedDay !== client.visitDay && !alarmDayKept;
     const dateMoved = savedDate !== undefined && savedDate !== (client.specificDate || '');
-    const shouldRescheduleAlarm = !!client.alarm && (dayMoved || dateMoved);
+    const shouldRescheduleAlarm = !!client.alarm && (dayMoved || dateMoved || alarmDayDropped);
     const previousAlarm: ClientAlarmSnapshot | null = client.alarm
       && !(typeof client.alarmScheduledFor === 'number' && client.alarmScheduledFor <= Date.now())
       ? {
@@ -419,7 +521,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
       };
 
       if (shouldRescheduleAlarm && previousAlarm) {
-        data.alarmDay = savedDay || client.alarmDay || client.visitDay;
+        data.alarmDay = alarmDayKept ? client.alarmDay : (savedDay || client.alarmDay || client.visitDay);
         const alarmUpdated = await runSerializedAlarmMutation(client.id, async () => {
           // Replace the local trigger first, then persist its new schedule. If
           // either half fails, the helper cancels the replacement and restores
@@ -427,7 +529,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
           const fireAt = await scheduleClientAlarm(
             client.id,
             (data.name ?? client.name) || '',
-            (data.address ?? (showClientInfo ? locationFields(sanitizeClientAddresses(addresses)[0]).address : client.address)) || '',
+            getClientLocationForDay({ ...client, ...data } as Client, data.alarmDay).address,
             client.alarm,
             {
               ...alarmScheduleFields(
@@ -437,7 +539,7 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                   freq,
                   specificDate: savedDate || data.specificDate || client.specificDate,
                 } as Client,
-                savedDay || client.alarmDay || client.visitDay,
+                data.alarmDay || savedDay || client.alarmDay || client.visitDay,
               ),
               scopeKey: client.groupId || client.userId,
               ownerUid: auth().currentUser?.uid,
@@ -679,6 +781,76 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                   ))}
                 </View>
 
+                {editsDays && (
+                  <View style={{ marginTop: 20 }}>
+                    <Text style={styles.sectionTitle}>
+                      {t('scheduleModal.visitDays')}{' '}
+                      <Text style={styles.sectionHintInline}>{t('scheduleModal.canSelectMultiple')}</Text>
+                    </Text>
+                    <View style={styles.freqGrid}>
+                      {ALL_DAYS.map((day) => {
+                        const selected = visitDays.includes(day);
+                        return (
+                          <TouchableOpacity
+                            key={day}
+                            onPress={() => toggleVisitDay(day)}
+                            style={[styles.freqChip, selected && styles.freqChipSelected]}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: selected }}
+                            accessibilityLabel={getDayLabel(day)}
+                          >
+                            <Text style={[styles.freqChipText, selected && styles.freqChipTextSelected]}>
+                              {getDayLabel(day).slice(0, 3)}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {asksDayAddress && (
+                  <View style={{ marginTop: 20 }}>
+                    <Text style={styles.sectionTitle}>{t('editModal.dayAddressTitle')}</Text>
+                    {addressDays.map((day) => {
+                      const chosen = savedAddresses.find((location) => location.id === dayAddresses[day])
+                        || savedAddresses[0];
+                      return (
+                        <View key={day} style={styles.dayAddressRow}>
+                          <Text style={styles.dayAddressDay}>{getDayLabel(day)}</Text>
+                          <View style={styles.freqGrid}>
+                            {savedAddresses.map((location) => {
+                              const selected = location.id === chosen.id;
+                              return (
+                                <TouchableOpacity
+                                  key={location.id}
+                                  onPress={() => setDayAddresses((current) => ({ ...current, [day]: location.id }))}
+                                  style={[styles.freqChip, styles.dayAddressChip, selected && styles.freqChipSelected]}
+                                  accessibilityRole="radio"
+                                  accessibilityState={{ selected }}
+                                  accessibilityLabel={`${getDayLabel(day)}: ${t(`clientAddresses.${location.type}`)}, ${location.address}`}
+                                >
+                                  <Ionicons
+                                    name={location.type === 'home' ? 'home-outline' : location.type === 'work' ? 'briefcase-outline' : 'location-outline'}
+                                    size={Math.round(15 * fontScale)}
+                                    color={selected ? colors.textWhite : colors.textSecondary}
+                                  />
+                                  <Text style={[styles.freqChipText, selected && styles.freqChipTextSelected]}>
+                                    {t(`clientAddresses.${location.type}`)}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                          <Text style={styles.dayAddressText} numberOfLines={2}>
+                            {chosen.address || t('scheduleModal.savedMapLocation')}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+
                 {needsDate && (
                   <View style={{ marginTop: 16 }}>
                     <Text style={styles.sectionTitle}>
@@ -689,7 +861,17 @@ const EditClientModal: React.FC<EditClientModalProps> = ({
                         <Text style={styles.selectedDateText}>
                           {formatDisplayDate(startDate)}
                         </Text>
-                        <TouchableOpacity onPress={() => { setStartDate(''); setShowDatePicker(false); }}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setStartDate('');
+                            setShowDatePicker(false);
+                            // Sin fecha, el día vuelve a ser el que tenía antes de elegirla.
+                            if (daysBeforeDateRef.current) {
+                              setVisitDays(daysBeforeDateRef.current);
+                              daysBeforeDateRef.current = null;
+                            }
+                          }}
+                        >
                           <Text style={styles.clearDateText}>{t('editModal.clearDate')}</Text>
                         </TouchableOpacity>
                       </View>
@@ -959,6 +1141,33 @@ const getStyles = (colors: ThemeColors, isTablet: boolean, modalWidth?: number, 
   },
   freqChipTextSelected: {
     color: colors.textWhite,
+  },
+  sectionHintInline: {
+    fontWeight: '400',
+    textTransform: 'none',
+  },
+  dayAddressRow: {
+    backgroundColor: colors.sectionBackground,
+    borderRadius: s(12),
+    padding: s(12),
+    marginBottom: s(8),
+  },
+  dayAddressDay: {
+    fontSize: s(15),
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: s(8),
+  },
+  dayAddressChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: s(6),
+    backgroundColor: colors.inputBackground,
+  },
+  dayAddressText: {
+    fontSize: s(13),
+    color: colors.textMuted,
+    marginTop: s(8),
   },
   selectedDateRow: {
     flexDirection: 'row',

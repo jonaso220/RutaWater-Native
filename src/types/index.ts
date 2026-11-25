@@ -40,6 +40,10 @@ export interface Client {
   // siendo la ubicación efectiva de la visita para compatibilidad con rutas,
   // alarmas, exportaciones y documentos anteriores a esta lista.
   addresses?: ClientAddress[];
+  // Ubicación elegida para cada día de visita (día → id de `addresses`), para
+  // clientes que reciben en lugares distintos según el día. Un día sin entrada
+  // usa la ubicación efectiva de arriba.
+  addressByDay?: Record<string, string>;
   notes: string;
   // Datos de facturación opcionales (Uruguay: RUT + razón social). Ausentes
   // en documentos anteriores a esta ficha.

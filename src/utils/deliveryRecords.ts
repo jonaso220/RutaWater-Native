@@ -1,4 +1,5 @@
 import type { Client } from '../types';
+import { getClientLocationForDay, weekdayOfDateKey } from './clientAddresses';
 import { dataScopeFields } from './dataScope';
 import type { VisitCommand, VisitTransition } from './visitCompletion';
 
@@ -85,7 +86,8 @@ export const deliveryDocument = (
     clientId: client.id,
     customerId: client.customerId || client.id,
     clientName: client.name || '',
-    clientAddress: client.address || '',
+    // La dirección donde se entregó: la elegida para ese día de visita.
+    clientAddress: getClientLocationForDay(client, weekdayOfDateKey(change.occurrence)).address,
     occurrence: change.occurrence,
     completedAt: new Date(change.at),
     delivered: change.delivered,

@@ -22,6 +22,7 @@ import {
   shouldPresentDeliveredAlarm,
 } from '../utils/alarmReconciliation';
 import { alarmScheduleFields } from '../utils/helpers';
+import { getClientLocationForDay } from '../utils/clientAddresses';
 
 export interface AlarmData {
   clientId: string;
@@ -174,7 +175,7 @@ export const useAlarmChecker = () => {
             const fireAt = await scheduleClientAlarm(
               latest.id,
               latest.name || '',
-              latest.address || '',
+              getClientLocationForDay(latest, targetDay).address,
               latest.alarm,
               {
                 ...alarmScheduleFields(latest, targetDay),

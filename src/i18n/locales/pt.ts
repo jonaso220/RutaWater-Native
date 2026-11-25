@@ -576,6 +576,10 @@ export default {
     call: 'Ligar',
     whatsapp: 'Abrir WhatsApp',
     openMaps: 'Abrir Maps',
+    changeDayAddress: 'Mudar endereço de {{day}}',
+    dayAddressTitle: 'Endereço de {{day}}',
+    dayAddressHelp: 'Vale para todas as visitas de {{day}}. Os outros dias não mudam.',
+    dayAddressSaveError: 'Não foi possível salvar o endereço desse dia.',
     onceLabel: 'Uma vez',
     onceWithDate: 'Uma vez: {{date}}',
   },
@@ -625,7 +629,7 @@ export default {
     mapsPlaceholder: 'URL do Google Maps',
     add: 'Adicionar outro endereço',
     remove: 'Remover endereço',
-    help: 'O primeiro endereço é o principal. Você pode escolher qualquer endereço ao agendar uma visita.',
+    help: 'O primeiro endereço é o principal. No cartão você pode escolher qual usar em cada dia de visita.',
   },
 
   clientPhones: {
@@ -700,6 +704,8 @@ export default {
     saveError: 'Não foi possível salvar as alterações.',
     errorSunday: 'Não é possível agendar no Domingo',
     errorNoDays: 'Este cliente não tem dias atribuídos. Use o Diretório para agendar com dias específicos.',
+    errorPickDay: 'Escolha pelo menos um dia de visita.',
+    dayAddressTitle: 'Endereço de cada dia',
     editClientData: 'Editar dados do cliente',
     editFrequency: 'Editar frequência',
     noDate: 'Sem data',

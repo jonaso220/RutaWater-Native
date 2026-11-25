@@ -68,6 +68,7 @@ import { Frequency } from '../constants/products';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { getClientPhoneSearchText } from '../utils/clientPhones';
+import { getClientAddressSearchText, sanitizeAddressByDay } from '../utils/clientAddresses';
 import { useContentRail } from '../stores/contentRailStore';
 
 type ListItem =
@@ -149,6 +150,7 @@ interface ClientItemProps {
   onAlarm: (client: Client) => void;
   onRelationships: (client: Client) => void;
   onChangePosition: (clientId: string, newPos: number, day: string) => void;
+  onChangeDayAddress: (client: Client, day: string, addressId: string) => void;
 }
 
 const ClientItem = React.memo<ClientItemProps>(({
@@ -175,6 +177,7 @@ const ClientItem = React.memo<ClientItemProps>(({
   onAlarm,
   onRelationships,
   onChangePosition,
+  onChangeDayAddress,
 }) => {
   const handleMarkDone = useCallback(() => onMarkDone(client, selectedDay), [onMarkDone, client, selectedDay]);
   const handleMarkNotNeeded = useCallback(
@@ -193,6 +196,10 @@ const ClientItem = React.memo<ClientItemProps>(({
   const handleChangePosition = useCallback(
     (newPos: number) => onChangePosition(client.id, newPos, selectedDay),
     [onChangePosition, client.id, selectedDay],
+  );
+  const handleChangeDayAddress = useCallback(
+    (addressId: string) => onChangeDayAddress(client, selectedDay, addressId),
+    [onChangeDayAddress, client, selectedDay],
   );
 
   return (
@@ -215,6 +222,8 @@ const ClientItem = React.memo<ClientItemProps>(({
       onAlarm={handleAlarm}
       onRelationships={handleRelationships}
       onChangePosition={handleChangePosition}
+      visitDay={selectedDay}
+      onChangeDayAddress={handleChangeDayAddress}
       enCaminoMessage={enCaminoMessage}
       tomorrowVisitMessage={tomorrowVisitMessage}
       isTomorrowVisit={isTomorrowVisit}
@@ -680,7 +689,7 @@ const HomeScreen = () => {
     // Fuzzy search filter (debounced)
     if (debouncedSearchTerm.trim()) {
       const matcher = fuzzyMatch(debouncedSearchTerm);
-      filtered = filtered.filter((c) => matcher(c.name || '', c.address || '', getClientPhoneSearchText(c)));
+      filtered = filtered.filter((c) => matcher(c.name || '', getClientAddressSearchText(c) || c.address || '', getClientPhoneSearchText(c)));
     }
 
     // Active filters (type filters: AND, freq filters: OR, product filters: OR — matches webapp)
@@ -1072,6 +1081,16 @@ const HomeScreen = () => {
     setShowTransfersSheet(true);
   }, [clients, hasPendingTransfer, addTransfer, getClientDebtTotal, t]);
 
+  // La tarjeta elige cuál de las ubicaciones guardadas se usa ese día de visita
+  // (p. ej. martes en el trabajo, jueves en casa). Los otros días no cambian.
+  const handleChangeDayAddress = useCallback(async (client: Client, day: string, addressId: string) => {
+    hapticSelection();
+    const saved = await updateClient(client.id, {
+      addressByDay: { ...sanitizeAddressByDay(client.addressByDay), [day]: addressId },
+    });
+    if (!saved) Alert.alert(t('error'), t('clientCard.dayAddressSaveError'));
+  }, [updateClient, t]);
+
   // Stable handler wrappers — read from a ref so renderListItem
   // doesn't have to depend on individual handler identities. Without this,
   // any change to addTransfer / saveAlarm / hasPendingTransfer (which the
@@ -1089,6 +1108,7 @@ const HomeScreen = () => {
     handleAlarm,
     handleRelationshipsCb,
     changePosition,
+    handleChangeDayAddress,
   });
   handlersRef.current = {
     handleMarkDone,
@@ -1102,6 +1122,7 @@ const HomeScreen = () => {
     handleAlarm,
     handleRelationshipsCb,
     changePosition,
+    handleChangeDayAddress,
   };
 
   const reorderContextRef = useRef({
@@ -1128,6 +1149,8 @@ const HomeScreen = () => {
       onTransfer: (c: Client) => handlersRef.current.handleTransfer(c),
       onAlarm: (c: Client) => handlersRef.current.handleAlarm(c),
       onRelationships: (c: Client) => handlersRef.current.handleRelationshipsCb(c),
+      onChangeDayAddress: (c: Client, day: string, addressId: string) =>
+        handlersRef.current.handleChangeDayAddress(c, day, addressId),
       onChangePosition: (id: string, pos: number, day: string) => {
         const context = reorderContextRef.current;
         if (!Number.isFinite(pos) || context.positions[id] === undefined) return;
@@ -1201,6 +1224,7 @@ const HomeScreen = () => {
           onAlarm={stableHandlers.onAlarm}
           onRelationships={stableHandlers.onRelationships}
           onChangePosition={stableHandlers.onChangePosition}
+          onChangeDayAddress={stableHandlers.onChangeDayAddress}
         />
       );
     },
@@ -1303,6 +1327,7 @@ const HomeScreen = () => {
                 onAlarm={stableHandlers.onAlarm}
                 onRelationships={stableHandlers.onRelationships}
                 onChangePosition={stableHandlers.onChangePosition}
+                onChangeDayAddress={stableHandlers.onChangeDayAddress}
               />
             </View>
           ))}

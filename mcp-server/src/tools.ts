@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { Client, PaymentSchedule } from '../../src/types';
+import { getClientLocationForDay } from '../../src/utils/clientAddresses';
 import { getClientPhones, getPrimaryClientPhone } from '../../src/utils/clientPhones';
 import { normalizePhoneForComparison } from '../../src/utils/helpers';
 import { appendAudit } from './audit';
@@ -253,6 +254,8 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
       const agenda = agendaFor(clients, date).map(({ client, occurrence, overdue, position }) => ({
         posicion: position,
         ...clientSummary(client, { route, catalog: products, debts: debtsForClient(clients, debts, client) }),
+        // Dónde se entrega ese día (casa, trabajo…): la elegida en la tarjeta para ese día de semana.
+        direccion_del_dia: getClientLocationForDay(client, weekdayOf(occurrence)).address,
         fecha_visita: occurrence,
         atrasada: overdue,
       }));

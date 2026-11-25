@@ -27,7 +27,9 @@ import {
 import { useClientsQuery, clientsQueryKey } from './queries/useClientsQuery';
 import { reportError } from '../lib/crashReporting';
 import { planPositionChange } from '../utils/clientOrder';
-import { getClientAddresses, getClientAddressSearchText, locationFields } from '../utils/clientAddresses';
+import {
+  getClientAddresses, getClientAddressSearchText, getClientLocationForDay, locationFields,
+} from '../utils/clientAddresses';
 import { useClientsStore } from '../stores/clientsStore';
 import { toExistingClientUpdate } from '../utils/clientWriteData';
 import { dataScopeFields, dataScopeQuery } from '../utils/dataScope';
@@ -62,7 +64,7 @@ const alarmSnapshotForClient = (
   return {
     clientId: client.id,
     clientName: client.name || '',
-    address: client.address || '',
+    address: getClientLocationForDay(client, timing.targetDay).address,
     time: client.alarm,
     targetDay: timing.targetDay,
     specificDate: timing.specificDate,
@@ -611,6 +613,9 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
         phones: getClientPhones(clientData),
         addresses: savedAddresses,
         ...scheduledLocationFields,
+        // La ubicación elegida al agendar vale para todos sus días: una
+        // elección por día de una agenda anterior no debe pisarla.
+        addressByDay: {},
         ...scope,
         userId,
         freq: newFreq,
@@ -848,7 +853,7 @@ export const useClients = ({ userId, groupId, scopeReadVersion = 0 }: UseClients
           const fireAt = await scheduleClientAlarm(
             clientId,
             client?.name || '',
-            client?.address || '',
+            client ? getClientLocationForDay(client, resolvedDay).address : '',
             time,
             {
               ...(client

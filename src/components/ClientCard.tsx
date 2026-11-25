@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Linking, Pressable, Alert } f
 import { useTranslation } from 'react-i18next';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Client } from '../types';
+import { Client, ClientAddressType } from '../types';
 import { useAllProducts } from '../stores/productCatalogStore';
 import { normalizePhone } from '../utils/helpers';
 import { formatShortDate } from '../utils/format';
@@ -13,18 +13,29 @@ import PromptModal from './PromptModal';
 import ModalOverlay from './ModalOverlay';
 import ClientDetailsModal from './ClientDetailsModal';
 import { ProductIcon } from './ProductIcon';
-import { getFreqLabel } from '../constants/products';
+import { getDayLabel, getFreqLabel } from '../constants/products';
 import { WIDE_CONTENT_MAX_WIDTH } from '../constants/layout';
 import {
   buildWhatsAppMessageUrl,
   resolveClientCardWhatsAppMessage,
 } from '../utils/whatsAppTemplates';
 import { normalizeGoogleMapsLink } from '../utils/googleMapsLink';
+import {
+  clientAtDayLocation,
+  getClientAddresses,
+  getClientLocationForDay,
+} from '../utils/clientAddresses';
 import { startEnCaminoLink } from '../services/liveTracking';
 import { withTrackingLink } from '../utils/liveTracking';
 import { useContentRail } from '../stores/contentRailStore';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/;
+
+const ADDRESS_TYPE_ICONS: Record<ClientAddressType, string> = {
+  home: 'home-outline',
+  work: 'briefcase-outline',
+  other: 'location-outline',
+};
 
 const formatClientName = (name: string) => name
   .trim()
@@ -72,6 +83,10 @@ interface ClientCardProps {
   onAlarm?: () => void;
   onRelationships?: () => void;
   onChangePosition?: (newPosition: number) => void;
+  // Día de la lista en la que está la tarjeta: define qué ubicación muestra.
+  visitDay?: string;
+  // Elige cuál de las ubicaciones guardadas se usa ese día.
+  onChangeDayAddress?: (addressId: string) => void;
   fontScale?: number;
   wideLayout?: boolean;
 }
@@ -95,6 +110,8 @@ const ClientCard: React.FC<ClientCardProps> = ({
   onAlarm,
   onRelationships,
   onChangePosition,
+  visitDay,
+  onChangeDayAddress,
   enCaminoMessage,
   tomorrowVisitMessage,
   isTomorrowVisit = false,
@@ -102,7 +119,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
   wideLayout = false,
 }) => {
   const { colors } = useTheme();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const contentRail = useContentRail();
   const s = (v: number) => Math.round(v * fontScale);
   const styles = useMemo(() => getStyles(colors, fontScale), [colors, fontScale]);
@@ -114,7 +131,21 @@ const ClientCard: React.FC<ClientCardProps> = ({
   // Igual que el prompt de posición: se monta al primer uso.
   const [showDetails, setShowDetails] = useState(false);
   const [detailsMounted, setDetailsMounted] = useState(false);
+  const [showAddressPicker, setShowAddressPicker] = useState(false);
+  const [addressPickerMounted, setAddressPickerMounted] = useState(false);
   const allProducts = useAllProducts();
+  // Un cliente puede recibir en lugares distintos según el día (casa/trabajo).
+  const savedAddresses = useMemo(() => getClientAddresses(client), [client]);
+  const dayLocation = useMemo(() => getClientLocationForDay(client, visitDay), [client, visitDay]);
+  const canPickAddress = !!onChangeDayAddress && !!visitDay && savedAddresses.length > 1;
+  // En español y portugués los días van en minúscula dentro de una frase.
+  const dayLabel = visitDay
+    ? (i18n.language?.startsWith('en') ? getDayLabel(visitDay) : getDayLabel(visitDay).toLocaleLowerCase())
+    : '';
+  const openAddressPicker = () => {
+    setAddressPickerMounted(true);
+    setShowAddressPicker(true);
+  };
   const relationshipCount = Object.keys(client.relationships || {}).length;
 
   const productList = React.useMemo(() => {
@@ -178,14 +209,14 @@ const ClientCard: React.FC<ClientCardProps> = ({
   };
 
   const openMaps = () => {
-    if (client.lat && client.lng) {
+    if (dayLocation.lat && dayLocation.lng) {
       Linking.openURL(
-        `https://www.google.com/maps/dir/?api=1&destination=${client.lat},${client.lng}`,
+        `https://www.google.com/maps/dir/?api=1&destination=${dayLocation.lat},${dayLocation.lng}`,
       ).catch(() => {
         Alert.alert(t('error'), t('directory.errorMaps'));
       });
-    } else if (client.mapsLink) {
-      const mapsLink = normalizeGoogleMapsLink(client.mapsLink);
+    } else if (dayLocation.mapsLink) {
+      const mapsLink = normalizeGoogleMapsLink(dayLocation.mapsLink);
       if (!mapsLink) {
         Alert.alert(t('error'), t('directory.errorMapsLink'));
         return;
@@ -196,7 +227,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
     }
   };
 
-  const hasLocation = !!(client.lat && client.lng) || !!normalizeGoogleMapsLink(client.mapsLink);
+  const hasLocation = !!(dayLocation.lat && dayLocation.lng) || !!normalizeGoogleMapsLink(dayLocation.mapsLink);
 
   const runMenuAction = (action?: () => void) => {
     setShowActionsMenu(false);
@@ -310,6 +341,20 @@ const ClientCard: React.FC<ClientCardProps> = ({
                 <Ionicons name="chevron-forward" size={s(18)} color={colors.textHint} />
               </TouchableOpacity>
             )}
+            {canPickAddress && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => runMenuAction(openAddressPicker)}
+                accessibilityRole="button"
+                accessibilityLabel={t('clientCard.changeDayAddress', { day: dayLabel })}
+              >
+                <View style={styles.menuItemIcon}>
+                  <Ionicons name="swap-horizontal-outline" size={s(20)} color={colors.textSecondary} />
+                </View>
+                <Text style={styles.menuItemText}>{t('clientCard.changeDayAddress', { day: dayLabel })}</Text>
+                <Ionicons name="chevron-forward" size={s(18)} color={colors.textHint} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.menuItem}
               onPress={() => runMenuAction(() => {
@@ -338,6 +383,78 @@ const ClientCard: React.FC<ClientCardProps> = ({
               <Ionicons name="chevron-forward" size={s(18)} color={colors.textHint} />
             </TouchableOpacity>
           </View>
+        </View>
+      </View>
+    </ModalOverlay>
+  );
+
+  const addressPicker = (
+    <ModalOverlay
+      visible={showAddressPicker}
+      onClose={() => setShowAddressPicker(false)}
+      animationType="fade"
+      escapeParent
+    >
+      <View style={styles.menuOverlay}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => setShowAddressPicker(false)}
+          accessibilityRole="button"
+          accessibilityLabel={t('close')}
+        />
+        <View style={styles.menuSheet}>
+          <View style={styles.menuHandle} />
+          <View style={styles.menuHeader}>
+            <View style={styles.menuHeaderText}>
+              <Text style={styles.menuTitle}>{t('clientCard.dayAddressTitle', { day: dayLabel })}</Text>
+              <Text style={styles.menuSubtitle}>{formatClientName(client.name || '')}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.menuCloseButton}
+              onPress={() => setShowAddressPicker(false)}
+              accessibilityRole="button"
+              accessibilityLabel={t('close')}
+            >
+              <Ionicons name="close" size={s(20)} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.menuItems}>
+            {savedAddresses.map((location) => {
+              const selected = location.id === dayLocation.addressId;
+              return (
+                <TouchableOpacity
+                  key={location.id}
+                  style={[styles.menuItem, styles.addressOption, selected && styles.addressOptionSelected]}
+                  onPress={() => {
+                    setShowAddressPicker(false);
+                    if (!selected) onChangeDayAddress?.(location.id);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${t(`clientAddresses.${location.type}`)}: ${location.address}`}
+                >
+                  <View style={[styles.menuItemIcon, selected && styles.menuItemIconPrimary]}>
+                    <Ionicons
+                      name={ADDRESS_TYPE_ICONS[location.type]}
+                      size={s(20)}
+                      color={selected ? colors.primary : colors.textSecondary}
+                    />
+                  </View>
+                  <View style={styles.menuItemTextBlock}>
+                    <Text style={[styles.menuItemText, styles.menuItemTextStacked]}>
+                      {t(`clientAddresses.${location.type}`)}
+                    </Text>
+                    <Text style={styles.menuItemHint} numberOfLines={2}>
+                      {location.address || t('scheduleModal.savedMapLocation')}
+                    </Text>
+                  </View>
+                  {selected && <Ionicons name="checkmark-circle" size={s(22)} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.addressPickerHelp}>{t('clientCard.dayAddressHelp', { day: dayLabel })}</Text>
         </View>
       </View>
     </ModalOverlay>
@@ -437,10 +554,11 @@ const ClientCard: React.FC<ClientCardProps> = ({
         />
       )}
       {showActionsMenu && actionsMenu}
+      {addressPickerMounted && addressPicker}
       {detailsMounted && (
         <ClientDetailsModal
           visible={showDetails}
-          client={client}
+          client={clientAtDayLocation(client, visitDay)}
           onClose={() => setShowDetails(false)}
           onEdit={onEdit}
           fontScale={fontScale}
@@ -528,7 +646,7 @@ const ClientCard: React.FC<ClientCardProps> = ({
         </View>
 
         {/* Address with location button */}
-        {client.address ? (
+        {dayLocation.address ? (
           hasLocation ? (
             <TouchableOpacity
               onPress={openMaps}
@@ -536,18 +654,18 @@ const ClientCard: React.FC<ClientCardProps> = ({
               activeOpacity={0.6}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               accessibilityRole="link"
-              accessibilityLabel={`${t('clientCard.openMaps')}: ${client.address}`}
+              accessibilityLabel={`${t('clientCard.openMaps')}: ${dayLocation.address}`}
             >
               <Ionicons name="location-sharp" size={s(18)} color={colors.primary} />
               <Text style={styles.clientAddressLink} numberOfLines={wideLayout ? 1 : 3}>
-                {client.address}
+                {dayLocation.address}
               </Text>
               <Ionicons name="chevron-forward" size={s(16)} color={colors.textHint} />
             </TouchableOpacity>
           ) : (
             <TouchableOpacity onPress={onEdit} style={styles.addressRow} activeOpacity={0.6}>
               <Ionicons name="location-outline" size={s(16)} color={colors.textHint} />
-              <Text style={styles.clientAddress}>{client.address}</Text>
+              <Text style={styles.clientAddress}>{dayLocation.address}</Text>
             </TouchableOpacity>
           )
         ) : null}
@@ -1270,6 +1388,21 @@ const getStyles = (colors: ThemeColors, scale: number = 1) => {
       color: colors.textSecondary,
       fontSize: s(12),
       marginTop: s(2),
+    },
+    addressOption: {
+      paddingVertical: s(8),
+      borderWidth: 1,
+      borderColor: 'transparent',
+    },
+    addressOptionSelected: {
+      backgroundColor: colors.primaryLight,
+      borderColor: colors.primaryBorder,
+    },
+    addressPickerHelp: {
+      color: colors.textMuted,
+      fontSize: s(12),
+      marginTop: s(10),
+      paddingHorizontal: s(8),
     },
     // --- Wide-screen (Mac/iPad) horizontal layout ---
     // Wider card so a single full-width row uses the extra space; the action

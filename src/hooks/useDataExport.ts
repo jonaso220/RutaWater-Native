@@ -132,6 +132,7 @@ export const useDataExport = (user: ExportUser) => {
           id: c.id, customerId: c.customerId || c.id,
           name: c.name, phone: c.phone || '', phones: getClientPhones(c), address: c.address || '',
           addresses: c.addresses || [],
+          ...(c.addressByDay && Object.keys(c.addressByDay).length ? { addressByDay: c.addressByDay } : {}),
           lat: c.lat || '', lng: c.lng || '', freq: c.freq || '',
           visitDay: c.visitDay || '', visitDays: c.visitDays || [],
           specificDate: c.specificDate || '', notes: c.notes || '',

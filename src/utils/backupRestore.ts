@@ -1,6 +1,7 @@
 import { ClientAddress, ClientAddressType, ClientPhone, PaymentSchedule, RELATIONSHIP_TYPES } from '../types';
 import { parseDate, sanitizePhone, sanitizeProductQty, sanitizeString } from './helpers';
 import { sanitizeClientPhones } from './clientPhones';
+import { sanitizeAddressByDay } from './clientAddresses';
 import { isValidPaymentSchedule } from './paymentSchedule';
 
 export interface BackupClientRecord {
@@ -11,6 +12,7 @@ export interface BackupClientRecord {
   phones: ClientPhone[];
   address: string;
   addresses: ClientAddress[];
+  addressByDay?: Record<string, string>;
   notes: string;
   rut: string;
   businessName: string;
@@ -230,6 +232,8 @@ const sanitizeClient = (value: unknown, index: number): BackupClientRecord => {
     phones: sanitizeClientPhones(value.phones),
     address: sanitizeString(value.address, 200),
     addresses: sanitizeAddresses(value.addresses),
+    ...(Object.keys(sanitizeAddressByDay(value.addressByDay)).length
+      ? { addressByDay: sanitizeAddressByDay(value.addressByDay) } : {}),
     notes: sanitizeString(value.notes, 500),
     rut: sanitizeString(value.rut, 40),
     businessName: sanitizeString(value.businessName, 150),

@@ -49,6 +49,9 @@ export interface NoticeItem {
   destinatario_id: string;
   telefono: string;
   texto: string;
+  /** Cómo pedírselo a mandar_avisos sin escribir el texto: la plantilla y, si hace falta, el cambio. Sin plantilla, va `texto`. */
+  plantilla?: 'aviso_manana' | 'recordatorio';
+  reemplazar?: string[];
   /** Cómo se identifica en el registro: la ficha o «ficha::dest:nombre» con dos destinatarios. */
   clave: string;
   excepcion?: string;
@@ -172,14 +175,17 @@ export const buildNoticeList = (options: NoticeListOptions): NoticeList => {
     const shared = recipients.length > 1;
 
     let text = reminder;
+    let via: Pick<NoticeItem, 'plantilla' | 'reemplazar'> = { plantilla: 'recordatorio' };
     if (kind === 'aviso') {
+      via = { plantilla: 'aviso_manana' };
       const ownName = exception?.texto_propio && (!exception.texto_propio_dia || exception.texto_propio_dia === day) ? exception.texto_propio : '';
       const own = ownName ? rules.textos?.propios?.[ownName] || [] : [];
       if (ownName && !own.length) return review(`faltan las variantes del texto propio «${ownName}»`);
-      if (own.length) text = variantFor(date, own);
+      if (own.length) { text = variantFor(date, own); via = {}; }
       else if (exception?.reemplazo_por_tu_casa) {
         if (template.split('por tu casa').length !== 2) return review('la plantilla del aviso no dice «por tu casa» una sola vez: no se pudo cambiar el texto');
         text = template.replace('por tu casa', exception.reemplazo_por_tu_casa);
+        via = { plantilla: 'aviso_manana', reemplazar: [`por tu casa=>${exception.reemplazo_por_tu_casa}`] };
       } else text = template;
     }
     if (!text) return review(kind === 'aviso' ? 'falta la plantilla del aviso' : 'falta el texto del recordatorio');
@@ -203,7 +209,7 @@ export const buildNoticeList = (options: NoticeListOptions): NoticeList => {
       const phone = recipient.ficha ? whatsappOf(recipient.ficha) : '';
       if (!phone) return result.revisar.push({ ...base, motivo: `${recipient.nombre} no tiene WhatsApp en la ficha` });
       return result.mandar.push({
-        ...who, telefono: phone, texto: text, clave: key,
+        ...who, telefono: phone, texto: text, ...via, clave: key,
         ...(exception ? { excepcion: exception.clave } : {}),
         ...(since ? { frenar_si_escribio_desde: since } : {}),
         ...(shared && !exception?.destinatarios?.independientes ? { grupo: client.id } : {}),

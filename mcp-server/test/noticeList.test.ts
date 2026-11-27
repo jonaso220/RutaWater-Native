@@ -115,3 +115,32 @@ describe('buildNoticeList: recordatorio', () => {
     expect(list.omitidos).toEqual([expect.objectContaining({ cliente_id: 's', accion: 'listo_si_no_contesto', desde: `${DAY_BEFORE} 09:15` })]);
   });
 });
+
+describe('setNoticeException', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { setNoticeException, readNoticeRules } = require('../src/noticeFiles');
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'avisos-'));
+    process.env.RUTAWATER_AVISOS_DIR = dir;
+    fs.writeFileSync(path.join(dir, 'avisos-excepciones.json'), JSON.stringify({ version: 1, excepciones: [], textos: { recordatorio: REMINDER } }));
+  });
+  afterEach(() => { delete process.env.RUTAWATER_AVISOS_DIR; fs.rmSync(dir, { recursive: true, force: true }); });
+
+  it('crea la excepción para todas las fichas de la persona y la saca cuando vuelve a lo común', () => {
+    const a = client('a', 1, { name: 'Local', address: 'Calle Uno' });
+    const again = client('a2', 50, { name: 'Local', address: 'Calle Uno', freq: 'on_demand', visitDays: [] });
+    const all = [a, again, client('b', 2)];
+    const first = setNoticeException(a, all, { recordatorio: false, motivo: 'no quiere el segundo mensaje' }, '2026-11-27');
+    expect(first).toEqual(expect.objectContaining({ cambiado: true, fichas: 2, despues: { aviso: true, recordatorio: false, texto: 'por tu casa' } }));
+    expect(readNoticeRules().excepciones[0]).toEqual(expect.objectContaining({ fichas: ['a', 'a2'], recordatorio: false, motivo: 'no quiere el segundo mensaje (Jonathan, 2026-11-27)' }));
+    expect(setNoticeException(a, all, { recordatorio: false }, '2026-11-27').cambiado).toBe(false);
+    expect(setNoticeException(again, all, { texto_por_tu_casa: 'por el local' }, '2026-11-28').despues.texto).toBe('por el local');
+    expect(setNoticeException(a, all, { aviso: false }, '2026-11-28').despues).toEqual({ aviso: false, recordatorio: false, texto: 'por el local' });
+    setNoticeException(a, all, { aviso: true, recordatorio: true, texto_por_tu_casa: '' }, '2026-11-29');
+    expect(readNoticeRules().excepciones).toEqual([]);
+    expect(readNoticeRules().textos.recordatorio).toBe(REMINDER);
+  });
+});

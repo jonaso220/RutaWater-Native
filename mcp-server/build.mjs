@@ -20,3 +20,5 @@ await build({ ...shared, entryPoints: ['scripts/formato-nombres.ts'], outfile: '
 await build({ ...shared, entryPoints: ['scripts/direcciones-coordenadas.ts'], outfile: 'dist/direcciones-coordenadas.cjs' });
 // Lo corre el vigilante en cada vuelta: ubica los pedidos de una vez cargados desde la app.
 await build({ ...shared, entryPoints: ['scripts/ordenar-una-vez.ts'], outfile: 'dist/ordenar-una-vez.cjs' });
+// Lo corre el vigilante: arma la lista de avisos y recordatorios y la compara con la pasada.
+await build({ ...shared, entryPoints: ['scripts/lista-avisos.ts'], outfile: 'dist/lista-avisos.cjs' });

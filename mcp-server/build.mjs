@@ -18,3 +18,5 @@ await build({ ...shared, entryPoints: ['scripts/completar-coordenadas.ts'], outf
 await build({ ...shared, entryPoints: ['scripts/formato-nombres.ts'], outfile: 'dist/formato-nombres.cjs' });
 // Script de una sola vez: direcciones rehechas a partir de las coordenadas.
 await build({ ...shared, entryPoints: ['scripts/direcciones-coordenadas.ts'], outfile: 'dist/direcciones-coordenadas.cjs' });
+// Lo corre el vigilante en cada vuelta: ubica los pedidos de una vez cargados desde la app.
+await build({ ...shared, entryPoints: ['scripts/ordenar-una-vez.ts'], outfile: 'dist/ordenar-una-vez.cjs' });

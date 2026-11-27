@@ -31,4 +31,10 @@ EOF
 
 cp dist/server.cjs "$DEST/server.cjs.tmp"
 mv "$DEST/server.cjs.tmp" "$DEST/server.cjs"
-echo "Instalado en $DEST/server.cjs"
+# Programas que el vigilante corre en cada vuelta, sin Claude: ubicar los pedidos
+# de una vez cargados desde la app y armar o comparar la lista de avisos.
+for programa in ordenar-una-vez lista-avisos; do
+  cp "dist/$programa.cjs" "$DEST/$programa.cjs.tmp"
+  mv "$DEST/$programa.cjs.tmp" "$DEST/$programa.cjs"
+done
+echo "Instalado en $DEST/server.cjs (más ordenar-una-vez.cjs y lista-avisos.cjs)"

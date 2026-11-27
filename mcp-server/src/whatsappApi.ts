@@ -340,7 +340,11 @@ const NOTICE_BUDGET_MS = 60_000;
 const uncertainFile = () => join(env('RUTAWATER_ENVIAR_DIR', join(home, '.rutawater-mcp/enviar-whatsapp')), 'inciertos.json');
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
-export interface NoticeInput { telefono: string; texto: string; cliente?: string; reintentar?: boolean; frenarDesde?: Date }
+export interface NoticeInput {
+  telefono: string; texto: string; cliente?: string; reintentar?: boolean; frenarDesde?: Date;
+  /** Mandarlo aunque el chat esté excluido de la API: Jonathan quiere que ese cliente reciba el aviso (27/11/2026). */
+  aunqueExcluido?: boolean;
+}
 type NoticeState = 'enviado' | 'ya_enviado' | 'escribio' | 'no_enviado' | 'incierto' | 'excluido' | 'invalido' | 'sin_intentar';
 export interface NoticeResult {
   telefono: string; cliente?: string; estado: NoticeState; id?: string; hora?: string; motivo?: string;
@@ -349,7 +353,7 @@ export interface NoticeResult {
 
 export const sendNotices = async (
   db: Firestore, items: NoticeInput[], now = new Date(),
-  mac: (db: Firestore, phone: string, text: string) => Promise<{ id: string }> = sendViaMac,
+  mac: (db: Firestore, phone: string, text: string, confirm?: boolean) => Promise<{ id: string }> = sendViaMac,
   budgetMs = NOTICE_BUDGET_MS, retryPauseMs = 3_000,
 ) => {
   const excluded = await loadExcluded(db, localConfig());
@@ -360,9 +364,11 @@ export const sendNotices = async (
   // Envíos sin confirmar de hoy: { "<teléfono>|<huella del texto>": hora }.
   const saved = existsSync(uncertainFile()) ? JSON.parse(readFileSync(uncertainFile(), 'utf8')) : {};
   const uncertain: Record<string, string> = saved.dia === day ? saved.envios || {} : {};
+  // Enviados hoy a chats excluidos de la API (sin registro en la bandeja).
+  const blind: Record<string, string> = saved.dia === day ? saved.sin_confirmar || {} : {};
   const saveUncertain = () => {
     mkdirSync(join(uncertainFile(), '..'), { recursive: true });
-    writeFileSync(uncertainFile(), JSON.stringify({ dia: day, envios: uncertain }));
+    writeFileSync(uncertainFile(), JSON.stringify({ dia: day, envios: uncertain, sin_confirmar: blind }));
   };
   const results: NoticeResult[] = [];
   let stop = '';
@@ -375,10 +381,30 @@ export const sendNotices = async (
       results.push({ ...base, estado: 'invalido', motivo: text ? 'Teléfono inválido: pasá el número con código de país (598…).' : 'El mensaje está vacío.' });
       continue;
     }
-    if (isExcluded(excluded, phone)) { results.push({ ...base, estado: 'excluido', motivo: 'Ese chat está excluido: no se le escribe.' }); continue; }
+    const outside = isExcluded(excluded, phone);
+    if (outside && !item.aunqueExcluido) { results.push({ ...base, estado: 'excluido', motivo: 'Ese chat está excluido: no se le escribe.' }); continue; }
     if (!stop && Date.now() - started > budgetMs) stop = 'se acabó el tiempo de esta llamada';
     if (stop) { results.push({ ...base, estado: 'sin_intentar', motivo: stop }); continue; }
     const key = `${phone}|${createHash('sha1').update(text).digest('hex').slice(0, 16)}`;
+    // Un chat excluido no deja nada en la bandeja: no se puede ver si escribió ni confirmar el envío por la API.
+    // Lo que salió hoy se anota acá para no repetirlo.
+    if (outside) {
+      if (blind[key]) { results.push({ ...base, estado: 'ya_enviado', hora: blind[key] }); continue; }
+      if (!stop && Date.now() - started > budgetMs) stop = 'se acabó el tiempo de esta llamada';
+      if (stop) { results.push({ ...base, estado: 'sin_intentar', motivo: stop }); continue; }
+      try {
+        await mac(db, phone, text, false);
+        blind[key] = hour(new Date());
+        saveUncertain();
+        results.push({ ...base, estado: 'enviado', motivo: 'Chat excluido de la API: se apretó Enviar con el borrador exacto, sin confirmación por la API.' });
+      } catch (error) {
+        if (!(error instanceof MacUnavailable)) throw error;
+        macFailures += 1;
+        results.push({ ...base, estado: 'no_enviado', motivo: `${error.message}. No salió nada.` });
+        if (!/borrador no coincide/.test(error.message) || macFailures >= 2) stop = `el Mac no pudo mandar (${error.message})`;
+      }
+      continue;
+    }
     const chat = (await db.collection(INBOX).where('phone', '==', phone).get()).docs.map(readDoc).sort((a, b) => +a.sentAt - +b.sentAt);
     const already = chat.find((message) => message.direction === 'out' && +message.sentAt >= dayStart && String(message.text || '').trim() === text);
     if (already) {

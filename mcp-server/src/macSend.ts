@@ -41,7 +41,7 @@ const confirmed = async (db: Firestore, phone: string, text: string, since: Date
   return null;
 };
 
-export const sendViaMac = async (db: Firestore, phone: string, text: string): Promise<{ id: string }> => {
+export const sendViaMac = async (db: Firestore, phone: string, text: string, confirm = true): Promise<{ id: string }> => {
   const app = join(dir(), 'RutaWater Enviar.app');
   if (process.platform !== 'darwin' || !existsSync(app)) throw new MacUnavailable('falta RutaWater Enviar.app en el Mac');
   if (await screenLocked()) throw new MacUnavailable('la pantalla del Mac está bloqueada');
@@ -61,6 +61,8 @@ export const sendViaMac = async (db: Firestore, phone: string, text: string): Pr
     const permission = /-1719|-25211|assistive|asistencia|accesibilidad/i.test(outcome);
     throw new MacUnavailable(permission ? 'falta el permiso de Accesibilidad para RutaWater Enviar' : `no apretó Enviar (${outcome})`);
   }
+  // Un chat excluido de la API no deja el mensaje en la bandeja: no hay con qué confirmar.
+  if (!confirm) return { id: '' };
   const id = await confirmed(db, phone, text, since);
   if (!id) {
     throw new WriteError('Apreté Enviar en WhatsApp del Mac pero no apareció enviado en 45 s: puede haber salido igual. Fijate en el chat antes de reintentar (no lo mando por plantilla para no duplicarlo).');

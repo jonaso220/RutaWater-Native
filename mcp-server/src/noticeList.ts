@@ -24,6 +24,8 @@ export interface NoticeException {
   texto_propio?: string;
   /** Si está, el texto propio vale solo para repartos de ese día de semana. */
   texto_propio_dia?: string;
+  /** El aviso se manda aunque su chat esté excluido de la API (no se le contesta, pero recibe el aviso). */
+  aviso_aunque_excluido?: boolean;
   /** listo: si no contestó el aviso no se le recuerda y se marca Listo. */
   si_no_contesta?: 'listo';
   motivo?: string;
@@ -59,6 +61,7 @@ export interface NoticeItem {
   frenar_si_escribio_desde?: string;
   /** Dos destinatarios de una misma visita: si uno contestó, no se le recuerda al otro. */
   grupo?: string;
+  aunque_excluido?: boolean;
 }
 
 export interface NoticeSkip {
@@ -213,6 +216,7 @@ export const buildNoticeList = (options: NoticeListOptions): NoticeList => {
         ...(exception ? { excepcion: exception.clave } : {}),
         ...(since ? { frenar_si_escribio_desde: since } : {}),
         ...(shared && !exception?.destinatarios?.independientes ? { grupo: client.id } : {}),
+        ...(exception?.aviso_aunque_excluido ? { aunque_excluido: true } : {}),
       });
     });
     return undefined;

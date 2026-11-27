@@ -405,6 +405,7 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
       frenar_si_escribio_desde: item.frenar_si_escribio_desde || sinceYesterday,
       clave: item.clave,
       ...(item.grupo ? { grupo: item.grupo } : {}),
+      ...(item.aunque_excluido ? { aunque_excluido: true } : {}),
     }));
     const batches: Array<typeof messages> = [];
     messages.forEach((message) => {
@@ -1054,13 +1055,14 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
         texto: z.string().max(4000).optional().describe('Mensaje propio'),
         clave: z.string().max(200).optional().describe('Clave del registro (la da lista_avisos); vuelve en el resultado'),
         grupo: z.string().max(60).optional().describe('La da lista_avisos; no cambia el envío'),
+        aunque_excluido: z.boolean().optional().describe('La da lista_avisos: mandarlo aunque el chat esté excluido de la API'),
         reemplazar: z.array(z.string()).max(5).optional().describe('Cambios «texto viejo=>texto nuevo» sobre el mensaje'),
         reintentar: z.boolean().optional().describe('Solo para un «incierto» que ya se comprobó que no salió'),
         frenar_si_escribio_desde: z.string().max(30).optional().describe('«aaaa-mm-dd hh:mm» en hora de Uruguay: si el cliente escribió desde entonces, no se le manda'),
       })).min(1).max(NOTICE_BATCH),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-  }, handle(async ({ mensajes }: { mensajes: Array<{ telefono: string; cliente?: string; plantilla?: 'aviso_manana' | 'recordatorio'; texto?: string; clave?: string; reemplazar?: string[]; reintentar?: boolean; frenar_si_escribio_desde?: string }> }) => {
+  }, handle(async ({ mensajes }: { mensajes: Array<{ telefono: string; cliente?: string; plantilla?: 'aviso_manana' | 'recordatorio'; texto?: string; clave?: string; aunque_excluido?: boolean; reemplazar?: string[]; reintentar?: boolean; frenar_si_escribio_desde?: string }> }) => {
     // Todo el lote se valida antes de mandar el primero.
     const template = mensajes.some((item) => item.plantilla === 'aviso_manana') ? whatsappTemplates(await store.getSettings()).aviso_manana : '';
     const reminder = mensajes.some((item) => item.plantilla === 'recordatorio') ? readNoticeRules().textos?.recordatorio || '' : '';
@@ -1071,7 +1073,7 @@ export const registerTools = (server: McpServer, store: Store, config: ServerCon
       const since = (item.frenar_si_escribio_desde || '').trim();
       const frenarDesde = since ? new Date(/^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(since) ? `${since.replace(' ', 'T')}:00-03:00` : since) : undefined;
       if (frenarDesde && Number.isNaN(frenarDesde.getTime())) throw new Error(`Mensaje ${index + 1}: frenar_si_escribio_desde tiene que ser «aaaa-mm-dd hh:mm».`);
-      return { telefono: item.telefono, cliente: item.cliente, reintentar: item.reintentar, frenarDesde, texto: item.reemplazar?.length ? applyReplacements(base, item.reemplazar) : base };
+      return { telefono: item.telefono, cliente: item.cliente, reintentar: item.reintentar, frenarDesde, aunqueExcluido: item.aunque_excluido, texto: item.reemplazar?.length ? applyReplacements(base, item.reemplazar) : base };
     });
     const result = await sendNotices(store.db, items);
     const keys = new Map(mensajes.filter((item) => item.clave).map((item) => [item.telefono, item.clave]));

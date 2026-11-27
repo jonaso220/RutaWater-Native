@@ -171,6 +171,17 @@ describeWithEmulator('WhatsApp por la API', () => {
       expect(mac).toHaveBeenCalledTimes(1);
     });
 
+    test('un chat excluido recibe el aviso solo si se pide, sin confirmación y una sola vez', async () => {
+      const mac = jest.fn(async () => ({ id: '' }));
+      const item = { telefono: '099111222', texto: AVISO, cliente: 'Excluida', aunqueExcluido: true };
+      const first = await sendNotices(db, [item, { telefono: '099111222', texto: AVISO }], NOW, mac);
+      expect(first.resultados.map((entry) => entry.estado)).toEqual(['enviado', 'excluido']);
+      expect(mac.mock.calls.map((call: unknown[]) => [call[1], call[3]])).toEqual([['59899111222', false]]);
+      const again = await sendNotices(db, [item], NOW, mac);
+      expect(again.resultados.map((entry) => entry.estado)).toEqual(['ya_enviado']);
+      expect(mac).toHaveBeenCalledTimes(1);
+    });
+
     test('pantalla bloqueada: no sale nada y corta el lote', async () => {
       const locked = jest.fn(async () => { throw new MacUnavailable('la pantalla del Mac está bloqueada'); });
       const result = await sendNotices(db, [{ telefono: '59899123456', texto: AVISO }, { telefono: '59898000000', texto: AVISO }], NOW, locked);
